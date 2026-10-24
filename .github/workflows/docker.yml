@@ -21,6 +21,11 @@ jobs:
       contents: read
       packages: write   # 推送 ghcr.io 需要
 
+    # secrets 不能直接用在 step 的 if 里，先经 env 中转
+    env:
+      HUB_USER: ${{ secrets.DOCKERHUB_USERNAME }}
+      HUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+
     steps:
       - uses: actions/checkout@v4
 
@@ -69,18 +74,18 @@ jobs:
 
       # ---- 可选：Docker Hub（secrets 配了才推，且 PAT 必须是 Read & Write）----
       - name: 登录 Docker Hub
-        if: ${{ secrets.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != '' }}
+        if: env.HUB_USER != ''
         uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          username: ${{ env.HUB_USER }}
+          password: ${{ env.HUB_TOKEN }}
 
       - name: 推送镜像到 Docker Hub
-        if: ${{ secrets.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != '' }}
+        if: env.HUB_USER != ''
         continue-on-error: true   # Hub 凭据没写权限时不拖垮整条流水线
         run: |
           set -euo pipefail
-          U="${{ secrets.DOCKERHUB_USERNAME }}"
+          U="$HUB_USER"
           while IFS= read -r tag; do
             [ -z "$tag" ] && continue
             hub_tag="${tag#ghcr.io/*/}"
