@@ -1,0 +1,48 @@
+name: Diagnose DockerHub
+
+on:
+  workflow_dispatch:
+
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检查 token 作用域与账号身份
+        env:
+          U: ${{ secrets.DOCKERHUB_USERNAME }}
+          T: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          set -uo pipefail
+          echo "用户名: $U"
+          echo "token 前缀: ${T:0:12}... 长度 ${#T}"
+          echo
+          echo "=== 1) 交换 registry token（push,pull 作用域）==="
+          code=$(curl -s -u "$U:$T" \
+            "https://auth.docker.io/token?service=registry.docker.io&scope=repository:$U/love-space:push,pull" \
+            -o /tmp/tok.json -w "%{http_code}")
+          echo "HTTP $code"
+          if jq -e '.token' /tmp/tok.json >/dev/null 2>&1; then
+            echo "交换成功。JWT 中的 access："
+            jq -r '.token' /tmp/tok.json | cut -d. -f2 | tr '_-' '/+' | base64 -d 2>/dev/null | jq '.access' 2>/dev/null || echo "（JWT 解析失败）"
+          else
+            echo "交换失败："
+            jq -c '{error: (.details // .error // .)}' /tmp/tok.json 2>/dev/null || head -c 300 /tmp/tok.json
+          fi
+          echo
+          echo "=== 2) 登录 hub，查真实账号身份 ==="
+          curl -s -X POST https://hub.docker.com/v2/users/login \
+            -H 'Content-Type: application/json' \
+            -d "{\"username\":\"$U\",\"password\":\"$T\"}" -o /tmp/login.json
+          echo "登录响应字段: $(jq -r 'keys | join(",")' /tmp/login.json 2>/dev/null)"
+          JWT=$(jq -r '.token // empty' /tmp/login.json)
+          echo "hub JWT 长度: ${#JWT}"
+          if [ -n "$JWT" ]; then
+            curl -s -H "Authorization: Bearer $JWT" https://hub.docker.com/v2/user/ -o /tmp/user.json
+            echo "账号信息："
+            jq -c '{username, email_verified, verified, id, type, subscribed, restricted}' /tmp/user.json 2>/dev/null || head -c 300 /tmp/user.json
+          fi
+          echo
+          echo "=== 3) 该命名空间下的仓库 ==="
+          curl -s "https://hub.docker.com/v2/repositories/$U/?page_size=10" -o /tmp/repos.json
+          echo "总数: $(jq -r '.count // "查询失败"' /tmp/repos.json 2>/dev/null)"
+          jq -r '.results[]? | " - \(.name) | private: \(.is_private)"' /tmp/repos.json 2>/dev/null
