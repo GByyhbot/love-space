@@ -1,0 +1,22 @@
+data/
+.env
+__pycache__/
+.pytest_cache/
+.venv/
+test-results/
+*.pyc
+
+# ---- 凭据与本地运维资料，绝不入库 ----
+# .workbuddy 里存有服务器账号密码、部署配置与运维笔记
+.workbuddy/
+secrets/
+备份密码-请妥善保存.txt
+
+# ---- 二进制：只保留对外下载的那份 APK ----
+*.apk
+!static/lovespace.apk
+恋爱空间.apk
+
+# ---- 系统垃圾 ----
+.DS_Store
+Thumbs.db

@@ -1,0 +1,43 @@
+services:
+  love:
+    build:
+      context: .
+      args:
+        # 国内网络加速（海外部署可删除这两行）
+        APT_MIRROR: mirrors.tuna.tsinghua.edu.cn
+        PIP_INDEX_URL: https://pypi.tuna.tsinghua.edu.cn/simple
+    container_name: love-space
+    restart: unless-stopped
+    ports:
+      - "${LOVE_BIND_ADDRESS:-127.0.0.1}:1314:1314"
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=256m
+    volumes:
+      - ./data:/data
+    environment:
+      TZ: Asia/Shanghai
+      DATA_DIR: /data
+      # 公网访问地址（用于来源校验与通知跳转）
+      PUBLIC_URL: ${PUBLIC_URL:-https://love-space.iepose.cn}
+      # 登录会话 Cookie 仅通过 HTTPS 发送；HTTP 访问无法维持登录状态
+      SECURE_COOKIES: "${SECURE_COOKIES:-true}"
+      # 首次远程初始化时，在 .env 中设置一次性随机口令；初始化后删除
+      SETUP_TOKEN: "${SETUP_TOKEN:-}"
+      # 单文件上传上限（MB）
+      MAX_UPLOAD_MB: "${MAX_UPLOAD_MB:-250}"
+      # 低存储告警阈值（MB）
+      LOW_STORAGE_MB: "${LOW_STORAGE_MB:-1024}"
+      # Built-in browser/native push server; must be HTTPS.
+      NTFY_SERVER: ${NTFY_SERVER:-https://ntfy.350921.xyz}
+      # 内置 ntfy 系统推送总开关：0=停用（默认，通知走企业微信/Web Push），1=恢复手机弹窗
+      NTFY_ENABLED: ${NTFY_ENABLED:-0}
+      # Encrypt newly generated full backups when configured.
+      BACKUP_PASSWORD: ${BACKUP_PASSWORD:-}
+      BACKUP_EXTRA_DIR: ${BACKUP_EXTRA_DIR:-}
+      RUN_WORKER: ${RUN_WORKER:-true}
+      NOTIFY_ALLOWED_PRIVATE_HOSTS: ${NOTIFY_ALLOWED_PRIVATE_HOSTS:-}

@@ -1,0 +1,143 @@
+# 恋爱空间
+
+一个**只属于两个人的私密恋爱空间**：发动态、存照片、聊天、写日记、记纪念日、留惊喜。手机体验优先，通过 Docker 自行部署，数据完全自己掌握。
+
+## 功能一览
+
+- **首页** — 恋爱天数、双方今日心情、下个纪念日倒计时、最新动态
+- **时光** — 图文/视频/语音动态，点赞评论，支持补记过去、按日期/作者/类型/关键词筛选
+- **相册** — 动态照片自动汇总，可建主题相册；删除分类不删照片
+- **消息** — 双人即时聊天（文字/图片/语音/视频），断线重连、失败重试、防重复发送
+- **我们** — 纪念日（每年重复/提前提醒）、共同愿望清单、每日心情、留言板、情侣问答、共同打卡
+- **个人角落** — 私密日记（完全账号隔离）、草稿箱、定时惊喜（到期自动公开）、回收站（30 天）
+- **通知中心** — 浏览器系统推送（含 iPhone 主屏幕网页）、Android 原生提醒，以及 SMTP、Bark、Server酱、PushPlus、企业微信机器人、Webhook、Telegram、钉钉、飞书、ntfy；失败自动重试
+- **数据保障** — 每日自动备份（保留 7 份）、手动备份、个人数据导出、完整恢复与迁移
+
+## 快速开始（Docker Compose，推荐）
+
+要求：服务器/NAS 已安装 Docker 与 Docker Compose。
+
+```bash
+# 1. 上传整个项目目录到服务器，例如 /vol1/1000/LARJ
+# 2. 首次远程初始化时设置一次性随机口令（.env 已被忽略，不会提交）
+cd /vol1/1000/LARJ
+echo "SETUP_TOKEN=$(openssl rand -hex 32)" >> .env
+docker compose up -d --build
+
+# 3. 查看状态
+docker compose ps
+curl http://127.0.0.1:1314/health
+```
+
+通过配置好的 HTTPS 域名访问空间：
+
+1. 第一个账号在页面完成初始化（需输入 `SETUP_TOKEN`）
+2. 初始化完成后从 `.env` 删除 `SETUP_TOKEN` 并重启容器
+3. 首页点「发送邀请」生成链接给另一半注册；双方绑定后注册自动关闭
+
+## 配置项（环境变量）
+
+| 变量 | 默认 | 说明 |
+|---|---|---|
+| `DATA_DIR` | `/data` | 数据目录（数据库、媒体、备份、密钥），必须持久化 |
+| `SETUP_TOKEN` | 空 | 首次远程初始化口令；使用一次性随机值，初始化完成后删除 |
+| `SECURE_COOKIES` | `true` | 会话 Cookie 仅通过 HTTPS 发送；生产环境保持开启 |
+| `LOVE_BIND_ADDRESS` | `127.0.0.1` | 宿主机监听地址；只允许同机反向代理连接。反向代理在独立容器时使用私有网络或防火墙限制来源，不要直接向公网开放应用端口 |
+| `PUBLIC_URL` | 空 | 对外访问地址（如 `https://love.example.com`），用于通知附带的跳转链接与来源校验 |
+| `MAX_UPLOAD_MB` | `250` | 单文件上传上限 |
+| `LOW_STORAGE_MB` | `1024` | 剩余存储低于该值（MB）时告警 |
+| `BACKUP_EXTRA_DIR` | 空 | 额外备份目录（第二块盘/NAS 挂载路径） |
+| `BACKUP_PASSWORD` | 空 | 设置后新备份使用 AES-GCM 加密；忘记密码无法恢复 |
+| `RUN_WORKER` | `true` | 是否运行内置定时任务（媒体转码、备份、通知投递） |
+| `NOTIFY_ALLOWED_PRIVATE_HOSTS` | 空 | 允许通知发往的内网地址白名单（自建 Bark/Webhook 用） |
+| `NTFY_SERVER` | `https://ntfy.350921.xyz` | 内置系统推送服务地址；必须为 HTTPS |
+
+### 通知方式说明
+
+- 安卓 APK 使用 ntfy HTTP 持续连接接收提醒，断线后自动重连；不需要 Firebase 项目、服务账号或小米推送资质。
+- APK 正常联网时加载线上空间；断网或服务器暂时不可达时，会显示 APK 内置的恢复页，提供本机版本、网络诊断、重试连接和浏览器打开入口。空间页面、记录与媒体仍需联网访问。
+- 网页版可在「通知渠道与提醒偏好」开启浏览器系统推送；推送连接由浏览器自身管理，不需要你提供 Firebase 项目或服务账号。它绑定当前浏览器，和 APK 是两套设备订阅。
+- 也可配置 Bark、邮件、Server酱、PushPlus、企业微信、Webhook、Telegram、钉钉、飞书或 ntfy。建议同时启用两个独立渠道作为补充。
+- 小米手机需允许恋爱空间自启动、通知与后台运行，并将电池策略设为「无限制」。系统强行停止 App 或厂商限制后台网络时，持续连接也可能中断；打开 App 后会恢复连接。
+
+
+## 云服务器部署
+
+1. **域名与 HTTPS**：将域名解析到服务器，用 Nginx/Caddy 反代到容器 1314 端口并配置证书。
+   Caddy 示例（自动 HTTPS）：
+
+   ```
+   love.example.com {
+       reverse_proxy 127.0.0.1:1314
+   }
+   ```
+
+2. 设置 `PUBLIC_URL=https://love.example.com`；`SECURE_COOKIES` 默认开启，重启容器。
+3. **防火墙**：只放行 80/443；应用端口默认仅监听本机 `127.0.0.1:1314`。若反向代理在独立容器中，请改用私有网络或防火墙规则限制来源。
+4. **备份**：每日自动备份在 `data/backups/`，保留 7 份；可设 `BACKUP_EXTRA_DIR` 异地再存一份。
+5. **升级**：上传新版代码后 `docker compose up -d --build`，数据目录不受影响。
+
+## 家庭设备 / NAS 部署
+
+- 会话 Cookie 默认要求 HTTPS；使用 NAS IP 访问时页面会跳转到 `PUBLIC_URL` HTTPS 域名，非 HTTPS 地址不能提交登录和写入请求。
+- 数据目录放在 NAS 的共享卷（如 `/vol1/1000/LARJ/data`），随 NAS 的快照/RAID 一起保护。
+- **网页录音需要 HTTPS**：局域网下可通过 NAS 自带的反向域名（如 `*.fnos.club`）或自签证书 + Tailscale/WireGuard 实现；未满足时页面会提示改用「上传已有音频」。
+- **iPhone 网页系统通知**：iOS/iPadOS 16.4 及以上需先将网站添加到主屏幕，再从主屏幕打开并主动开启通知权限；不同系统版本和设备策略可能影响送达。
+- 远程访问建议走 Tailscale/VPN，避免直接暴露公网。
+
+聊天 ZIP 导入默认限制压缩文件为 50 MB、解压后总量为 100 MB、单个条目为 30 MB、图片为 2000 张，避免异常压缩包耗尽资源。
+
+## 恢复与迁移
+
+在服务器上执行（`love-space` 为容器名）：
+
+```bash
+# 手动完整备份
+docker exec love-space python -m app.manage backup
+
+# 恢复 / 迁移到新目录（用于换设备、换服务器）
+docker cp love-space:/data/backups/backup-XXXX.zip .
+docker run --rm -v /vol1/1000:/target -v $PWD:/src 镜像名 \
+    python -m app.manage restore /src/backup-XXXX.zip /target/LARJ-new
+# 然后把 compose 的 data 卷指向 LARJ-new，重启即可
+```
+
+恢复目标必须是新的空目录；恢复后所有登录会话与待发通知会被安全重置。
+
+## 本地开发
+
+```bash
+python -m venv .venv && . .venv/bin/activate   # Windows: .venv\Scripts\activate
+pip install -r requirements-dev.txt
+uvicorn app.main:app --reload --port 8000
+pytest            # 全部测试：API 验收 + 媒体链路 + 安全 + 版本一致性
+```
+
+### 改前端必须同时改两个版本号（否则用户会拿到「新 JS + 旧 CSS」）
+
+`static/sw.js` 顶部的 `const VERSION` 与 `static/index.html` 里
+`style.css` / `app.js` 的 `?v=` **必须同号**。`sw.js` 对 CSS 是 cache-first，
+版本号脱钩时旧 CSS 缓存会一直被命中，表现为样式莫名其妙错乱，而服务端一切正常。
+
+1. `static/sw.js`：`const VERSION = 69;`（`CACHE` 与 `CORE` 都由它拼出，不要再手写）
+2. `static/index.html`：两处 `?v=69`
+
+`tests/test_version_consistency.py` 会自动校验这三处；只升一处的话 pytest 会失败。
+只改后端不用升版本。
+
+## 安全与隐私设计
+
+- 未登录无法访问任何 API 与媒体文件；所有媒体经权限校验后流式返回
+- Service Worker 仅缓存静态页面资源；登录记录与媒体不支持离线读取，退出时清除本机草稿与推送订阅
+- 私密日记/草稿/未公开惊喜：正文以 AES-GCM 加密落库，且不出现在对方的页面、搜索、相册、通知和导出中
+- 媒体原文件仍存为普通文件，读取由账号权限控制；完整备份包含解密主密钥，建议配置 `BACKUP_PASSWORD` 并妥善保管恢复密码
+- 渠道密钥用 Fernet 加密存储；密码使用 scrypt 哈希；登录/注册有频率限制
+- 通知仅发送摘要，不含正文；外发地址强制 HTTPS 与公网校验（防 SSRF）
+- Android 后台提醒使用独立账号 topic、持久化投递与重试；锁屏仅显示通用提醒
+- 浏览器推送订阅在数据库中加密保存，VAPID 密钥由 `secret.key` 稳定派生并随完整备份恢复；外部端点限定为主流浏览器推送服务
+- 备份文件权限 600；导出仅包含本人有权查看的内容
+
+## 已知约定
+
+- 时区默认北京时间，可在空间设置修改
+- 纪念日第一版使用公历；iPhone 网页推送需「添加到主屏幕」后使用

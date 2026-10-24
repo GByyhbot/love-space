@@ -1,0 +1,20 @@
+data/
+.git/
+.gitignore
+.venv/
+.pytest_cache/
+__pycache__/
+*.pyc
+test-results/
+.env
+secrets/firebase-admin.json
+README.md
+# 开发机上的辅助脚本与素材，跟运行镜像无关，别塞进构建上下文
+.workbuddy/
+tz/
+*.zip
+# 根目录的 APK 只是交付副本；真正对外下载的是 static/lovespace.apk，那个要留着
+恋爱空间.apk
+*.md
+新界面设计方案.html
+.workbuddy/deploy.env
