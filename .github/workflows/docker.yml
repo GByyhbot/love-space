@@ -84,16 +84,22 @@ jobs:
         if: env.HUB_USER != ''
         continue-on-error: true   # Hub 凭据没写权限时不拖垮整条流水线
         run: |
-          set -euo pipefail
           U="$HUB_USER"
+          ok=0; fail=0
           while IFS= read -r tag; do
             [ -z "$tag" ] && continue
-            hub_tag="${tag#ghcr.io/*/}"
-            hub_tag="$U/${hub_tag}"
+            hub_tag="$U/${tag#ghcr.io/*/}"
             echo "推送 $hub_tag"
             docker tag love-space:ci "$hub_tag"
-            docker push "$hub_tag"
+            if docker push "$hub_tag"; then
+              ok=$((ok + 1))
+            else
+              fail=$((fail + 1))
+              echo "::warning::Docker Hub 推送失败，PAT 很可能仍是只读档（Read-only），需改为 Read & Write 后重跑"
+            fi
           done <<< "${{ steps.tags.outputs.tags }}"
+          echo "Docker Hub：成功 $ok 个，失败 $fail 个"
+          exit 0
 
       - name: 汇总
         if: always()
