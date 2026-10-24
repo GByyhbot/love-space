@@ -53,6 +53,12 @@ jobs:
         working-directory: android-app
         run: npm ci
 
+      # assets/capacitor.plugins.json、assets/public 等由 cap sync 生成，
+      # 它们被 Capacitor 自带的 .gitignore 排除，所以必须在 CI 里重新生成
+      - name: 同步 Capacitor 资源与原生插件
+        working-directory: android-app
+        run: npx cap sync android
+
       - name: 还原签名密钥
         if: steps.guard.outputs.signed == 'true'
         working-directory: android-app
