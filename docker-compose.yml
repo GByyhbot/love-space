@@ -9,8 +9,20 @@ services:
         # 国内网络加速（海外部署可删除这两行）
         APT_MIRROR: mirrors.tuna.tsinghua.edu.cn
         PIP_INDEX_URL: https://pypi.tuna.tsinghua.edu.cn/simple
+        # 版本号注入：本地构建默认 dev/local；CI 会用 git tag 与 commit 覆盖
+        LOVE_VERSION: ${LOVE_VERSION:-dev}
+        LOVE_BUILD: ${LOVE_BUILD:-local}
     container_name: love-space
     restart: unless-stopped
+    # 日志不设上限时 json-file 会一直长，跑几个月能把 /var/lib/docker 撑爆
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    # 内存上限：视频抽帧/转码时 ffmpeg 会短暂吃内存，留够余量但仍要兜底，
+    # 避免单个容器把整台 NAS 拖垮（OOM 只杀这个容器，宿主其它服务不受影响）
+    mem_limit: ${LOVE_MEM_LIMIT:-2g}
     ports:
       - "${LOVE_BIND_ADDRESS:-127.0.0.1}:1314:1314"
     read_only: true

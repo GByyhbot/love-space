@@ -60,6 +60,17 @@ echo "LOVE_IMAGE=ghcr.io/gbyyhbot/love-space:sha-2ac50a7" >> .env
 echo "<你的 GitHub PAT，需 read:packages 权限>" | docker login ghcr.io -u <GitHub 用户名> --password-stdin
 ```
 
+> 国内拉取 `ghcr.io` 偶尔会被重置连接（不是权限问题，日志里是
+> `connection reset by peer`）。重试几次通常就能过；如果反复失败，就退回
+> `docker compose up -d --build` 本地构建（走 apt/pip 国内镜像，反而更稳）。
+
+容器默认带了日志轮转（`10m × 3`）和 2G 内存上限，避免长期运行把宿主的
+`/var/lib/docker` 撑爆、或视频转码时把整台 NAS 拖垮。内存上限可用 `.env` 覆盖：
+
+```bash
+echo "LOVE_MEM_LIMIT=3g" >> .env
+```
+
 ## Android APK
 
 APK 是 Capacitor 原生壳（远程加载线上站点，所以网页改版不需要重新打包）。工程在 `android-app/`，由 GitHub Actions 自动构建：
@@ -182,6 +193,20 @@ pytest            # 全部测试：API 验收 + 媒体链路 + 安全 + 版本�
 `tests/test_version_consistency.py` 会自动校验这三处；只升一处的话 pytest 会失败。
 只改后端不用升版本。
 
+### 网页版本号从 git tag 来，不要手改代码
+
+`/api/status` 的 `version` / `build` 不再是写死在 `main.py` 里的字符串，而是构建期注入：
+
+| 变量 | 来源 | 默认值 |
+| --- | --- | --- |
+| `LOVE_VERSION` | CI 用 git tag（去掉 `v`）；本地部署脚本用 `git describe` | `dev` |
+| `LOVE_BUILD` | 短 commit + 日期，如 `abc1234-20261024` | `local` |
+| `LOVE_APK_VERSION` | 手动/CI 指定，要和 `android-app/.../build.gradle` 的 `versionName` 同号 | `1.2.4` |
+
+所以**发版只需要打 tag**：`git tag v1.2.5 && git push --tags`，镜像里的版本号自动变成 1.2.5。
+`tests/test_version_config.py` 会校验 `/api/status` 报的 APK 版本与 `build.gradle` 的
+`versionName` 一致——不同号的话客户端「检查更新」会一直提示有新版本。
+
 ## 安全与隐私设计
 
 - 未登录无法访问任何 API 与媒体文件；所有媒体经权限校验后流式返回
@@ -197,4 +222,7 @@ pytest            # 全部测试：API 验收 + 媒体链路 + 安全 + 版本�
 ## 已知约定
 
 - 时区默认北京时间，可在空间设置修改
+- 静态资源与 JSON 走 gzip（`app.main.SelectiveGZip`，首屏约省 140KB）；但
+  `/api/events`（SSE）、`/media/`、`/api/export` 原样直出——压缩 SSE 会把帧攒在缓冲区里
+  让实时推送失效，压缩视频则会让 Range 失效、进度条拖不动
 - 纪念日第一版使用公历；iPhone 网页推送需「添加到主屏幕」后使用

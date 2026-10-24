@@ -28,13 +28,34 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # 下面要用 git describe 拿版本号
+
+      # 版本号注入到镜像里，/api/status 直接读出来（app/config.py）。
+      # 好处是"网页版本号"不再依赖人手改代码：打 v1.2.5 的 tag，界面上就是 1.2.5。
+      - name: 计算版本号与构建号
+        id: ver
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            V="${GITHUB_REF_NAME#v}"
+          else
+            # main 上的提交：形如 1.2.4-3-gabc1234，能看出比哪个 tag 多几个提交
+            V="$(git describe --tags --always | sed 's/^v//')"
+          fi
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          echo "build=${GITHUB_SHA::7}-$(date -u +%Y%m%d)" >> "$GITHUB_OUTPUT"
+          echo "版本号：$V"
 
       # 关键：构建阶段不登录任何 registry。
       # 一旦登录，BuildKit 会拿该凭据去 auth.docker.io 换基础镜像 library/python 的 token，
       # 凭据作用域不足就报 401 "access token has insufficient scopes"（Docker Hub 的 PAT 默认是只读档）。
       # 基础镜像是公开的，匿名拉取即可；登录只用于最后的 push。
       - name: 构建镜像（未登录，匿名拉基础镜像）
-        run: docker build --platform linux/amd64 -t love-space:ci .
+        run: |
+          docker build --platform linux/amd64 -t love-space:ci \
+            --build-arg LOVE_VERSION="${{ steps.ver.outputs.version }}" \
+            --build-arg LOVE_BUILD="${{ steps.ver.outputs.build }}" .
 
       - name: 计算镜像标签
         id: tags

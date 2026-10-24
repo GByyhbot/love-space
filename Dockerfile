@@ -2,11 +2,17 @@ FROM python:3.13-slim
 
 ARG APT_MIRROR=""
 ARG PIP_INDEX_URL=""
+# 构建期注入的版本信息，由 /api/status 读出（见 app/config.py）。
+# CI 打 tag 时传 git tag 进来，网页版本号就不再需要人手改代码。
+ARG LOVE_VERSION="dev"
+ARG LOVE_BUILD="local"
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     TZ=Asia/Shanghai \
-    DATA_DIR=/data
+    DATA_DIR=/data \
+    LOVE_VERSION=${LOVE_VERSION} \
+    LOVE_BUILD=${LOVE_BUILD}
 
 RUN if [ -n "$APT_MIRROR" ]; then \
         sed -i "s|deb.debian.org|${APT_MIRROR}|g" /etc/apt/sources.list.d/debian.sources; \

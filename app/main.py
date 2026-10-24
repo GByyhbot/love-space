@@ -20,9 +20,11 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Stre
 from fastapi.staticfiles import StaticFiles
 from PIL import Image
 from pydantic import BaseModel, Field
+from starlette.middleware.gzip import GZipMiddleware
 
 from . import db
 from . import importers
+from .config import APK_VERSION, BUILD_ID, WEB_VERSION
 from .serializers import serialize, serialize_many
 from . import webpush as webpush_service
 from .db import connect, dumps, now, uid
@@ -54,6 +56,29 @@ async def lifespan(app):
 
 
 app = FastAPI(title='恋爱空间', lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
+
+
+class SelectiveGZip(GZipMiddleware):
+    """gzip 压缩，但放过 SSE 与已压缩的二进制流。
+
+    GZipMiddleware 对没有 content-length 的响应是"边收边压"，这和 SSE 天然冲突：
+    `data:` 帧会被攒在压缩缓冲区里（deflate 通常要几百字节到几 KB 才吐一次），
+    心跳和实时提醒就全失去了意义。视频/图片本来就是压缩格式，再 gzip 只是白烧 CPU，
+    而且压缩过的流不支持 Range，视频拖动进度条会直接坏掉。
+    """
+
+    PASSTHROUGH = ('/api/events', '/media/', '/api/export')
+
+    async def __call__(self, scope, receive, send):
+        if scope['type'] == 'http' and scope['path'].startswith(self.PASSTHROUGH):
+            await self.app(scope, receive, send)
+            return
+        await super().__call__(scope, receive, send)
+
+
+# 必须加在所有其它中间件之前注册？不需要：Starlette 里最后 add 的在最外层，
+# 压缩在外层才能压到内层写完的响应体。
+app.add_middleware(SelectiveGZip, minimum_size=1024)
 
 log = logging.getLogger('love.space')
 
@@ -177,8 +202,8 @@ def status():
     with connect() as c:
         count = c.execute('SELECT count(*) FROM users').fetchone()[0]
     return {'initialized': count > 0, 'paired': count == 2, 'setup_token_required': bool(os.getenv('SETUP_TOKEN')),
-            'version': '1.2.2', 'build': '20261024-02',
-            'apk_version': '1.2.4', 'apk_url': '/static/lovespace.apk'}
+            'version': WEB_VERSION, 'build': BUILD_ID,
+            'apk_version': APK_VERSION, 'apk_url': '/static/lovespace.apk'}
 
 
 @app.get('/health')

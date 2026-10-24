@@ -3,6 +3,10 @@
 *.sh text eol=lf
 gradlew text eol=lf
 *.bat text eol=crlf
+# Dockerfile 用了多行 RUN（反斜杠续行），CRLF 会让续行失效；
+# compose/CI 配置同理，统一按 LF 检出
+Dockerfile text eol=lf
+*.yml text eol=lf
 
 # 二进制：不做任何转换
 *.jar binary
