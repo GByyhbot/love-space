@@ -19,63 +19,84 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      packages: write   # 推送 ghcr.io 需要
+
     steps:
       - uses: actions/checkout@v4
 
-      # secrets 没配就直接停下，别让构建白跑一趟
-      - name: 检查 Docker Hub 凭据
-        id: guard
-        run: |
-          if [ -z "${{ secrets.DOCKERHUB_USERNAME }}" ] || [ -z "${{ secrets.DOCKERHUB_TOKEN }}" ]; then
-            echo "::warning::未配置 DOCKERHUB_USERNAME / DOCKERHUB_TOKEN，跳过镜像构建"
-            echo "ready=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "ready=true" >> "$GITHUB_OUTPUT"
-          fi
-
-      # 关键：构建阶段不登录 Docker Hub。
-      # 否则 BuildKit 会拿 PAT 去 auth.docker.io 换基础镜像 library/python 的 token，
-      # 一旦该凭据作用域受限就报 401 "access token has insufficient scopes"。
+      # 关键：构建阶段不登录任何 registry。
+      # 一旦登录，BuildKit 会拿该凭据去 auth.docker.io 换基础镜像 library/python 的 token，
+      # 凭据作用域不足就报 401 "access token has insufficient scopes"（Docker Hub 的 PAT 默认是只读档）。
       # 基础镜像是公开的，匿名拉取即可；登录只用于最后的 push。
       - name: 构建镜像（未登录，匿名拉基础镜像）
-        if: steps.guard.outputs.ready == 'true'
         run: docker build --platform linux/amd64 -t love-space:ci .
 
-      - name: 生成镜像标签
-        id: meta
-        if: steps.guard.outputs.ready == 'true'
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ secrets.DOCKERHUB_USERNAME }}/love-space
-          tags: |
-            type=raw,value=latest,enable={{is_default_branch}}
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=sha,format=short
-
-      - name: 登录 Docker Hub
-        if: steps.guard.outputs.ready == 'true'
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: 打标签并推送
-        if: steps.guard.outputs.ready == 'true'
+      - name: 计算镜像标签
+        id: tags
         run: |
           set -euo pipefail
-          pushed=0
+          OWNER="${GITHUB_REPOSITORY_OWNER,,}"   # ghcr 要求全小写
+          SHORT="${GITHUB_SHA::7}"
+          TAGS="ghcr.io/$OWNER/love-space:sha-$SHORT"
+          if [ "$GITHUB_REF_TYPE" = "branch" ] && [ "$GITHUB_REF_NAME" = "main" ]; then
+            TAGS="$TAGS"$'\n'"ghcr.io/$OWNER/love-space:latest"
+          fi
+          if [ "$GITHUB_REF_TYPE" = "tag" ] && [[ "$GITHUB_REF_NAME" == v* ]]; then
+            TAGS="$TAGS"$'\n'"ghcr.io/$OWNER/love-space:${GITHUB_REF_NAME#v}"
+          fi
+          echo "tags<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$TAGS" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+          echo "将推送："
+          echo "$TAGS"
+
+      - name: 登录 GitHub 容器仓库
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 推送镜像到 ghcr.io
+        run: |
+          set -euo pipefail
           while IFS= read -r tag; do
             [ -z "$tag" ] && continue
             echo "推送 $tag"
             docker tag love-space:ci "$tag"
             docker push "$tag"
-            pushed=$((pushed + 1))
-          done <<< "${{ steps.meta.outputs.tags }}"
-          echo "共推送 $pushed 个标签"
+          done <<< "${{ steps.tags.outputs.tags }}"
+
+      # ---- 可选：Docker Hub（secrets 配了才推，且 PAT 必须是 Read & Write）----
+      - name: 登录 Docker Hub
+        if: ${{ secrets.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != '' }}
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: 推送镜像到 Docker Hub
+        if: ${{ secrets.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != '' }}
+        continue-on-error: true   # Hub 凭据没写权限时不拖垮整条流水线
+        run: |
+          set -euo pipefail
+          U="${{ secrets.DOCKERHUB_USERNAME }}"
+          while IFS= read -r tag; do
+            [ -z "$tag" ] && continue
+            hub_tag="${tag#ghcr.io/*/}"
+            hub_tag="$U/${hub_tag}"
+            echo "推送 $hub_tag"
+            docker tag love-space:ci "$hub_tag"
+            docker push "$hub_tag"
+          done <<< "${{ steps.tags.outputs.tags }}"
+
+      - name: 汇总
+        if: always()
+        run: |
           {
-            echo "### 镜像已推送"
+            echo "### 镜像标签"
             echo '```'
-            echo "${{ steps.meta.outputs.tags }}"
+            echo "${{ steps.tags.outputs.tags }}"
             echo '```'
+            echo "拉取示例：\`docker pull ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/love-space:latest\`"
           } >> "$GITHUB_STEP_SUMMARY"
