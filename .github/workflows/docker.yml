@@ -43,11 +43,19 @@ jobs:
           OWNER="${GITHUB_REPOSITORY_OWNER,,}"   # ghcr 要求全小写
           SHORT="${GITHUB_SHA::7}"
           TAGS="ghcr.io/$OWNER/love-space:sha-$SHORT"
-          if [ "$GITHUB_REF_TYPE" = "branch" ] && [ "$GITHUB_REF_NAME" = "main" ]; then
-            TAGS="$TAGS"$'\n'"ghcr.io/$OWNER/love-space:latest"
+          if [ "$GITHUB_REF_TYPE" = "branch" ]; then
+            # 滚动标签：跟随 main 最新提交，供"尝鲜"用
+            TAGS="$TAGS"$'\n'"ghcr.io/$OWNER/love-space:edge"
           fi
           if [ "$GITHUB_REF_TYPE" = "tag" ] && [[ "$GITHUB_REF_NAME" == v* ]]; then
-            TAGS="$TAGS"$'\n'"ghcr.io/$OWNER/love-space:${GITHUB_REF_NAME#v}"
+            V="${GITHUB_REF_NAME#v}"          # 1.2.3
+            MINOR="${V%.*}"                    # 1.2
+            TAGS="$TAGS"$'\n'"ghcr.io/$OWNER/love-space:$V"
+            if [ "$MINOR" != "$V" ]; then
+              TAGS="$TAGS"$'\n'"ghcr.io/$OWNER/love-space:$MINOR"
+            fi
+            # latest 只在正式发版时前进，保证它永远是"最近一次发布"
+            TAGS="$TAGS"$'\n'"ghcr.io/$OWNER/love-space:latest"
           fi
           echo "tags<<EOF" >> "$GITHUB_OUTPUT"
           echo "$TAGS" >> "$GITHUB_OUTPUT"
