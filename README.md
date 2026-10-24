@@ -35,6 +35,31 @@ curl http://127.0.0.1:1314/health
 2. 初始化完成后从 `.env` 删除 `SETUP_TOKEN` 并重启容器
 3. 首页点「发送邀请」生成链接给另一半注册；双方绑定后注册自动关闭
 
+### 用预构建镜像（不本地构建）
+
+镜像由 GitHub Actions 自动构建并推送到 `ghcr.io/gbyyhbot/love-space`，标签规则：
+
+| 标签 | 触发 |
+| --- | --- |
+| `latest` | push 到 `main` |
+| `sha-xxxxxxx` | 每次 push，对应提交短哈希 |
+| `1.2.3` / `1.2` | 打 `v1.2.3` 这样的 tag |
+
+```bash
+# 直接拉镜像运行（需要先有 docker-compose.yml 与 .env）
+docker compose pull
+docker compose up -d
+
+# 想固定到某个版本，改 .env：
+echo "LOVE_IMAGE=ghcr.io/gbyyhbot/love-space:sha-2ac50a7" >> .env
+```
+
+镜像默认是**私有**的。要么在 GitHub 的包设置里改成 Public，要么先在服务器上登录一次：
+
+```bash
+echo "<你的 GitHub PAT，需 read:packages 权限>" | docker login ghcr.io -u <GitHub 用户名> --password-stdin
+```
+
 ## 配置项（环境变量）
 
 | 变量 | 默认 | 说明 |
