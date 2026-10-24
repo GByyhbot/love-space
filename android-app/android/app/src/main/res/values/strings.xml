@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">恋爱空间</string>
+    <string name="title_activity_main">恋爱空间</string>
+    <string name="package_name">cn.iepose.lovespace</string>
+    <string name="custom_url_scheme">cn.iepose.lovespace</string>
+</resources>

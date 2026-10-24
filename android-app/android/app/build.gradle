@@ -1,0 +1,75 @@
+apply plugin: 'com.android.application'
+
+// 正式签名：凭据放在 android/keystore.properties（不入版本库）
+// 文件缺失时自动回落到 debug 签名，保证没有私钥的机器也能构建
+def keystorePropsFile = rootProject.file('keystore.properties')
+def hasReleaseKey = keystorePropsFile.exists()
+def keystoreProps = new Properties()
+if (hasReleaseKey) {
+    keystorePropsFile.withInputStream { keystoreProps.load(it) }
+}
+
+android {
+    namespace "cn.iepose.lovespace"
+    compileSdk rootProject.ext.compileSdkVersion
+    defaultConfig {
+        applicationId "cn.iepose.lovespace"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        versionCode 15
+        versionName "1.2.3"
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        aaptOptions {
+             // 贴图已是压缩格式：不二次压缩，保证 AssetManager.openFd() 可用（支持 Range 的短视频贴图）
+             noCompress 'webp', 'webm'
+             // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
+             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
+            ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+        }
+    }
+    signingConfigs {
+        release {
+            if (hasReleaseKey) {
+                storeFile rootProject.file(keystoreProps['storeFile'])
+                storePassword keystoreProps['storePassword']
+                keyAlias keystoreProps['keyAlias']
+                keyPassword keystoreProps['keyPassword']
+                enableV1Signing true
+                enableV2Signing true
+                enableV3Signing true
+            }
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            shrinkResources false
+            signingConfig hasReleaseKey ? signingConfigs.release : signingConfigs.debug
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+        debug {
+            // 调试包继续用 debug key，方便日常 adb 调试
+            applicationIdSuffix ''
+        }
+    }
+}
+
+repositories {
+    flatDir{
+        dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
+    }
+}
+
+dependencies {
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+    implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
+    implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
+    implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
+    implementation project(':capacitor-android')
+    testImplementation "junit:junit:$junitVersion"
+    androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
+    androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
+    implementation project(':capacitor-cordova-android-plugins')
+}
+
+apply from: 'capacitor.build.gradle'

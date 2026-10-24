@@ -1,0 +1,15 @@
+# 统一换行符，避免 Windows 检出把 shell 脚本改成 CRLF 导致 CI 报 bad interpreter
+* text=auto
+*.sh text eol=lf
+gradlew text eol=lf
+*.bat text eol=crlf
+
+# 二进制：不做任何转换
+*.jar binary
+*.jks binary
+*.keystore binary
+*.apk binary
+*.png binary
+*.webp binary
+*.webm binary
+*.ttf binary

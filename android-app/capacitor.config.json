@@ -1,0 +1,14 @@
+{
+  "appId": "cn.iepose.lovespace",
+  "appName": "恋爱空间",
+  "webDir": "www",
+  "server": {
+    "url": "https://love-space.iepose.cn",
+    "androidScheme": "https",
+    "cleartext": false
+  },
+  "android": {
+    "allowMixedContent": false,
+    "backgroundColor": "#FCF8F9"
+  }
+}

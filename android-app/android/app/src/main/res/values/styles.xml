@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- Base application theme. -->
+    <style name="AppTheme" parent="Theme.AppCompat.Light.DarkActionBar">
+        <!-- Customize your theme here. -->
+        <item name="colorPrimary">@color/colorPrimary</item>
+        <item name="colorPrimaryDark">@color/colorPrimaryDark</item>
+        <item name="colorAccent">@color/colorAccent</item>
+    </style>
+
+    <style name="AppTheme.NoActionBar" parent="Theme.AppCompat.DayNight.NoActionBar">
+        <item name="windowActionBar">false</item>
+        <item name="windowNoTitle">true</item>
+        <item name="android:background">@null</item>
+        <!-- targetSdk 35 强制 edge-to-edge 导致内容顶进状态栏；opt-out 后 WebView 从状态栏下方布局。
+             状态栏底色/图标深浅由 JS 侧 StatusBar 插件按明暗主题动态覆盖，此处为默认浅色兜底 -->
+        <item name="android:windowOptOutEdgeToEdgeEnforcement">true</item>
+        <item name="android:statusBarColor">#FCF8F9</item>
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
+
+
+    <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
+        <item name="android:background">@drawable/splash</item>
+    </style>
+</resources>

@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#FCF8F9" />
+  <title>恋爱空间</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #FCF8F9;
+      color: #B0596D;
+      font-family: -apple-system, "PingFang SC", "Noto Sans SC", "Microsoft YaHei", sans-serif;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+    .box { text-align: center; }
+    .heart {
+      width: 72px;
+      height: 72px;
+      margin: 0 auto 20px;
+      border-radius: 22px;
+      background: #F8E3E8;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 38px;
+      line-height: 1;
+      animation: beat 1.2s ease-in-out infinite;
+    }
+    .tip { font-size: 15px; letter-spacing: 1px; opacity: 0.85; }
+    @keyframes beat {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.08); }
+    }
+  </style>
+</head>
+<body>
+  <main class="box">
+    <div class="heart" aria-hidden="true">💖</div>
+    <p class="tip">正在进入恋爱空间…</p>
+  </main>
+</body>
+</html>

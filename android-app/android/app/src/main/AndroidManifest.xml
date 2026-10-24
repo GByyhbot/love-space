@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/AppTheme">
+        <activity
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation"
+            android:name=".MainActivity"
+            android:label="@string/title_activity_main"
+            android:theme="@style/AppTheme.NoActionBarLaunch"
+            android:launchMode="singleTask"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- 原生消息提醒服务：仅在已登录并设置账号 topic 后启动 -->
+        <service
+            android:name=".NtfyStreamService"
+            android:exported="false"
+            android:foregroundServiceType="remoteMessaging" />
+
+
+        <!-- 开机自启：BootReceiver 收到 BOOT_COMPLETED 后启动 MainActivity -->
+        <receiver
+            android:name=".BootReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+            </intent-filter>
+        </receiver>
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/file_paths" />
+        </provider>
+    </application>
+
+    <!-- Permissions -->
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- 录音（getUserMedia audio）与相机（getUserMedia video）：
+         声明后 Capacitor 的 BridgeWebChromeClient 会把 WebView 的权限请求
+         自动转发为系统运行时权限弹窗 -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- Capacitor 7 的 onPermissionRequest 要求录音必须同时声明此权限（normal 级，声明即授予），
+         否则 launcher 回调任一 denied 即整体 request.deny() -->
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <uses-permission android:name="android.permission.CAMERA" />
+
+    <!-- 消息轮询前台服务、通知权限与系统开机广播 -->
+    <!-- ① 前台消息服务权限；WAKE_LOCK 由旧版后台插件声明，当前消息接收以 NtfyStreamService 为准 -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_REMOTE_MESSAGING" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- ② 由用户主动打开 Android 电池限制设置 -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <!-- ③ 开机自启 -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+</manifest>

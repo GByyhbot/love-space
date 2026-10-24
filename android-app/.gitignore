@@ -1,0 +1,25 @@
+# ---- 构建产物 ----
+build/
+.gradle/
+.cxx/
+*.apk
+*.aab
+*.ap_
+capture/
+
+# ---- 本机专属配置（CI 由 secrets 生成）----
+local.properties
+keystore.properties
+
+# ---- 签名私钥：绝不入库 ----
+keys/
+*.jks
+*.keystore
+
+# ---- Node ----
+node_modules/
+npm-debug.log*
+
+# ---- 系统垃圾 ----
+.DS_Store
+Thumbs.db
