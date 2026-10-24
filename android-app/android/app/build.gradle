@@ -17,7 +17,7 @@ android {
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 15
-        versionName "1.2.3"
+        versionName "1.2.4"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // 贴图已是压缩格式：不二次压缩，保证 AssetManager.openFd() 可用（支持 Range 的短视频贴图）

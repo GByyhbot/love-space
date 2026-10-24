@@ -177,8 +177,8 @@ def status():
     with connect() as c:
         count = c.execute('SELECT count(*) FROM users').fetchone()[0]
     return {'initialized': count > 0, 'paired': count == 2, 'setup_token_required': bool(os.getenv('SETUP_TOKEN')),
-            'version': '1.2.1', 'build': '20261024-01',
-            'apk_version': '1.2.3', 'apk_url': '/static/lovespace.apk'}
+            'version': '1.2.2', 'build': '20261024-02',
+            'apk_version': '1.2.4', 'apk_url': '/static/lovespace.apk'}
 
 
 @app.get('/health')
