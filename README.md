@@ -60,9 +60,9 @@ echo "LOVE_IMAGE=ghcr.io/gbyyhbot/love-space:sha-2ac50a7" >> .env
 echo "<你的 GitHub PAT，需 read:packages 权限>" | docker login ghcr.io -u <GitHub 用户名> --password-stdin
 ```
 
-> 国内拉取 `ghcr.io` 偶尔会被重置连接（不是权限问题，日志里是
-> `connection reset by peer`）。重试几次通常就能过；如果反复失败，就退回
-> `docker compose up -d --build` 本地构建（走 apt/pip 国内镜像，反而更稳）。
+> 国内拉取 `ghcr.io` 偶尔会被重置连接（日志里是 `connection reset by peer`，**不是权限问题**）。
+> 先重试几次；如果一直失败——有些家宽/NAT 的 IPv6 出口是坏的，而 docker 解析后会优先走
+> IPv6——就退回 `docker compose up -d --build` 本地构建（走 apt/pip 国内镜像，反而更稳）。
 
 容器默认带了日志轮转（`10m × 3`）和 2G 内存上限，避免长期运行把宿主的
 `/var/lib/docker` 撑爆、或视频转码时把整台 NAS 拖垮。内存上限可用 `.env` 覆盖：
