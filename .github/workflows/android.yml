@@ -86,7 +86,9 @@ jobs:
         run: |
           set -euo pipefail
           VERSION="${GITHUB_REF_NAME#v}"
-          CODE="$(date +%Y%m%d)"
+          # 必须按北京时间取日期：runner 是 UTC，凌晨发布时 UTC 还是前一天，
+          # 会和上一版撞出同一个 versionCode（1.2.5 第一次构建就撞成了 20261024）。
+          CODE="$(TZ=Asia/Shanghai date +%Y%m%d)"
           echo "版本 $VERSION，versionCode $CODE"
           sed -i -E "s/versionCode [0-9]+/versionCode $CODE/" android/app/build.gradle
           sed -i -E "s/versionName \"[^\"]*\"/versionName \"$VERSION\"/" android/app/build.gradle
