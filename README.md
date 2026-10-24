@@ -60,6 +60,38 @@ echo "LOVE_IMAGE=ghcr.io/gbyyhbot/love-space:sha-2ac50a7" >> .env
 echo "<你的 GitHub PAT，需 read:packages 权限>" | docker login ghcr.io -u <GitHub 用户名> --password-stdin
 ```
 
+## Android APK
+
+APK 是 Capacitor 原生壳（远程加载线上站点，所以网页改版不需要重新打包）。工程在 `android-app/`，由 GitHub Actions 自动构建：
+
+| 触发 | 结果 |
+| --- | --- |
+| 打 `v*` tag | 构建正式包 → 自动发布到 GitHub Release（附 APK，versionName 取自 tag，versionCode 取日期 YYYYMMDD） |
+| 改 `android-app/**` 或手动触发 | 只构建并留 workflow artifact，不发布 |
+
+签名密钥通过仓库 secrets 注入，不入库：
+
+```
+ANDROID_KEYSTORE_BASE64      # base64 -w0 release.jks
+ANDROID_KEYSTORE_PASSWORD
+ANDROID_KEY_ALIAS            # love-space
+ANDROID_KEY_PASSWORD
+```
+
+本地构建（需要 **JDK 21**，Capacitor 7 要求 Java 21；JDK 17 会报「无效源发行版: 21」）：
+
+```bash
+cd android-app
+npm ci
+npx cap sync android          # 生成 assets/capacitor.plugins.json 等
+cd android
+./gradlew assembleRelease     # 产物：app/build/outputs/apk/release/app-release.apk
+```
+
+本地构建需要 `android/keystore.properties`（缺失会自动回落到 debug 签名）与 `android/local.properties`（`sdk.dir`），两者都被 gitignore。
+
+> 换签名后旧包无法覆盖安装，必须先卸载。贴纸包**不要**放回 `assets/stickers`——那会让 APK 从 3.4MB 涨到 43MB，现由服务器 `/static/stickers/` 提供。
+
 ## 配置项（环境变量）
 
 | 变量 | 默认 | 说明 |
