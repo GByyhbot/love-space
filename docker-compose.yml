@@ -2,7 +2,7 @@ services:
   love:
     # 双模式：本地构建（docker compose up -d --build）或用 Docker Hub 预构建镜像
     # （docker compose pull && docker compose up -d）。镜像名可用 LOVE_IMAGE 覆盖。
-    image: ${LOVE_IMAGE:-gbyyhbot/love-space:latest}
+    image: ${LOVE_IMAGE:-2126263229/love-space:latest}
     build:
       context: .
       args:

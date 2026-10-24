@@ -33,15 +33,13 @@ jobs:
             echo "ready=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - uses: docker/setup-buildx-action@v3
+      # 关键：构建阶段不登录 Docker Hub。
+      # 否则 BuildKit 会拿 PAT 去 auth.docker.io 换基础镜像 library/python 的 token，
+      # 一旦该凭据作用域受限就报 401 "access token has insufficient scopes"。
+      # 基础镜像是公开的，匿名拉取即可；登录只用于最后的 push。
+      - name: 构建镜像（未登录，匿名拉基础镜像）
         if: steps.guard.outputs.ready == 'true'
-
-      - name: 登录 Docker Hub
-        if: steps.guard.outputs.ready == 'true'
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: docker build --platform linux/amd64 -t love-space:ci .
 
       - name: 生成镜像标签
         id: meta
@@ -55,14 +53,29 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=sha,format=short
 
-      - name: 构建并推送（linux/amd64）
+      - name: 登录 Docker Hub
         if: steps.guard.outputs.ready == 'true'
-        uses: docker/build-push-action@v6
+        uses: docker/login-action@v3
         with:
-          context: .
-          platforms: linux/amd64
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: 打标签并推送
+        if: steps.guard.outputs.ready == 'true'
+        run: |
+          set -euo pipefail
+          pushed=0
+          while IFS= read -r tag; do
+            [ -z "$tag" ] && continue
+            echo "推送 $tag"
+            docker tag love-space:ci "$tag"
+            docker push "$tag"
+            pushed=$((pushed + 1))
+          done <<< "${{ steps.meta.outputs.tags }}"
+          echo "共推送 $pushed 个标签"
+          {
+            echo "### 镜像已推送"
+            echo '```'
+            echo "${{ steps.meta.outputs.tags }}"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
