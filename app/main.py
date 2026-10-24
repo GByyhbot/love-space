@@ -332,6 +332,16 @@ class Space(BaseModel):
     custom_color: str = Field(default='', max_length=7)
     motion: bool = True
     timezone: str = 'Asia/Shanghai'
+    # 聊天壁纸。None 表示"客户端没带这个字段"（旧版前端/旧 APK 保存空间设置时），
+    # 此时沿用库里的原值——否则旧客户端一保存就把壁纸清空了。
+    chat_bg: str | None = Field(default=None, max_length=20)
+    chat_bg_media: str | None = Field(default=None, max_length=64)
+    chat_bg_dim: int | None = None
+
+
+# 内置壁纸预设（前端 CSS 里同名实现）；'photo' 表示用自己上传的照片，'' 表示默认无壁纸
+CHAT_BG_PRESETS = {'sakura', 'night', 'cream', 'mint', 'stars'}
+CHAT_BG_DEFAULT_DIM = 35
 
 
 @app.put('/api/space')
@@ -346,13 +356,30 @@ def space(body: Space, user=Depends(current_user)):
             raise ValueError()
         if body.theme != 'custom':
             body.custom_color = ''
+        if body.chat_bg is not None and body.chat_bg not in CHAT_BG_PRESETS | {'', 'photo'}:
+            raise ValueError()
+        if body.chat_bg_dim is not None and not 0 <= body.chat_bg_dim <= 80:
+            raise ValueError()
     except Exception:
-        raise HTTPException(422, '请检查日期、时区和主题')
+        raise HTTPException(422, '请检查日期、时区、主题和聊天背景')
     with connect() as c:
-        old = db.setting(c, 'space')
+        old = db.setting(c, 'space') or {}
+        data = body.model_dump()
+        # 旧客户端没带壁纸字段时保留原值，别把对方设好的背景抹掉
+        fallback = {'chat_bg': '', 'chat_bg_media': '', 'chat_bg_dim': CHAT_BG_DEFAULT_DIM}
+        for key in fallback:
+            if data.get(key) is None:
+                data[key] = old.get(key, fallback[key])
+        # 切回预设时清掉照片引用，否则这张图会一直被判定为"正在使用"而无法清理
+        if data['chat_bg'] != 'photo':
+            data['chat_bg_media'] = ''
+        elif not data['chat_bg_media']:
+            raise HTTPException(422, '请先选择一张照片作为聊天背景')
+        elif data['chat_bg_media'] != old.get('chat_bg_media'):
+            validate_owned_image(c, data['chat_bg_media'], user['id'])
         if body.cover != old.get('cover'):
             validate_owned_image(c, body.cover, user['id'])
-        db.set_setting(c, 'space', body.model_dump())
+        db.set_setting(c, 'space', data)
     return {'ok': True}
 
 

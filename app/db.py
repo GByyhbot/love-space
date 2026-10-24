@@ -246,7 +246,9 @@ def init():
         c.execute('DROP TABLE IF EXISTS fcm_devices')
         # 旧库迁移（media_id / attached）已在上面按 PRAGMA 检查后补齐，这里不再重复。
         defaults = {'space': {'name': '我们的恋爱空间', 'since': '', 'cover': '', 'theme': 'rose',
-                             'motion': True, 'timezone': 'Asia/Shanghai'}, 'schema_version': 1}
+                             'motion': True, 'timezone': 'Asia/Shanghai',
+                             # 聊天壁纸：预设键 / 用照片时的媒体 id / 遮罩强度（百分比）
+                             'chat_bg': '', 'chat_bg_media': '', 'chat_bg_dim': 35}, 'schema_version': 1}
         for key, value in defaults.items():
             c.execute('INSERT OR IGNORE INTO settings VALUES (?,?)', (key, dumps(value)))
         # The former shared topic let both accounts receive the same transport
@@ -409,7 +411,8 @@ def media_visible(c, media_id, user_id):
         return True
     if media_in_visible_record(c, media_id, user_id):
         return True
-    if setting(c, 'space', {}).get('cover') == media_id:
+    space = setting(c, 'space', {})
+    if media_id in (space.get('cover'), space.get('chat_bg_media')):
         return True
     # 导入的聊天记录是两人共享的，里面的图片不能只让导入者看到
     if c.execute('SELECT 1 FROM import_messages WHERE media_id=? LIMIT 1', (media_id,)).fetchone():

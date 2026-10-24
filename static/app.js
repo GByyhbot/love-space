@@ -194,7 +194,10 @@ function renderPage() {
  if(state.page==='home'){loadOnThisDay();loadYearbook();}
  if(state.page==='together'&&state.tab==='calendar') loadCalendar();
 }
-async function navigate(page,tab='') {if(page!=='messages')state.chatReturn={page,tab};if(page==='messages'&&state.me){state.me.chat_unread=0;post('/notices/read?event=chat').catch(()=>{});}state.page=page;state.tab=tab;location.hash=page;try{if(page==='timeline')await loadTimeline(true);await loadSpecial();renderShell();window.scrollTo({top:0});}catch(e){toast(e.message);}}
+/* state.me 还没到时不要渲染：boot() 是异步的，用户在首屏加载完之前点导航（或 hashchange 抢跑）
+   会让 renderShell 读到 null.space 抛 TypeError，被 catch 成一条吓人的报错提示。
+   直接返回即可——boot() 结束时会按 location.hash 渲染到正确的页面。 */
+async function navigate(page,tab='') {if(!state.me)return;if(page!=='messages')state.chatReturn={page,tab};if(page==='messages'&&state.me){state.me.chat_unread=0;post('/notices/read?event=chat').catch(()=>{});}state.page=page;state.tab=tab;location.hash=page;try{if(page==='timeline')await loadTimeline(true);await loadSpecial();renderShell();window.scrollTo({top:0});}catch(e){toast(e.message);}}
 async function loadSpecial(){
  if(state.page==='channels'){
   [state.channels,state.deliveries,state.webpush]=await Promise.all([api('/channels'),api('/deliveries'),api('/webpush')]);
@@ -294,9 +297,20 @@ function chatRows() {
  const pend=pending.map(p=>`<div class="chat-line mine">${avatar(state.me.user.id)}<div><div class="chat-bubble">${esc(p.body.content||'一个附件')}</div><div class="chat-time">尚未发送 <button data-action="retry-chat" data-id="${p.client_id}">点击重试</button></div></div></div>`).join('');
  return rows+pend||empty('今天，有什么想对 TA 说？','说说日常，也说说想念。');
 }
+/* 聊天壁纸：预设用 CSS 渐变/纹理，'photo' 用自己上传的照片。
+   dim 是压在图上的遮罩强度（百分比）——它存在的意义只有一个：保证气泡文字在任何底图上都读得清。 */
+const CHAT_BG_PRESETS=[['','默认'],['sakura','樱粉'],['cream','奶油'],['mint','薄荷'],['stars','星光'],['night','夜幕'],['photo','用照片']];
+function wallpaperDim(){return Math.min(80,Math.max(0,Number(state.me?.space?.chat_bg_dim??35)));}
+function chatWallpaper(){
+ const s=state.me?.space||{},bg=s.chat_bg||'';
+ if(!bg)return '';
+ const style=`--chat-bg-dim:${wallpaperDim()/100}`;
+ if(bg==='photo')return s.chat_bg_media?`<div class="chat-wallpaper photo" aria-hidden="true" style="${style};background-image:url('/media/${esc(s.chat_bg_media)}?preview=true')"></div>`:'';
+ return `<div class="chat-wallpaper" data-bg="${esc(bg)}" aria-hidden="true" style="${style}"></div>`;
+}
 function messagesPage() {
  const partner=state.me.users.find(u=>u.id!==state.me.user.id);
- return `<section class="chat-panel"><header class="chat-header"><button class="icon-btn" data-action="chat-back" aria-label="返回">${icon('back')}</button>${partner?avatar(partner.id):'<span class="avatar">♡</span>'}<div><h3>${partner?esc(partner.name):'等待另一半加入'}</h3><small>我们的悄悄话 · 仅彼此可见</small></div><button class="icon-btn" data-nav="imports" aria-label="聊天记录" style="margin-left:auto">${icon('book')}</button></header><div id="chat-log" class="chat-log" aria-live="polite">${chatRows()}</div><div id="sticker-dock" class="sticker-dock" hidden></div><form id="chat-form" class="chat-compose"><button type="button" class="icon-btn" data-action="sticker-panel" aria-label="表情">😊</button><button type="button" class="icon-btn" data-action="chat-attachment" aria-label="添加图片、视频或语音">${icon('plus')}</button><textarea id="chat-text" name="content" placeholder="想说的话，想分享的日常…" rows="1" maxlength="20000" aria-label="聊天内容"></textarea><button class="button primary" type="submit" aria-label="发送消息">${icon('send')}</button></form></section>`;
+ return `<section class="chat-panel"><header class="chat-header"><button class="icon-btn" data-action="chat-back" aria-label="返回">${icon('back')}</button>${partner?avatar(partner.id):'<span class="avatar">♡</span>'}<div><h3>${partner?esc(partner.name):'等待另一半加入'}</h3><small>我们的悄悄话 · 仅彼此可见</small></div><button class="icon-btn" data-nav="imports" aria-label="聊天记录" style="margin-left:auto">${icon('book')}</button></header><div class="chat-body">${chatWallpaper()}<div id="chat-log" class="chat-log" aria-live="polite">${chatRows()}</div></div><div id="sticker-dock" class="sticker-dock" hidden></div><form id="chat-form" class="chat-compose"><button type="button" class="icon-btn" data-action="sticker-panel" aria-label="表情">😊</button><button type="button" class="icon-btn" data-action="chat-attachment" aria-label="添加图片、视频或语音">${icon('plus')}</button><textarea id="chat-text" name="content" placeholder="想说的话，想分享的日常…" rows="1" maxlength="20000" aria-label="聊天内容"></textarea><button class="button primary" type="submit" aria-label="发送消息">${icon('send')}</button></form></section>`;
 }
 function scrollChat(){const log=$('#chat-log');if(log)log.scrollTop=log.scrollHeight;}
 
@@ -665,8 +679,32 @@ function recordForm(kind,record=null) {
 function spaceForm() {
  const s=state.me.space;
  const darkPref=localStorage.getItem(DARK_KEY)||'auto';
- simpleForm('空间设置',field('空间名称','name',s.name,'text','required maxlength="60"')+field('从哪一天开始相爱','since',s.since,'date')+`<div class="form-row">${selectField('主题色','theme',[['rose','草莓牛奶'],['peach','蜜桃奶油'],['lavender','香芋云朵'],['custom','自定义']],s.theme)}${selectField('夜间模式','dark',[['auto','跟随系统'],['on','始终开启'],['off','始终关闭']],darkPref)}</div><label>自定义颜色（主题选「自定义」时生效）<input type="color" name="custom_color" value="${s.custom_color||'#c6748a'}"></label><div class="file-picker"><span class="file-picker-title">更换封面照片</span><label class="upload-tile file-picker-tile"><span class="upload-ico">🖼️</span><b>选择封面照片</b><small id="cover-file-name">${s.cover?'已设置封面，可重新选择':'选择一张照片作为我们的空间封面'}</small><input type="file" id="cover-file" accept="image/jpeg,image/png,image/webp"></label></div><label class="switch-row">启用轻柔动效<input name="motion" type="checkbox" ${s.motion?'checked':''}></label>`,async(data,form)=>{let cover=s.cover;const file=$('#cover-file').files[0];if(file)cover=(await uploadFile(file)).id;localStorage.setItem(DARK_KEY,data.dark);applyDarkMode();delete data.dark;if(data.theme!=='custom')data.custom_color='';if(data.theme==='custom'&&!data.custom_color)data.custom_color=s.custom_color||'#c6748a';await put('/space',{...data,cover,motion:$('[name=motion]',form).checked});applyCustomColor(data.theme,data.custom_color);});
+ const bg=s.chat_bg||'',dim=s.chat_bg_dim??35,wm=s.chat_bg_media||'';
+ /* 壁纸色卡：预设直接复用 .chat-wallpaper 的样式，所见即所得；选「用照片」时先弹文件选择 */
+ const swatches=CHAT_BG_PRESETS.map(([key,label])=>{
+  const on=key===bg;
+  const art=key==='photo'
+   ?(wm?`<span class="chat-wallpaper" aria-hidden="true" style="background-image:url('/media/${esc(wm)}?preview=true')"></span>`:'<span class="pico" aria-hidden="true">📷</span>')
+   :(key?`<span class="chat-wallpaper" data-bg="${key}" aria-hidden="true"></span>`:'');
+  return `<button type="button" class="wallpaper-swatch${on?' selected':''}${key==='photo'&&!wm?' photo-empty':''}" data-bg="${key}" aria-pressed="${on}">${art}<b>${label}</b></button>`;
+ }).join('');
+ simpleForm('空间设置',field('空间名称','name',s.name,'text','required maxlength="60"')+field('从哪一天开始相爱','since',s.since,'date')+`<div class="form-row">${selectField('主题色','theme',[['rose','草莓牛奶'],['peach','蜜桃奶油'],['lavender','香芋云朵'],['custom','自定义']],s.theme)}${selectField('夜间模式','dark',[['auto','跟随系统'],['on','始终开启'],['off','始终关闭']],darkPref)}</div><label>自定义颜色（主题选「自定义」时生效）<input type="color" name="custom_color" value="${s.custom_color||'#c6748a'}"></label><div class="file-picker"><span class="file-picker-title">更换封面照片</span><label class="upload-tile file-picker-tile"><span class="upload-ico">🖼️</span><b>选择封面照片</b><small id="cover-file-name">${s.cover?'已设置封面，可重新选择':'选择一张照片作为我们的空间封面'}</small><input type="file" id="cover-file" accept="image/jpeg,image/png,image/webp"></label></div><div class="wallpaper-picker"><span class="file-picker-title">聊天壁纸</span><div class="wallpaper-swatches" id="wallpaper-swatches">${swatches}</div><label class="wallpaper-dim-row">背景遮罩 <input type="range" name="chat_bg_dim" id="wallpaper-dim" min="0" max="80" step="5" value="${dim}"><span id="wallpaper-dim-val">${dim}%</span></label><label class="upload-tile file-picker-tile"><span class="upload-ico">🖼️</span><b>用你们的照片</b><small id="wallpaper-file-name">${wm?'已设置背景照片，可重新选择':'选一张照片铺在聊天背景上'}</small><input type="file" id="wallpaper-file" accept="image/jpeg,image/png,image/webp"></label><input type="hidden" name="chat_bg" value="${esc(bg)}"><input type="hidden" name="chat_bg_media" value="${esc(wm)}"><p class="small-note">遮罩越强，背景越淡、文字越清楚。壁纸对你们两个人同时生效。</p></div><label class="switch-row">启用轻柔动效<input name="motion" type="checkbox" ${s.motion?'checked':''}></label>`,async(data,form)=>{let cover=s.cover;const file=$('#cover-file').files[0];if(file)cover=(await uploadFile(file)).id;let wallpaper=data.chat_bg_media||'';const wfile=$('#wallpaper-file').files[0];if(wfile){wallpaper=(await uploadFile(wfile)).id;data.chat_bg='photo';}localStorage.setItem(DARK_KEY,data.dark);applyDarkMode();delete data.dark;if(data.theme!=='custom')data.custom_color='';if(data.theme==='custom'&&!data.custom_color)data.custom_color=s.custom_color||'#c6748a';data.chat_bg_dim=Math.min(80,Math.max(0,Number(data.chat_bg_dim)||0));await put('/space',{...data,cover,chat_bg_media:wallpaper,motion:$('[name=motion]',form).checked});applyCustomColor(data.theme,data.custom_color);});
  $('#cover-file').onchange=e=>{$('#cover-file-name').textContent=e.target.files[0]?.name||'选择一张照片作为我们的空间封面';};
+ /* 色卡点选：「用照片」在还没有照片时先弹文件框，避免存下一个没有图的 photo 壁纸 */
+ $('#wallpaper-swatches').onclick=e=>{
+  const btn=e.target.closest('.wallpaper-swatch');if(!btn)return;
+  const key=btn.dataset.bg;
+  if(key==='photo'&&!$('#simple-form [name=chat_bg_media]').value){$('#wallpaper-file').click();return;}
+  $('#simple-form [name=chat_bg]').value=key;
+  $$('.wallpaper-swatch').forEach(b=>{const on=b===btn;b.classList.toggle('selected',on);b.setAttribute('aria-pressed',String(on));});
+ };
+ $('#wallpaper-file').onchange=e=>{
+  const f=e.target.files[0];if(!f)return;
+  $('#wallpaper-file-name').textContent=f.name;
+  $('#simple-form [name=chat_bg]').value='photo';
+  $$('.wallpaper-swatch').forEach(b=>{const on=b.dataset.bg==='photo';b.classList.toggle('selected',on);b.setAttribute('aria-pressed',String(on));b.classList.remove('photo-empty');});
+ };
+ $('#wallpaper-dim').oninput=e=>{$('#wallpaper-dim-val').textContent=e.target.value+'%';};
 }
 function personalWishCard(r){const own=r.author===state.me.user.id,open=r.body.locked===false;return `<article class="card personal-wish-card${open?' opened':''}"><div class="card-header">${avatar(r.author)}<div><strong>${own?'你':'TA'}的个人心愿</strong><small>${open?'已解锁 · 内容只有你们两人能看见':'具体内容已加密保存'}</small></div>${own?`<div class="card-menu"><details class="more-menu"><summary aria-label="更多操作" title="更多操作">⋯</summary><div class="menu-pop"><button data-action="delete-record" data-id="${r.id}" class="danger">${icon('trash')} 删除</button></div></details></div>`:''}</div><h3 class="card-title">${esc(r.body.title)}</h3>${open?`<p class="card-text wish-plain">${esc(r.body.content||'')}</p>`:`<p class="card-text">${own?'这是你写下的个人心愿，输入密码即可回看内容。':'TA 留了一份心愿给你，输入一次密码后就能一直读到内容。'}</p><div class="inline-actions">${button('输入密码查看','unlock-personal-wish','soft','lock',`data-id="${r.id}"`)}</div>`}</article>`;}
 function profileForm(){const u=state.me.user;simpleForm('让 TA 一眼认出你',field('昵称','name',u.name,'text','required maxlength="30"')+`<div class="file-picker"><span class="file-picker-title">头像照片</span><label class="upload-tile file-picker-tile"><span class="upload-ico">🖼️</span><b>选择头像照片</b><small id="avatar-file-name">${u.avatar?'已设置头像，可重新选择':'上传一张照片，让 TA 一眼认出你'}</small><input type="file" id="avatar-file" accept="image/jpeg,image/png,image/webp"></label></div>`+field('原密码（修改密码时填写）','old_password','','password')+field('新密码（不修改请留空）','new_password','','password','minlength="10"'),async(data)=>{let avatarId=u.avatar;const file=$('#avatar-file').files[0];if(file)avatarId=(await uploadFile(file)).id;const res=await put('/profile',{...data,avatar:avatarId});if(res.login_required){state.me=null;state.stream?.close();closeModal();await boot();}});$('#avatar-file').onchange=e=>{$('#avatar-file-name').textContent=e.target.files[0]?.name||'上传一张照片，让 TA 一眼认出你';};}
