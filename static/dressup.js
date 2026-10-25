@@ -38,11 +38,14 @@ const BODIES = {
     // shoulderY = 手臂支点。它必须比躯干顶点低一截：袖山是半个球，
     // 球顶会再抬 0.1 上去，支点压在顶点上就会顶出两个"肩上的气球"。
     shoulderY: 2.000, waistY: 1.520, hipY: 1.285, kneeY: 0.720, ankleY: 0.095,
-    chestR: 0.205, waistR: 0.160, hipR: 0.226, shoulderR: 0.152, torsoZ: 0.80,
-    // 截面从下往上：胯 → 腰（收）→ 胸（鼓）→ 肩（平）→ 斜方肌（缓收）→ 颈根
-    torso: [[0.004, 1.150], [0.196, 1.200], [0.222, 1.270], [0.198, 1.380], [0.162, 1.520],
-      [0.172, 1.650], [0.196, 1.800], [0.204, 1.880], [0.200, 1.945], [0.180, 2.000],
-      [0.148, 2.045], [0.110, 2.080], [0.088, 2.105]],
+    chestR: 0.208, waistR: 0.156, hipR: 0.226, shoulderR: 0.152, torsoZ: 0.80,
+    /* 截面从下往上：胯 → 腰（收）→ 胸（鼓）→ 肩（平）→ 斜方肌（缓收）→ 颈根。
+       2026-10-25 对照低模基础人体参考图校正：肩胸段加宽拉平（0.196→0.208），
+       腰再收一档（0.162→0.156），1.65 处的腰肋略收——正面剪影才是
+       "倒三角 + V 型收腰"，而不是一根上下一边粗的柱子。 */
+    torso: [[0.004, 1.150], [0.196, 1.200], [0.226, 1.270], [0.200, 1.380], [0.156, 1.520],
+      [0.166, 1.650], [0.196, 1.780], [0.208, 1.870], [0.206, 1.940], [0.188, 2.000],
+      [0.152, 2.045], [0.112, 2.080], [0.088, 2.105]],
     armPivotX: 0.164, armTilt: 0.19,
     upperArm: 0.372, foreArm: 0.382, handLen: 0.180,
     upR1: 0.084, upR2: 0.062, foreR1: 0.062, foreR2: 0.050,
@@ -58,10 +61,14 @@ const BODIES = {
       [0.134, 0.004], [0.132, 0.064], [0.118, 0.118], [0.086, 0.156], [0.038, 0.172], [0.004, 0.176]],
     neckR: 0.070, neckTopR: 0.052, neckBot: 1.900, neckTop: 2.075,
     shoulderY: 1.890, waistY: 1.455, hipY: 1.215, kneeY: 0.675, ankleY: 0.088,
-    chestR: 0.186, waistR: 0.140, hipR: 0.212, shoulderR: 0.126, torsoZ: 0.82,
-    torso: [[0.004, 1.085], [0.182, 1.130], [0.208, 1.200], [0.196, 1.310], [0.144, 1.455],
-      [0.156, 1.580], [0.180, 1.720], [0.186, 1.800], [0.182, 1.855], [0.164, 1.900],
-      [0.132, 1.932], [0.098, 1.955], [0.078, 1.968]],
+    chestR: 0.192, waistR: 0.136, hipR: 0.216, shoulderR: 0.126, torsoZ: 0.86,
+    /* 2026-10-25 对照参考图：胸段加鼓（0.186→0.192）、腰收窄（0.144→0.136）、
+       胯加宽（0.208→0.214），torsoZ 0.82→0.86 —— 车削体前后一起加深，
+       侧影才有了胸和臀的起伏，正面腰臀反差拉大才是沙漏形。
+       ⚠️ 衣服从这套曲线自动推出（topProfile/clothZ/裤腰），改这里衣服自动跟。 */
+    torso: [[0.004, 1.085], [0.184, 1.130], [0.214, 1.200], [0.198, 1.310], [0.136, 1.455],
+      [0.150, 1.580], [0.176, 1.715], [0.192, 1.795], [0.188, 1.855], [0.166, 1.900],
+      [0.134, 1.932], [0.098, 1.955], [0.078, 1.968]],
     armPivotX: 0.147, armTilt: 0.19,
     upperArm: 0.352, foreArm: 0.364, handLen: 0.166,
     upR1: 0.072, upR2: 0.054, foreR1: 0.054, foreR2: 0.044,
@@ -143,10 +150,12 @@ function blob(rx, ry, rz, m, seg = 18) {
  *  手腕和脚踝那两处收窄是最出效果的，一眼就从"积木"变成"人"。
  *
  *  profile 写成 [[y, r], ...]，y 从 0（近端，插进躯干那头）到 −len（远端）。 */
-function limb(profile, m, seg = 22, samples = 20) {
+function limb(profile, m, seg = 30, samples = 20) {
   /* ⚠️ 不能直接拿 profile 去 lathe：那样每两个控制点之间是一段圆锥，
      圆锥之间的斜率是断的，弯起来就"数得出节"（小腿上会有一圈硬折线）。
-     用样条穿过这些点再密采样，四肢才是一条连续的曲线。 */
+     用样条穿过这些点再密采样，四肢才是一条连续的曲线。
+     seg=30：管子是 22 段时，多边形面片会和关节球面交替争深度，
+     膝盖顶上有一圈淡色虚线（2026-10-25）；提到 30 交界就是一条细线。 */
   const curve = new THREE.SplineCurve(profile.map(([y, r]) => new THREE.Vector2(r, y)));
   const pts = curve.getPoints(samples).map((v) => [Math.max(0.001, v.x), v.y]);
   return new THREE.Mesh(lathe(pts, seg), m);
@@ -280,22 +289,30 @@ function buildCharacter(d) {
   const elbowL = new THREE.Group();
   const elbowR = new THREE.Group();
   const wristR = d.foreR2 * 0.88;   // 真实手腕比前臂细一截
-  /* 关节的"公称半径"：上下两段在关节处的半径取成同一个值，关节球也做成
-     这个半径的球。球在赤道处的表面是竖直的，和半径相同的圆柱正好相切——
-     相切就没有折线，膝盖和手肘因此是连续的，不会多出一圈箍。
-     只要球比管子大一点点（1%），交界处就会变成一圈明显的鼓包，反而更假。 */
+  /* 关节的"公称半径"：上下两段在关节处的半径取成同一个值（elbowJ / kneeJ）。
+     ⚠️ 但"球和管相切就不会有折线"只对直筒成立——两段管在靠近关节时都在
+     收窄（锥面），与球面近乎平行，间隙小于深度缓冲就会闪锯齿，见下面的
+     jointOver 注释。 */
   const elbowJ = (d.upR2 + d.foreR1) / 2;
   const kneeJ = (d.thighR2 + d.shinR1) / 2;
+  /* 关节两段的接法（照抄裤管膝盖验证过的结构，别再回到"两段锥面 + 切线球"）：
+     两段管在关节处如果继续收窄，管面就和关节球面近乎平行地贴着走一长段，
+     间隙小于深度缓冲精度，裸露的膝盖/手肘会闪出一圈针脚状锯齿。
+     正确做法：上段管先收到关节公称半径，然后以**恒定半径的直段越过关节中心**；
+     下段管也从中心上方同一半径接管。关节球加大 2.5%，从外面完整包住两个管口。
+     管口直段越过的长度 ≤ 0.18*J，保证屈肘/屈膝 90° 时管口边缘仍然缩在球内
+     （sqrt(J² + (0.18J)²) < 1.025J）。 */
+  const jointOver = (J) => J * 0.18;
   const armUpperProfile = [
     [0.020, d.upR1 * 1.01],
-    [-0.10 * d.upperArm, d.upR1 * 1.07],   // 三角肌下缘最鼓
+    [-0.10 * d.upperArm, d.upR1 * 1.10],   // 二头肌最鼓（短袖以下全露，这段曲线管不管事一眼分明）
     [-0.34 * d.upperArm, d.upR1 * 0.97],
     [-0.62 * d.upperArm, d.upR2 * 1.18],
-    [-0.86 * d.upperArm, d.upR2 * 1.05],
-    [-d.upperArm, elbowJ],
+    [-0.88 * d.upperArm, elbowJ * 1.02],
+    [-(d.upperArm + jointOver(elbowJ)), elbowJ],
   ];
   const armForeProfile = [
-    [0, elbowJ],
+    [jointOver(elbowJ), elbowJ],
     [-0.13 * d.foreArm, d.foreR1 * 1.05],  // 前臂上段再鼓一次
     [-0.44 * d.foreArm, d.foreR1 * 0.87],
     [-0.76 * d.foreArm, wristR * 1.10],
@@ -311,8 +328,8 @@ function buildCharacter(d) {
     g.add(delt);
     g.add(limb(armUpperProfile, skinMat));
     elbow.position.y = -d.upperArm;
-    // 正球、正半径，和两端的管口相切（见 elbowJ 的注释）
-    elbow.add(blob(elbowJ * 1.004, elbowJ * 1.004, elbowJ * 1.004, skinMat, 22));
+    // 球加大 2.5% 从外面完整包住两个管口（结构见 jointOver 注释）
+    elbow.add(blob(elbowJ * 1.025, elbowJ * 1.025, elbowJ * 1.025, skinMat, 40));
     elbow.add(limb(armForeProfile, skinMat));
     // 手：挂在手腕上（腕在 −foreArm），手掌再往下
     const hand = makeHand(d, side, skinMat);
@@ -334,21 +351,23 @@ function buildCharacter(d) {
     [-0.12 * d.thigh, d.thighR1 * 1.04],
     [-0.40 * d.thigh, d.thighR1 * 0.90],
     [-0.72 * d.thigh, d.thighR2 * 1.10],
-    [-d.thigh, kneeJ],
+    [-0.88 * d.thigh, kneeJ * 1.02],
+    [-(d.thigh + jointOver(kneeJ)), kneeJ],   // 恒定半径直段越过膝关节中心
   ];
   const shinProfile = [
-    [0, kneeJ],
-    [-0.11 * d.shin, d.shinR1 * 1.06],     // 小腿肚
-    [-0.32 * d.shin, d.shinR1 * 0.92],
-    [-0.56 * d.shin, d.shinR2 * 1.32],
-    [-0.82 * d.shin, d.shinR2 * 1.04],
+    [jointOver(kneeJ), kneeJ],                // 从关节中心上方以同一半径接管
+    [-0.10 * d.shin, d.shinR1 * 1.12],     // 小腿肚（腓肠肌）：长裤裤脚以下全靠这段读出"这是条腿"
+    [-0.30 * d.shin, d.shinR1 * 0.90],
+    [-0.56 * d.shin, d.shinR2 * 1.30],
+    [-0.82 * d.shin, d.shinR2 * 1.02],
     [-shinTube, ankleR],                   // 脚踝收窄
   ];
   for (const [g, knee, side] of [[legL, kneeL, -1], [legR, kneeR, 1]]) {
     g.position.set(side * d.hipPivotX, d.hipY, 0);
     g.add(limb(thighProfile, skinMat));
     knee.position.y = -d.thigh;
-    knee.add(blob(kneeJ * 1.004, kneeJ * 1.004, kneeJ * 1.004, skinMat, 22));
+    // 球加大 2.5% 完整包住两个管口（结构见 jointOver 注释）
+    knee.add(blob(kneeJ * 1.025, kneeJ * 1.025, kneeJ * 1.025, skinMat, 40));
     knee.add(limb(shinProfile, skinMat));
     // 脚：踝下一只脚背，脚尖朝 +z。要整个塞进鞋里，别比鞋还宽
     const foot = blob(d.footW * 0.88, d.footH * 0.22, d.footLen * 0.42, skinMat, 18);
