@@ -16,6 +16,16 @@ import * as THREE from './vendor/three.module.min.js';
 
 const SKIN = '#f0c9ae';
 
+/** 左右对称的一对起伏（乳房/胸肌/臀瓣/腹肌列/V 线都是成对的）。
+ *  ⚠️ 必须在身材表之前定义：表里的 feats 是模块加载时就要算出来的常量，
+ *  放在表后面会撞 TDZ（Cannot access 'pair' before initialization）。
+ *  phi 是绕身体的角度：0 = 正前(+z)，π = 正后(−z)，π/2 = 右侧。
+ *  phi0→phi1 随高度插值，能画出斜线（马甲线、人鱼线）。 */
+const pair = (phi0, phi1, sigma, y0, y1, amp) => ([
+  { phi0, phi1, sigma, y0, y1, amp },
+  { phi0: -phi0, phi1: -phi1, sigma, y0, y1, amp },
+]);
+
 /* ══════════════════════════ 身材表：男女各一套 ══════════════════════════
    torso 每项是 [y, halfW, frontK, backK]：
      y      高度
@@ -49,23 +59,41 @@ const BODY_M = {
      胸的前凸和臀的后翘直接做进 frontK/backK 曲线（1.87 胸峰 / 1.29 臀峰），
      不靠外面贴球——贴球一定有一圈"贴纸边"。鼓包要"圆"：
      峰值和两侧邻点的高差别拉开太大，样条才鼓成馒头而不是尖包。 */
+  /* 基础截面只给"躯干本身的厚薄"，胸/腹/臀的体积交给下面的 feats：
+     曲线只留一点起伏，鼓包全由沿法线的位移出，才鼓得圆而不鼓成桶。 */
   torso: [
     [1.150, 0.004, 0.80, 0.80],   // 骨盆底收口（几乎一个点）
-    [1.220, 0.155, 0.70, 0.92],
-    [1.290, 0.186, 0.72, 1.08],   // 胯最宽；臀峰（更圆更翘）
-    [1.380, 0.178, 0.74, 0.90],
-    [1.520, 0.148, 0.80, 0.72],   // 腰（前腹收住、后背压平）
-    [1.650, 0.162, 0.86, 0.72],
-    [1.780, 0.192, 0.90, 0.72],
-    [1.870, 0.202, 0.98, 0.74],   // 胸最宽，胸峰更饱满
-    [1.940, 0.198, 0.90, 0.76],
-    [2.000, 0.204, 0.82, 0.78],   // 肩线：再加宽一档，压住大头后的比例
-    [2.045, 0.160, 0.78, 0.74],
-    [2.080, 0.114, 0.74, 0.70],
+    [1.220, 0.155, 0.70, 0.86],
+    [1.290, 0.186, 0.72, 0.94],   // 胯最宽
+    [1.380, 0.178, 0.74, 0.82],
+    [1.450, 0.168, 0.78, 0.74],
+    [1.520, 0.150, 0.80, 0.72],   // 腰
+    [1.600, 0.162, 0.82, 0.72],
+    [1.780, 0.192, 0.86, 0.72],
+    [1.870, 0.202, 0.90, 0.74],   // 胸最宽
+    [1.940, 0.200, 0.88, 0.76],
+    [2.000, 0.212, 0.82, 0.78],   // 肩线：再加宽一档，压住大头后的比例
+    [2.030, 0.196, 0.80, 0.76],   // 斜方肌缓收——肩坡要平滑，别出"肩章"台阶
+    [2.065, 0.152, 0.76, 0.72],
+    [2.090, 0.114, 0.74, 0.70],
     [2.105, 0.090, 0.68, 0.64],   // 颈根
   ],
-  /* 男体不加任何胸部贴片（见 buildBody 里"胸"的注释）：胸廓方阔感全靠 torso
-     曲线的 frontK 鼓包。 */
+  /* 男体解剖起伏：胸肌两瓣 + 胸骨沟 + 下缘褶；腹肌两列 + 白线沟 +
+     三道横褶（六块）；人鱼线（V）从髋骨斜收到小腹；臀两瓣 + 臀沟。
+     amp 单位是米（位移量），0.03 ≈ 3cm 级，Q 版身上正好。 */
+  feats: [
+    ...pair(0.40, 0.40, 0.42, 1.79, 1.96, 0.030),                 // 胸肌
+    { phi0: 0, phi1: 0, sigma: 0.13, y0: 1.79, y1: 1.96, amp: -0.012 },  // 胸骨沟
+    { phi0: 0, phi1: 0, sigma: 0.9, y0: 1.778, y1: 1.798, amp: -0.006 },  // 胸肌下缘褶（轻一点，重了像搁板）
+    ...pair(0.30, 0.30, 0.30, 1.40, 1.78, 0.016),                 // 腹肌两列
+    { phi0: 0, phi1: 0, sigma: 0.14, y0: 1.40, y1: 1.78, amp: -0.013 },  // 腹白线
+    { phi0: 0, phi1: 0, sigma: 1.10, y0: 1.545, y1: 1.568, amp: -0.010 },
+    { phi0: 0, phi1: 0, sigma: 1.10, y0: 1.635, y1: 1.658, amp: -0.010 },
+    { phi0: 0, phi1: 0, sigma: 1.10, y0: 1.715, y1: 1.738, amp: -0.010 },
+    ...pair(0.72, 0.24, 0.20, 1.28, 1.50, -0.011),                // 人鱼线
+    ...pair(Math.PI - 0.55, Math.PI - 0.55, 0.52, 1.10, 1.38, 0.034),    // 臀瓣
+    { phi0: Math.PI, phi1: Math.PI, sigma: 0.22, y0: 1.12, y1: 1.36, amp: -0.013 },
+  ],
   armPivotX: 0.164, armTilt: 0.19,
   upperArm: 0.372, foreArm: 0.382, handLen: 0.180,
   upR1: 0.084, upR2: 0.062, foreR1: 0.062, foreR2: 0.050,
@@ -90,24 +118,36 @@ const BODY_F = {
   /* 女体 = 沙漏：肩窄 → 胸峰 → 腰最收 → 胯最宽（明显比肩宽）。
      乳房的体积主体做进 frontK 曲线（1.78 处 frontK 1.06 的圆鼓包），
      侧影是自然的胸线；球只负责把鼓包分成左右两瓣 + 中间一道沟。 */
+  /* 基础截面同样只管厚薄：乳房和臀的体积在 feats 里沿法线鼓出来，
+     鼓成两瓣球而不是"胸前多一块"。 */
   torso: [
     [1.085, 0.004, 0.80, 0.80],
-    [1.150, 0.150, 0.68, 0.96],
-    [1.215, 0.205, 0.70, 1.16],   // 胯最宽（加宽）；臀峰更圆更翘
-    [1.310, 0.193, 0.72, 0.94],
-    [1.455, 0.124, 0.80, 0.70],   // 腰最收
-    [1.580, 0.136, 0.82, 0.70],
-    [1.715, 0.162, 0.88, 0.72],   // 胸下沿
-    [1.780, 0.172, 1.06, 0.74],   // 胸峰：frontK 鼓包更圆
-    [1.855, 0.170, 0.92, 0.74],
-    [1.900, 0.142, 0.82, 0.72],   // 肩线：再收窄一档，衬得头大胯宽
-    [1.932, 0.118, 0.76, 0.66],
-    [1.955, 0.088, 0.70, 0.60],
+    [1.150, 0.152, 0.68, 0.86],
+    [1.215, 0.208, 0.70, 0.96],   // 胯最宽
+    [1.310, 0.196, 0.72, 0.80],
+    [1.390, 0.160, 0.76, 0.72],
+    [1.455, 0.124, 0.80, 0.70],   // 腰最收（沙漏的腰）
+    [1.530, 0.132, 0.82, 0.70],
+    [1.660, 0.158, 0.86, 0.72],   // 胸下沿
+    [1.780, 0.172, 0.96, 0.74],   // 胸峰（乳房主体在 feats）
+    [1.855, 0.172, 0.92, 0.74],
+    [1.900, 0.136, 0.82, 0.72],   // 肩线：再收窄一档，衬得头大胯宽
+    [1.922, 0.126, 0.80, 0.70],   // 肩坡平滑
+    [1.945, 0.100, 0.76, 0.64],
+    [1.960, 0.082, 0.70, 0.58],
     [1.968, 0.074, 0.62, 0.54],
   ],
-  /* 乳房：浅一层椭球把躯干上的胸峰分成左右两瓣；rz 加大一档更圆润，
-     埋 52%（buildBody），露出的部分才是圆弧而不是贴片。 */
-  bust: { y: 1.770, x: 0.064, rx: 0.064, ry: 0.050, rz: 0.036, tilt: 0.14 },
+  /* 女体解剖起伏：乳房两瓣（大、圆、有乳沟）+ 马甲线（两条斜沟 + 白线沟 +
+     两侧小腹的饱满）+ 臀两瓣（比男的更饱满）+ 臀沟。 */
+  feats: [
+    ...pair(0.34, 0.34, 0.44, 1.65, 1.90, 0.044),                 // 乳房
+    { phi0: 0, phi1: 0, sigma: 0.11, y0: 1.68, y1: 1.88, amp: -0.014 },  // 乳沟
+    ...pair(0.72, 0.24, 0.20, 1.26, 1.50, -0.012),                // 马甲线（斜的 V）
+    { phi0: 0, phi1: 0, sigma: 0.13, y0: 1.36, y1: 1.62, amp: -0.010 },  // 白线沟
+    ...pair(0.30, 0.30, 0.28, 1.32, 1.58, 0.014),                 // 小腹两侧的饱满
+    ...pair(Math.PI - 0.55, Math.PI - 0.55, 0.55, 1.08, 1.38, 0.050),    // 臀瓣
+    { phi0: Math.PI, phi1: Math.PI, sigma: 0.22, y0: 1.10, y1: 1.36, amp: -0.016 },
+  ],
   armPivotX: 0.147, armTilt: 0.19,
   upperArm: 0.352, foreArm: 0.364, handLen: 0.166,
   upR1: 0.072, upR2: 0.054, foreR1: 0.054, foreR2: 0.044,
@@ -173,35 +213,6 @@ function revolveRings(profile, samples = 30) {
   return ring;
 }
 
-function revolve(profile, m, seg = 52, samples = 30) {
-  const ring = revolveRings(profile, samples);
-  const pos = [];
-  const idx = [];
-  for (let i = 0; i <= samples; i += 1) {
-    const { y, a, bR, z0 } = ring[i];
-    for (let j = 0; j <= seg; j += 1) {
-      const phi = (j / seg) * Math.PI * 2;
-      pos.push(a * Math.sin(phi), y, z0 + bR * Math.cos(phi));
-    }
-  }
-  /* 绕向：φ 递增 → +x，i 递增 → +y；(a, a+1, b) 的法线是 +z（朝外）。 */
-  for (let i = 0; i < samples; i += 1) {
-    for (let j = 0; j < seg; j += 1) {
-      const a = i * (seg + 1) + j;
-      const b = a + seg + 1;
-      idx.push(a, a + 1, b, b, a + 1, b + 1);
-    }
-  }
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  geo.setIndex(idx);
-  geo.computeVertexNormals();
-  const mesh = new THREE.Mesh(geo, m);
-  mesh.castShadow = true;
-  mesh.receiveShadow = true;
-  return mesh;
-}
-
 /** 手：手掌 + 四指 + 拇指（拇指是"读成手"的关键那一根）。 */
 function makeHand(d, side, m) {
   const H = d.handLen;
@@ -236,23 +247,75 @@ function makeHand(d, side, m) {
   return g;
 }
 
-/** 躯干前表面（胸腹一侧）在高度 y 处的 z；后表面深度同理（返回正数）。
- *  贴在躯干上的零件（胸肌/乳房/臀）都用它定位，才不会浮出来或者埋进去。 */
-function lerpRing(ring, y, pick) {
-  if (y <= ring[0].y) return pick(ring[0]);
-  for (let i = 1; i < ring.length; i += 1) {
-    if (y <= ring[i].y) {
-      const t = (y - ring[i - 1].y) / (ring[i].y - ring[i - 1].y || 1);
-      return pick(ring[i - 1]) * (1 - t) + pick(ring[i]) * t;
+/* ══════════════════════════ 躯干曲面 + 解剖起伏 ══════════════════════════
+   光靠"每层一个椭圆"只能做出峰，做不出左右结构：乳房是两瓣、臀是两瓣中间
+   一条沟、胸肌两瓣中间胸骨沟、腹肌是两列 + 白线沟 + 横向分段。
+   所以在椭圆截面上再叠一层"沿外法线的位移"：
+     - 横向（绕身体一圈）用高斯扩散，边缘自然渐隐，不会有一圈硬棱；
+     - 竖向用 sin² 鼓包，两端斜率为 0，和躯干平滑相接；
+     - amp < 0 就是"沟"（胸骨沟/臀沟/马甲线/白线）。
+   位移沿的是椭圆外法线，不是简单加半径，胸才鼓成球而不是撑成桶。 */
+function angularGap(phi, phic) {
+  let dphi = Math.abs(phi - phic) % (Math.PI * 2);
+  if (dphi > Math.PI) dphi = Math.PI * 2 - dphi;
+  return dphi;
+}
+
+function revolveSkin(profile, feats, m, seg = 72, samples = 44) {
+  const ring = revolveRings(profile, samples);
+  const pos = [];
+  const idx = [];
+  for (let i = 0; i <= samples; i += 1) {
+    const { y, a, bR, z0 } = ring[i];
+    for (let j = 0; j <= seg; j += 1) {
+      const phi = (j / seg) * Math.PI * 2;
+      let x = a * Math.sin(phi);
+      let z = z0 + bR * Math.cos(phi);
+      // 椭圆 (x/a)² + ((z-z0)/bR)² = 1 的外法线 ∝ (sinφ/a, cosφ/bR)
+      let nx = Math.sin(phi) / a;
+      let nz = Math.cos(phi) / bR;
+      const nl = Math.hypot(nx, nz) || 1;
+      nx /= nl; nz /= nl;
+      let dsp = 0;
+      for (const f of feats) {
+        const t = (y - f.y0) / (f.y1 - f.y0);
+        if (t <= 0 || t >= 1) continue;
+        const phic = f.phi0 + (f.phi1 - f.phi0) * t;   // φ 随高度插值 → 斜的线（马甲线/V 线）
+        const g = Math.exp(-(angularGap(phi, phic) ** 2) / (2 * f.sigma * f.sigma));
+        dsp += f.amp * g * Math.sin(Math.PI * t) ** 2;
+      }
+      pos.push(x + dsp * nx, y, z + dsp * nz);
     }
   }
-  return pick(ring[ring.length - 1]);
-}
-function frontZAt(d, y) {
-  return lerpRing(revolveRings(d.torso), y, (r) => r.z0 + r.bR);
-}
-function backDepthAt(d, y) {
-  return lerpRing(revolveRings(d.torso), y, (r) => r.bR - r.z0);
+  for (let i = 0; i < samples; i += 1) {
+    for (let j = 0; j < seg; j += 1) {
+      const a0 = i * (seg + 1) + j;
+      const b0 = a0 + seg + 1;
+      idx.push(a0, a0 + 1, b0, b0, a0 + 1, b0 + 1);
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setIndex(idx);
+  geo.computeVertexNormals();
+  /* 接缝焊接：φ=0（正前中央）那一圈，j=0 和 j=seg 是两个重复顶点，
+     computeVertexNormals 各算各的，正面正中会留一条穿胸而过的明暗缝。
+     把每圈首尾顶点的法线取平均写回去，缝就没了。 */
+  const nrm = geo.attributes.normal;
+  for (let i = 0; i <= samples; i += 1) {
+    const a0 = i * (seg + 1);
+    const b0 = a0 + seg;
+    const nx = (nrm.getX(a0) + nrm.getX(b0)) / 2;
+    const ny = (nrm.getY(a0) + nrm.getY(b0)) / 2;
+    const nz = (nrm.getZ(a0) + nrm.getZ(b0)) / 2;
+    nrm.setXYZ(a0, nx, ny, nz);
+    nrm.setXYZ(b0, nx, ny, nz);
+  }
+  nrm.needsUpdate = true;
+  const mesh = new THREE.Mesh(geo, m);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  return mesh;
 }
 
 function shade(hex, k) {
@@ -489,7 +552,7 @@ function mat(d, color, extra = {}) {
 /* ══════════════════════════ 躯干 ══════════════════════════ */
 function buildTorso(d, skinMat) {
   const g = new THREE.Group();
-  g.add(revolve(d.torso, skinMat, 52, 30));
+  g.add(revolveSkin(d.torso, d.feats, skinMat, 72, 44));
   return g;
 }
 
@@ -504,26 +567,10 @@ function buildBody(d, skinMat) {
   neck.position.y = (d.neckTop + d.neckBot) / 2;
   root.add(neck);
 
-  /* ── 胸 ──
-     男：不加任何贴片。椭球贴在躯干上必然有一圈"贴纸边"（第一/二版翻过车：
-     大球像胸罩，扁球像胸垫），男性胸廓的方阔感全靠 torso 曲线的 frontK 鼓包。
-     女：胸峰的主体同样在曲线里，只加一层极浅的椭球把鼓包分成左右两瓣——
-     圆而软的椭球边缘读得自然，扁宽的"胸垫"读不出。 */
-  if (d.gender === 'f') {
-    const b = d.bust;
-    for (const side of [-1, 1]) {
-      const bust = blob(b.rx, b.ry, b.rz, skinMat, 20);
-      bust.position.set(side * b.x, b.y, frontZAt(d, b.y) - b.rz * 0.52);
-      bust.rotation.x = b.tilt;          // 略微下垂
-      bust.castShadow = true;
-      bust.receiveShadow = true;
-      root.add(bust);
-    }
-  }
-
-  /* ── 臀：完全由 torso 的 backK 鼓包负责（1.29/1.215 处的臀峰）。
-     不用贴球——球贴在躯干曲面上必有一圈"贴纸边"，侧影就是一个
-     挂在屁股上的球（第一版翻过的车）。revolve 曲线自己的鼓包天然平滑。 ── */
+  /* ── 胸 / 腹 / 臀 ──
+     全部由 revolveSkin 的 feats 沿截面外法线鼓出来：乳房是两瓣球（带乳沟）、
+     胸肌两瓣带胸骨沟、腹肌两列带白线与横褶、臀两瓣带臀沟、男女都有 V 线。
+     这里不再有任何贴球——球贴在曲面上必有一圈法线突变的"贴纸边"。 */
 
   /* ── 手臂：肩 → 肘两段，半径走曲线（造型间第 4 轮定的结构） ── */
   const jointOver = (J) => J * 0.18;
@@ -570,20 +617,25 @@ function buildBody(d, skinMat) {
   const kneeJ = (d.thighR2 + d.shinR1) / 2;
   const shinTube = d.shin - d.footH * 0.30;
   const ankleR = d.shinR2 * 0.90;
+  /* 腿的线条：大腿上段饱满 → 中段缓收 → 膝上明显收 → 膝；
+     小腿肚（腓肠肌）是一段有峰的鼓包，往下顺到比目鱼肌再收踝。
+     控制点给密一点，样条才拉得出"有起伏的曲线"而不是两根锥子。 */
   const thighProfile = [
-    [0.020, d.thighR1 * 1.01],
-    [-0.12 * d.thigh, d.thighR1 * 1.04],
-    [-0.40 * d.thigh, d.thighR1 * 0.90],
-    [-0.72 * d.thigh, d.thighR2 * 1.10],
+    [0.020, d.thighR1 * 1.02],
+    [-0.08 * d.thigh, d.thighR1 * 1.06],   // 大腿最饱满处
+    [-0.26 * d.thigh, d.thighR1 * 1.00],
+    [-0.50 * d.thigh, d.thighR1 * 0.90],
+    [-0.72 * d.thigh, d.thighR1 * 0.80],
     [-0.88 * d.thigh, kneeJ * 1.02],
     [-(d.thigh + jointOver(kneeJ)), kneeJ],
   ];
   const shinProfile = [
     [jointOver(kneeJ), kneeJ],
-    [-0.10 * d.shin, d.shinR1 * 1.12],    // 小腿肚（腓肠肌）
-    [-0.30 * d.shin, d.shinR1 * 0.90],
-    [-0.56 * d.shin, d.shinR2 * 1.22],   // 小腿下段别再鼓：1.30 那版有个假肌肉包
-    [-0.82 * d.shin, d.shinR2 * 1.02],
+    [-0.08 * d.shin, d.shinR1 * 1.10],
+    [-0.20 * d.shin, d.shinR1 * 1.14],   // 腓肠肌峰
+    [-0.36 * d.shin, d.shinR1 * 0.96],
+    [-0.55 * d.shin, d.shinR1 * 0.80],
+    [-0.78 * d.shin, d.shinR2 * 1.08],
     [-shinTube, ankleR],
   ];
   for (const side of [-1, 1]) {
