@@ -95,6 +95,9 @@ const BODY_M = {
     ...pair(0.48, 0.48, 0.62, 1.66, 1.90, 0.026, 2.0),   // k=2：slab 形，底边收紧不拖沓
     { phi0: 0, phi1: 0, sigma: 0.13, y0: 1.68, y1: 1.90, amp: -0.011 },  // 胸骨沟：中线要可见，不然读成一块胸罩
     { phi0: 0, phi1: 0, sigma: 0.95, y0: 1.638, y1: 1.662, amp: -0.006 },  // 胸肌下缘褶（跟着胸肌下移）
+    /* 锁骨：男浅一点（女体参考图里的锁骨是女性信号，男性有但不抢戏） */
+    ...pair(0.15, 0.52, 0.10, 1.925, 1.965, 0.004),
+    { phi0: 0, phi1: 0, sigma: 0.10, y0: 1.915, y1: 1.95, amp: -0.005 },  // 胸骨上窝
     ...pair(0.30, 0.30, 0.30, 1.46, 1.81, 0.016),                 // 腹肌两列
     { phi0: 0, phi1: 0, sigma: 0.14, y0: 1.46, y1: 1.81, amp: -0.013 },  // 腹白线
     { phi0: 0, phi1: 0, sigma: 1.10, y0: 1.585, y1: 1.608, amp: -0.010 },
@@ -105,6 +108,9 @@ const BODY_M = {
     ...pair(Math.PI - 0.55, Math.PI - 0.55, 0.80, 1.23, 1.53, 0.026, 1.4),
     { phi0: Math.PI, phi1: Math.PI, sigma: 0.32, y0: 1.27, y1: 1.45, amp: -0.007, k: 1.4 },
   ],
+  /* 三角肌：男大（肩头方阔） */
+  delt: [1.06, 0.62, 1.04],
+  deltDrop: 0,
   armPivotX: 0.185, armTilt: 0.19,   // 肩加宽后臂根外移（James 校准：肩 +8%）
   upperArm: 0.372, foreArm: 0.382, handLen: 0.180,
   upR1: 0.084, upR2: 0.062, foreR1: 0.062, foreR2: 0.050,
@@ -125,7 +131,9 @@ const BODY_F = {
     [0.124, 0.002], [0.134, 0.065], [0.129, 0.118], [0.104, 0.158], [0.054, 0.180], [0.004, 0.184]],
   hairColor: '#6b4a3a',
   hairBackLen: Math.PI * 0.74,   // 长发：后脑一片到后颈
-  neckR: 0.078, neckTopR: 0.058, neckBot: 1.895, neckTop: 2.020,
+  /* 脖颈参考用户给的女体截图：长而细的脖颈是优雅感的核心，
+     QQ 秀短脖那版是给大头配的，女体改回修长（男体维持短脖）。 */
+  neckR: 0.074, neckTopR: 0.054, neckBot: 1.895, neckTop: 2.030,   // 0.165 太长像模特夸张版，收回到修长但不夸张
   shoulderY: 1.890, waistY: 1.500, hipY: 1.260, kneeY: 0.698, ankleY: 0.088,   // 髋点 1.26 = 黄金比腿长
   shoulderR: 0.126, chestR: 0.192, waistR: 0.136, hipR: 0.216,
   /* 女体 = 沙漏：肩窄 → 胸峰 → 腰最收 → 胯最宽（明显比肩宽）。
@@ -146,8 +154,10 @@ const BODY_F = {
     [1.680, 0.158, 0.86, 0.72],   // 胸下沿
     [1.780, 0.172, 0.96, 0.74],   // 胸峰（乳房主体在 feats）
     [1.855, 0.172, 0.92, 0.74],
-    [1.900, 0.136, 0.82, 0.72],   // 肩线：再收窄一档，衬得头大胯宽
-    [1.922, 0.126, 0.80, 0.70],   // 肩坡平滑
+    [1.855, 0.170, 0.92, 0.74],
+    [1.878, 0.152, 0.88, 0.72],   // 溜肩过渡（插在 1.855 与 1.900 之间的排序兜底会处理）
+    [1.900, 0.126, 0.82, 0.72],   // 肩线：再收窄一档，衬得头大胯宽
+    [1.922, 0.112, 0.80, 0.70],   // 肩坡平滑（坡拉长一点，女肩才溜）
     [1.945, 0.100, 0.76, 0.64],
     [1.960, 0.082, 0.70, 0.58],
     [1.968, 0.074, 0.62, 0.54],
@@ -155,8 +165,12 @@ const BODY_F = {
   /* 女体解剖起伏：乳房两瓣（大、圆、有乳沟）+ 马甲线（两条斜沟 + 白线沟 +
      两侧小腹的饱满）+ 臀两瓣（比男的更饱满）+ 臀沟。 */
   feats: [
-    ...pair(0.34, 0.34, 0.44, 1.65, 1.90, 0.044),                 // 乳房
-    { phi0: 0, phi1: 0, sigma: 0.11, y0: 1.68, y1: 1.88, amp: -0.014 },  // 乳沟
+    ...pair(0.34, 0.34, 0.44, 1.63, 1.90, 0.048),                 // 乳房（更饱满）
+    { phi0: 0, phi1: 0, sigma: 0.09, y0: 1.68, y1: 1.88, amp: -0.018 },  // 乳沟（加深：浅了读成一块）
+    /* 锁骨：从胸骨窝斜向外上到肩的两条浅脊——上半身最重要的女性信号。
+       phi0→phi1 斜线 + 细 σ，浅浅一条；中间配胸骨上窝的浅凹。 */
+    ...pair(0.16, 0.55, 0.10, 1.80, 1.85, 0.005),                 // 锁骨
+    { phi0: 0, phi1: 0, sigma: 0.10, y0: 1.79, y1: 1.825, amp: -0.006 },  // 胸骨上窝
     ...pair(0.72, 0.24, 0.20, 1.305, 1.545, -0.012),              // 马甲线（斜的 V）
     { phi0: 0, phi1: 0, sigma: 0.13, y0: 1.395, y1: 1.655, amp: -0.010 },  // 白线沟
     ...pair(0.30, 0.30, 0.28, 1.355, 1.615, 0.014),               // 小腹两侧的饱满
@@ -165,6 +179,9 @@ const BODY_F = {
     ...pair(Math.PI - 0.55, Math.PI - 0.55, 0.85, 1.195, 1.565, 0.032, 1.4),   // 臀瓣
     { phi0: Math.PI, phi1: Math.PI, sigma: 0.32, y0: 1.225, y1: 1.465, amp: -0.008, k: 1.4 },
   ],
+  /* 三角肌：男大（肩头方阔）；女小且低（溜肩，方肩是"衣架肩"） */
+  delt: [0.94, 0.54, 0.92],
+  deltDrop: 0.014,
   armPivotX: 0.147, armTilt: 0.19,
   upperArm: 0.352, foreArm: 0.364, handLen: 0.166,
   upR1: 0.072, upR2: 0.054, foreR1: 0.054, foreR2: 0.044,
@@ -445,6 +462,13 @@ function buildHead(d, skinMat, hairMat, blushMat) {
     lash.scale.z = 0.55;
     head.add(lash);
 
+    // 双眼皮：睫毛上方的浅色褶线（参考女体截图——没有它眼睛是"贴"上去的）
+    const lid = new THREE.Mesh(new THREE.CapsuleGeometry(0.008 * R, 0.24 * R, 4, 10), mat(d, shade(SKIN, 0.93), { roughness: 0.7 }));
+    lid.position.set(ex, ey + 0.135 * R, ez + 0.043 * R);
+    lid.rotation.set(0.10, 0, Math.PI / 2 + side * 0.06);
+    lid.scale.z = 0.5;
+    head.add(lid);
+
     // 眉：拉回眼睛正上方，眉眼距离近了表情才挂在脸上
     const brow = new THREE.Mesh(new THREE.CapsuleGeometry(0.015 * R, 0.24 * R, 4, 10), browMat);
     brow.position.set(side * 0.40 * R, 0.155 * R, faceAt(0.155, side * 0.40) + 0.014 * R);
@@ -616,9 +640,10 @@ function buildBody(d, skinMat) {
     const g = new THREE.Group();
     g.position.set(side * d.armPivotX, d.shoulderY, 0);
     g.rotation.z = side * d.armTilt;     // 静止时略微外张，手不会贴在胯上
-    // 三角肌：缺了它手臂和躯干之间会有一道缝；但它必须整个缩在袖子里
-    const delt = blob(d.upR1 * 1.06, d.upR1 * 0.62, d.upR1 * 1.04, skinMat, 20);
-    delt.position.y = -0.030;
+    // 三角肌：缺了它手臂和躯干之间会有一道缝；大小/高低按性别（女溜肩）
+    const [deltR, deltY, deltZ] = d.delt;
+    const delt = blob(d.upR1 * deltR, d.upR1 * deltY, d.upR1 * deltZ, skinMat, 20);
+    delt.position.y = -0.030 - (d.deltDrop || 0);
     delt.castShadow = true;
     g.add(delt);
     g.add(limb(armUpperProfile, skinMat));
