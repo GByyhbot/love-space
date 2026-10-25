@@ -30,11 +30,12 @@ const BODIES = {
   m: {
     h: 2.560,
     headR: 0.152, headY: 2.372, headSZ: 1.02,
-    /* 头颅截面：从下颌尖往上。颏部要收得比颧骨窄一截，
-       不然正面就是一颗大头蛋——收了下巴，脸才有人样。 */
-    headShape: [[0.004, -0.184], [0.056, -0.172], [0.092, -0.132], [0.126, -0.062],
-      [0.144, 0.006], [0.142, 0.070], [0.126, 0.126], [0.092, 0.166], [0.040, 0.184], [0.004, 0.188]],
-    neckR: 0.082, neckTopR: 0.062, neckBot: 2.045, neckTop: 2.240,
+    /* 头颅截面（2026-10-25 重排）：最宽点上移到额骨/太阳穴(0.146@0.070)，
+       下颌从颧骨就开始明显收窄(0.112@-0.065)、颏部收到 0.080——
+       旧版最宽点在眼线、下颌几乎不收，正面是一颗下宽上窄的"梨"。 */
+    headShape: [[0.004, -0.172], [0.044, -0.162], [0.080, -0.130], [0.112, -0.065],
+      [0.134, 0.000], [0.146, 0.070], [0.140, 0.125], [0.115, 0.168], [0.060, 0.192], [0.004, 0.196]],
+    neckR: 0.086, neckTopR: 0.064, neckBot: 2.045, neckTop: 2.240,
     // shoulderY = 手臂支点。它必须比躯干顶点低一截：袖山是半个球，
     // 球顶会再抬 0.1 上去，支点压在顶点上就会顶出两个"肩上的气球"。
     shoulderY: 2.000, waistY: 1.520, hipY: 1.285, kneeY: 0.720, ankleY: 0.095,
@@ -57,9 +58,9 @@ const BODIES = {
   f: {
     h: 2.380,
     headR: 0.142, headY: 2.205, headSZ: 1.02,
-    headShape: [[0.004, -0.174], [0.050, -0.162], [0.086, -0.122], [0.118, -0.058],
-      [0.134, 0.004], [0.132, 0.064], [0.118, 0.118], [0.086, 0.156], [0.038, 0.172], [0.004, 0.176]],
-    neckR: 0.070, neckTopR: 0.052, neckBot: 1.900, neckTop: 2.075,
+    headShape: [[0.004, -0.158], [0.040, -0.149], [0.074, -0.120], [0.104, -0.058],
+      [0.124, 0.002], [0.134, 0.065], [0.129, 0.118], [0.104, 0.158], [0.054, 0.180], [0.004, 0.184]],
+    neckR: 0.073, neckTopR: 0.054, neckBot: 1.900, neckTop: 2.075,
     shoulderY: 1.890, waistY: 1.455, hipY: 1.215, kneeY: 0.675, ankleY: 0.088,
     chestR: 0.192, waistR: 0.136, hipR: 0.216, shoulderR: 0.126, torsoZ: 0.86,
     /* 2026-10-25 对照参考图：胸段加鼓（0.186→0.192）、腰收窄（0.144→0.136）、
@@ -407,41 +408,49 @@ function buildCharacter(d) {
   };
   const faceAt = (yR, xR) => surfZ(yR * R, xR * R);
 
-  const eyeWhiteMat = new THREE.MeshStandardMaterial({ color: '#fffdfa', roughness: 0.35 });
-  const irisMat = mat('#3b2b33', { roughness: 0.42 });
+  const eyeWhiteMat = new THREE.MeshStandardMaterial({ color: '#fffdfa', roughness: 0.30 });
+  const irisMat = mat('#54403f', { roughness: 0.38 });
+  const pupilMat = mat('#2a1e22', { roughness: 0.30 });
   const shineMat = new THREE.MeshBasicMaterial({ color: '#ffffff' });
+  const lashMat = mat('#4a3a40', { roughness: 0.55 });
   const browMat = mat('#5a4650', { roughness: 0.6 });
   for (const side of [-1, 1]) {
-    const ex = side * 0.41 * R;
-    const ez = faceAt(0.005, side * 0.41);
+    const ex = side * 0.40 * R;
+    const ey = -0.015 * R;
+    const ez = faceAt(-0.015, side * 0.40);
 
-    // 眼白：压扁到 0.045R 厚，贴着脸往外鼓一点点就够，别做成两颗乒乓球
-    const white = blob(0.205 * R, 0.132 * R, 0.045 * R, eyeWhiteMat, 20);
-    white.position.set(ex, 0.005 * R, ez + 0.016 * R);
+    /* 眼睛（2026-10-25 重做）：旧版 0.205R 的大白饼几乎被 0.122R 的虹膜盖满，
+       再压一根 0.016R 的黑胶囊当眼皮——正面就是两颗黑玻璃珠。
+       现在眼睛缩一号、虹膜坐在下睑上（y 低于眼白中心）左右各留一线眼白，
+       瞳孔和高光分层，上睑只留一条细睫毛线，才读得出"在看人"。 */
+    const white = blob(0.170 * R, 0.112 * R, 0.038 * R, eyeWhiteMat, 20);
+    white.position.set(ex, ey, ez + 0.014 * R);
     head.add(white);
 
-    // 虹膜比眼白更往前一点，中间自然鼓出一道"角膜"，是卡通眼睛的立体感来源
-    const iris = blob(0.122 * R, 0.122 * R, 0.030 * R, irisMat, 18);
-    iris.position.set(ex, 0.0, ez + 0.048 * R);
+    const iris = blob(0.082 * R, 0.082 * R, 0.020 * R, irisMat, 18);
+    iris.position.set(ex, ey - 0.008 * R, ez + 0.042 * R);
     head.add(iris);
 
-    const shine = blob(0.040 * R, 0.040 * R, 0.012 * R, shineMat, 10);
-    shine.position.set(side * 0.355 * R, 0.058 * R, ez + 0.070 * R);
+    const pupil = blob(0.036 * R, 0.036 * R, 0.010 * R, pupilMat, 12);
+    pupil.position.set(ex, ey - 0.008 * R, ez + 0.054 * R);
+    head.add(pupil);
+
+    const shine = blob(0.026 * R, 0.026 * R, 0.008 * R, shineMat, 10);
+    shine.position.set(ex + side * 0.026 * R, ey + 0.030 * R, ez + 0.062 * R);
     head.add(shine);
 
-    // 上眼睑：一道细弧压住眼白上沿，眼睛立刻有"眼皮"而不是一颗球
-    const lid = new THREE.Mesh(new THREE.CapsuleGeometry(0.016 * R, 0.29 * R, 4, 10), irisMat);
-    lid.position.set(ex, 0.118 * R, faceAt(0.118, side * 0.41) + 0.026 * R);
-    lid.rotation.set(0.15, 0, Math.PI / 2 + side * 0.04);
-    head.add(lid);
+    // 上睫毛：一条细弧贴着眼白上缘（替代旧版那根又粗又低的黑眼皮）
+    const lash = new THREE.Mesh(new THREE.CapsuleGeometry(0.013 * R, 0.26 * R, 4, 10), lashMat);
+    lash.position.set(ex, ey + 0.088 * R, ez + 0.046 * R);
+    lash.rotation.set(0.10, 0, Math.PI / 2 + side * 0.06);
+    lash.scale.z = 0.55;
+    head.add(lash);
 
-    /* 眉：浅浅一道、几乎平放。抬到 0.40R 会被刘海盖住，只能留在 0.335R——
-       所以"凶"其实是眼睛那一圈给的（眼皮压得低、眉又厚又黑），
-       这里把眉做细、做浅，眼神就从瞪人变成看人。 */
-    const brow = new THREE.Mesh(new THREE.CapsuleGeometry(0.0115 * R, 0.32 * R, 4, 10), browMat);
-    brow.position.set(side * 0.40 * R, 0.318 * R, faceAt(0.318, side * 0.40) + 0.008 * R);
-    brow.rotation.set(0.12, side * 0.16, Math.PI / 2 - side * 0.03);
-    brow.scale.z = 0.7;
+    // 眉：从发际线边(0.318R)拉回到眼睛正上方(0.155R)，眉眼距离近了表情才挂在脸上
+    const brow = new THREE.Mesh(new THREE.CapsuleGeometry(0.015 * R, 0.24 * R, 4, 10), browMat);
+    brow.position.set(side * 0.40 * R, 0.155 * R, faceAt(0.155, side * 0.40) + 0.014 * R);
+    brow.rotation.set(0.12, side * 0.20, Math.PI / 2 - side * 0.10);
+    brow.scale.z = 0.6;
     head.add(brow);
 
     /* 腮红：一张带径向渐变的方片。以前是一个半透明椭球，边缘是一圈硬边，
@@ -461,26 +470,44 @@ function buildCharacter(d) {
     ear.position.set(side * 0.895 * R, -0.045 * R, -0.035 * R);
     ear.rotation.z = side * 0.12;
     head.add(ear);
-    const pit = blob(0.036 * R, 0.090 * R, 0.055 * R, mat(shade(SKIN, 0.90), { roughness: 0.86 }), 12);
+    const pit = blob(0.032 * R, 0.082 * R, 0.050 * R, mat(shade(SKIN, 0.945), { roughness: 0.86 }), 12);
     pit.position.set(side * 0.90 * R, -0.050 * R, 0.005 * R);
     head.add(pit);
   }
 
-  // 鼻子：只要一点起伏，多了就是另一个画风。球心压进脸里一半，露出来的只是鼻头
-  const nose = blob(0.072 * R, 0.070 * R, 0.062 * R, mat(shade(SKIN, 0.96), { roughness: 0.8 }), 16);
-  nose.position.set(0, -0.282 * R, faceAt(-0.282, 0) + 0.004 * R);
-  head.add(nose);
+  /* 鼻子：从眉心顺到鼻尖的一条脊 + 一个圆润、明显前凸的鼻头。
+     旧版只有一个几乎贴合脸面的小球（前凸仅 ~0.01），侧影看不出鼻子。
+     现在鼻头明显探出脸面、鼻梁用一条细脊连到眉心：正面看是鼻梁竖线，
+     侧面看是清楚的鼻型，鼻孔/鼻翼这种尺度留给更细的迭代。 */
+  const noseMat = mat(shade(SKIN, 0.95), { roughness: 0.82 });
+  const tipY = -0.40 * R;                              // 鼻尖高度
+  const nz = faceAt(-0.40, 0);
+  // 鼻头：小椭球，z 方向拉长 + 中心前移，明显探出脸面
+  const noseTip = blob(0.050 * R, 0.060 * R, 0.110 * R, noseMat, 18);
+  noseTip.position.set(0, tipY, nz + 0.055 * R);
+  head.add(noseTip);
+  // 鼻梁：从眉心到鼻头的一条细脊（沿 Y 站立、横向很窄、轻微前凸）
+  const bridge = new THREE.Mesh(new THREE.CapsuleGeometry(0.024 * R, 0.26 * R, 4, 10), noseMat);
+  bridge.position.set(0, -0.30 * R, faceAt(-0.30, 0) + 0.020 * R);
+  head.add(bridge);
 
-  /* 嘴：上唇薄、下唇厚。单个椭球贴上去就是一张贴纸，
-     分成两片之后中间那道压痕自己就出来了。 */
-  const lipTopMat = mat('#bd6b74', { roughness: 0.48 });
-  const lipLowMat = mat('#c8767f', { roughness: 0.46 });
-  const lipUp = blob(0.112 * R, 0.028 * R, 0.030 * R, lipTopMat, 14);
-  lipUp.position.set(0, -0.598 * R, faceAt(-0.598, 0) + 0.006 * R);
+  /* 嘴：上下唇合成一条自然的嘴缝，而不是两片分离的粉色贴纸。
+     上唇薄、下唇略厚，二者几乎相接；中间压一道细的深色嘴缝线。 */
+  const lipTopMat = mat('#bd6b74', { roughness: 0.46 });
+  const lipLowMat = mat('#c8767f', { roughness: 0.44 });
+  const mouthY = -0.62 * R;
+  const mz = faceAt(-0.62, 0);
+  const lipUp = blob(0.132 * R, 0.022 * R, 0.034 * R, lipTopMat, 16);
+  lipUp.position.set(0, mouthY + 0.016 * R, mz + 0.006 * R);
   head.add(lipUp);
-  const lipLow = blob(0.118 * R, 0.046 * R, 0.034 * R, lipLowMat, 16);
-  lipLow.position.set(0, -0.650 * R, faceAt(-0.650, 0) + 0.006 * R);
+  const lipLow = blob(0.140 * R, 0.032 * R, 0.038 * R, lipLowMat, 16);
+  lipLow.position.set(0, mouthY - 0.012 * R, mz + 0.006 * R);
   head.add(lipLow);
+  // 嘴缝：一条细的深色弧线压在上下唇之间
+  const seam = new THREE.Mesh(new THREE.CapsuleGeometry(0.009 * R, 0.20 * R, 4, 10), mat('#8a4a52', { roughness: 0.5 }));
+  seam.position.set(0, mouthY, mz + 0.014 * R);
+  seam.rotation.set(0, 0, Math.PI / 2);
+  head.add(seam);
 
   /* —— 头发：球面片按发型显隐 ——
      ⚠️ 不能只按 R（横向半径）缩放：头是竖长的蛋形，顶点比 R 高出近四分之一，
@@ -498,16 +525,40 @@ function buildCharacter(d) {
      发壳来打散，结果那片自己的上沿又成了另一条硬边（男生的刘海看着像被剃刀
      刮平）。现在改成建完几何体之后按 phi 做正弦偏移，把靠近下沿的顶点往下拉：
      边缘自己就成了参差的发梢，一片就够，不用再叠。 */
-  const addHair = (key, grow, phiStart, phiLen, thetaStart, thetaLen, segW = 40, segH = 24, wave = 0, taper = 0) => {
+  const addHair = (key, grow, phiStart, phiLen, thetaStart, thetaLen, segW = 40, segH = 24, wave = 0, taper = 0, fit = 0) => {
     const geo = new THREE.SphereGeometry(1, segW, segH, phiStart, phiLen, thetaStart, thetaLen);
-    if (wave || taper) {
+    if (fit || wave || taper) {
       const pos = geo.attributes.position;
       for (let i = 0; i < pos.count; i += 1) {
-        const x = pos.getX(i);
+        let x = pos.getX(i);
         const y = pos.getY(i);
-        const z = pos.getZ(i);
+        let z = pos.getZ(i);
         const th = Math.acos(Math.min(1, Math.max(-1, y)));
         const t = (th - thetaStart) / thetaLen;   // 0 = 发顶，1 = 下沿
+        if (fit) {
+          /* 蛋形贴合：把球壳的圆截面半径换成头颅曲线在同高度的半径。
+             头是竖长蛋形、最宽点在额骨——球壳在 θ 28°..54° 一带比头颅瘦，
+             会被颅骨顶穿，露出一条头皮（"秃了一圈发箍"）。按头颅曲线重算
+             横向半径后，发壳永远贴着任意头型，以后改 headShape 不用再调发壳。 */
+          const rEgg0 = surfZ(HH * grow * y, 0) * fit;
+          // 颅顶以上 surfZ 会钳在发顶半径上，直接用会顶出一个小凸起；
+          // 按 √(1-u²) 收回 0（球面轮廓），发顶收成圆头而不是锥尖
+          const topY = H * d.headSZ;
+          const yHead = HH * grow * y;
+          let rEgg = rEgg0;
+          if (yHead > topY) {
+            const u = (yHead - topY) / (HH * grow - topY);
+            rEgg *= Math.sqrt(Math.max(0, 1 - u * u));
+          }
+          const cur = Math.hypot(x, z);
+          if (cur > 1e-4) {
+            const s = rEgg / (HW * grow * cur);
+            x *= s;
+            z *= s;
+            pos.setX(i, x);
+            pos.setZ(i, z);
+          }
+        }
         /* taper：上沿半径渐变收到 1.002（贴住 cap 那层的半径）。
            两片发壳半径不同时，交界处是一圈径向台阶，正对光源就是一条横贯
            头顶的亮线（女生的刘海缝）。收进去之后台阶归零，缝就没了。 */
@@ -539,7 +590,11 @@ function buildCharacter(d) {
     hairParts[key] = m;
     return m;
   };
-  addHair('cap', 1.000, 0, Math.PI * 2, 0, Math.PI * 0.30);
+  /* cap：蛋形贴合（fit 1.045 = 发壳离头皮 4.5%），θ 一直压到 0.40π（72°，
+     眉弓上方）——最宽点移到额骨之后，旧球壳在头顶会秃一圈，egg-fit 后
+     发顶永远贴着颅骨；grow 0.963 让壳顶只高出颅顶 ~0.003，收口不显凸；
+     下沿藏在 bangs/back 外壳之下，露不出硬边。 */
+  addHair('cap', 0.963, 0, Math.PI * 2, 0, Math.PI * 0.40, 48, 26, 0, 0, 1.045);
   // 长发（到后颈）与短发（到耳下）各一片，靠 visible 切换
   addHair('back', 1.022, Math.PI * 0.70, Math.PI * 1.60, Math.PI * 0.18, Math.PI * 0.74, 48, 28, 0.10);
   addHair('backS', 1.022, Math.PI * 0.70, Math.PI * 1.60, Math.PI * 0.18, Math.PI * 0.40, 48, 20, 0.09);
