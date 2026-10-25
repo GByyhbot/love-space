@@ -66,12 +66,12 @@ const BODY_M = {
      腿(髋点→脚底) / 身体(下巴→脚底) = 0.618 → 男髋点抬到 1.36（原 1.29）。
      腰线、胯底、所有下半身 feat 跟着一起抬，胸以上不动。 */
   torso: [
-    [1.235, 0.072, 0.80, 0.78],
-    [1.290, 0.170, 0.70, 0.74],   // 臀底对齐大腿背线（同女体）
-    [1.360, 0.205, 0.72, 0.84],   // 胯最宽；backK 宽缓圆丘（同女体思路）
-    [1.450, 0.196, 0.74, 0.84],
-    [1.520, 0.185, 0.78, 0.76],
-    [1.575, 0.165, 0.80, 0.72],   // 腰
+    [1.235, 0.080, 0.80, 0.78],
+    [1.290, 0.190, 0.70, 0.74],   // 臀底对齐大腿背线（同女体）
+    [1.360, 0.235, 0.72, 0.84],   // 胯最宽（再加宽：James 校准还差 15%）
+    [1.450, 0.222, 0.74, 0.84],
+    [1.520, 0.205, 0.78, 0.76],
+    [1.575, 0.175, 0.80, 0.72],   // 腰（只微加，保持收腰对比）
     [1.660, 0.178, 0.82, 0.72],
     [1.780, 0.225, 0.92, 0.72],   // 胸最宽最厚：压到 1.78 一带（和胸肌 lobe 同步下移）
     [1.870, 0.222, 0.90, 0.74],
@@ -108,8 +108,10 @@ const BODY_M = {
   armPivotX: 0.185, armTilt: 0.19,   // 肩加宽后臂根外移（James 校准：肩 +8%）
   upperArm: 0.372, foreArm: 0.382, handLen: 0.180,
   upR1: 0.084, upR2: 0.062, foreR1: 0.062, foreR2: 0.050,
-  hipPivotX: 0.080, thigh: 0.605, shin: 0.660,   // 腿加长：髋点抬到 1.36 后腿要接得到地(1.265)
-  thighR1: 0.100, thighR2: 0.084, shinR1: 0.078, shinR2: 0.052,
+  /* 腿要"分得开"：旧版髋支点 0.080 < 大腿半径 0.100，两腿内缘跨过中线互相重叠，
+     正面看就是并成一条。髋支点 0.110 后内缘 +0.006，两腿之间留出了缝。 */
+  hipPivotX: 0.110, thigh: 0.605, shin: 0.660,   // 腿加长：髋点抬到 1.36 后腿要接得到地(1.265)
+  thighR1: 0.104, thighR2: 0.086, shinR1: 0.082, shinR2: 0.050,
   footLen: 0.235, footH: 0.100, footW: 0.070,
 };
 
@@ -166,8 +168,9 @@ const BODY_F = {
   armPivotX: 0.147, armTilt: 0.19,
   upperArm: 0.352, foreArm: 0.364, handLen: 0.166,
   upR1: 0.072, upR2: 0.054, foreR1: 0.054, foreR2: 0.044,
-  hipPivotX: 0.086, thigh: 0.562, shin: 0.610,   // 髋点抬到 1.26 后腿加长，仍接到 ankleY 0.088
-  thighR1: 0.098, thighR2: 0.078, shinR1: 0.068, shinR2: 0.046,
+  /* 同男体：髋支点外移到 0.104，两腿之间留缝不再并成一条。 */
+  hipPivotX: 0.104, thigh: 0.562, shin: 0.610,   // 髋点抬到 1.26 后腿加长，仍接到 ankleY 0.088
+  thighR1: 0.098, thighR2: 0.078, shinR1: 0.072, shinR2: 0.044,
   footLen: 0.215, footH: 0.090, footW: 0.062,
 };
 
@@ -632,7 +635,9 @@ function buildBody(d, skinMat) {
   }
 
   /* ── 腿：髋 → 膝两段，同样走曲线（小腿肚那段是"这是条腿"的关键） ── */
-  const kneeJ = (d.thighR2 + d.shinR1) / 2;
+  /* 膝关节要"细"：取上下两段里较细的一根再收 3%，膝盖处才是明显的收腰，
+     而不是上下一样粗的一根管子（旧版取平均值，膝盖反而是最粗的地方之一）。 */
+  const kneeJ = Math.min(d.thighR2, d.shinR1) * 0.97;
   const shinTube = d.shin - d.footH * 0.30;
   const ankleR = d.shinR2 * 0.90;
   /* 腿的线条：大腿上段饱满 → 中段缓收 → 膝上明显收 → 膝；
@@ -640,21 +645,25 @@ function buildBody(d, skinMat) {
      控制点给密一点，样条才拉得出"有起伏的曲线"而不是两根锥子。 */
   const thighProfile = [
     [0.020, d.thighR1 * 1.02],
-    [-0.08 * d.thigh, d.thighR1 * 1.06],   // 大腿最饱满处
+    [-0.08 * d.thigh, d.thighR1 * 1.10],   // 大腿最饱满处（大腿要粗）
     [-0.26 * d.thigh, d.thighR1 * 1.00],
     [-0.50 * d.thigh, d.thighR1 * 0.90],
     [-0.72 * d.thigh, d.thighR1 * 0.80],
     [-0.88 * d.thigh, kneeJ * 1.02],
     [-(d.thigh + jointOver(kneeJ)), kneeJ],
   ];
+  /* 小腿线条：腓肠肌在上 1/5 鼓成一个明显的峰 → 中段顺下 → 比目鱼肌末段
+     再收到踝。旧版控制点太疏（7 点），样条拉出的峰只有 1.14 倍、几乎读不出
+     "小腿肚"；现在 9 点、峰值 1.20、踝收到 0.90×shinR2，粗→细的曲线才出来。 */
   const shinProfile = [
-    [jointOver(kneeJ), kneeJ],
-    [-0.08 * d.shin, d.shinR1 * 1.10],
-    [-0.20 * d.shin, d.shinR1 * 1.14],   // 腓肠肌峰
-    [-0.36 * d.shin, d.shinR1 * 0.96],
-    [-0.55 * d.shin, d.shinR1 * 0.80],
-    [-0.78 * d.shin, d.shinR2 * 1.08],
-    [-shinTube, ankleR],
+    [jointOver(kneeJ), kneeJ],          // 膝（最细）
+    [-0.06 * d.shin, d.shinR1 * 1.08],
+    [-0.16 * d.shin, d.shinR1 * 1.20],  // 腓肠肌峰
+    [-0.30 * d.shin, d.shinR1 * 1.08],
+    [-0.46 * d.shin, d.shinR1 * 0.86],
+    [-0.64 * d.shin, d.shinR2 * 1.16],  // 比目鱼肌
+    [-0.82 * d.shin, d.shinR2 * 0.98],
+    [-shinTube, ankleR],                // 脚踝收细
   ];
   for (const side of [-1, 1]) {
     const g = new THREE.Group();
@@ -664,10 +673,11 @@ function buildBody(d, skinMat) {
     knee.position.y = -d.thigh;
     knee.add(blob(kneeJ * 1.025, kneeJ * 1.025, kneeJ * 1.025, skinMat, 40));
     knee.add(limb(shinProfile, skinMat));
-    /* 脚：裸模的脚不能沿用鞋里的尺寸——加长、压扁、脚尖朝前，
-       从脚跟到脚尖有清晰的长度，不然就是两个小肉垫。 */
-    const foot = blob(d.footW * 1.02, d.footH * 0.30, d.footLen * 0.52, skinMat, 18);
+    /* 脚：裸模的脚不能沿用鞋里的尺寸——加长、压扁、脚尖朝前，再加个倾角
+       （踝高掌低），平底椭圆读出来就是两个小肉垫。 */
+    const foot = blob(d.footW * 1.02, d.footH * 0.30, d.footLen * 0.56, skinMat, 18);
     foot.position.set(0, -d.shin + d.footH * 0.10, d.footLen * 0.30);
+    foot.rotation.x = 0.22;   // 前低后高：脚背的楔形
     knee.add(foot);
     g.add(knee);
     root.add(g);
