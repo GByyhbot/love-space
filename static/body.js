@@ -391,6 +391,14 @@ function revolveSkin(profile, feats, m, seg = 72, samples = 44) {
   }
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  /* UV：u = 绕一圈的方位角比例，v = 高度比例。
+     ⚠️ 没有 uv 的话 bumpMap/roughnessMap 全部失效（three 会静默不出效果），
+     自定义 BufferGeometry 必须自己写。 */
+  const uvs = [];
+  for (let i = 0; i <= samples; i += 1) {
+    for (let j = 0; j <= seg; j += 1) uvs.push(j / seg * 3, i / samples * 2);
+  }
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
   geo.setIndex(idx);
   geo.computeVertexNormals();
   /* 接缝焊接：φ=0（正前中央）那一圈，j=0 和 j=seg 是两个重复顶点，
@@ -451,6 +459,44 @@ function blushTexture() {
   return tex;
 }
 
+/* ── 程序化毛孔/皮肤微起伏：运行时用 canvas 生成，不是资产文件 ──
+   塑料感的第一来源是"表面均匀"：真实皮肤有毛孔、油光分区、细纹。
+   这张噪声同时当 bumpMap（微起伏）和 roughnessMap（油光/干燥分区），
+   两张图复用一张纹理，零资产、零体积。 */
+function poreTexture(size = 512) {
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = size;
+  const ctx = cv.getContext('2d');
+  const img = ctx.createImageData(size, size);
+  const hash = (x, y) => {
+    const s = Math.sin(x * 127.1 + y * 311.7) * 43758.5453;
+    return s - Math.floor(s);
+  };
+  const smooth = (x, y) => {
+    const xi = Math.floor(x); const yi = Math.floor(y);
+    const xf = x - xi; const yf = y - yi;
+    const u = xf * xf * (3 - 2 * xf);
+    const v = yf * yf * (3 - 2 * yf);
+    const a = hash(xi, yi); const b = hash(xi + 1, yi);
+    const c = hash(xi, yi + 1); const d = hash(xi + 1, yi + 1);
+    return (a * (1 - u) + b * u) * (1 - v) + (c * (1 - u) + d * u) * v;
+  };
+  for (let y = 0; y < size; y += 1) {
+    for (let x = 0; x < size; x += 1) {
+      // 两个八度：细毛孔 + 稍大的皮纹起伏
+      const n = smooth(x * 0.35, y * 0.35) * 0.62 + smooth(x * 0.11, y * 0.11) * 0.38;
+      const v = 0.72 + n * 0.28;              // 控制在 0.72~1.0：floor 太低会出塑料高光斑
+      const i = (y * size + x) * 4;
+      img.data[i] = img.data[i + 1] = img.data[i + 2] = Math.round(v * 255);
+      img.data[i + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  const tex = new THREE.CanvasTexture(cv);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  return tex;
+}
+
 /** 头颅表面在给定高度、横向位置处的 z（脸是旋转曲面，z 不能手写）。 */
 function surfZ(d, y, x) {
   const pts = [...d.headShape].sort((a, b) => a[1] - b[1]);
@@ -489,10 +535,13 @@ function buildHead(d, skinMat, hairMat, blushMat) {
   const shineMat = new THREE.MeshBasicMaterial({ color: '#ffffff' });
   const lashMat = mat(d, '#4a3a40', { roughness: 0.55 });
   const browMat = mat(d, '#5a4650', { roughness: 0.6 });
+  /* 微不对称（去 AI 感）：真脸双眼差 2~4%、眉高差 1~3mm——完全对称反而假。
+     注意 ez 必须用同一个 eyeR 现算，别复用旧 ratio。 */
   for (const side of [-1, 1]) {
+    const eyeR = -0.015 + (side === -1 ? 0.014 : 0);   // 左眼略低
     const ex = side * 0.40 * R;
-    const ey = -0.015 * R;
-    const ez = faceAt(-0.015, side * 0.40);
+    const ey = eyeR * R;
+    const ez = faceAt(eyeR, side * 0.40);
 
     /* 眼睛（v85）：旧版大白饼几乎被虹膜盖满，再压一根黑胶囊当眼皮 →
        正面两颗黑玻璃珠。现在眼白缩一号、虹膜坐下睑、瞳孔/高光分层、
@@ -526,9 +575,10 @@ function buildHead(d, skinMat, hairMat, blushMat) {
     lid.scale.z = 0.5;
     head.add(lid);
 
-    // 眉：拉回眼睛正上方，眉眼距离近了表情才挂在脸上
+    // 眉：拉回眼睛正上方，眉眼距离近了表情才挂在脸上；右眉略高（不对称）
+    const browR = 0.155 + (side === 1 ? 0.009 : 0);
     const brow = new THREE.Mesh(new THREE.CapsuleGeometry(0.015 * R, 0.24 * R, 4, 10), browMat);
-    brow.position.set(side * 0.40 * R, 0.155 * R, faceAt(0.155, side * 0.40) + 0.014 * R);
+    brow.position.set(side * 0.40 * R, browR * R, faceAt(browR, side * 0.40) + 0.014 * R);
     brow.rotation.set(0.12, side * 0.20, Math.PI / 2 - side * 0.10);
     brow.scale.z = 0.6;
     head.add(brow);
@@ -539,6 +589,11 @@ function buildHead(d, skinMat, hairMat, blushMat) {
     blush.rotation.y = side * 0.52;
     head.add(blush);
   }
+  /* 一颗小痣（右颊，泪痣位）：零瑕疵的皮肤读成 CGI；位置避开腮红平面范围。 */
+  const moleMat = mat(d, '#7a534c', { roughness: 0.45 });
+  const mole = blob(0.016 * R, 0.020 * R, 0.008 * R, moleMat, 8);
+  mole.position.set(0.585 * R, -0.125 * R, faceAt(-0.125, 0.585) + 0.006 * R);
+  head.add(mole);
   /* 耳朵：耳窝（pit）必须整个缩进耳廓里，否则侧影上是一个深色蘑菇凸起。 */
   for (const side of [-1, 1]) {
     const ear = blob(0.075 * R, 0.165 * R, 0.105 * R, skinMat, 14);
@@ -648,7 +703,46 @@ function buildHead(d, skinMat, hairMat, blushMat) {
 }
 
 function mat(d, color, extra = {}) {
-  return new THREE.MeshStandardMaterial({ color, roughness: 0.88, metalness: 0, ...extra });
+  return new THREE.MeshPhysicalMaterial({ color, roughness: 0.88, metalness: 0, ...extra });
+}
+
+/** 皮肤材质：真实皮肤不是塑料——
+ *   - clearcoat 0.08：T 区/肩/胸的一层薄油光（塑料是全亮或全哑，皮肤是分区的）
+ *   - sheen 0.35：绒毛感（桃子绒），肩背逆光时那一圈白边就靠它
+ *   - bumpMap + roughnessMap：程序化毛孔与油光/干燥分区
+ *   - 假 SSS：背光侧接近轮廓处注入暖色透射（真实皮肤逆光透血色）
+ *     ⚠️ 走 onBeforeCompile 注入，替换点找不到时不会报错（静默降级），
+ *     所以改动后必须截图看颜色有没有异常。 */
+function skinMaterial(noiseTex) {
+  const m = new THREE.MeshPhysicalMaterial({
+    color: SKIN,
+    roughness: 0.62,
+    metalness: 0,
+    clearcoat: 0.05,
+    clearcoatRoughness: 0.55,
+    sheen: 0.35,
+    sheenColor: new THREE.Color('#f6c3ab'),
+    sheenRoughness: 0.75,
+    bumpMap: noiseTex,
+    bumpScale: 0.45,       // ⚠️ three 的 bumpScale 是纹理高度系数（1=全强度），不是米——
+                           //   0.0018/0.012 都约等于没有（实测），细皮纹 0.35~0.6
+    roughnessMap: noiseTex,
+  });
+  m.onBeforeCompile = (shader) => {
+    shader.uniforms.uSSSColor = { value: new THREE.Color('#d9553c') };
+    shader.uniforms.uSSSScale = { value: 0.22 };
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nuniform vec3 uSSSColor;\nuniform float uSSSScale;')
+      .replace('#include <dithering_fragment>', `
+        {
+          float fres = 1.0 - abs(dot(normalize(vNormal), normalize(vViewPosition)));
+          float back = clamp(-dot(normalize(vNormal), normalize(vec3(0.45, 0.55, 0.70))), 0.0, 1.0);
+          gl_FragColor.rgb += uSSSColor * (back * fres * fres * uSSSScale);
+        }
+        #include <dithering_fragment>
+      `);
+  };
+  return m;
 }
 
 /* ══════════════════════════ 躯干 ══════════════════════════ */
@@ -826,9 +920,26 @@ export function mount(host, opts = {}) {
     const sc = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(32, 1, 0.1, 60);
 
-    // 摄影棚三点光
-    sc.add(new THREE.HemisphereLight(0xffffff, 0xe0cdd6, 1.55));
-    const key = new THREE.DirectionalLight(0xfff4ee, 2.00);
+    /* 程序化环境反射（一张 32×16 的渐变 equirect，运行时生成，不是资产）：
+       没有环境可反射时，clearcoat/sheen 无内容可映 → 高光就是"塑料点"。
+       有了它，皮肤和头发才有柔和的环境反光。 */
+    try {
+      const pmrem = new THREE.PMREMGenerator(renderer);
+      const env = pmrem.fromScene(new THREE.Scene().add(
+        Object.assign(new THREE.Mesh(
+          new THREE.SphereGeometry(10, 16, 12),
+          new THREE.MeshBasicMaterial({ color: '#cfd6e6', side: THREE.BackSide }),
+        ), {}),
+      )).texture;
+      sc.environment = env;
+      sc.environmentIntensity = 0.15;   // ⚠️ 只给 clearcoat/sheen 提供反射内容；
+      //                                    调到 0.55 会把阴影洗掉、对比塌掉（实测翻过车）
+      pmrem.dispose();
+    } catch { /* 环境反射失败不影响主流程 */ }
+
+    // 摄影棚三点光（主光略降、轮廓光略降，避免"打满"的塑料感）
+    sc.add(new THREE.HemisphereLight(0xffffff, 0xe0cdd6, 1.30));
+    const key = new THREE.DirectionalLight(0xfff4ee, 1.85);
     key.position.set(2.4, 4.2, 3.0);
     key.castShadow = true;
     key.shadow.mapSize.set(2048, 2048);
@@ -847,9 +958,13 @@ export function mount(host, opts = {}) {
     const fill = new THREE.DirectionalLight(0xffffff, 0.72);
     fill.position.set(-3.2, 1.8, 2.2);
     sc.add(fill);
-    const rim = new THREE.DirectionalLight(0xffe7ef, 0.95);
+    const rim = new THREE.DirectionalLight(0xffe7ef, 0.80);
     rim.position.set(-2.2, 1.6, -2.2);
     sc.add(rim);
+    // 地面反弹光：真实环境里总有来自下方的一次反弹，缺了它人物像悬浮的塑料模型
+    const bounce = new THREE.DirectionalLight(0xffd8c4, 0.35);
+    bounce.position.set(0.6, -2.4, 1.2);
+    sc.add(bounce);
 
     const spin = new THREE.Group();   // 拖动转的是这一层
     sc.add(spin);
@@ -858,9 +973,14 @@ export function mount(host, opts = {}) {
 
     // 男女各建一次，切换只改 visible（不重建几何体，省显存也快）
     const blushMat = new THREE.MeshBasicMaterial({ map: blushTexture(), transparent: true, depthWrite: false });
+    const noiseTex = poreTexture(512);   // 程序化毛孔（一次生成，男女共用）
     const made = [BODY_M, BODY_F].map((d) => {
-      const skinMat = mat(d, SKIN, { roughness: 0.80 });
-      const hairMat = mat(d, d.hairColor, { roughness: 0.55, metalness: 0.02 });
+      const skinMat = skinMaterial(noiseTex);
+      const hairMat = mat(d, d.hairColor, {
+        roughness: 0.48, metalness: 0.02,
+        sheen: 0.55, sheenColor: new THREE.Color('#c9b8c8'),   // 发丝的绒感/逆光边
+        bumpMap: noiseTex, bumpScale: 0.12,
+      });
       const body = buildBody(d, skinMat);
       const head = buildHead(d, skinMat, hairMat, blushMat);
       /* QQ 秀比例：整颗头统一放大 headScale，位置按"下巴埋进领口 0.035"算，
@@ -891,6 +1011,23 @@ export function mount(host, opts = {}) {
 
   const { renderer, camera, couple, made, shadow } = scene;
   canvasHost.appendChild(renderer.domElement);
+
+  /* 轻后期：暗角 + 胶片颗粒（CSS 覆盖层，零渲染开销）。
+     完全干净的成像也是 CGI 感来源——真实相机有暗角和噪点。 */
+  const NOISE_SVG = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160">'
+    + '<filter id="n"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" stitchTiles="stitch"/>'
+    + '<feColorMatrix type="saturate" values="0"/></filter>'
+    + '<rect width="160" height="160" filter="url(#n)" opacity="0.34"/></svg>'
+  );
+  const film = document.createElement('div');
+  film.className = 'dressup-film';
+  film.style.cssText = 'position:absolute;inset:0;pointer-events:none;z-index:2;opacity:0.45;'
+    + 'mix-blend-mode:overlay;'
+    + 'background:radial-gradient(ellipse at center, transparent 58%, rgba(58,30,42,0.16) 100%),'
+    + `url("${NOISE_SVG}");`
+    + 'background-size:100% 100%,160px 160px;';
+  canvasHost.appendChild(film);
 
   /* ── 取景：按当前偏航下的投影算，人物填满画面 ──
      坑：按包围球半径算距离，球半径是"半对角线"，人只占画面一半。
@@ -1024,4 +1161,5 @@ export function pause() {
   scene.detach?.();
   scene.detach = null;
   scene.renderer.domElement.remove();
+  canvasHost.querySelectorAll('.dressup-film, style').forEach((n) => n.remove());
 }
