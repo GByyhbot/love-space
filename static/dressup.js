@@ -30,19 +30,21 @@ const BODIES = {
   m: {
     h: 2.560,
     headR: 0.152, headY: 2.372, headSZ: 1.02,
-    headShape: [[0.004, -0.178], [0.070, -0.166], [0.108, -0.126], [0.132, -0.062],
+    /* 头颅截面：从下颌尖往上。颏部要收得比颧骨窄一截，
+       不然正面就是一颗大头蛋——收了下巴，脸才有人样。 */
+    headShape: [[0.004, -0.184], [0.056, -0.172], [0.092, -0.132], [0.126, -0.062],
       [0.144, 0.006], [0.142, 0.070], [0.126, 0.126], [0.092, 0.166], [0.040, 0.184], [0.004, 0.188]],
     neckR: 0.082, neckTopR: 0.062, neckBot: 2.045, neckTop: 2.240,
     // shoulderY = 手臂支点。它必须比躯干顶点低一截：袖山是半个球，
     // 球顶会再抬 0.1 上去，支点压在顶点上就会顶出两个"肩上的气球"。
     shoulderY: 2.000, waistY: 1.520, hipY: 1.285, kneeY: 0.720, ankleY: 0.095,
-    chestR: 0.205, waistR: 0.160, hipR: 0.226, shoulderR: 0.152, torsoZ: 0.72,
+    chestR: 0.205, waistR: 0.160, hipR: 0.226, shoulderR: 0.152, torsoZ: 0.80,
     // 截面从下往上：胯 → 腰（收）→ 胸（鼓）→ 肩（平）→ 斜方肌（缓收）→ 颈根
     torso: [[0.004, 1.150], [0.196, 1.200], [0.222, 1.270], [0.198, 1.380], [0.162, 1.520],
       [0.172, 1.650], [0.196, 1.800], [0.204, 1.880], [0.200, 1.945], [0.180, 2.000],
       [0.148, 2.045], [0.110, 2.080], [0.088, 2.105]],
-    armPivotX: 0.196, armTilt: 0.19,
-    upperArm: 0.330, foreArm: 0.340, handLen: 0.115,
+    armPivotX: 0.164, armTilt: 0.19,
+    upperArm: 0.372, foreArm: 0.382, handLen: 0.180,
     upR1: 0.084, upR2: 0.062, foreR1: 0.062, foreR2: 0.050,
     hipPivotX: 0.098, thigh: 0.565, shin: 0.625,
     thighR1: 0.126, thighR2: 0.100, shinR1: 0.094, shinR2: 0.062,
@@ -52,16 +54,16 @@ const BODIES = {
   f: {
     h: 2.380,
     headR: 0.142, headY: 2.205, headSZ: 1.02,
-    headShape: [[0.004, -0.168], [0.064, -0.156], [0.100, -0.118], [0.122, -0.058],
+    headShape: [[0.004, -0.174], [0.050, -0.162], [0.086, -0.122], [0.118, -0.058],
       [0.134, 0.004], [0.132, 0.064], [0.118, 0.118], [0.086, 0.156], [0.038, 0.172], [0.004, 0.176]],
     neckR: 0.070, neckTopR: 0.052, neckBot: 1.900, neckTop: 2.075,
     shoulderY: 1.890, waistY: 1.455, hipY: 1.215, kneeY: 0.675, ankleY: 0.088,
-    chestR: 0.186, waistR: 0.140, hipR: 0.212, shoulderR: 0.126, torsoZ: 0.74,
+    chestR: 0.186, waistR: 0.140, hipR: 0.212, shoulderR: 0.126, torsoZ: 0.82,
     torso: [[0.004, 1.085], [0.182, 1.130], [0.208, 1.200], [0.196, 1.310], [0.144, 1.455],
       [0.156, 1.580], [0.180, 1.720], [0.186, 1.800], [0.182, 1.855], [0.164, 1.900],
       [0.132, 1.932], [0.098, 1.955], [0.078, 1.968]],
-    armPivotX: 0.172, armTilt: 0.19,
-    upperArm: 0.310, foreArm: 0.322, handLen: 0.105,
+    armPivotX: 0.147, armTilt: 0.19,
+    upperArm: 0.352, foreArm: 0.364, handLen: 0.166,
     upR1: 0.072, upR2: 0.054, foreR1: 0.054, foreR2: 0.044,
     hipPivotX: 0.094, thigh: 0.540, shin: 0.587,
     thighR1: 0.112, thighR2: 0.088, shinR1: 0.082, shinR2: 0.055,
@@ -107,7 +109,7 @@ const GARMENTS = {
 };
 
 /* 两个人默认穿不一样，一进来就能看出是"我们俩" */
-const DEFAULT_A = { top: 'tee-pink', bottom: 'pants-navy', shoes: 'sneaker-white', hair: 'bangs', hairColor: 'ink' };
+const DEFAULT_A = { top: 'tee-pink', bottom: 'pants-navy', shoes: 'sneaker-white', hair: 'bob', hairColor: 'ink' };
 const DEFAULT_B = { top: 'tee-blue', bottom: 'skirt-lilac', shoes: 'sneaker-white', hair: 'twin', hairColor: 'chestnut' };
 
 /* ── 建模小工具 ────────────────────────────────────────────────── */
@@ -132,6 +134,68 @@ function blob(rx, ry, rz, m, seg = 18) {
   const mesh = new THREE.Mesh(new THREE.SphereGeometry(1, seg, Math.max(10, seg - 4)), m);
   mesh.scale.set(rx, ry, rz);
   return mesh;
+}
+
+/** 一段肢体：一条"半径随长度变化"的曲线绕轴成型。
+ *  ⚠️ 别再用"圆台"做手臂腿——圆台就是一根锥子，从肩到肘一个斜率，
+ *  弯起来能数出节、看侧面像套叠的管子。真实四肢是一条曲线：
+ *  三角肌下鼓、上臂中段收、肘上细、前臂上段再鼓一次、到手腕明显收窄。
+ *  手腕和脚踝那两处收窄是最出效果的，一眼就从"积木"变成"人"。
+ *
+ *  profile 写成 [[y, r], ...]，y 从 0（近端，插进躯干那头）到 −len（远端）。 */
+function limb(profile, m, seg = 22, samples = 20) {
+  /* ⚠️ 不能直接拿 profile 去 lathe：那样每两个控制点之间是一段圆锥，
+     圆锥之间的斜率是断的，弯起来就"数得出节"（小腿上会有一圈硬折线）。
+     用样条穿过这些点再密采样，四肢才是一条连续的曲线。 */
+  const curve = new THREE.SplineCurve(profile.map(([y, r]) => new THREE.Vector2(r, y)));
+  const pts = curve.getPoints(samples).map((v) => [Math.max(0.001, v.x), v.y]);
+  return new THREE.Mesh(lathe(pts, seg), m);
+}
+
+/** 手：手掌 + 四根并拢的手指 + 一根拇指。
+ *  以前是一只压扁的椭球，正面看就是一把勺子。这个尺寸下（手长 0.18，
+ *  桌面截图约 20 像素）指缝根本看不清，但只要手指的轮廓有起伏、拇指从
+ *  侧面支出来，大脑就会把它读成手。拇指是"读成手"的关键那一根。
+ *
+ *  ⚠️ 手掌不能用一个椭球：椭球在手腕那一头是个圆顶，比前臂还细，
+ *  接上去就是一圈"袖口"。手掌要用 lathe 收口（上端细、下端方），
+ *  再把 z 压扁——手的横截面本来就是扁的。 */
+function makeHand(d, side, m) {
+  const H = d.handLen;
+  const g = new THREE.Group();
+  // 手掌：上端收进前臂里（0.038 < 腕 0.044），往下撑宽到 0.058，末端收方
+  const palmProfile = [
+    [0.020, H * 0.21],
+    [-0.10 * H, H * 0.30],
+    [-0.34 * H, H * 0.325],
+    [-0.52 * H, H * 0.30],
+    [-0.60 * H, H * 0.245],
+    [-0.64 * H, H * 0.13],
+  ];
+  const palm = new THREE.Mesh(lathe(palmProfile.map(([y, r]) => [r, y]), 18), m);
+  palm.scale.z = 0.46;            // 手掌是扁的
+  g.add(palm);
+
+  // 四指：并在一起的一排胶囊，整排往前倾一点（手指是松的，不会笔直朝下）
+  const fingers = new THREE.Group();
+  fingers.rotation.x = -0.20;
+  const fr = H * 0.086;
+  const flen = H * 0.18;
+  for (let i = 0; i < 4; i += 1) {
+    const k = i - 1.5;                       // −1.5 … 1.5
+    const f = new THREE.Mesh(new THREE.CapsuleGeometry(fr, flen - Math.abs(k) * H * 0.022, 3, 10), m);
+    f.position.set(k * H * 0.163, -H * 0.60 - flen * 0.42, 0);
+    f.rotation.z = -k * 0.07;
+    fingers.add(f);
+  }
+  g.add(fingers);
+
+  // 拇指：从掌根内侧斜出去。两侧朝向相反，所以按 side 取号
+  const thumb = new THREE.Mesh(new THREE.CapsuleGeometry(H * 0.095, H * 0.17, 3, 10), m);
+  thumb.position.set(-side * H * 0.245, -H * 0.50, H * 0.075);
+  thumb.rotation.set(0.34, 0, -side * 0.98);
+  g.add(thumb);
+  return g;
 }
 
 function shade(hex, k) {
@@ -159,6 +223,25 @@ function shadowTexture() {
   return tex;
 }
 
+/* ── 腮红：径向渐变的贴图 ────────────────────────────────────────
+   以前是一个半透明椭球，边缘一圈硬边，像脸上贴了张粉色圆贴纸。
+   渐变到 0 才不会露出边界——脸上没有"腮红的边"。 */
+function blushTexture() {
+  const size = 64;
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = size;
+  const ctx = cv.getContext('2d');
+  const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  g.addColorStop(0, 'rgba(230,120,135,0.50)');
+  g.addColorStop(0.45, 'rgba(232,130,145,0.26)');
+  g.addColorStop(1, 'rgba(236,150,160,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, size, size);
+  const tex = new THREE.CanvasTexture(cv);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
 /* ══════════════════════ 角色构建 ══════════════════════ */
 
 function buildCharacter(d) {
@@ -167,6 +250,7 @@ function buildCharacter(d) {
   const mat = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.88, metalness: 0, ...extra });
   const skinMat = mat(SKIN, { roughness: 0.80 });
   const hairMat = mat(HAIR_BASE, { roughness: 0.55, metalness: 0.02 });
+  const blushMat = new THREE.MeshBasicMaterial({ map: blushTexture(), transparent: true, depthWrite: false });
   const latheMesh = (points, m, z = 1, seg = 44) => {
     const mesh = new THREE.Mesh(lathe(points, seg), m);
     mesh.scale.z = z;
@@ -190,50 +274,85 @@ function buildCharacter(d) {
   neck.position.y = (d.neckTop + d.neckBot) / 2;
   upperInner.add(neck);
 
-  /* —— 手臂：肩 → 肘两段，带三角肌 —— */
+  /* —— 手臂：肩 → 肘两段，半径走曲线（见 limb 的注释） —— */
   const armL = new THREE.Group();
   const armR = new THREE.Group();
   const elbowL = new THREE.Group();
   const elbowR = new THREE.Group();
+  const wristR = d.foreR2 * 0.88;   // 真实手腕比前臂细一截
+  /* 关节的"公称半径"：上下两段在关节处的半径取成同一个值，关节球也做成
+     这个半径的球。球在赤道处的表面是竖直的，和半径相同的圆柱正好相切——
+     相切就没有折线，膝盖和手肘因此是连续的，不会多出一圈箍。
+     只要球比管子大一点点（1%），交界处就会变成一圈明显的鼓包，反而更假。 */
+  const elbowJ = (d.upR2 + d.foreR1) / 2;
+  const kneeJ = (d.thighR2 + d.shinR1) / 2;
+  const armUpperProfile = [
+    [0.020, d.upR1 * 1.01],
+    [-0.10 * d.upperArm, d.upR1 * 1.07],   // 三角肌下缘最鼓
+    [-0.34 * d.upperArm, d.upR1 * 0.97],
+    [-0.62 * d.upperArm, d.upR2 * 1.18],
+    [-0.86 * d.upperArm, d.upR2 * 1.05],
+    [-d.upperArm, elbowJ],
+  ];
+  const armForeProfile = [
+    [0, elbowJ],
+    [-0.13 * d.foreArm, d.foreR1 * 1.05],  // 前臂上段再鼓一次
+    [-0.44 * d.foreArm, d.foreR1 * 0.87],
+    [-0.76 * d.foreArm, wristR * 1.10],
+    [-d.foreArm, wristR],
+  ];
   for (const [g, elbow, side] of [[armL, elbowL, -1], [armR, elbowR, 1]]) {
     g.position.set(side * d.armPivotX, d.shoulderY, 0);
     g.rotation.z = side * d.armTilt;
     // 三角肌：缺了这一坨，手臂和躯干之间会有一道缝。
-    // 但别做得比袖口还大——大了就顶穿袖子，肩头露出一颗肉球。
-    const delt = blob(d.upR1 * 1.06, d.upR1 * 0.86, d.upR1 * 1.02, skinMat, 20);
+    // 但它必须整个缩在袖子里——大了就顶穿袖子，肩头露出一颗肉球。
+    const delt = blob(d.upR1 * 1.06, d.upR1 * 0.62, d.upR1 * 1.04, skinMat, 20);
     delt.position.y = -0.030;
     g.add(delt);
-    g.add(taper(d.upR1, d.upR2, d.upperArm, skinMat).translateY(-d.upperArm / 2));
+    g.add(limb(armUpperProfile, skinMat));
     elbow.position.y = -d.upperArm;
-    // 关节球只做"填缝"：必须比两端管子略粗（共面会闪锯齿环），
-    // 但也就粗 7%，再大就在关节上顶出一圈硬边
-    const elbowR = Math.max(d.upR2, d.foreR1) * 1.035;
-    elbow.add(blob(elbowR, elbowR * 0.86, elbowR, skinMat, 18));
-    elbow.add(taper(d.foreR1, d.foreR2, d.foreArm, skinMat).translateY(-d.foreArm / 2));
-    // 手：扁椭球，比小臂略宽一点
-    const hand = blob(d.foreR2 * 1.34, d.handLen * 0.74, d.foreR2 * 0.62, skinMat, 18);
-    hand.position.set(0, -d.foreArm - d.handLen * 0.48, 0);
+    // 正球、正半径，和两端的管口相切（见 elbowJ 的注释）
+    elbow.add(blob(elbowJ * 1.004, elbowJ * 1.004, elbowJ * 1.004, skinMat, 22));
+    elbow.add(limb(armForeProfile, skinMat));
+    // 手：挂在手腕上（腕在 −foreArm），手掌再往下
+    const hand = makeHand(d, side, skinMat);
+    hand.position.y = -d.foreArm;
     elbow.add(hand);
     g.add(elbow);
     upperInner.add(g);
   }
 
-  /* —— 腿：髋 → 膝两段，带膝盖和脚 —— */
+  /* —— 腿：髋 → 膝两段，同样走曲线 —— */
   const legL = new THREE.Group();
   const legR = new THREE.Group();
   const kneeL = new THREE.Group();
   const kneeR = new THREE.Group();
   const shinTube = d.shin - d.footH * 0.30;
+  const ankleR = d.shinR2 * 0.90;
+  const thighProfile = [
+    [0.020, d.thighR1 * 1.01],
+    [-0.12 * d.thigh, d.thighR1 * 1.04],
+    [-0.40 * d.thigh, d.thighR1 * 0.90],
+    [-0.72 * d.thigh, d.thighR2 * 1.10],
+    [-d.thigh, kneeJ],
+  ];
+  const shinProfile = [
+    [0, kneeJ],
+    [-0.11 * d.shin, d.shinR1 * 1.06],     // 小腿肚
+    [-0.32 * d.shin, d.shinR1 * 0.92],
+    [-0.56 * d.shin, d.shinR2 * 1.32],
+    [-0.82 * d.shin, d.shinR2 * 1.04],
+    [-shinTube, ankleR],                   // 脚踝收窄
+  ];
   for (const [g, knee, side] of [[legL, kneeL, -1], [legR, kneeR, 1]]) {
     g.position.set(side * d.hipPivotX, d.hipY, 0);
-    g.add(taper(d.thighR1, d.thighR2, d.thigh, skinMat).translateY(-d.thigh / 2));
+    g.add(limb(thighProfile, skinMat));
     knee.position.y = -d.thigh;
-    const kneeR = Math.max(d.thighR2, d.shinR1) * 1.045;
-    knee.add(blob(kneeR, kneeR * 0.90, kneeR, skinMat, 18));
-    knee.add(taper(d.shinR1, d.shinR2, shinTube, skinMat).translateY(-shinTube / 2));
-    // 脚：踝下一只脚背，脚尖朝 +z
-    const foot = blob(d.footW * 0.92, d.footH * 0.46, d.footLen * 0.52, skinMat, 18);
-    foot.position.set(0, -d.shin + d.footH * 0.40, d.footLen * 0.26);
+    knee.add(blob(kneeJ * 1.004, kneeJ * 1.004, kneeJ * 1.004, skinMat, 22));
+    knee.add(limb(shinProfile, skinMat));
+    // 脚：踝下一只脚背，脚尖朝 +z。要整个塞进鞋里，别比鞋还宽
+    const foot = blob(d.footW * 0.88, d.footH * 0.22, d.footLen * 0.42, skinMat, 18);
+    foot.position.set(0, -d.shin + d.footH * 0.17, d.footLen * 0.18);
     knee.add(foot);
     g.add(knee);
     root.add(g);
@@ -247,51 +366,102 @@ function buildCharacter(d) {
   const skull = latheMesh(d.headShape, skinMat, d.headSZ, 40);
   head.add(skull);
 
-  /* —— 五官：按头半径 R 摆，换体型不用重算坐标 —— */
+  /* —— 五官：全部贴着头颅表面摆 ——
+     ⚠️ 脸的 z 坐标不能手写。头是 headShape 绕 Y 转出来的曲面，改一次脸型
+     （把下巴收窄）之后，手写的 z 要么浮在脸前面（一个肉球贴在鼻子上、腮红
+     像一张贴纸），要么整个埋进头里（只剩一个白点）。这里按"高度 y + 横向 x"
+     现算表面 z，每个零件再沿法线往外推一点点。 */
+  const surfZ = (y, x) => {
+    const pts = [...d.headShape].sort((a, b) => a[1] - b[1]);   // 按高度升序
+    let r = pts[0][0];
+    for (let i = 1; i < pts.length; i += 1) {
+      if (y <= pts[i][1]) {
+        const t = (y - pts[i - 1][1]) / (pts[i][1] - pts[i - 1][1] || 1);
+        r = pts[i - 1][0] + (pts[i][0] - pts[i - 1][0]) * Math.min(1, Math.max(0, t));
+        break;
+      }
+      r = pts[i][0];
+    }
+    const rz = r * d.headSZ;
+    const k = 1 - Math.min(1, (x / r) ** 2);
+    return rz * Math.sqrt(Math.max(0, k));
+  };
+  const faceAt = (yR, xR) => surfZ(yR * R, xR * R);
+
   const eyeWhiteMat = new THREE.MeshStandardMaterial({ color: '#fffdfa', roughness: 0.35 });
   const irisMat = mat('#3b2b33', { roughness: 0.42 });
   const shineMat = new THREE.MeshBasicMaterial({ color: '#ffffff' });
-  const blushMat = new THREE.MeshBasicMaterial({ color: '#eda2ab', transparent: true, opacity: 0.30 });
-  const mouthMat = mat('#b96a73', { roughness: 0.55 });
-  const browMat = mat('#4e3c46', { roughness: 0.6 });
+  const browMat = mat('#5a4650', { roughness: 0.6 });
   for (const side of [-1, 1]) {
-    const white = blob(0.21 * R, 0.13 * R, 0.062 * R, eyeWhiteMat, 18);
-    white.position.set(side * 0.41 * R, 0.005 * R, 0.905 * R);
+    const ex = side * 0.41 * R;
+    const ez = faceAt(0.005, side * 0.41);
+
+    // 眼白：压扁到 0.045R 厚，贴着脸往外鼓一点点就够，别做成两颗乒乓球
+    const white = blob(0.205 * R, 0.132 * R, 0.045 * R, eyeWhiteMat, 20);
+    white.position.set(ex, 0.005 * R, ez + 0.016 * R);
     head.add(white);
 
-    const iris = blob(0.125 * R, 0.125 * R, 0.045 * R, irisMat, 16);
-    iris.position.set(side * 0.41 * R, 0.0, 0.945 * R);
+    // 虹膜比眼白更往前一点，中间自然鼓出一道"角膜"，是卡通眼睛的立体感来源
+    const iris = blob(0.122 * R, 0.122 * R, 0.030 * R, irisMat, 18);
+    iris.position.set(ex, 0.0, ez + 0.048 * R);
     head.add(iris);
 
-    const shine = blob(0.042 * R, 0.042 * R, 0.02 * R, shineMat, 10);
-    shine.position.set(side * 0.355 * R, 0.055 * R, 0.968 * R);
+    const shine = blob(0.040 * R, 0.040 * R, 0.012 * R, shineMat, 10);
+    shine.position.set(side * 0.355 * R, 0.058 * R, ez + 0.070 * R);
     head.add(shine);
 
     // 上眼睑：一道细弧压住眼白上沿，眼睛立刻有"眼皮"而不是一颗球
-    const lid = new THREE.Mesh(new THREE.CapsuleGeometry(0.017 * R, 0.30 * R, 4, 10), irisMat);
-    lid.position.set(side * 0.41 * R, 0.115 * R, 0.925 * R);
-    lid.rotation.set(0.15, 0, Math.PI / 2 + side * 0.10);
+    const lid = new THREE.Mesh(new THREE.CapsuleGeometry(0.016 * R, 0.29 * R, 4, 10), irisMat);
+    lid.position.set(ex, 0.118 * R, faceAt(0.118, side * 0.41) + 0.026 * R);
+    lid.rotation.set(0.15, 0, Math.PI / 2 + side * 0.04);
     head.add(lid);
 
-    const brow = new THREE.Mesh(new THREE.CapsuleGeometry(0.014 * R, 0.34 * R, 4, 10), browMat);
-    brow.position.set(side * 0.40 * R, 0.335 * R, 0.905 * R);
-    brow.rotation.set(0.12, side * 0.16, Math.PI / 2 - side * 0.05);
+    /* 眉：浅浅一道、几乎平放。抬到 0.40R 会被刘海盖住，只能留在 0.335R——
+       所以"凶"其实是眼睛那一圈给的（眼皮压得低、眉又厚又黑），
+       这里把眉做细、做浅，眼神就从瞪人变成看人。 */
+    const brow = new THREE.Mesh(new THREE.CapsuleGeometry(0.0115 * R, 0.32 * R, 4, 10), browMat);
+    brow.position.set(side * 0.40 * R, 0.318 * R, faceAt(0.318, side * 0.40) + 0.008 * R);
+    brow.rotation.set(0.12, side * 0.16, Math.PI / 2 - side * 0.03);
     brow.scale.z = 0.7;
     head.add(brow);
 
-    const blush = blob(0.16 * R, 0.10 * R, 0.03 * R, blushMat, 14);
-    blush.position.set(side * 0.62 * R, -0.30 * R, 0.80 * R);
-    blush.rotation.y = side * 0.62;
+    /* 腮红：一张带径向渐变的方片。以前是一个半透明椭球，边缘是一圈硬边，
+       看着像脸上贴了一张粉色圆贴纸。 */
+    const blush = new THREE.Mesh(new THREE.PlaneGeometry(0.44 * R, 0.27 * R), blushMat);
+    const bz = faceAt(-0.30, side * 0.50);
+    blush.position.set(side * 0.50 * R, -0.30 * R, bz + 0.010 * R);
+    blush.rotation.y = side * 0.52;
     head.add(blush);
   }
-  // 鼻子：只要一点起伏，多了就是另一个画风
-  const nose = blob(0.075 * R, 0.075 * R, 0.055 * R, mat(shade(SKIN, 0.95), { roughness: 0.8 }), 14);
-  nose.position.set(0, -0.285 * R, 0.965 * R);
+  /* 耳朵：这个尺寸下只有 4~5 个像素，但少了它脸就是一颗蛋。
+     ⚠️ 耳窝（pit）必须整个缩进耳廓里：以前 pit 放在 0.995R、比头皮还凸出
+     0.08R，侧影上就是一个深色蘑菇凸起。现在 ear/pit 都收到 0.90R 一带，
+     只留耳廓一点点弧度露出头皮。 */
+  for (const side of [-1, 1]) {
+    const ear = blob(0.075 * R, 0.165 * R, 0.105 * R, skinMat, 14);
+    ear.position.set(side * 0.895 * R, -0.045 * R, -0.035 * R);
+    ear.rotation.z = side * 0.12;
+    head.add(ear);
+    const pit = blob(0.036 * R, 0.090 * R, 0.055 * R, mat(shade(SKIN, 0.90), { roughness: 0.86 }), 12);
+    pit.position.set(side * 0.90 * R, -0.050 * R, 0.005 * R);
+    head.add(pit);
+  }
+
+  // 鼻子：只要一点起伏，多了就是另一个画风。球心压进脸里一半，露出来的只是鼻头
+  const nose = blob(0.072 * R, 0.070 * R, 0.062 * R, mat(shade(SKIN, 0.96), { roughness: 0.8 }), 16);
+  nose.position.set(0, -0.282 * R, faceAt(-0.282, 0) + 0.004 * R);
   head.add(nose);
 
-  const mouth = blob(0.135 * R, 0.045 * R, 0.045 * R, mouthMat, 16);
-  mouth.position.set(0, -0.625 * R, 0.885 * R);
-  head.add(mouth);
+  /* 嘴：上唇薄、下唇厚。单个椭球贴上去就是一张贴纸，
+     分成两片之后中间那道压痕自己就出来了。 */
+  const lipTopMat = mat('#bd6b74', { roughness: 0.48 });
+  const lipLowMat = mat('#c8767f', { roughness: 0.46 });
+  const lipUp = blob(0.112 * R, 0.028 * R, 0.030 * R, lipTopMat, 14);
+  lipUp.position.set(0, -0.598 * R, faceAt(-0.598, 0) + 0.006 * R);
+  head.add(lipUp);
+  const lipLow = blob(0.118 * R, 0.046 * R, 0.034 * R, lipLowMat, 16);
+  lipLow.position.set(0, -0.650 * R, faceAt(-0.650, 0) + 0.006 * R);
+  head.add(lipLow);
 
   /* —— 头发：球面片按发型显隐 ——
      ⚠️ 不能只按 R（横向半径）缩放：头是竖长的蛋形，顶点比 R 高出近四分之一，
@@ -301,10 +471,48 @@ function buildCharacter(d) {
   const HW = R * 1.085;
   const HH = H * 1.075;
   const hairParts = {};
-  /* grow 让每片发壳半径略有差异：三片用同一半径会完全共面，正面上方那一条会闪烁。
-     phi 是绕 Y 的角度，正前方 = 0.5π。back 给到 0.72π..2.28π，两侧鬓角才不漏头皮。 */
-  const addHair = (key, grow, phiStart, phiLen, thetaStart, thetaLen, segW = 36, segH = 24) => {
+  /* grow 让每片发壳半径不同：同半径的三片会完全共面，正面上方那一条会闪锯齿。
+     phi 是绕 Y 的角度，正前方 = 0.5π。back 给到 0.70π..2.30π，两侧鬓角才不漏头皮。
+
+     ⚠️ 发片的下沿必须是"波浪"的。球面片在固定 theta 处收边，那一圈是正圆，
+     正面看就是一条笔直的水平线——也就是"戴了顶锅盖"。以前靠再叠一片更外面的
+     发壳来打散，结果那片自己的上沿又成了另一条硬边（男生的刘海看着像被剃刀
+     刮平）。现在改成建完几何体之后按 phi 做正弦偏移，把靠近下沿的顶点往下拉：
+     边缘自己就成了参差的发梢，一片就够，不用再叠。 */
+  const addHair = (key, grow, phiStart, phiLen, thetaStart, thetaLen, segW = 40, segH = 24, wave = 0, taper = 0) => {
     const geo = new THREE.SphereGeometry(1, segW, segH, phiStart, phiLen, thetaStart, thetaLen);
+    if (wave || taper) {
+      const pos = geo.attributes.position;
+      for (let i = 0; i < pos.count; i += 1) {
+        const x = pos.getX(i);
+        const y = pos.getY(i);
+        const z = pos.getZ(i);
+        const th = Math.acos(Math.min(1, Math.max(-1, y)));
+        const t = (th - thetaStart) / thetaLen;   // 0 = 发顶，1 = 下沿
+        /* taper：上沿半径渐变收到 1.002（贴住 cap 那层的半径）。
+           两片发壳半径不同时，交界处是一圈径向台阶，正对光源就是一条横贯
+           头顶的亮线（女生的刘海缝）。收进去之后台阶归零，缝就没了。 */
+        if (taper && t < taper) {
+          const f = t / taper;
+          const s = (1.002 / grow) + (1 - 1.002 / grow) * (f * f * (3 - 2 * f));
+          pos.setX(i, x * s);
+          pos.setZ(i, z * s);
+        }
+        if (wave && t > 0.05) {
+          const k = Math.pow(Math.min(1, t), 2.2);
+          // 两条不同频率的波叠起来，才不像一条规律的荷叶边；
+          // 低频占大头，高频只做一点点毛边——全给高频会变成一排毛刺。
+          const phi = Math.atan2(z, x);
+          const lobe = 0.58 + 0.30 * Math.sin(phi * 3 + 0.6) + 0.12 * Math.sin(phi * 9 - 1.1);
+          const pull = k * wave * lobe;
+          pos.setY(i, y - pull);
+          const s = 1 + pull * 0.30;               // 顺带往外撑一点，发梢才有厚度
+          pos.setX(i, pos.getX(i) * s);
+          pos.setZ(i, pos.getZ(i) * s);
+        }
+      }
+      geo.computeVertexNormals();
+    }
     const m = new THREE.Mesh(geo, hairMat);
     m.scale.set(HW * grow, HH * grow, HW * grow);
     m.visible = false;
@@ -312,26 +520,54 @@ function buildCharacter(d) {
     hairParts[key] = m;
     return m;
   };
-  addHair('cap', 1.00, 0, Math.PI * 2, 0, Math.PI * 0.34);
-  addHair('back', 1.02, Math.PI * 0.72, Math.PI * 1.56, Math.PI * 0.20, Math.PI * 0.68, 36, 22);
-  addHair('bangs', 1.015, Math.PI * 0.26, Math.PI * 0.48, Math.PI * 0.28, Math.PI * 0.16, 32, 10);
-  addHair('bangs2', 1.032, Math.PI * 0.34, Math.PI * 0.30, Math.PI * 0.34, Math.PI * 0.10, 26, 10);
-  // 鬓发用胶囊而不是球面片：球面片在脸上会切出方角
+  addHair('cap', 1.000, 0, Math.PI * 2, 0, Math.PI * 0.30);
+  // 长发（到后颈）与短发（到耳下）各一片，靠 visible 切换
+  addHair('back', 1.022, Math.PI * 0.70, Math.PI * 1.60, Math.PI * 0.18, Math.PI * 0.74, 48, 28, 0.10);
+  addHair('backS', 1.022, Math.PI * 0.70, Math.PI * 1.60, Math.PI * 0.18, Math.PI * 0.40, 48, 20, 0.09);
+  /* 刘海：比内层再往外 4.5%，压出一点厚度和一道投在额头上的阴影。
+     下沿停在眉毛上方（θ≈72°），再加波浪刚好垂到眉梢。
+     segH 给足一点：下沿的波浪是靠竖向分段表现弧度的，段少就是锯齿。 */
+  addHair('bangs', 1.045, Math.PI * 0.22, Math.PI * 0.56, Math.PI * 0.26, Math.PI * 0.15, 52, 22, 0.115, 0.45);
+  /* 鬓发用胶囊而不是球面片：球面片在脸上会切出方角。
+     短的到颧骨（短发用），长的到下颌（长发用）——两套都建好，靠 visible 切。 */
   for (const side of [-1, 1]) {
-    const lock = new THREE.Mesh(new THREE.CapsuleGeometry(0.16 * R, 1.30 * R, 6, 14), hairMat);
-    lock.position.set(side * 0.88 * R, -0.10 * R, 0.42 * R);
-    lock.rotation.z = side * 0.05;
-    lock.visible = false;
-    head.add(lock);
-    hairParts[side < 0 ? 'sideL' : 'sideR'] = lock;
+    /* 鬓发顶端必须藏在 backS（发壳下沿 ≈0.41R）之下，否则会在太阳穴
+       钻出一颗暗色凸起。整体下移 + 内收后，上沿 0.28R 安全藏住，
+       下沿 -0.32R 仍然盖到耳→下颌。 */
+    const short = new THREE.Mesh(new THREE.CapsuleGeometry(0.14 * R, 0.60 * R, 6, 14), hairMat);
+    short.position.set(side * 0.86 * R, -0.02 * R, 0.30 * R);
+    short.rotation.z = side * 0.05;
+    short.visible = false;
+    head.add(short);
+    hairParts[side < 0 ? 'sideL' : 'sideR'] = short;
+
+    const long = new THREE.Mesh(new THREE.CapsuleGeometry(0.155 * R, 1.26 * R, 6, 14), hairMat);
+    long.position.set(side * 0.90 * R, -0.14 * R, 0.32 * R);
+    long.rotation.z = side * 0.05;
+    long.visible = false;
+    head.add(long);
+    hairParts[side < 0 ? 'longL' : 'longR'] = long;
   }
+  /* 双马尾：发根挪到耳上方偏后，整条用 limb 收成尖。
+     以前是"一根胶囊 + 顶上顶个球"，末端是个圆头，像挂了两串香肠。 */
   for (const side of [-1, 1]) {
     const g = new THREE.Group();
-    g.position.set(side * 0.92 * R, -0.30 * R, -0.22 * R);
-    g.rotation.z = side * 0.28;
+    // 发根要露在头的轮廓外面，不然两条尾巴看着是"浮在脑后"的两只角
+    g.position.set(side * 1.00 * R, 0.26 * R, -0.52 * R);
+    g.rotation.set(0.26, 0, side * 0.34);
     g.visible = false;
-    g.add(new THREE.Mesh(new THREE.CapsuleGeometry(0.17 * R, 1.0 * R, 6, 14), hairMat).translateY(-0.55 * R));
-    g.add(new THREE.Mesh(new THREE.SphereGeometry(0.20 * R, 14, 12), hairMat).translateY(0.04 * R));
+    const tie = new THREE.Mesh(new THREE.TorusGeometry(0.135 * R, 0.040 * R, 8, 16), hairMat);
+    tie.rotation.x = Math.PI / 2;
+    tie.position.y = -0.04 * R;
+    g.add(tie);
+    g.add(limb([
+      [0.02 * R, 0.09 * R],
+      [-0.20 * R, 0.20 * R],
+      [-0.72 * R, 0.235 * R],
+      [-1.24 * R, 0.185 * R],
+      [-1.66 * R, 0.105 * R],
+      [-1.86 * R, 0.020 * R],
+    ], hairMat, 20));
     head.add(g);
     hairParts[side < 0 ? 'tailL' : 'tailR'] = g;
   }
@@ -369,23 +605,38 @@ function buildCharacter(d) {
     ];
   };
 
-  // 袖：肩上一只球盖 + 一段圆台。只给圆台会在肩头留一道硬边。
-  // 球盖半径只能比手臂粗一点点——放大到 1.6 倍就成了复古泡泡袖，
-  // 整条手臂看着像从气球里插出来的一根棍。
-  const sleeve = (id, side, len, rEnd, color, withCap = true) => {
+  /* 袖：一根带肩峰的曲线管，顶端收成小圆头缩进斜方肌下面。
+     以前是"圆台 + 一个压扁的半球盖"：半球的赤道和圆台口几乎重合，
+     交界处一道硬折，肩上就像顶了个球（左右两个肩膀都能看见那颗球）。
+     现在整条一次成型，肩峰只是曲线里的一处鼓包，没有交界线。 */
+  const sleeve = (id, side, len, rEnd, color) => {
     const g = side === 'l' ? armL : armR;
-    const sr = d.upR1 * 1.28;
-    own(id, g, taper(sr * 0.97, rEnd, len, color, 22).translateY(-len / 2 + 0.010));
-    if (withCap) {
-      // 球盖压扁到 0.62：整球的话球顶比肩线高出一截，看着像肩上顶了个气球
-      const cap = new THREE.Mesh(new THREE.SphereGeometry(sr, 22, 14, 0, Math.PI * 2, 0, Math.PI / 2), color);
-      cap.scale.y = 0.62;
-      cap.position.y = -0.012;
-      own(id, g, cap);
-    }
+    const R0 = d.upR1;
+    /* ⚠️ 袖子的半径在肩头那段必须一直大于手臂本身。
+       手臂管的顶端（+0.02R，半径 1.01R0）是齐口切开的，只要袖子在同一个
+       高度比它细一点点，那圈肉色就会从袖口上沿顶出来——肩上一块米色三角，
+       看着像袖子破了。 */
+    /* 顶点的半径写 0：这才是把袖子"封口"。留 0.05R0 的话顶上是一个
+       小洞，从上往下看能看见袖子内壁，肩上就有一道深色小缺口。 */
+    /* ⚠️ 截面的 y 必须一路递减（袖子总长可变）：以前肩峰写死 -0.075、
+       下一控制点写 -0.22*len，短袖（len≈0.19）时 -0.05 比 -0.075 还高，
+       曲线在肩头折返一次，轮廓上就挑出两片三角尖。现在全部用绝对高度，
+       峰 → 缓收 → 袖口，任何 len 都单调。 */
+    own(id, g, limb([
+      [0.058, 0.0],
+      [0.048, R0 * 0.56],
+      [0.018, R0 * 1.10],
+      [-0.060, R0 * 1.24],        // 肩峰
+      [-0.140, R0 * 1.16],
+      [-len, rEnd],
+    ], color, 26));
   };
-  const foreSleeve = (id, side, color) => own(id, side === 'l' ? elbowL : elbowR,
-    taper(d.foreR1 * 1.40, d.foreR2 * 1.28, d.foreArm + 0.02, color, 20).translateY(-d.foreArm / 2));
+  const foreSleeve = (id, side, color) => own(id, side === 'l' ? elbowL : elbowR, limb([
+    [0.000, d.foreR1 * 1.40],
+    [-0.34 * d.foreArm, d.foreR1 * 1.34],
+    [-0.72 * d.foreArm, d.foreR2 * 1.30],
+    [-(d.foreArm + 0.02), d.foreR2 * 1.26],
+  ], color, 24));
 
   for (const g of GARMENTS.top) {
     const m = mat(g.color);
@@ -445,32 +696,54 @@ function buildCharacter(d) {
       // 裤腰挂上身：倾身时跟着躯干走，不会和上衣错开。
       // 骨盆这段不能用「漏斗收到小半径」——那个高度躯干本身还有 0.19 宽，
       // 一收就把整个骨盆从裤子里捅出来（正面看就是一团肉）。
-      // 照短裤的构造来：先贴着胯，到裆部才水平封口，腿从下面出来。
+      // ⚠️ 截面必须全程比躯干大 ~1cm（z 已同样压到 torsoZ，只比 x 半径），
+      // 哪怕一段比躯干瘦，皮肤就会从裤子里透出一条肉色横带（1.20 处踩过坑）。
+      // 收口要到 hipY-0.155：躯干皮肤在 hipY-0.135 才闭合，收早了裆部露一坨肉。
       bodyOf(g.id, latheMesh([
         [d.waistR + 0.012, d.waistY + 0.055],
-        [d.hipR + 0.008, d.hipY + 0.020],
-        [d.hipR + 0.004, d.hipY - 0.050],
-        [d.hipR - 0.036, d.hipY - 0.105],
-        [d.hipR - 0.090, d.hipY - 0.128],
-        [0.030, d.hipY - 0.136],
-      ], m, clothZ));
+        [d.hipR + 0.006, d.hipY + 0.000],
+        [d.hipR + 0.000, d.hipY - 0.045],
+        [d.hipR - 0.020, d.hipY - 0.085],
+        [d.hipR - 0.086, d.hipY - 0.115],
+        [d.hipR - 0.136, d.hipY - 0.135],
+        [0.030, d.hipY - 0.155],
+      ], m, d.torsoZ));
       for (const [g2, knee, side] of [[legL, kneeL, 'l'], [legR, kneeR, 'r']]) {
         if (isPants) {
           // 长裤分两段：大腿管 + 小腿管，跟着膝关节折
           const plen = d.thigh + 0.02;
-          own(g.id, g2, taper(d.thighR1 + 0.010, d.thighR2 + 0.014, plen, m, 22)
-            .translateY(-plen / 2));
+          // 裤管在膝盖处的公称半径：上下两段和中间的补缝球都用它（同 skin 的 elbowJ 一个道理）
+          const pantJ = Math.max(d.thighR2 + 0.012, d.shinR1 + 0.024);
+          // 左右裤管半径错开 1.5mm：两条管在裆下相切处几乎共面，深度缓冲
+          // 分不出谁前谁后，整条裆缝闪成一排虚线。错开之后相交处是一条
+          // 稳定的曲线，缝就实了（1.5mm 肉眼分不出粗细差）。
+          const eps = side === 'l' ? 0 : 0.0015;
+          // 裤管也走样条：圆台是一根锥子，套在腿上就是一圈直筒，
+          // 走起路来像两根管子。带一点大腿撑、膝盖收的曲线才有布的意思。
+          own(g.id, g2, limb([
+            [0.010, d.thighR1 + 0.012 + eps],
+            [-0.28 * plen, d.thighR1 + 0.004 + eps],
+            [-0.70 * plen, d.thighR2 + 0.016 + eps],
+            [-plen, pantJ + eps],
+          ], m, 24).translateY(0));
           // 小腿这段要往上多包一截，盖过膝关节：只到下口的话，
           // 一跪下（膝盖折 1.5 弧度）裤腿就裂开一道缝，露出膝盖上的肉。
           /* ⚠️ 但这截不能靠"把圆台往上移"来做：膝盖折 80° 的时候，
              圆台的上盖会横向顶出去，正面看是一块方板（像护膝）。
              改用一颗布料球盖住关节——球在任何角度都是圆的，
-             两个管口都缩回球里面，怎么折都不会露出上盖。 */
+             两个管口都缩回球里面，怎么折都不会露出上盖。
+             球只比裤管粗 2%：以前给到 14%，站着不动时膝盖上就像绑了护膝。 */
           const shinLen = shinTube + 0.03;
-          own(g.id, knee, taper(d.shinR1 + 0.020, d.shinR2 + 0.018, shinLen, m, 22)
-            .translateY(-shinLen / 2 + 0.015));
-          const padR = Math.max(d.thighR2 + 0.014, d.shinR1 + 0.020) + 0.014;
-          own(g.id, knee, blob(padR, padR * 0.92, padR, m, 20));
+          own(g.id, knee, limb([
+            [0.020, pantJ + eps],
+            [-0.22 * shinLen, d.shinR1 + 0.018 + eps],
+            [-0.58 * shinLen, d.shinR2 + 0.026 + eps],
+            [-shinLen, d.shinR2 + 0.008 + eps],
+          ], m, 24));
+          /* 补缝球只比管口大 0.4% 时，样条在控制点附近外凸的半径会追平球面，
+             一圈针脚似的锯齿就闪出来了（管口球面互相 z-fight）。留 2% 间隙，
+             球完整包住两段管口，膝盖圆润又没有锯齿。 */
+          own(g.id, knee, blob((pantJ + eps) * 1.02, (pantJ + eps) * 1.02, (pantJ + eps) * 1.02, m, 26));
         } else {
           // 短裤不过膝，单段挂在髋上，膝盖动它不动
           own(g.id, g2, taper(d.thighR1 + 0.018, d.thighR2 + 0.024, d.thigh * 0.62, m, 22)
@@ -500,25 +773,49 @@ function buildCharacter(d) {
     }
   }
 
+  /* 鞋：一只鞋要能看出"鞋"来——平鞋底、圆鞋头、后跟高一块。
+     以前是两只压扁的椭球叠在一起（鞋身 + 鞋底），看着像两只白煮蛋，
+     而且比裤脚还窄，小腿就像一根柱子插进一颗蛋里。 */
   for (const g of GARMENTS.shoes) {
-    const m = mat(g.color, { roughness: 0.72 });
+    const m = mat(g.color, { roughness: 0.68 });
+    const dark = mat(shade(g.color, 0.76), { roughness: 0.78 });
     for (const knee of [kneeL, kneeR]) {
-      // 鞋：脚背一只椭球 + 鞋底一块扁片，比单个球更像鞋
-      const shoe = blob(d.footW * 1.02, d.footH * 0.52, d.footLen * 0.56, m, 20);
-      shoe.position.set(0, -d.shin + d.footH * 0.42, d.footLen * 0.27);
-      own(g.id, knee, shoe);
-      const sole = blob(d.footW * 1.04, d.footH * 0.16, d.footLen * 0.57, mat(shade(g.color, 0.82), { roughness: 0.8 }), 20);
-      sole.position.set(0, -d.shin + d.footH * 0.09, d.footLen * 0.27);
+      const W = d.footW;
+      const L = d.footLen;
+      const H = d.footH;
+      const y0 = -d.shin;                        // 脚踝
+      /* 鞋底：圆柱压成椭圆板。底面必须是平的——椭球的底面是圆的，
+         人就成了踮着脚尖站在地上，接地的位置也会算错。 */
+      const sole = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 1, 26), dark);
+      sole.scale.set(W * 1.42, H * 0.20, L * 0.64);
+      sole.position.set(0, y0 + H * 0.10, L * 0.22);
       own(g.id, knee, sole);
+      // 鞋头：前低后高的椭球，脚尖微微下压
+      const upper = blob(W * 1.34, H * 0.34, L * 0.62, m, 22);
+      upper.position.set(0, y0 + H * 0.26, L * 0.20);
+      upper.rotation.x = 0.09;
+      own(g.id, knee, upper);
+      // 后跟：比鞋头高一块，侧面才有鞋的剪影
+      const heel = blob(W * 1.28, H * 0.40, L * 0.26, m, 20);
+      heel.position.set(0, y0 + H * 0.30, -L * 0.34);
+      own(g.id, knee, heel);
     }
   }
+
+  /* 投影：整套几何一次性打开自阴影。之前全场景没有一颗投影，全身亮度均匀——
+     这正是画面"像塑料模型"的头号原因：下巴不压脖子、手臂不压躯干、头发不压额头，
+     再精细的形体也立不住。透明材质（腮红）不投，否则脸上会糊一片灰。 */
+  root.traverse((o) => {
+    if (!o.isMesh) return;
+    o.castShadow = !o.material.transparent;
+    o.receiveShadow = true;
+  });
 
   return {
     root, upper, upperInner, head, dims: d,
     armL, armR, elbowL, elbowR, legL, legR, kneeL, kneeR,
     hairParts, hairMat, garments, props: { ring },
-  };
-}
+  };}
 
 /* ══════════════════════ 换装 ══════════════════════ */
 
@@ -540,9 +837,19 @@ function applyOutfit(char, outfit) {
 
   const hp = char.hairParts;
   const hairStyle = outfit.hair;
-  hp.cap.visible = hp.back.visible = hp.bangs.visible = hp.bangs2.visible = true;
-  hp.sideL.visible = hp.sideR.visible = hairStyle === 'bangs' || hairStyle === 'twin';
+  /* 三种发型现在真的不一样了：
+     短发 = 后脑收在耳下（backS）+ 鬓角到颧骨 + 刘海斜一点（偏分）；
+     齐刘海 = 后脑到后颈（back）+ 鬓角到下颌；
+     双马尾 = 齐刘海的底子 + 两条收尖的尾巴。 */
+  const crop = hairStyle === 'bob';
+  hp.cap.visible = hp.bangs.visible = true;
+  hp.back.visible = !crop;
+  hp.backS.visible = crop;
+  hp.sideL.visible = hp.sideR.visible = crop || hairStyle === 'twin';
+  hp.longL.visible = hp.longR.visible = hairStyle === 'bangs';
   hp.tailL.visible = hp.tailR.visible = hairStyle === 'twin';
+  // 偏分：整片刘海绕 Z 斜一点。绕的是头的中心，所以它仍然贴在那层壳上。
+  hp.bangs.rotation.z = crop ? 0.15 : 0;
   char.hairMat.color.set(byId(GARMENTS.hairColor, outfit.hairColor).color);
 
   return { isDress };
@@ -934,6 +1241,11 @@ export function mount(host, opts = {}) {
     // 标准材质不像 toon 那样自带高对比色阶，稍加曝光补偿压住白衣服的高光
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.05;
+    /* 自阴影：只给主光开一张投影图，用来做身上的接触阴影（下巴→脖子、
+       手臂→躯干、头发→额头、大腿→裙内）。没有这层，再准的形体也是一片
+       均匀亮，看着就是"塑料人"。PCFSoft 让边缘软一点，才有皮肤的意思。 */
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.VSMShadowMap;
 
     const sc = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(32, 1, 0.1, 60);
@@ -941,14 +1253,37 @@ export function mount(host, opts = {}) {
     /* 灯光按「摄影棚三点光」配：标准材质的光衰减是物理的，强度要跟 toon 差一个量级。
        天光补冷、主光从右上前方、轮廓光从左后方把肩线勾出来——
        少了轮廓光，深色头发和背景会糊成一片。 */
-    sc.add(new THREE.HemisphereLight(0xffffff, 0xe0cdd6, 1.15));
-    const key = new THREE.DirectionalLight(0xfff4ee, 2.35);
+    sc.add(new THREE.HemisphereLight(0xffffff, 0xe0cdd6, 1.55));
+    const key = new THREE.DirectionalLight(0xfff4ee, 2.00);
     key.position.set(2.4, 4.2, 3.0);
+    key.castShadow = true;
+    key.shadow.mapSize.set(2048, 2048);
+    /* 阴影相机是正交的，范围要正好罩住两个人的包围盒（±2.8 足够，
+       再大就摊薄精度，脸上会出来一格一格的锯齿）。 */
+    const sc2 = key.shadow.camera;
+    sc2.left = -2.8; sc2.right = 2.8; sc2.top = 2.8; sc2.bottom = -2.8;
+    sc2.near = 0.5; sc2.far = 14;
+    // ⚠️ 改完 left/right/top/bottom 必须 updateProjectionMatrix：
+    // 不然投影矩阵还是默认的 ±5 / far 500，同样 2048 张图摊在两倍面积上，
+    // 阴影边缘一格一格的，还会在手臂上糊出一片一片的暗斑（像沾了脏东西）。
+    sc2.updateProjectionMatrix();
+    // 曲面上最容易出条纹（shadow acne）：靠 normalBias 沿法线抬一点采样点
+    key.shadow.bias = -0.0009;
+    key.shadow.normalBias = 0.085;
+    /* VSM 才认 radius：PCFSoft 是固定核，边缘只有一两像素宽，
+       在脸上、手臂上就是一条硬边，看着像脏。给一个大一点的模糊半径，
+       接触阴影才像真的环境光遮蔽。 */
+    key.shadow.radius = 3.5;
+    key.shadow.blurSamples = 12;
+    /* 半透明的影子：真实环境里有反弹光，被挡住的那块不会黑掉一大片。
+       全黑的阴影会把"裤子自己压出来的那道褶"变成一条脏印子。
+       （LightShadow.intensity 是 r157+ 的接口） */
+    key.shadow.intensity = 0.55;
     sc.add(key);
-    const fill = new THREE.DirectionalLight(0xffffff, 0.55);
+    const fill = new THREE.DirectionalLight(0xffffff, 0.72);
     fill.position.set(-3.2, 1.8, 2.2);
     sc.add(fill);
-    const rim = new THREE.DirectionalLight(0xffe7ef, 0.85);
+    const rim = new THREE.DirectionalLight(0xffe7ef, 0.95);
     rim.position.set(-2.2, 1.6, -2.2);
     sc.add(rim);
 
