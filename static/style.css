@@ -536,6 +536,19 @@ body.cal-full{overflow:hidden;height:100dvh}
 .delivery{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:13px 2px;border-bottom:1px solid var(--line);flex-wrap:wrap}
 .delivery:last-child{border:0}
 .delivery p{font-size:14px;line-height:1.6;overflow-wrap:anywhere}
+/* 设置页「数据管理」里的存储摘要：一行，点一下进备份页看完整拆解。
+   用 Button 语义（可键盘聚焦 + hover），但视觉上贴着 soft 这条 Level2 层。 */
+.storage-strip{display:flex;align-items:center;gap:12px;width:100%;text-align:left;margin-bottom:14px;padding:13px 14px;border:1px solid var(--line);border-radius:var(--radius-s);background:var(--soft);transition:background var(--speed),border-color var(--speed)}
+.storage-strip:hover{background:var(--soft-strong);border-color:var(--soft-strong)}
+.storage-strip-icon{display:grid;place-items:center;width:34px;height:34px;flex:none;border-radius:10px;background:var(--surface);color:var(--primary)}
+.storage-strip-icon .icon{width:18px;height:18px}
+.storage-strip-body{display:grid;gap:2px;min-width:0;flex:1}
+.storage-strip-body strong{font-size:15px;color:var(--primary-dark)}
+.storage-strip-body small{font-size:12px;color:var(--muted)}
+.storage-strip-more{margin-left:auto;display:inline-flex;align-items:center;gap:4px;flex:none;font-size:12px;color:var(--muted)}
+.storage-strip-more .icon{width:15px;height:15px}
+@media(max-width:640px){.storage-strip{flex-wrap:wrap}.storage-strip-more{margin-left:46px}}
+
 .storage-panel{margin-bottom:16px}
 .storage-overview{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px}
 .storage-stat{background:var(--soft);border:1px solid var(--line);border-radius:14px;padding:14px;text-align:center}

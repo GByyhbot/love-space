@@ -221,7 +221,11 @@ async function loadSpecial(){
   if(browserPushSupported()&&!isNativeApp()){try{state.webpush.local=Boolean(await (await navigator.serviceWorker.ready).pushManager.getSubscription());}catch{}}
   if(isNativeApp()){try{const push=nativePushBridge();state.nativePush=push?.status?await push.status():{available:false,error:'原生提醒插件不可用'};}catch{state.nativePush={available:false};}}
  }
- if(state.page==='backups'){state.backups=await api('/backups');try{state.storage=await api('/storage');}catch{state.storage=null;}}
+ // 设置页只要一行摘要；非管理员 /api/storage 会 403，所以只在 admin 时才请求。
+ // 备份页那一路已经拉完整数据，这里命中缓存就够了。
+ if(state.page==='settings'&&state.me.user.admin){try{state.storage=await api('/storage');}catch{state.storage=null;}}
+ // 非管理员直接改 hash 进备份页时 /api/backups 会 403，别让整页崩掉
+ if(state.page==='backups'){try{state.backups=await api('/backups');}catch{state.backups=[];}try{state.storage=await api('/storage');}catch{state.storage=null;}}
  if(state.page==='personal'&&state.tab==='trash')state.trash=await api('/records?trash=true&kind='+Object.keys(kindLabel).join(','));
  if(state.page==='imports'||state.page==='importdetail')state.imports=await api('/imports');
  if(state.page==='dashboard')state.dashboard=await api('/dashboard');
@@ -924,7 +928,13 @@ function weeklyPage(){
 }
 function settingsPage() {
  const v=state.appVersion||{};
- return `${heading('设置','管理空间、账号和数据。')}<div class="settings-grid"><section class="card"><h2>${icon('home')} 空间设置</h2><div class="setting-list"><button data-action="space">名称、封面与主题 ${icon('arrow')}</button>${state.me.users.length<2?`<button data-action="invite">邀请另一半 ${icon('arrow')}</button>`:''}<button data-nav="channels">通知渠道与提醒偏好 ${icon('arrow')}</button></div></section><section class="card"><h2>${icon('gear')} 我的账号</h2><div class="setting-list"><button data-action="profile">头像、昵称与密码 ${icon('arrow')}</button><button data-action="logout">退出登录 ${icon('arrow')}</button></div></section><section class="card"><h2>${icon('download')} 数据管理</h2><div class="setting-list"><a href="/api/export" download>导出我有权查看的记录与原文件 ${icon('download')}</a><a href="/api/export/markdown" download>导出 Markdown 知识库（第二大脑） ${icon('download')}</a>${state.me.user.admin?`<button data-nav="backups">完整备份与迁移 ${icon('arrow')}</button>`:''}</div><p class="small-note">第二大脑是纯 Markdown 文件夹，可拖进 Obsidian / Logseq，也可直接给 AI 当长期记忆；只含你自己可见的内容，个人心愿只导出标题。私密日记按账号隔离，完整备份由服务器管理员管理。</p></section><section class="card"><h2>${icon('info')} 关于</h2><div class="setting-list"><div style="display:flex;align-items:center;gap:10px;padding:12px 0"><span class="stat-icon" style="font-size:28px">💕</span><div><h3 style="margin:0;font-size:15px">恋爱空间</h3><p class="meta" style="margin:2px 0 0">${v.version?'v'+v.version+' · '+v.build+(state.apkVersion?' · APK v'+state.apkVersion:''):'加载中…'}</p></div></div><button data-action="check-update">检查更新 ${icon('arrow')}</button></div><p class="small-note">网页功能自动更新；原生功能（如后台通知）需下载新版 APK，可在检查更新中获取。</p></section></div>`;
+ /* 存储占用以前只存在于「数据管理 → 完整备份与迁移」里面，外面连个数字都没有，
+    等于埋了三层还看不见。管理员在设置页就地给一行摘要，点一下进详情。 */
+ const st=state.storage;
+ const fmtSize=b=>b>=1073741824?(b/1073741824).toFixed(2)+' GB':(b/1048576).toFixed(1)+' MB';
+ const isAdmin=!!state.me.user.admin;
+ const storageStrip=isAdmin&&st?`<button class="storage-strip" data-nav="backups"><span class="storage-strip-icon">${icon('gear')}</span><span class="storage-strip-body"><strong>已用 ${fmtSize(st.total||0)}</strong><small>可用 ${fmtSize(st.disk_free||0)} · ${st.record_count||0} 条记录 · ${st.media_count||0} 个媒体文件</small></span><span class="storage-strip-more">存储占用与备份 ${icon('arrow')}</span></button>`:'';
+ return `${heading('设置','管理空间、账号和数据。')}<div class="settings-grid"><section class="card"><h2>${icon('home')} 空间设置</h2><div class="setting-list"><button data-action="space">名称、封面与主题 ${icon('arrow')}</button>${state.me.users.length<2?`<button data-action="invite">邀请另一半 ${icon('arrow')}</button>`:''}<button data-nav="channels">通知渠道与提醒偏好 ${icon('arrow')}</button></div></section><section class="card"><h2>${icon('gear')} 我的账号</h2><div class="setting-list"><button data-action="profile">头像、昵称与密码 ${icon('arrow')}</button><button data-action="logout">退出登录 ${icon('arrow')}</button></div></section><section class="card"><h2>${icon('download')} 数据管理</h2>${storageStrip}<div class="setting-list"><a href="/api/export" download>导出我有权查看的记录与原文件 ${icon('download')}</a><a href="/api/export/markdown" download>导出 Markdown 知识库（第二大脑） ${icon('download')}</a>${state.me.user.admin?`<button data-nav="backups">完整备份与存储占用 ${icon('arrow')}</button>`:''}</div><p class="small-note">第二大脑是纯 Markdown 文件夹，可拖进 Obsidian / Logseq，也可直接给 AI 当长期记忆；只含你自己可见的内容，个人心愿只导出标题。私密日记按账号隔离，完整备份由服务器管理员管理。</p></section><section class="card"><h2>${icon('info')} 关于</h2><div class="setting-list"><div style="display:flex;align-items:center;gap:10px;padding:12px 0"><span class="stat-icon" style="font-size:28px">💕</span><div><h3 style="margin:0;font-size:15px">恋爱空间</h3><p class="meta" style="margin:2px 0 0">${v.version?'v'+v.version+' · '+v.build+(state.apkVersion?' · APK v'+state.apkVersion:''):'加载中…'}</p></div></div><button data-action="check-update">检查更新 ${icon('arrow')}</button></div><p class="small-note">网页功能自动更新；原生功能（如后台通知）需下载新版 APK，可在检查更新中获取。</p></section></div>`;
 }
 function personalPage() {
  const tab=state.tab||'diary',tabs=[['diary','私密日记'],['draft','草稿箱'],['surprise','定时惊喜'],['trash','回收站']];
