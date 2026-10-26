@@ -306,7 +306,7 @@ def ensure_push_topic(c, user_id):
 
 PRIVATE = {'diary', 'draft', 'surprise'}
 SHARED_EDIT = {'album', 'anniversary', 'wish', 'habit'}
-KINDS = {'post', 'diary', 'draft', 'surprise', 'album', 'anniversary', 'wish', 'personal_wish', 'mood', 'note', 'question', 'habit', 'chat'}
+KINDS = {'post', 'diary', 'draft', 'surprise', 'album', 'anniversary', 'wish', 'personal_wish', 'mood', 'note', 'question', 'habit', 'chat', 'quest', 'ledger'}
 
 # 聊天通知的合并窗口（秒）：短时间连发只弹一条推送，文案带未读数量。
 # 窗口越长合并越彻底、延迟越高；15s 在"及时"与"不刷屏"之间取平衡。

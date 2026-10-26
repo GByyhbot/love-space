@@ -33,7 +33,7 @@ KIND_LABELS = {
     'post': '时光动态', 'diary': '私密日记', 'draft': '草稿', 'surprise': '定时惊喜',
     'anniversary': '纪念日', 'wish': '共同愿望', 'personal_wish': '个人心愿',
     'mood': '每日心情', 'note': '留言板', 'question': '情侣问答', 'habit': '共同打卡',
-    'chat': '聊天', 'album': '相册',
+    'chat': '聊天', 'album': '相册', 'quest': '恋爱清单', 'ledger': '共同账本',
 }
 
 # 固定东八区：Debian slim 镜像常常没有 tzdata，用 zoneinfo 会直接抛异常
@@ -121,6 +121,15 @@ def _render_record(rec, authors, media_links, prev_next, same_day, path, title_m
         out += [f"- 日期：{body['date']}{extra}"]
     if kind == 'wish':
         out += [f"- 状态：{'已实现' if body.get('done') else '还在期待'}"]
+    if kind == 'quest':
+        out += [f"- 状态：{'已完成' if body.get('done') else '还没做'}",
+                f"- 分类：{body.get('category') or '日常'}"]
+    if kind == 'ledger':
+        try:
+            amount = float(body.get('amount') or 0)
+        except (TypeError, ValueError):
+            amount = 0.0
+        out += [f'- 金额：¥{amount:.2f}', f"- 分类：{body.get('category') or '其他'}"]
     if kind == 'habit':
         checks = rec.get('checks') or []
         out += [f"- 打卡：{len(checks)} 次"]

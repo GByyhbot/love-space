@@ -406,7 +406,7 @@ def clean_body(c, kind, data, user_id, previous=None):
     if kind == 'personal_wish':
         raise HTTPException(422, '个人心愿请使用专属加密接口保存')
     permitted = {'title', 'content', 'date', 'media', 'album', 'publish_at', 'annual', 'remind_days',
-                 'category', 'done', 'emoji', 'target', 'completion_post', 'sticker'}
+                 'category', 'done', 'emoji', 'target', 'completion_post', 'sticker', 'amount'}
     body = {k: v for k, v in data.items() if k in permitted}
     if 'sticker' in body and (not isinstance(body['sticker'], str)
                               or not re.fullmatch(r'/static/stickers/[a-z0-9]+/\d+\.(webm|webp)', body['sticker'])):
@@ -423,6 +423,15 @@ def clean_body(c, kind, data, user_id, previous=None):
             raise HTTPException(422, '重复方式仅支持 每年公历 / 每年农历 / 一次')
     if 'remind_days' in body and (type(body['remind_days']) is not int or not 0 <= body['remind_days'] <= 365):
         raise HTTPException(422, '提前提醒天数需在 0–365 之间')
+    if 'amount' in body:
+        # 账本金额：只接受数字，落库前统一成两位小数；上限 1 亿，挡住误输的长串数字
+        try:
+            amount = round(float(body['amount']), 2)
+        except (TypeError, ValueError):
+            raise HTTPException(422, '金额格式不正确')
+        if not 0 <= amount <= 100000000:
+            raise HTTPException(422, '金额需在 0–1 亿之间')
+        body['amount'] = amount
     for key in ('date', 'target'):
         if body.get(key):
             try:
