@@ -144,7 +144,7 @@ async function boot() {
   if (!state.me) return renderAuth(status,invite);
   history.replaceState(null,'',location.pathname+location.hash);
   state.page=location.hash.slice(1).split('/')[0] || 'home';
-  if (!['home','timeline','albums','messages','together','personal','settings','notices','channels','backups','imports','importdetail','dashboard','weekly','dressup','body'].includes(state.page)) state.page='home';
+  if (!['home','timeline','albums','messages','together','personal','settings','notices','channels','backups','imports','importdetail','dashboard','weekly','dressup'].includes(state.page)) state.page='home';
   await refreshData(); if(state.page==='timeline')await loadTimeline(true); renderShell(); connectEvents(); connectNtfy(); syncNativePush(); startKeepAlive();
  } catch(e) {$('#app').innerHTML=empty('暂时无法连接空间',e.message,'reload','重新连接');}
 }
@@ -192,9 +192,8 @@ function renderShell() {
 }
 
 function renderPage() {
- const pages={home:homePage,timeline:timelinePage,albums:albumsPage,messages:messagesPage,together:togetherPage,personal:personalPage,settings:settingsPage,notices:noticesPage,channels:channelsPage,backups:backupsPage,imports:importsPage,importdetail:importDetailPage,dashboard:dashboardPage,weekly:weeklyPage,dressup:dressupPage,body:bodyPage};
+ const pages={home:homePage,timeline:timelinePage,albums:albumsPage,messages:messagesPage,together:togetherPage,personal:personalPage,settings:settingsPage,notices:noticesPage,channels:channelsPage,backups:backupsPage,imports:importsPage,importdetail:importDetailPage,dashboard:dashboardPage,weekly:weeklyPage,dressup:dressupPage};
  stopDressup(); // 整页 innerHTML 要换掉了：先把 3D 的 canvas 摘下来存着，别让 WebGL 上下文被回收
- stopBody();
  $('#page').innerHTML=(pages[state.page] || homePage)();
  if(state.page==='timeline'&&state.timelineHasMore)$('#timeline-list')?.insertAdjacentHTML('afterend',`<div class="timeline-more">${button('继续往前翻','load-more-timeline','secondary')}</div>`);
  if(state.page==='messages') {$('#chat-text').value=localStorage.getItem('chat-text:'+state.me.user.id)||'';autoGrow($('#chat-text'));scrollChat();$('#chat-text')?.addEventListener('focus',()=>{const d=$('#sticker-dock');if(d)d.hidden=true;});}
@@ -202,7 +201,6 @@ function renderPage() {
  if(state.page==='home'){loadOnThisDay();loadYearbook();}
  if(state.page==='together'&&state.tab==='calendar') loadCalendar();
  if(state.page==='dressup') mountDressup();
- if(state.page==='body') mountBody();
 }
 /* state.me 还没到时不要渲染：boot() 是异步的，用户在首屏加载完之前点导航（或 hashchange 抢跑）
    会让 renderShell 读到 null.space 抛 TypeError，被 catch 成一条吓人的报错提示。
@@ -578,7 +576,7 @@ function togetherPage() {
  if(state.tab==='calendar')return calendarPage();
  if(state.tab==='personal-wish')return personalWishPage();
  if(state.tab){const meta=toolsList.find(x=>x[0]===state.tab);if(meta)return `${heading(meta[2],meta[3],'new-'+state.tab,'添加'+({anniversary:'纪念日',wish:'愿望',mood:'心情',note:'留言',question:'问题',habit:'目标'}[state.tab]))}<div class="tabs"><button data-action="tools-back">← 回到我们</button></div>${state.tab==='question'?'<p class="hint">可以写下自己的问题，也可以从内置题目里挑一个。双方回答后才揭晓彼此的答案。</p>':''}${recordsOf(state.tab).length?recordsOf(state.tab).map(recordCard).join(''):empty('给我们，多一点小小的仪式感',meta[3],'new-'+state.tab,'现在开始')}`;}
- return `${heading('关于我们，还有好多好多','把喜欢落在实处，把日子过成纪念。')}<div class="tools-grid"><button class="tool-card" data-nav="dashboard"><span class="tool-emoji">📊</span><h3>数据看板</h3><p>我们的点滴，都在这里</p></button><button class="tool-card" data-nav="weekly"><span class="tool-emoji">✉️</span><h3>回忆周报</h3><p>把这一周，收进一封信</p></button><button class="tool-card" data-nav="dressup"><span class="tool-emoji">🧸</span><h3>我们的造型间</h3><p>给我们的卡通形象换身衣服</p></button><button class="tool-card" data-nav="body"><span class="tool-emoji">🧍</span><h3>人体模型</h3><p>男生女生分开看，先看形体</p></button>${toolsList.map(([id,emoji,title,desc])=>`<button class="tool-card" data-action="tool-${id}"><span class="tool-emoji">${emoji}</span><h3>${title}</h3><p>${desc}</p></button>`).join('')}</div><div class="section-heading settings-section-heading"><h2>${icon('gear')} 设置</h2></div><div class="tools-grid settings-tools"><button class="tool-card" data-action="space"><span class="tool-emoji">🏡</span><h3>空间设置</h3><p>空间名称、封面与相恋日期</p></button>${state.me.users.length<2?`<button class="tool-card" data-action="invite"><span class="tool-emoji">💌</span><h3>邀请另一半入住</h3><p>把你们的专属空间分享给 TA</p></button>`:''}<button class="tool-card" data-nav="channels"><span class="tool-emoji">🔔</span><h3>提醒设置</h3><p>通知渠道与提醒偏好</p></button><button class="tool-card" data-nav="settings"><span class="tool-emoji">⚙️</span><h3>全部设置</h3><p>账号资料、数据导出与备份</p></button></div>`;
+ return `${heading('关于我们，还有好多好多','把喜欢落在实处，把日子过成纪念。')}<div class="tools-grid"><button class="tool-card" data-nav="dashboard"><span class="tool-emoji">📊</span><h3>数据看板</h3><p>我们的点滴，都在这里</p></button><button class="tool-card" data-nav="weekly"><span class="tool-emoji">✉️</span><h3>回忆周报</h3><p>把这一周，收进一封信</p></button><button class="tool-card" data-nav="dressup"><span class="tool-emoji">🧸</span><h3>我们的造型间</h3><p>给我们的卡通形象换身衣服</p></button>${toolsList.map(([id,emoji,title,desc])=>`<button class="tool-card" data-action="tool-${id}"><span class="tool-emoji">${emoji}</span><h3>${title}</h3><p>${desc}</p></button>`).join('')}</div><div class="section-heading settings-section-heading"><h2>${icon('gear')} 设置</h2></div><div class="tools-grid settings-tools"><button class="tool-card" data-action="space"><span class="tool-emoji">🏡</span><h3>空间设置</h3><p>空间名称、封面与相恋日期</p></button>${state.me.users.length<2?`<button class="tool-card" data-action="invite"><span class="tool-emoji">💌</span><h3>邀请另一半入住</h3><p>把你们的专属空间分享给 TA</p></button>`:''}<button class="tool-card" data-nav="channels"><span class="tool-emoji">🔔</span><h3>提醒设置</h3><p>通知渠道与提醒偏好</p></button><button class="tool-card" data-nav="settings"><span class="tool-emoji">⚙️</span><h3>全部设置</h3><p>账号资料、数据导出与备份</p></button></div>`;
 }
 function personalWishPage(){const wishes=recordsOf('personal_wish');return `${heading('个人心愿','写下的人可以直接回看，对方输入一次密码后就能一直看到。','new-personal-wish','许下心愿','heart')}<div class="tabs"><button data-action="tools-back">← 回到我们</button></div><p class="hint">心愿名称彼此可见。密码至少 6 位（建议纯数字），每条心愿都要不同；告诉对方后，对方解锁一次即可永久查看。</p>${wishes.length?wishes.map(personalWishCard).join(''):empty('留一份只差密码就能打开的心愿','对方能看见心愿名称，具体内容仍由你掌握。','new-personal-wish','许下第一份心愿')}`;}
 /* 造型间：3D 引擎（three.js）按需加载，不进首屏包体。
@@ -589,21 +587,6 @@ function dressupPage(){
  return `${heading('我们的造型间','换一身衣服，看看今天想变成什么样子。')}${back}<div id="dressup-root" class="dressup-root"><p class="hint">正在准备造型间…</p></div>`;
 }
 function stopDressup(){if(dressupMod&&dressupMod.pause)dressupMod.pause();}
-/* 人体模型：独立页面，男/女可切换，单人/双人两种视图；只渲染静止人体，
-   不挂换装、不加动作——先把它当"人体底板"看。 */
-let bodyMod=null;
-function bodyPage(){
- const back='<div class="tabs"><button data-action="tools-back">← 回到我们</button></div>';
- return `${heading('人体模型','男生和女生分开搭，先只看形体。')}${back}<div id="body-root" class="dressup-root"><p class="hint">正在准备人体模型…</p></div>`;
-}
-function stopBody(){if(bodyMod&&bodyMod.pause)bodyMod.pause();}
-function mountBody(){
- const root=$('#body-root');if(!root)return;
- import(`/static/body.js${ASSET_V ? `?v=${ASSET_V}` : ''}`).then(mod=>{
-  bodyMod=mod;
-  if(state.page==='body'&&$('#body-root')===root) mod.mount(root,{userId:state.me.user.id});
- }).catch(err=>{root.innerHTML=`<p class="hint">人体模型没能打开：${esc(err.message)}</p>`;});
-}
 function mountDressup(){
  const root=$('#dressup-root');if(!root)return;
  import(`/static/dressup.js${ASSET_V ? `?v=${ASSET_V}` : ''}`).then(mod=>{
