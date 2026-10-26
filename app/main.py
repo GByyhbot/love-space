@@ -1418,6 +1418,18 @@ def export(request: Request, user=Depends(current_user)):
     return FileResponse(path, filename='我们的回忆.zip', media_type='application/zip', background=BackgroundTask(path.unlink, missing_ok=True))
 
 
+@app.get('/api/export/markdown')
+def export_markdown(request: Request, user=Depends(current_user)):
+    """导出 Markdown 知识库（"恋爱第二大脑"）。与 JSON 导出共用限流档位。"""
+    rate_limit(request, 'export', 10, 300)
+    from .markdown_export import build_markdown_archive
+    path = build_markdown_archive(user['id'])
+    from starlette.background import BackgroundTask
+    stamp = __import__('datetime').datetime.now().strftime('%Y%m%d')
+    return FileResponse(path, filename=f'恋爱空间-第二大脑-{stamp}.zip',
+                        media_type='application/zip', background=BackgroundTask(path.unlink, missing_ok=True))
+
+
 @app.post('/api/backups')
 def backup(request: Request, user=Depends(current_user)):
     if not user['admin']:
