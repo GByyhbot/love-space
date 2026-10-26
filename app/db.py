@@ -308,7 +308,7 @@ PRIVATE = {'diary', 'draft', 'surprise'}
 # 静态加密的类型：私密记录 + 生理期（健康数据，库文件被拷走也不该是明文）。
 # 注意它和 PRIVATE 不等价：period 加密但可以按 shared 共享给另一半。
 ENCRYPTED = PRIVATE | {'period'}
-SHARED_EDIT = {'album', 'anniversary', 'wish', 'habit', 'quest', 'ledger', 'music'}
+SHARED_EDIT = {'album', 'anniversary', 'wish', 'habit', 'quest', 'ledger', 'music', 'period'}
 KINDS = {'post', 'diary', 'draft', 'surprise', 'album', 'anniversary', 'wish', 'personal_wish', 'mood', 'note', 'question', 'habit', 'chat', 'quest', 'ledger', 'period', 'music'}
 
 # 聊天通知的合并窗口（秒）：短时间连发只弹一条推送，文案带未读数量。

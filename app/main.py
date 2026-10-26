@@ -387,6 +387,8 @@ class RecordInput(BaseModel):
     kind: str
     body: dict
     client_id: str | None = Field(default=None, max_length=100)
+    # 仅 kind=period 使用：替另一半记录（她不舒服的时候，你替她记一条）
+    author: str | None = Field(default=None, max_length=64)
 
 
 class PersonalWishInput(BaseModel):
@@ -448,7 +450,9 @@ def clean_body(c, kind, data, user_id, previous=None):
         # 生理期默认双人公开可见：另一半提前知道，才谈得上照顾。
         # 想留私密就在表单里取消勾选（传 shared:false），或用 /api/period/share 一次性收回。
         body.setdefault('shared', True)
-        if 'flow' in body and body['flow'] not in ('少', '中', '多'):
+        if body.get('flow') in (None, ''):
+            body.pop('flow', None)
+        elif body['flow'] not in ('少', '中', '多'):
             raise HTTPException(422, '经量只能选 少 / 中 / 多')
         symptoms = body.get('symptoms')
         if symptoms is not None:
@@ -597,15 +601,27 @@ def records(kind: str = '', q: str = '', author: str = '', date: str = '', media
 def create_record(body: RecordInput, user=Depends(current_user)):
     with connect() as c:
         c.execute('BEGIN IMMEDIATE')
+        author_id = user['id']
+        if body.author and body.author != user['id']:
+            # 只对生理期开放"代记"：两个人的周期由两个人一起维护，
+            # 别的类型仍必须是本人写的，否则点赞评论的作者归属会乱。
+            if body.kind != 'period':
+                raise HTTPException(422, '只有生理期支持替对方记录')
+            if not c.execute('SELECT 1 FROM users WHERE id=?', (body.author,)).fetchone():
+                raise HTTPException(422, '记录对象不存在')
+            author_id = body.author
         if body.client_id:
-            existing = c.execute('SELECT * FROM records WHERE author=? AND client_id=?', (user['id'], body.client_id)).fetchone()
+            existing = c.execute('SELECT * FROM records WHERE author=? AND client_id=?', (author_id, body.client_id)).fetchone()
             if existing:
                 return serialize(c, existing, user['id'])
         cleaned = clean_body(c, body.kind, body.body, user['id'])
+        if author_id != user['id'] and not cleaned.get('shared', True):
+            # 替她记一条私密记录，你自己却看不到，只会两头困惑
+            raise HTTPException(422, '替对方记录时无法设为仅自己可见')
         rid = uid()
         timestamp = now()
         c.execute('INSERT INTO records VALUES (?,?,?,?,?,?,NULL,?,?)',
-                  (rid, body.kind, user['id'], db.body_encode(body.kind, rid, cleaned), timestamp, timestamp,
+                  (rid, body.kind, author_id, db.body_encode(body.kind, rid, cleaned), timestamp, timestamp,
                    timestamp if body.kind not in db.PRIVATE else None, body.client_id))
         if body.kind not in db.PRIVATE:
             event = 'chat' if body.kind == 'chat' else ('note' if body.kind == 'note' else 'activity')
@@ -706,6 +722,10 @@ def update_record(rid: str, body: RecordInput, user=Depends(current_user)):
             raise HTTPException(422, '已发布内容不能改变可见范围，请另建记录')
         old_body = db.body_decode(row)
         cleaned = clean_body(c, body.kind, body.body, user['id'], old_body)
+        if body.kind == 'period' and row['author'] != user['id']:
+            # 另一半可以帮忙改内容（她说难受的时候你替她补一条症状），
+            # 但「共享给 TA」是隐私开关，只能由记录本人改。
+            cleaned['shared'] = old_body.get('shared', True)
         publish = now() if row['kind'] == 'draft' and body.kind == 'post' else row['published']
         c.execute('UPDATE records SET kind=?,body=?,updated=?,published=? WHERE id=?',
                   (body.kind, db.body_encode(body.kind, rid, cleaned), now(), publish, rid))

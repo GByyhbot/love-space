@@ -131,7 +131,11 @@ label{display:grid;gap:6px;font-size:13px;color:var(--muted)}
 .form-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:8px;flex-wrap:wrap}
 .form-actions .button{flex:0 1 auto}
 .form-error{color:var(--danger);font-size:13px;line-height:1.6;min-height:8px}
-.switch-row{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:14px;color:var(--ink)}
+.switch-row{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:14px;color:var(--ink);padding:12px 14px;border:1px solid var(--line);border-radius:var(--radius-s);background:var(--soft);cursor:pointer}
+.switch-row span{display:grid;gap:3px;min-width:0}
+.switch-note{font-size:11.5px;font-style:normal;color:var(--muted);font-weight:400}
+.switch-row input[type=checkbox]{width:22px;height:22px;flex:none;margin:0;accent-color:var(--primary);cursor:pointer}
+.switch-row input[type=checkbox]:disabled{cursor:not-allowed;opacity:.6}
 .answer-box{padding:13px 15px;background:var(--soft);border-radius:var(--radius-s);font-size:14px;line-height:1.7;margin-top:10px;white-space:pre-wrap;overflow-wrap:anywhere}
 .status-pill{border-radius:15px;padding:4px 10px;font-size:12px;background:var(--bg);color:var(--muted);border:1px solid var(--line);flex-shrink:0}
 .status-pill.sent{background:var(--green-soft);color:var(--green);border-color:transparent}
@@ -613,7 +617,7 @@ body.cal-full{overflow:hidden;height:100dvh}
 .upload-zone.dragging{border-color:var(--primary);background:var(--soft)}
 .upload-zone.dragging .upload-tile{opacity:.65;border-color:var(--primary)}
 .upload-tile.recording{border-color:var(--primary);background:var(--soft);animation:pulse-rec 1.2s infinite}
-.switch-row input[type=checkbox]{width:20px;height:20px}
+.switch-row input[type=checkbox]{width:22px;height:22px;flex:none;margin:0;accent-color:var(--primary)}
 
 /* ── 7. 动效与无障碍 ─────────────────────────── */
 @keyframes pulse{50%{opacity:.45}}
@@ -818,20 +822,54 @@ body.cal-full{overflow:hidden;height:100dvh}
 .week-hero .eyebrow{font-size:11px;letter-spacing:.16em;color:var(--muted)}
 @media(max-width:560px){.bars{gap:4px}.bars .bar span{font-size:9px}.bars .bar:nth-child(even) span{visibility:hidden}}
 
-/* ———— 生理期 ———— */
+/* ———— 生理期：美柚式四阶段 ————
+   月经期用主题色（最重），其余三段用低饱和色：色相区分 + 不透明度够，
+   一眼能看出"这几天是排卵期"。每段第一天在格子里打短名，预测日降透明、虚线边。 */
 .period-month{margin:0 0 16px}
 .period-month:last-of-type{margin-bottom:0}
 .period-month h3{font-size:13px;font-weight:600;color:var(--muted);margin:0 0 8px}
-.cal-day.p-actual{background:var(--soft-strong)}
-.cal-day.p-actual span:first-child{color:var(--primary-dark);font-weight:700}
-.cal-day.p-predicted{border:1px dashed var(--primary);opacity:.75}
-.cal-day.p-ovulation::after{content:'';position:absolute;bottom:7px;width:6px;height:6px;border-radius:50%;background:var(--green)}
-.period-legend{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:4px 0 0}
-.period-legend .lg{width:11px;height:11px;border-radius:4px;display:inline-block;margin:0 4px 0 10px}
-.period-legend .lg:first-child{margin-left:0}
-.lg-actual{background:var(--soft-strong)}
-.lg-predicted{border:1px dashed var(--primary)}
-.lg-ovulation{background:var(--green);border-radius:50%}
+.cal-day.ph-period{background:var(--soft-strong);box-shadow:inset 0 0 0 1px rgba(176,72,107,.16)}
+.cal-day.ph-period span:first-child{color:var(--primary-dark);font-weight:700}
+.cal-day.ph-follicular{background:rgba(95,138,90,.26)}
+.cal-day.ph-fertile{background:rgba(139,114,168,.34)}
+.cal-day.ph-luteal{background:rgba(196,150,70,.28)}
+/* 阶段短名：只出现在每段第一天，让"阶段切换"这件事看得见 */
+.cal-day em{font-style:normal;font-size:10px;font-weight:800;letter-spacing:.02em;line-height:1;padding:2px 5px;border-radius:5px;background:var(--surface);color:var(--ink);margin-top:-2px}
+.cal-day.ph-pred{opacity:.85}
+.cal-day.ph-period.ph-pred{background:transparent;border:1px dashed var(--primary)}
+.cal-day.ph-fertile.ph-ovu::after{content:'';position:absolute;bottom:4px;width:7px;height:7px;border-radius:50%;background:#8B72A8;box-shadow:0 0 0 2px rgba(139,114,168,.25)}
+.period-legend{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin:10px 0 0}
+.lg-pill{padding:4px 11px;border-radius:999px;font-size:12px;font-weight:600;color:var(--ink);border:1px solid transparent;line-height:1.5}
+.lg-pill.p-period{background:var(--soft-strong);color:var(--primary-dark)}
+.lg-pill.p-follicular{background:rgba(95,138,90,.26)}
+.lg-pill.p-fertile{background:rgba(139,114,168,.34)}
+.lg-pill.p-luteal{background:rgba(196,150,70,.28)}
+.lg-pill.p-pred{border:1px dashed var(--primary);color:var(--muted);font-weight:500}
+
+/* 阶段进度条：一条 bar 摊开整个周期，游标就是今天，当前段描边高亮 */
+.phase-wrap{margin:14px 0 0}
+.phase-bar{display:flex;gap:3px;position:relative;height:40px}
+.phase-seg{display:flex;flex-direction:column;align-items:center;justify-content:center;min-width:0;border-radius:9px;line-height:1.25;overflow:hidden;white-space:nowrap}
+.phase-seg b{font-size:12px;font-weight:700;color:var(--ink);opacity:.9}
+.phase-seg small{font-size:10.5px;color:var(--muted)}
+.phase-seg.current{box-shadow:inset 0 0 0 2px var(--primary),0 3px 10px rgba(176,72,107,.14)}
+.phase-seg.current b{opacity:1;color:var(--primary-dark)}
+.phase-seg.current small{color:var(--primary-dark);opacity:.8}
+.s-period{background:var(--soft-strong)}
+.s-follicular{background:rgba(95,138,90,.26)}
+.s-fertile{background:rgba(139,114,168,.34)}
+.s-luteal{background:rgba(196,150,70,.28)}
+.phase-cursor{position:absolute;top:-5px;bottom:-5px;width:3px;border-radius:2px;background:var(--primary-dark);transform:translateX(-1.5px);box-shadow:0 0 0 3px rgba(176,72,107,.13)}
+.phase-label{display:inline-flex;align-items:center;gap:7px;font-size:13px;color:var(--ink);margin:10px 0 0;padding:7px 14px;border-radius:999px;background:var(--soft);line-height:1.35}
+.phase-label::before{content:'';width:8px;height:8px;border-radius:50%;background:var(--primary);flex:none}
+.phase-label strong{font-size:14.5px;font-weight:800;color:var(--primary-dark)}
+.phase-label.now-period{background:var(--soft-strong)}
+.phase-label.now-follicular{background:rgba(95,138,90,.2)}
+.phase-label.now-fertile{background:rgba(139,114,168,.26)}
+.phase-label.now-luteal{background:rgba(196,150,70,.22)}
+.phase-label.now-follicular::before{background:#5F8A5A}
+.phase-label.now-fertile::before{background:#8B72A8}
+.phase-label.now-luteal::before{background:#C4964B}
 .sym-chips{display:flex;flex-wrap:wrap;gap:8px;margin:-2px 0 2px}
 .sym-chip{padding:7px 14px;border-radius:999px;border:1px solid var(--line);background:var(--surface);font-size:13px;color:var(--muted);cursor:pointer;transition:background var(--speed),color var(--speed),border-color var(--speed)}
 .sym-chip.on{background:var(--primary);border-color:var(--primary);color:var(--on-primary);font-weight:600}
