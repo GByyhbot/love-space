@@ -807,6 +807,14 @@ function periodForm(record=null, forWhom=null){
  if(whoSel)whoSel.onchange=()=>{
   const other=whoSel.value!==state.me.user.id,sw=$('[name=shared]',$('#period-form'));
   if(sw){sw.checked=true;sw.disabled=other;}
+  // 换人就把「经期几天 / 周期几天」的默认值换成那个人的历史平均值，
+  // 否则替她记会用我自己的周期当默认，写出来的记录是错的。
+  const t=periodData(whoSel.value);
+  const lenEl=$('[name=length]',$('#period-form')),cycEl=$('[name=cycle]',$('#period-form'));
+  if(lenEl)lenEl.value=t.length;
+  if(cycEl)cycEl.value=t.cycle;
+  const note=$('.modal-form .small-note',$('#period-form'));
+  if(note)note.textContent=`周期默认按${other?person(whoSel.value).name:'你自己'}历史记录的平均值填好，也可以手动改。数据加密保存，两个人一起维护同一条周期。`;
  };
  $('#period-form').onsubmit=async e=>{
   e.preventDefault();const form=e.currentTarget,submit=$('button[type=submit]',form);
