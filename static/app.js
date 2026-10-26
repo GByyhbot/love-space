@@ -151,7 +151,22 @@ function renderAuth(status, invite) {
 }
 
 async function refreshData() {
- [state.me,state.records,state.photos,state.notices]=await Promise.all([api('/me'),api('/records?kind='+Object.keys(kindLabel).join(',')+'&limit=300'),api('/photos'),api('/notices')]);
+ /* 首屏分两窗拉，别让聊天把别的记录挤掉：
+    chat 是唯一会无限增长的类型（实测占 88%），却和纪念日/清单/账本抢同一个 limit 窗口，
+    窗口一满，最早的纪念日就先消失。现在 chat 单独留最近 200 条（聊天页本来就只显示这么多），
+    其他类型走独立的 1000 条窗口——它们都是人工添加，增长很慢。 */
+ const [me,others,chats,photos,notices]=await Promise.all([
+   api('/me'),
+   api('/records?kind='+Object.keys(kindLabel).join(',')+'&exclude=chat&limit=1000'),
+   api('/records?kind=chat&limit=200'),
+   api('/photos'),
+   api('/notices'),
+ ]);
+ state.me=me;
+ const byId=new Map(others.map(r=>[r.id,r]));
+ for(const chat of chats)byId.set(chat.id,chat);
+ state.records=[...byId.values()];
+ state.photos=photos; state.notices=notices;
  syncNativePush();
 }
 async function loadTimeline(reset=false) {

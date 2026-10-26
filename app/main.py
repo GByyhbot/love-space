@@ -526,9 +526,11 @@ def serialize_many(c, rows, user_id):
 @app.get('/api/records')
 def records(kind: str = '', q: str = '', author: str = '', date: str = '', media_type: str = '',
             trash: bool = False, limit: int = 0, before: float = 0, before_id: str = '',
-            user=Depends(current_user)):
+            exclude: str = '', user=Depends(current_user)):
     with connect() as c:
-        limit = min(max(limit, 0), 200)
+        # 上限 1000：首屏要把「除聊天外」的记录一次拿全（纪念日、清单、账本这些增长很慢），
+        # 聊天自己有独立的 200 条窗口。原来卡在 200，聊天一多就把老纪念日挤出窗口。
+        limit = min(max(limit, 0), 1000)
         clauses, params = [], []
         if trash:
             clauses.extend(['author=?', 'deleted IS NOT NULL'])
@@ -541,6 +543,11 @@ def records(kind: str = '', q: str = '', author: str = '', date: str = '', media
         if kinds:
             clauses.append('kind IN (' + ','.join('?' for _ in kinds) + ')')
             params.extend(kinds)
+        # 独立的排除列表：比让前端把十几个类型名拼进 kind 更好读，也不会漏
+        excluded = [value for value in exclude.split(',') if value]
+        if excluded:
+            clauses.append('kind NOT IN (' + ','.join('?' for _ in excluded) + ')')
+            params.extend(excluded)
         if author:
             clauses.append('author=?')
             params.append(author)
