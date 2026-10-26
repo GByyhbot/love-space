@@ -26,7 +26,7 @@ def _env(name, default):
 # tests/test_version_config.py 会拿这里的值和 android-app 的 build.gradle 对账。
 WEB_VERSION = _env('LOVE_VERSION', 'dev')
 BUILD_ID = _env('LOVE_BUILD', 'local')
-APK_VERSION = _env('LOVE_APK_VERSION', '1.2.5')
+APK_VERSION = _env('LOVE_APK_VERSION', '1.2.6')
 
 
 def public_origin():

@@ -13,6 +13,7 @@ import android.util.Log;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
+import android.webkit.WebSettings;
 import android.webkit.WebView;
 
 import com.getcapacitor.Bridge;
@@ -47,6 +48,26 @@ public class MainActivity extends BridgeActivity {
         NtfyStreamService.start(this);
         // ③ WebView 下载支持：WebView 默认不处理二进制下载，APK 链接交给系统浏览器下载（应用内更新依赖）
         setupDownloadListener();
+        // ④ 打开本地存储：聊天背景图按 media id 缓存进 IndexedDB，省得每次进聊天都重下一遍。
+        //    WebSettings 的 database/domStorage 默认未必开启，不开的话 JS 侧 indexedDB.open 会直接失败。
+        setupLocalStorage();
+    }
+
+    /**
+     * 启用 WebView 的 DOM Storage 与数据库（IndexedDB）能力。
+     * 失败只影响"背景图缓存"这一件事——app.js 里对 IndexedDB 不可用做了静默降级，不会崩。
+     */
+    private void setupLocalStorage() {
+        try {
+            if (getBridge() == null || getBridge().getWebView() == null) return;
+            WebSettings settings = getBridge().getWebView().getSettings();
+            settings.setDomStorageEnabled(true);
+            settings.setDatabaseEnabled(true);
+            settings.setAllowContentAccess(true);
+            Log.i(TAG, "本地存储已启用（IndexedDB 可用）");
+        } catch (Exception e) {
+            Log.e(TAG, "启用本地存储失败", e);
+        }
     }
 
     /**

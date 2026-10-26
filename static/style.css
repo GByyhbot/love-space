@@ -374,13 +374,37 @@ label{display:grid;gap:6px;font-size:13px;color:var(--muted)}
 .chat-compose textarea{min-height:40px;height:40px;max-height:100px;resize:none;flex:1;font-size:14px;line-height:1.5;padding:9px 14px;background:var(--bg);border-radius:20px;overflow-y:auto;scrollbar-width:none}
 .chat-compose textarea::-webkit-scrollbar{display:none}
 .chat-compose .button{padding:0;width:44px;height:44px;flex-shrink:0}
-/* ── 聊天壁纸：底图固定在消息区，气泡与输入/标题栏保持不透明 ──
-   .chat-wallpaper 绝对定位铺满 .chat-body，::after 是压在图上的遮罩（--chat-bg-dim 控制强度），
-   这样底图不会跟着消息滚动，文字对比度也不会被照片毁掉。 */
+/* ── 聊天壁纸：底图铺满整个聊天面板（标题栏和输入栏也压在图上） ──
+   .chat-wallpaper 挂到 .chat-panel 上绝对定位铺满，::after 是压在图上的遮罩（--chat-bg-dim 控制强度）。
+   底图不随消息滚动，标题栏/输入栏改成半透明玻璃让图透出来，文字对比度靠气泡自身背景兜底。 */
+.chat-panel{position:relative}
+.chat-panel>.chat-header,.chat-panel>.chat-body,.chat-panel>.sticker-dock,.chat-panel>.chat-compose{position:relative;z-index:1}
 .chat-body{position:relative;flex:1;min-height:0;display:flex;overflow:hidden}
 .chat-wallpaper{position:absolute;inset:0;z-index:0;background-size:cover;background-position:center;background-repeat:no-repeat;pointer-events:none}
 .chat-wallpaper::after{content:'';position:absolute;inset:0;background:var(--veil,var(--bg));opacity:var(--chat-bg-dim,.35)}
+/* 照片壁纸用深色遮罩（浅色遮罩会把照片冲成灰白，白字气泡也读不清） */
+.chat-wallpaper.photo{--veil:#0F0D14}
+:root.dark .chat-wallpaper.photo::after{opacity:var(--chat-bg-dim,.35)}
 .chat-body .chat-log{position:relative;z-index:1;background:transparent;width:100%}
+/* 有壁纸时标题栏/输入栏变半透明玻璃，让底图真正"全屏" */
+.chat-panel.has-wallpaper{background:transparent;border-color:transparent;box-shadow:none}
+.chat-panel.has-wallpaper .chat-header,.chat-panel.has-wallpaper .chat-compose{background:rgba(255,255,255,.62);backdrop-filter:blur(16px) saturate(1.25);-webkit-backdrop-filter:blur(16px) saturate(1.25);border-color:rgba(255,255,255,.45)}
+.chat-panel.has-wallpaper .chat-compose textarea{background:rgba(255,255,255,.82)}
+/* ── 沉浸式：用照片当背景时，气泡/标题栏/输入栏换成半透明深色（主流聊天 App 的观感） ── */
+.chat-panel.immersive .chat-header,.chat-panel.immersive .chat-compose,.chat-panel.immersive .sticker-dock{background:rgba(16,14,20,.44);border-color:rgba(255,255,255,.14)}
+.chat-panel.immersive .chat-header h3,.chat-panel.immersive .chat-header small,.chat-panel.immersive .chat-time,.chat-panel.immersive .chat-recall{color:rgba(255,255,255,.82)}
+.chat-panel.immersive .chat-header h3{color:#fff;text-shadow:0 1px 8px rgba(0,0,0,.4)}
+.chat-panel.immersive .icon-btn{color:#fff}
+.chat-panel.immersive .chat-bubble{background:rgba(30,27,34,.56);border-color:rgba(255,255,255,.16);color:#fff;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+.chat-panel.immersive .mine .chat-bubble{background:rgba(176,72,107,.66);border-color:rgba(255,255,255,.22);color:#fff}
+.chat-panel.immersive .chat-time button{color:#fff}
+.chat-panel.immersive .chat-day{align-self:center;display:inline-block;margin:14px auto 6px;padding:3px 12px;border-radius:999px;background:rgba(0,0,0,.3);color:rgba(255,255,255,.88);font-size:11.5px}
+.chat-panel.immersive .chat-day::before,.chat-panel.immersive .chat-day::after{display:none}
+.chat-panel.immersive .chat-compose textarea{background:rgba(255,255,255,.16);border-color:rgba(255,255,255,.22);color:#fff}
+.chat-panel.immersive .chat-compose textarea::placeholder{color:rgba(255,255,255,.66)}
+.chat-panel.immersive .voice-chip{color:#fff}
+.chat-panel.immersive .voice-chip .voice-dur{color:rgba(255,255,255,.8)}
+.chat-panel.immersive .media-grid button{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.18)}
 /* 预设：纯 CSS 渐变/纹理，不占带宽也不用等图片加载 */
 .chat-wallpaper[data-bg="sakura"]{background-image:radial-gradient(60% 50% at 15% 20%,#FFD9E4 0%,transparent 60%),radial-gradient(50% 45% at 85% 15%,#FFE7EE 0%,transparent 65%),radial-gradient(55% 50% at 70% 85%,#FFD5E3 0%,transparent 60%),linear-gradient(160deg,#FFF5F8,#FCE7EF 55%,#F8DCE6)}
 .chat-wallpaper[data-bg="cream"]{background-image:radial-gradient(55% 45% at 20% 15%,#FFF3E2 0%,transparent 62%),radial-gradient(50% 45% at 80% 90%,#FBE9D6 0%,transparent 60%),linear-gradient(155deg,#FFFBF5,#FDF0E2 55%,#F8E6D3)}

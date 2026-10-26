@@ -205,7 +205,7 @@ function renderPage() {
  const pages={home:homePage,timeline:timelinePage,albums:albumsPage,messages:messagesPage,together:togetherPage,personal:personalPage,settings:settingsPage,notices:noticesPage,channels:channelsPage,backups:backupsPage,imports:importsPage,importdetail:importDetailPage,dashboard:dashboardPage,weekly:weeklyPage};
  $('#page').innerHTML=(pages[state.page] || homePage)();
  if(state.page==='timeline'&&state.timelineHasMore)$('#timeline-list')?.insertAdjacentHTML('afterend',`<div class="timeline-more">${button('继续往前翻','load-more-timeline','secondary')}</div>`);
- if(state.page==='messages') {$('#chat-text').value=localStorage.getItem('chat-text:'+state.me.user.id)||'';autoGrow($('#chat-text'));scrollChat();$('#chat-text')?.addEventListener('focus',()=>{const d=$('#sticker-dock');if(d)d.hidden=true;});}
+ if(state.page==='messages') {$('#chat-text').value=localStorage.getItem('chat-text:'+state.me.user.id)||'';autoGrow($('#chat-text'));scrollChat();$('#chat-text')?.addEventListener('focus',()=>{const d=$('#sticker-dock');if(d)d.hidden=true;});applyWallpaper();}
  if(state.page==='importdetail') initImportLog();
  if(state.page==='home'){loadOnThisDay();loadYearbook();}
  if(state.page==='together'&&state.tab==='calendar') loadCalendar();
@@ -361,19 +361,92 @@ function chatRows() {
  return rows+pend||empty('今天，有什么想对 TA 说？','说说日常，也说说想念。');
 }
 /* 聊天壁纸：预设用 CSS 渐变/纹理，'photo' 用自己上传的照片。
-   dim 是压在图上的遮罩强度（百分比）——它存在的意义只有一个：保证气泡文字在任何底图上都读得清。 */
+   dim 是压在图上的遮罩强度（百分比）——它存在的意义只有一个：保证气泡文字在任何底图上都读得清。
+   壁纸写在 space 设置里（/api/space → db.setting('space')），所以是**两个人共用一份**：
+   谁改都对双方同时生效，不需要各设各的。 */
 const CHAT_BG_PRESETS=[['','默认'],['sakura','樱粉'],['cream','奶油'],['mint','薄荷'],['stars','星光'],['night','夜幕'],['photo','用照片']];
 function wallpaperDim(){return Math.min(80,Math.max(0,Number(state.me?.space?.chat_bg_dim??35)));}
+/* 只有真照片才进"沉浸式"：气泡/标题栏/输入栏换成半透明深色，让照片透出来。
+   预设渐变本来就是浅色的，套深色气泡反而突兀，所以保持原来的浅色排版。 */
+function chatBgIsPhoto(){const s=state.me?.space||{};return s.chat_bg==='photo'&&!!s.chat_bg_media;}
+/* 壁纸层挂在 .chat-panel 上而不是消息区内部：这样背景是**整屏**的，标题栏和输入栏
+   也压在图上（像聊天 App 那样），而不是只铺消息列表那块。 */
 function chatWallpaper(){
  const s=state.me?.space||{},bg=s.chat_bg||'';
  if(!bg)return '';
  const style=`--chat-bg-dim:${wallpaperDim()/100}`;
- if(bg==='photo')return s.chat_bg_media?`<div class="chat-wallpaper photo" aria-hidden="true" style="${style};background-image:url('/media/${esc(s.chat_bg_media)}?preview=true')"></div>`:'';
- return `<div class="chat-wallpaper" data-bg="${esc(bg)}" aria-hidden="true" style="${style}"></div>`;
+ return bg==='photo'
+  ? `<div class="chat-wallpaper photo" id="chat-wallpaper" aria-hidden="true" style="${style}"></div>`
+  : `<div class="chat-wallpaper" id="chat-wallpaper" data-bg="${esc(bg)}" aria-hidden="true" style="${style}"></div>`;
 }
+
+/* ── 背景照片本地缓存 ──
+   /media/ 是 no-store（私密媒体不该留在任何共享缓存里），后果是每次进聊天都要重新下载
+   背景图，App 上尤其明显。这里按 media id 把图片 Blob 存进 IndexedDB：
+   id 没变 → 直接用本地副本，一次网络请求都不发；换图后 id 变 → 新 key 重新下载，旧副本自动清掉。
+   IndexedDB 不可用（隐私模式 / 老 WebView）时静默降级为每次联网。 */
+const BG_DB='love-space-bg',BG_STORE='wallpaper';
+let bgObjectUrl='';
+function bgIDB(){
+ return new Promise((resolve,reject)=>{
+  if(!window.indexedDB)return reject(new Error('no indexedDB'));
+  const req=indexedDB.open(BG_DB,1);
+  req.onupgradeneeded=()=>{const db=req.result;if(!db.objectStoreNames.contains(BG_STORE))db.createObjectStore(BG_STORE);};
+  req.onsuccess=()=>resolve(req.result);
+  req.onerror=()=>reject(req.error||new Error('open failed'));
+ });
+}
+async function bgCacheRead(key){
+ try{
+  const db=await bgIDB();
+  return await new Promise((res,rej)=>{const rq=db.transaction(BG_STORE,'readonly').objectStore(BG_STORE).get(key);rq.onsuccess=()=>res(rq.result||null);rq.onerror=()=>rej(rq.error);});
+ }catch{return null;}
+}
+async function bgCacheWrite(key,blob){
+ try{
+  const db=await bgIDB();
+  await new Promise((res,rej)=>{const tx=db.transaction(BG_STORE,'readwrite');tx.objectStore(BG_STORE).put(blob,key);tx.oncomplete=res;tx.onerror=()=>rej(tx.error);});
+ }catch{}
+}
+/* 只留当前这张：换了背景，旧图不该继续占着本地空间 */
+async function bgCacheTrim(keep){
+ try{
+  const db=await bgIDB();
+  await new Promise(res=>{
+   const tx=db.transaction(BG_STORE,'readwrite'),store=tx.objectStore(BG_STORE),rq=store.getAllKeys();
+   rq.onsuccess=()=>{(rq.result||[]).forEach(k=>{if(k!==keep)store.delete(k);});};
+   tx.oncomplete=res;tx.onerror=res;
+  });
+ }catch{}
+}
+function paintWallpaper(layer,blob){
+ if(bgObjectUrl){URL.revokeObjectURL(bgObjectUrl);bgObjectUrl='';}
+ bgObjectUrl=URL.createObjectURL(blob);
+ layer.style.backgroundImage=`url("${bgObjectUrl}")`;
+ layer.dataset.ready='1';
+}
+async function applyWallpaper(){
+ const layer=$('#chat-wallpaper');
+ if(!layer)return;
+ if(!chatBgIsPhoto()){layer.dataset.ready='';bgCacheTrim('');return;}
+ const mid=state.me.space.chat_bg_media,key='bg:'+mid;
+ const cached=await bgCacheRead(key);
+ if(cached&&cached.size){paintWallpaper(layer,cached);bgCacheTrim(key);return;}
+ try{
+  const res=await fetch(`/media/${mid}?preview=true`,{credentials:'same-origin'});
+  if(!res.ok)return;
+  const blob=await res.blob();
+  if(!blob.size)return;
+  paintWallpaper(layer,blob);
+  await bgCacheWrite(key,blob);
+  bgCacheTrim(key);
+ }catch{/* 离线或失败：这次就没背景图，下次进来再试 */}
+}
+
 function messagesPage() {
  const partner=state.me.users.find(u=>u.id!==state.me.user.id);
- return `<section class="chat-panel"><header class="chat-header"><button class="icon-btn" data-action="chat-back" aria-label="返回">${icon('back')}</button>${partner?avatar(partner.id):'<span class="avatar">♡</span>'}<div><h3>${partner?esc(partner.name):'等待另一半加入'}</h3><small>我们的悄悄话 · 仅彼此可见</small></div><button class="icon-btn" data-nav="imports" aria-label="聊天记录" style="margin-left:auto">${icon('book')}</button></header><div class="chat-body">${chatWallpaper()}<div id="chat-log" class="chat-log" aria-live="polite">${chatRows()}</div></div><div id="sticker-dock" class="sticker-dock" hidden></div><form id="chat-form" class="chat-compose"><button type="button" class="icon-btn" data-action="sticker-panel" aria-label="表情">😊</button><button type="button" class="icon-btn" data-action="chat-attachment" aria-label="添加图片、视频或语音">${icon('plus')}</button><textarea id="chat-text" name="content" placeholder="想说的话，想分享的日常…" rows="1" maxlength="20000" aria-label="聊天内容"></textarea><button class="button primary" type="submit" aria-label="发送消息">${icon('send')}</button></form></section>`;
+ const immersive=chatBgIsPhoto(),bgOn=!!(state.me?.space?.chat_bg);
+ return `<section class="chat-panel${bgOn?' has-wallpaper':''}${immersive?' immersive':''}">${chatWallpaper()}<header class="chat-header"><button class="icon-btn" data-action="chat-back" aria-label="返回">${icon('back')}</button>${partner?avatar(partner.id):'<span class="avatar">♡</span>'}<div><h3>${partner?esc(partner.name):'等待另一半加入'}</h3><small>我们的悄悄话 · 仅彼此可见</small></div><button class="icon-btn" data-action="chat-bg" aria-label="聊天背景" title="聊天背景" style="margin-left:auto">${icon('photo')}</button><button class="icon-btn" data-nav="imports" aria-label="聊天记录">${icon('book')}</button></header><div class="chat-body"><div id="chat-log" class="chat-log" aria-live="polite">${chatRows()}</div></div><div id="sticker-dock" class="sticker-dock" hidden></div><form id="chat-form" class="chat-compose"><button type="button" class="icon-btn" data-action="sticker-panel" aria-label="表情">😊</button><button type="button" class="icon-btn" data-action="chat-attachment" aria-label="添加图片、视频或语音">${icon('plus')}</button><textarea id="chat-text" name="content" placeholder="想说的话，想分享的日常…" rows="1" maxlength="20000" aria-label="聊天内容"></textarea><button class="button primary" type="submit" aria-label="发送消息">${icon('send')}</button></form></section>`;
 }
 function scrollChat(){const log=$('#chat-log');if(log)log.scrollTop=log.scrollHeight;}
 
@@ -1045,6 +1118,43 @@ function spaceForm() {
  };
  $('#wallpaper-dim').oninput=e=>{$('#wallpaper-dim-val').textContent=e.target.value+'%';};
 }
+/* 聊天页里的「换背景」：只管壁纸三件套，不用进空间设置翻一大张表。
+   壁纸是 space 级设置，PUT /api/space 要带全量必填字段（name 等），所以这里摊上现有 space 再覆盖。 */
+function chatBgForm(){
+ const s=state.me.space||{};
+ const bg=s.chat_bg||'',dim=s.chat_bg_dim??35,wm=s.chat_bg_media||'';
+ const swatches=CHAT_BG_PRESETS.map(([key,label])=>{
+  const on=key===bg;
+  const art=key==='photo'
+   ?(wm?`<span class="chat-wallpaper" aria-hidden="true" style="background-image:url('/media/${esc(wm)}?preview=true')"></span>`:'<span class="pico" aria-hidden="true">📷</span>')
+   :(key?`<span class="chat-wallpaper" data-bg="${key}" aria-hidden="true"></span>`:'');
+  return `<button type="button" class="wallpaper-swatch${on?' selected':''}${key==='photo'&&!wm?' photo-empty':''}" data-bg="${key}" aria-pressed="${on}">${art}<b>${label}</b></button>`;
+ }).join('');
+ simpleForm('聊天背景',`<div class="wallpaper-picker"><div class="wallpaper-swatches" id="wallpaper-swatches">${swatches}</div><label class="wallpaper-dim-row">背景遮罩 <input type="range" name="chat_bg_dim" id="wallpaper-dim" min="0" max="80" step="5" value="${dim}"><span id="wallpaper-dim-val">${dim}%</span></label><label class="upload-tile file-picker-tile"><span class="upload-ico">🖼️</span><b>用你们的照片</b><small id="wallpaper-file-name">${wm?'已设置背景照片，可重新选择':'选一张照片铺满整个聊天背景'}</small><input type="file" id="wallpaper-file" accept="image/jpeg,image/png,image/webp"></label><input type="hidden" name="chat_bg" value="${esc(bg)}"><input type="hidden" name="chat_bg_media" value="${esc(wm)}"><p class="small-note">遮罩越强，背景越淡、文字越清楚。这张背景你们两个人一起用，谁改都是两边同时变。</p></div>`,async(data)=>{
+  let media=data.chat_bg_media||'';
+  const file=$('#wallpaper-file').files[0];
+  if(file)media=(await uploadFile(file)).id;
+  const key=data.chat_bg||'';
+  if(key==='photo'&&!media)throw new Error('请先选择一张照片');
+  /* 只改壁纸三项，其余原样回传：PUT /api/space 的 name 等字段是必填的，
+     少了会被判 422，把「换个背景」变成一次莫名其妙的失败。 */
+  await put('/space',{...s,chat_bg:key,chat_bg_media:key==='photo'?media:'',chat_bg_dim:Math.min(80,Math.max(0,Number(data.chat_bg_dim)||0))});
+ });
+ $('#wallpaper-swatches').onclick=e=>{
+  const btn=e.target.closest('.wallpaper-swatch');if(!btn)return;
+  const key=btn.dataset.bg;
+  if(key==='photo'&&!$('#simple-form [name=chat_bg_media]').value){$('#wallpaper-file').click();return;}
+  $('#simple-form [name=chat_bg]').value=key;
+  $$('.wallpaper-swatch').forEach(b=>{const on=b===btn;b.classList.toggle('selected',on);b.setAttribute('aria-pressed',String(on));});
+ };
+ $('#wallpaper-file').onchange=e=>{
+  const f=e.target.files[0];if(!f)return;
+  $('#wallpaper-file-name').textContent=f.name;
+  $('#simple-form [name=chat_bg]').value='photo';
+  $$('.wallpaper-swatch').forEach(b=>{const on=b.dataset.bg==='photo';b.classList.toggle('selected',on);b.setAttribute('aria-pressed',String(on));b.classList.remove('photo-empty');});
+ };
+ $('#wallpaper-dim').oninput=e=>{$('#wallpaper-dim-val').textContent=e.target.value+'%';};
+}
 function personalWishCard(r){const own=r.author===state.me.user.id,open=r.body.locked===false;return `<article class="card personal-wish-card${open?' opened':''}"><div class="card-header">${avatar(r.author)}<div><strong>${own?'你':'TA'}的个人心愿</strong><small>${open?'已解锁 · 内容只有你们两人能看见':'具体内容已加密保存'}</small></div>${own?`<div class="card-menu"><details class="more-menu"><summary aria-label="更多操作" title="更多操作">⋯</summary><div class="menu-pop"><button data-action="delete-record" data-id="${r.id}" class="danger">${icon('trash')} 删除</button></div></details></div>`:''}</div><h3 class="card-title">${esc(r.body.title)}</h3>${open?`<p class="card-text wish-plain">${esc(r.body.content||'')}</p>`:`<p class="card-text">${own?'这是你写下的个人心愿，输入密码即可回看内容。':'TA 留了一份心愿给你，输入一次密码后就能一直读到内容。'}</p><div class="inline-actions">${button('输入密码查看','unlock-personal-wish','soft','lock',`data-id="${r.id}"`)}</div>`}</article>`;}
 function profileForm(){const u=state.me.user;simpleForm('让 TA 一眼认出你',field('昵称','name',u.name,'text','required maxlength="30"')+`<div class="file-picker"><span class="file-picker-title">头像照片</span><label class="upload-tile file-picker-tile"><span class="upload-ico">🖼️</span><b>选择头像照片</b><small id="avatar-file-name">${u.avatar?'已设置头像，可重新选择':'上传一张照片，让 TA 一眼认出你'}</small><input type="file" id="avatar-file" accept="image/jpeg,image/png,image/webp"></label></div>`+field('原密码（修改密码时填写）','old_password','','password')+field('新密码（不修改请留空）','new_password','','password','minlength="10"'),async(data)=>{let avatarId=u.avatar;const file=$('#avatar-file').files[0];if(file)avatarId=(await uploadFile(file)).id;const res=await put('/profile',{...data,avatar:avatarId});if(res.login_required){state.me=null;state.stream?.close();closeModal();await boot();}});$('#avatar-file').onchange=e=>{$('#avatar-file-name').textContent=e.target.files[0]?.name||'上传一张照片，让 TA 一眼认出你';};}
 async function inviteModal(){const data=await post('/invite');const url=location.origin+'/?invite='+encodeURIComponent(data.token);openModal('邀请你，住进我的小世界',`<p class="meta">把这个链接私下发给另一半。邀请仅可使用一次，二十四小时内有效；重新生成会让旧链接失效。</p><label style="margin-top:18px">专属邀请链接<input id="invite-url" readonly value="${esc(url)}"></label><div class="form-actions" style="margin-top:18px">${button('复制邀请链接','copy-invite','primary')}</div>`);}
@@ -1104,10 +1214,42 @@ function updatePhotoModal(){
  preloadPhoto(photos[photoIndex - 1]?.id);
  preloadPhoto(photos[photoIndex + 1]?.id);
 }
+/* 图片查看器分两条路：
+   · state.photos 里的（时光/相册照片）→ 原「收藏的瞬间」，可以翻遍整个相册；
+   · 不在相册里的（聊天消息、留言、导入记录里带的图）→ 按**它所属的那条记录**单独看。
+   以前只有第一条，聊天里的图在相册里查不到，idx 变 -1 落到第一张，
+   于是"点聊天里的照片"会莫名其妙跳到收藏相册的第一张。 */
 function photoModal(mid){
  const idx = (state.photos || []).findIndex(p => p.id === mid);
- photoIndex = idx < 0 ? 0 : idx;
- renderPhotoModal();
+ if(idx >= 0){ photoIndex = idx; renderPhotoModal(); return; }
+ recordMediaModal(mid);
+}
+/* 单条记录内的图片查看器：只在这条消息/这条动态的图之间左右翻，不串到别人的相册 */
+const mediaViewer = {ids:[], i:0};
+function recordMediaIds(mid){
+ const rec=(state.records||[]).find(r=>(r.media||[]).some(m=>m.id===mid));
+ const imgs=(rec?.media||[]).filter(m=>!m.mime||m.mime.startsWith('image/'));
+ return {ids: imgs.length?imgs.map(m=>m.id):[mid], title: rec?kindLabel[rec.kind]||'我们的记录':'照片'};
+}
+function mediaViewerHtml(innerOnly=false){
+ const {ids,i}=mediaViewer;
+ const arrows=`${i>0?`<button type="button" class="photo-arrow left" data-action="mv-prev" aria-label="上一张">${icon('back')}</button>`:''}${i<ids.length-1?`<button type="button" class="photo-arrow right" data-action="mv-next" aria-label="下一张">${icon('arrow')}</button>`:''}`;
+ const inner=`<div class="lightbox-wrap"><img class="lightbox-image" src="/media/${ids[i]}?preview=true" alt="聊天图片">${arrows}</div>${ids.length>1?`<p class="lightbox-count">${i+1} / ${ids.length}</p>`:''}<div class="photo-detail-actions"><a class="button secondary small" href="/media/${ids[i]}?download=true" download>${icon('download')} 下载原文件</a></div>`;
+ return innerOnly?inner:`<div class="lightbox-body">${inner}</div>`;
+}
+function recordMediaModal(mid){
+ const {ids,title}=recordMediaIds(mid);
+ mediaViewer.ids=ids; mediaViewer.i=Math.max(0,ids.indexOf(mid));
+ openModal(title, mediaViewerHtml(), {wide:true});
+}
+function moveMediaViewer(step){
+ const {ids}=mediaViewer;
+ if(!ids.length)return;
+ mediaViewer.i=Math.min(ids.length-1,Math.max(0,mediaViewer.i+step));
+ const body=$('.lightbox-body');
+ if(!body)return recordMediaModal(ids[mediaViewer.i]);
+ // 原地换内容，别重开弹窗——重开会有一次 collapse→expand 的闪烁
+ body.innerHTML=mediaViewerHtml(true);
 }
 function videoModal(id){
  const m = (state.records || []).flatMap(r => r.media || []).find(x => x.id === id);
@@ -1170,6 +1312,8 @@ async function act(action,id,el) {
  if(action==='anniversary-memories'){state.filters={date:el.dataset.date};return navigate('timeline');}
  if(action==='photo')return photoModal(id);
  if(action==='video')return videoModal(id);
+ if(action==='mv-prev')return moveMediaViewer(-1);
+ if(action==='mv-next')return moveMediaViewer(1);
  if(action==='photo-prev'||action==='photo-next'){photoIndex += action==='photo-next' ? 1 : -1; return updatePhotoModal();}
  if(action==='space')return spaceForm();
  if(action==='profile')return profileForm();
@@ -1191,6 +1335,7 @@ async function act(action,id,el) {
  }catch{toast('检查更新失败，请稍后再试');}return;}
  if(action==='notice-detail'){closeModal();const detail=await api('/records/'+id);const unread=state.notices.filter(n=>n.record_id===id&&!n.seen);if(unread.length){try{await post('/notices/read?record_id='+encodeURIComponent(id));await refresh();}catch{}}if(detail.kind==='chat')return navigate('messages');openModal('这一刻的故事',recordCard(detail),{wide:true});return;}
  if(action==='chat-attachment')return composer('chat');
+ if(action==='chat-bg')return chatBgForm();
  if(action==='chat-to-draft')return composer('post',null,{...r.body,mediaObjects:r.media});
  if(action==='retry-chat'){const p=pendingChats().find(p=>p.client_id===id);if(p){await sendChat(p.body,p.client_id);await refresh();}return;}
  if(action==='recall-chat')return confirmAction('撤回这条悄悄话？','撤回后双方都不会再看到这条消息。',async()=>{await post('/records/'+id+'/recall');await refresh();return toast('已撤回');});
