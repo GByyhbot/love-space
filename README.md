@@ -226,4 +226,3 @@ pytest            # 全部测试：API 验收 + 媒体链路 + 安全 + 版本�
   `/api/events`（SSE）、`/media/`、`/api/export` 原样直出——压缩 SSE 会把帧攒在缓冲区里
   让实时推送失效，压缩视频则会让 Range 失效、进度条拖不动
 - 纪念日第一版使用公历；iPhone 网页推送需「添加到主屏幕」后使用
-- ~~造型间（3D 换装）已于 v102 移除~~：原自托管 `static/vendor/three.module.min.js` 已删除，`static/vendor/` 现为空目录，本仓库不再包含任何 3D 引擎依赖；贴图改由服务器 `/static/stickers/` 提供。
