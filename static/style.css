@@ -90,7 +90,7 @@ label{display:grid;gap:6px;font-size:13px;color:var(--muted)}
 .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:22px;box-shadow:var(--shadow);margin-bottom:16px}
 .card-title{font-size:17px;margin-bottom:10px;line-height:1.5}
 .card-text{font-size:15px;line-height:1.8;white-space:pre-wrap;overflow-wrap:anywhere}
-.personal-wish-content{padding:18px;border:1px solid var(--line);border-radius:16px;background:var(--bg);font-size:15px;line-height:1.8;white-space:pre-wrap;overflow-wrap:anywhere}
+.personal-wish-content{padding:18px;border:1px solid var(--line);border-radius:16px;background:var(--soft);font-size:15px;line-height:1.8;white-space:pre-wrap;overflow-wrap:anywhere}
 .card-header{display:flex;gap:12px;align-items:center;margin-bottom:14px}
 .card-header strong{font-size:14px}
 .card-header small{display:block;font-size:12px;color:var(--muted);margin-top:2px}
@@ -137,9 +137,12 @@ label{display:grid;gap:6px;font-size:13px;color:var(--muted)}
 .switch-row input[type=checkbox]{width:22px;height:22px;flex:none;margin:0;accent-color:var(--primary);cursor:pointer}
 .switch-row input[type=checkbox]:disabled{cursor:not-allowed;opacity:.6}
 .answer-box{padding:13px 15px;background:var(--soft);border-radius:var(--radius-s);font-size:14px;line-height:1.7;margin-top:10px;white-space:pre-wrap;overflow-wrap:anywhere}
-.status-pill{border-radius:15px;padding:4px 10px;font-size:12px;background:var(--bg);color:var(--muted);border:1px solid var(--line);flex-shrink:0}
+.status-pill{border-radius:15px;padding:4px 10px;font-size:12px;background:var(--soft);color:var(--muted);border:1px solid var(--line);flex-shrink:0}
 .status-pill.sent{background:var(--green-soft);color:var(--green);border-color:transparent}
 .status-pill.failed{background:var(--danger-soft);color:var(--danger);border-color:transparent}
+/* pending 以前没有任何定义，掉回 --bg 那条几乎和白卡同色，
+   「私密」「尚未开启」这种需要被看见的状态等于隐形。和绿/红一起凑成三色语义。 */
+.status-pill.pending{background:var(--amber-soft);color:var(--amber);border-color:transparent}
 .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}
 .back-title{display:flex;align-items:center;gap:12px}
 
@@ -174,7 +177,10 @@ label{display:grid;gap:6px;font-size:13px;color:var(--muted)}
 .sidebar-bottom{margin-top:auto}
 .little-note{text-align:center;font-family:var(--serif);color:var(--muted);line-height:2;font-size:12px;padding-bottom:24px;opacity:.85}
 .little-note span{font-size:22px;color:var(--primary)}
-.profile-btn{display:flex;align-items:center;gap:11px;width:100%;border-top:1px solid var(--line);padding:18px 6px 0;text-align:left}
+/* 侧栏底部那颗「我的小角落」：以前只有一条上边框顶在 sidebar 上，看不出是个按钮。
+   给它自己的块背景 + 悬停反馈，和 nav 那排项区分开（sidebar 本身就是 --surface）。 */
+.profile-btn{display:flex;align-items:center;gap:11px;width:100%;padding:12px;text-align:left;background:var(--soft);border:1px solid var(--line);border-radius:var(--radius-s);transition:background var(--speed),border-color var(--speed)}
+.profile-btn:hover{background:var(--soft-strong);border-color:var(--soft-strong)}
 .profile-btn strong{font-size:14px}
 .profile-btn small{display:block;color:var(--muted);margin-top:2px;font-size:11px}
 .main{grid-column:2;min-width:0;max-width:1200px;width:100%;margin:0 auto;padding:28px 36px 48px}
@@ -183,7 +189,8 @@ label{display:grid;gap:6px;font-size:13px;color:var(--muted)}
 .topbar .account-menu>summary{width:44px;height:44px;padding:2px;border:1px solid var(--line);background:var(--surface)}
 .topbar .account-menu .menu-pop{position:absolute;top:calc(100% + 10px);right:0;width:250px;max-width:calc(100vw - 36px);padding:8px;z-index:40}
 .topbar .account-menu .menu-pop button{min-height:44px;font-size:14px}
-.account-menu-heading{padding:10px 12px 12px;border-bottom:1px solid var(--line);margin-bottom:4px;min-width:0}
+/* popover 的头是一块信息区，不该和下面一排同背景的行动项混在一起 */
+.account-menu-heading{padding:10px 12px 12px;background:var(--soft);border-radius:9px;margin-bottom:4px;min-width:0}
 .account-menu-heading strong{display:block;color:var(--ink);font-size:15px;overflow-wrap:anywhere}
 .account-menu-heading small{display:block;font-size:12px;color:var(--muted);margin-top:2px}
 .topbar .account-menu .account-logout{border-top:1px solid var(--line);border-radius:0 0 9px 9px;margin-top:4px}
@@ -253,7 +260,7 @@ label{display:grid;gap:6px;font-size:13px;color:var(--muted)}
 .mood-row{display:grid;grid-template-columns:26px minmax(0,1fr) minmax(0,1.15fr);align-items:center;gap:8px;font-size:13px;min-height:30px;min-width:0}
 .mood-row .avatar{width:26px;height:26px;font-size:11px}
 .mood-row>span:nth-child(2){min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.mood-bubble{margin:0;background:var(--bg);border:1px solid var(--line);padding:4px 10px;border-radius:12px;color:var(--ink);font-size:12px;min-width:0;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mood-bubble{margin:0;background:var(--soft);border:1px solid var(--line);padding:4px 10px;border-radius:12px;color:var(--ink);font-size:12px;min-width:0;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .today-cell .countdown-mini{display:flex;align-items:baseline;gap:6px;font-size:13px;color:var(--ink)}
 .today-cell .countdown-mini strong{font:26px var(--serif);color:var(--primary-dark);font-weight:500}
 .today-cell .countdown-mini small{color:var(--muted)}
@@ -271,7 +278,7 @@ label{display:grid;gap:6px;font-size:13px;color:var(--muted)}
 /* 个人心愿：解锁后正文直接展开，保留换行与长串换行 */
 .personal-wish-card.opened{border-color:var(--primary)}
 .personal-wish-card.opened .card-header small{color:var(--primary)}
-.personal-wish-card .wish-plain{white-space:pre-wrap;word-break:break-word;overflow-wrap:anywhere;line-height:1.7;margin:0;padding:12px 14px;border-radius:12px;background:var(--bg)}
+.personal-wish-card .wish-plain{white-space:pre-wrap;word-break:break-word;overflow-wrap:anywhere;line-height:1.7;margin:0;padding:12px 14px;border-radius:12px;background:var(--soft)}
 
 /* 纪念日卡 */
 .anniversary-card{text-align:center}
@@ -298,11 +305,11 @@ label{display:grid;gap:6px;font-size:13px;color:var(--muted)}
 .yearbook-summary{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .yearbook-summary p{font-size:13px;color:var(--muted)}
 .yearbook-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:14px 0}
-.yearbook-stat{background:var(--bg);border:1px solid var(--line);border-radius:14px;padding:13px;text-align:center;min-width:0}
+.yearbook-stat{background:var(--soft);border:1px solid var(--line);border-radius:14px;padding:13px;text-align:center;min-width:0}
 .yearbook-stat strong{display:block;font:24px var(--serif);color:var(--primary-dark);font-weight:500}
 .yearbook-stat small{color:var(--muted);font-size:12px}
 .yearbook-highlights{display:grid;gap:8px}
-.yearbook-highlight{display:flex;gap:12px;align-items:center;padding:10px 12px;background:var(--bg);border-radius:12px;border:1px solid var(--line)}
+.yearbook-highlight{display:flex;gap:12px;align-items:center;padding:10px 12px;background:var(--soft);border-radius:12px;border:1px solid var(--line)}
 .yearbook-highlight .hl-emoji{font-size:18px;flex:none}
 .yearbook-highlight .hl-text{font-size:13px;color:var(--ink);flex:1;line-height:1.6;min-width:0}
 .yearbook-highlight .hl-num{font:17px var(--serif);color:var(--primary);flex:none}
@@ -320,7 +327,7 @@ label{display:grid;gap:6px;font-size:13px;color:var(--muted)}
 .filter-body{display:flex;gap:10px;margin-top:12px;flex-wrap:wrap;align-items:center}
 .media-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:14px}
 .media-grid.single{grid-template-columns:1fr}
-.media-grid button{padding:0;overflow:hidden;border-radius:12px;background:var(--bg);border:1px solid var(--line)}
+.media-grid button{padding:0;overflow:hidden;border-radius:12px;background:var(--soft);border:1px solid var(--line)}
 .media-grid img{width:100%;aspect-ratio:1;object-fit:cover;display:block}
 .media-grid.single img{aspect-ratio:16/10;max-height:360px}
 .media-grid audio{width:100%;border-radius:12px;grid-column:1/-1}
@@ -329,7 +336,7 @@ label{display:grid;gap:6px;font-size:13px;color:var(--muted)}
 .media-video{position:relative}
 .play-badge{position:absolute;inset:0;margin:auto;width:44px;height:44px;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.45);border-radius:50%;color:#fff}
 .play-badge svg{width:20px;height:20px;margin-left:3px}
-.comments{padding:12px 14px;background:var(--bg);border-radius:12px;margin-top:12px;display:grid;gap:8px;font-size:13px;line-height:1.6;overflow-wrap:anywhere}
+.comments{padding:12px 14px;background:var(--soft);border-radius:12px;margin-top:12px;display:grid;gap:8px;font-size:13px;line-height:1.6;overflow-wrap:anywhere}
 .comments strong{color:var(--primary-dark)}
 .comment-delete{float:right;color:var(--muted);font-size:12px;min-height:24px}
 
@@ -466,7 +473,7 @@ body.cal-full{overflow:hidden;height:100dvh}
 .import-head strong{font-size:16px;line-height:1.5;min-width:0;overflow-wrap:anywhere}
 .import-platform{background:var(--soft);color:var(--primary-dark);border:1px solid var(--soft-strong);font-size:12px;padding:3px 10px;border-radius:999px;flex:none;font-weight:500}
 .import-last{color:var(--muted);font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin:4px 0}
-.import-preview-box{border:1px solid var(--line);border-radius:14px;padding:14px 16px;background:var(--bg);margin-top:10px;font-size:14px;display:grid;gap:8px}
+.import-preview-box{border:1px solid var(--line);border-radius:14px;padding:14px 16px;background:var(--soft);margin-top:10px;font-size:14px;display:grid;gap:8px}
 .import-progress{margin-top:10px;display:grid;gap:6px}
 .import-progress .bar-track{height:8px;background:var(--bg);border:1px solid var(--line);border-radius:4px;overflow:hidden}
 .import-progress .bar-fill{height:100%;background:linear-gradient(90deg,var(--primary),var(--primary-dark));transition:width .2s}
@@ -531,7 +538,7 @@ body.cal-full{overflow:hidden;height:100dvh}
 .delivery p{font-size:14px;line-height:1.6;overflow-wrap:anywhere}
 .storage-panel{margin-bottom:16px}
 .storage-overview{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px}
-.storage-stat{background:var(--bg);border:1px solid var(--line);border-radius:14px;padding:14px;text-align:center}
+.storage-stat{background:var(--soft);border:1px solid var(--line);border-radius:14px;padding:14px;text-align:center}
 .storage-stat strong{display:block;font:23px var(--serif);color:var(--primary-dark);font-weight:500}
 .storage-stat small{color:var(--muted);font-size:12px}
 .storage-bar{display:flex;align-items:center;gap:10px;margin:8px 0;font-size:13px}
@@ -565,7 +572,7 @@ body.cal-full{overflow:hidden;height:100dvh}
 .modal-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;gap:12px}
 .modal-header h2{font-size:19px}
 .modal-form{display:grid;gap:16px}
-.modal-section{display:grid;gap:14px;padding:16px;border:1px solid var(--line);border-radius:16px;background:var(--bg)}
+.modal-section{display:grid;gap:14px;padding:16px;border:1px solid var(--line);border-radius:16px;background:var(--soft)}
 .modal-section>span{font-size:13px;font-weight:600;color:var(--ink)}
 /* 手机底部弹层（发布窗口） */
 @media (max-width:640px){
@@ -849,7 +856,7 @@ body.cal-full{overflow:hidden;height:100dvh}
 .lg-pill.p-follicular{background:rgba(95,138,90,.26)}
 .lg-pill.p-fertile{background:rgba(139,114,168,.34)}
 .lg-pill.p-luteal{background:rgba(196,150,70,.28)}
-.lg-pill.p-pred{border:1px dashed var(--primary);color:var(--muted);font-weight:500}
+.lg-pill.p-pred{border:1px dashed var(--primary);color:var(--muted);font-weight:500;background:rgba(176,72,107,.05)}
 
 /* 阶段进度条：一条 bar 摊开整个周期，游标就是今天，当前段描边高亮 */
 .phase-wrap{margin:14px 0 0}
@@ -893,3 +900,119 @@ body.cal-full{overflow:hidden;height:100dvh}
 /* 对方的周期卡：一句话结论 + 三个数字，和他的记录区分开 */
 .partner-cycle{border-color:var(--soft-strong);background:linear-gradient(160deg,var(--soft),var(--surface))}
 .partner-cycle h3{font-size:21px;line-height:1.4;margin:8px 0 4px;color:var(--primary-dark);font-weight:700}
+/* 这两张之前压根没有样式定义，掉回纯白 .card：
+   「谁能看到这次周期」是隐私边界，必须一眼区别于普通数据卡；
+   网页系统通知属于「待办 / 待开启」，用琥珀信号色和 rose 主色调错开。 */
+.share-bar{background:linear-gradient(165deg,var(--soft),var(--surface) 72%);border-color:var(--soft-strong)}
+.webpush-card{background:linear-gradient(165deg,var(--amber-soft),var(--surface) 66%);border-color:rgba(160,107,56,.22)}
+
+/* ═══════════════════════════════════════════════════════════════
+   专项增强层 · UI / 交互 / 组件背景完善
+   在既有设计变量之上做"加层"：背景层次、卡片类型差异化、
+   统一交互反馈、空状态升级。不覆写原有规则（同名后者仅补充）。
+   配套改动：app.js 记录卡注入 kind-* 类；版本号 111 → 112。
+   ═════════════════════════════════════════════════════════════ */
+
+/* A. 增强型变量（仅补充，不覆盖原有） */
+:root{
+  --tint-rose:rgba(176,72,107,.055);
+  --tint-amber:rgba(160,107,56,.06);
+  --tint-violet:rgba(139,114,168,.06);
+  --tint-green:rgba(95,122,80,.06);
+  --tint-blue:rgba(96,126,168,.05);
+  --tint-peach:rgba(192,122,78,.06);
+  --shadow-xs:0 1px 2px rgba(69,56,63,.04);
+  --shadow-lg:0 16px 44px rgba(69,56,63,.14);
+  --hairline:inset 0 1px 0 rgba(255,255,255,.72);
+}
+
+/* B. 通用卡片：叠加顶部内高光，破"全白扁平" */
+.card{position:relative;box-shadow:var(--shadow),var(--hairline)}
+
+/* C. 卡片类型差异化背景（低饱和渐变 + 左侧细色条，克制区分） */
+.card.kind-anniversary{background:linear-gradient(165deg,var(--tint-amber),var(--surface) 72%)}
+.card.kind-wish{background:linear-gradient(165deg,var(--tint-violet),var(--surface) 72%)}
+.card.kind-quest,.card.kind-habit{background:linear-gradient(165deg,var(--tint-peach),var(--surface) 72%)}
+.card.kind-ledger{background:linear-gradient(165deg,var(--tint-green),var(--surface) 72%)}
+.card.kind-music{background:linear-gradient(165deg,var(--tint-violet),var(--surface) 72%)}
+.card.kind-album{background:linear-gradient(165deg,var(--tint-blue),var(--surface) 72%)}
+.card.kind-mood{background:linear-gradient(165deg,var(--tint-rose),var(--surface) 72%)}
+.card.kind-note,.card.kind-diary,.card.kind-post,.card.kind-surprise,.card.kind-question,.card.kind-draft,.card.kind-period{background:linear-gradient(165deg,rgba(176,72,107,.04),var(--surface) 72%)}
+.card.kind-anniversary::before,.card.kind-wish::before,.card.kind-quest::before,.card.kind-habit::before,.card.kind-ledger::before,.card.kind-music::before,.card.kind-album::before,.card.kind-mood::before,.card.kind-note::before,.card.kind-diary::before,.card.kind-post::before,.card.kind-surprise::before,.card.kind-question::before,.card.kind-draft::before,.card.kind-period::before{content:'';position:absolute;left:0;top:20px;bottom:20px;width:3px;border-radius:0 3px 3px 0;opacity:.85}
+.card.kind-anniversary::before{background:var(--amber)}
+.card.kind-wish::before,.card.kind-music::before{background:var(--lavender,#8B72A8)}
+.card.kind-quest::before,.card.kind-habit::before,.card.kind-mood::before{background:var(--primary)}
+.card.kind-ledger::before{background:var(--green)}
+.card.kind-album::before{background:#607EA8}
+.card.kind-note::before,.card.kind-diary::before,.card.kind-post::before,.card.kind-surprise::before,.card.kind-question::before,.card.kind-draft::before,.card.kind-period::before{background:var(--primary-dark)}
+
+/* D. 首页侧栏卡片细微 tint */
+.home-aside>.card.mood-card{background:linear-gradient(165deg,var(--tint-rose),var(--surface) 72%)}
+.home-aside>.card.anniversary-card{background:linear-gradient(165deg,var(--tint-amber),var(--surface) 72%)}
+
+/* E. Hero 背景层次（柔和光晕 + 渐变） */
+.hero{
+  background:
+    radial-gradient(130% 100% at 0% 0%,rgba(255,255,255,.55),transparent 52%),
+    radial-gradient(95% 85% at 100% 105%,rgba(176,72,107,.10),transparent 60%),
+    linear-gradient(120deg,var(--soft) 0%,var(--surface) 55%,var(--green-soft) 100%);
+}
+
+/* F. 顶栏毛玻璃吸顶（桌面） */
+@media (min-width:641px){
+  .topbar{
+    position:sticky;top:0;z-index:16;
+    padding-top:16px;padding-bottom:14px;margin-bottom:26px;
+    background:linear-gradient(180deg,var(--bg) 55%,rgba(250,246,247,0));
+    -webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);
+  }
+}
+
+/* G. 侧栏顶部微光 */
+.sidebar{
+  background:
+    linear-gradient(180deg,rgba(255,255,255,.5),transparent 28%),
+    var(--surface);
+}
+
+/* H. 工具宫格卡片增强（顶部渐变细线 + 更强悬浮） */
+.tool-card{position:relative;overflow:hidden;transition:transform var(--speed),box-shadow var(--speed),background var(--speed)}
+.tool-card::before{content:'';position:absolute;left:0;right:0;top:0;height:3px;background:linear-gradient(90deg,var(--primary),var(--soft-strong));opacity:0;transition:opacity var(--speed)}
+.tool-card:hover{box-shadow:var(--shadow-lift),var(--hairline)}
+.tool-card:hover::before{opacity:1}
+
+/* I. 统计卡柔光 */
+.stat{position:relative;overflow:hidden}
+.stat-icon{box-shadow:var(--shadow-xs)}
+.stat::after{content:'';position:absolute;right:-22px;top:-22px;width:86px;height:86px;border-radius:50%;background:radial-gradient(circle,var(--soft),transparent 70%);opacity:.7;pointer-events:none}
+
+/* J. 列表项交互反馈统一 */
+.setting-list button,.setting-list a{transition:background var(--speed),color var(--speed),padding-left var(--speed)}
+.setting-list button:hover,.setting-list a:hover{background:var(--soft);border-radius:var(--radius-s);padding-left:12px}
+.wish-line{transition:background var(--speed)}
+.wish-line:hover{background:var(--soft);border-radius:12px}
+.song-line{transition:background var(--speed)}
+.song-line:hover{background:var(--soft);border-radius:12px}
+.notice{transition:background var(--speed)}
+.notice:hover{background:var(--soft);border-radius:var(--radius-s)}
+.otd-item{transition:background var(--speed)}
+.otd-item:hover{background:var(--soft);border-radius:12px}
+
+/* K. 空状态升级：精致圆形徽标 + 轻微呼吸 */
+.empty-icon{
+  width:62px;height:62px;margin:0 auto 14px;
+  display:grid;place-items:center;font-size:28px;color:var(--primary);
+  background:linear-gradient(160deg,var(--soft),var(--surface));
+  box-shadow:var(--shadow-xs),inset 0 0 0 1px var(--line);
+  border-radius:50%;line-height:1;opacity:.96;
+}
+@keyframes float-heart{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
+.empty-icon{animation:float-heart 3.4s ease-in-out infinite}
+
+/* L. 暗色适配：关闭内高光，修正增强层 */
+:root.dark{--hairline:inset 0 1px 0 rgba(255,255,255,.04)}
+:root.dark .card{box-shadow:var(--shadow)}
+:root.dark .sidebar{background:var(--surface)}
+:root.dark .tool-card::before{background:linear-gradient(90deg,var(--primary),var(--soft-strong))}
+:root.dark .empty-icon{background:linear-gradient(160deg,var(--soft),var(--bg));box-shadow:var(--shadow-xs)}
+:root.dark .stat::after{background:radial-gradient(circle,var(--soft),transparent 70%)}
