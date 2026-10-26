@@ -17,14 +17,21 @@
 
 要求：服务器/NAS 已安装 Docker 与 Docker Compose。
 
-```bash
-# 1. 上传整个项目目录到服务器，例如 /vol1/1000/LARJ
-# 2. 首次远程初始化时设置一次性随机口令（.env 已被忽略，不会提交）
-cd /vol1/1000/LARJ
-echo "SETUP_TOKEN=$(openssl rand -hex 32)" >> .env
-docker compose up -d --build
+运行只需要两个文件：`docker-compose.yml` 和 `.env`——镜像由 GitHub Actions 构建好推到
+ghcr，服务器/NAS 上不编译源码（源码、`Dockerfile` 都不用上传）。
 
-# 3. 查看状态
+```bash
+# 1. 建目录，放上仓库根目录的 docker-compose.yml
+mkdir -p /vol1/1000/LARJ && cd /vol1/1000/LARJ
+
+# 2. 首次远程初始化时设置一次性随机口令（.env 已被忽略，不会提交）
+echo "SETUP_TOKEN=$(openssl rand -hex 32)" >> .env
+
+# 3. 拉镜像并启动（数据目录 ./data 会自动创建）
+docker compose pull
+docker compose up -d
+
+# 4. 查看状态
 docker compose ps
 curl http://127.0.0.1:1314/health
 ```
@@ -71,8 +78,13 @@ echo "<你的 GitHub PAT，需 read:packages 权限>" | docker login ghcr.io -u 
 > docker pull ghcr.nju.edu.cn/gbyyhbot/love-space:sha-xxxxxxx   # 南京大学 ghcr 镜像
 > ```
 >
-> 想直连就先重试几次；一直失败的话——有些家宽/NAT 的 IPv6 出口是坏的，而 docker 解析后会
-> 优先走 IPv6——就退回 `docker compose up -d --build` 本地构建（走 apt/pip 国内镜像，反而更稳）。
+> 想直连就先重试几次。一直失败的话——有些家宽/NAT 的 IPv6 出口是坏的，而 docker 解析后会
+> 优先走 IPv6——就整镜像站拉完再 retag 成规范名（compose 里写的是 `ghcr.io/...`）：
+>
+> ```bash
+> docker pull ghcr.nju.edu.cn/gbyyhbot/love-space:sha-xxxxxxx
+> docker tag  ghcr.nju.edu.cn/gbyyhbot/love-space:sha-xxxxxxx ghcr.io/gbyyhbot/love-space:sha-xxxxxxx
+> ```
 
 容器默认带了日志轮转（`10m × 3`）和 2G 内存上限，避免长期运行把宿主的
 `/var/lib/docker` 撑爆、或视频转码时把整台 NAS 拖垮。内存上限可用 `.env` 覆盖：
@@ -153,9 +165,8 @@ cd android
 2. 设置 `PUBLIC_URL=https://love.example.com`；`SECURE_COOKIES` 默认开启，重启容器。
 3. **防火墙**：只放行 80/443；应用端口默认仅监听本机 `127.0.0.1:1314`。若反向代理在独立容器中，请改用私有网络或防火墙规则限制来源。
 4. **备份**：每日自动备份在 `data/backups/`，保留 7 份；可设 `BACKUP_EXTRA_DIR` 异地再存一份。
-5. **升级**：优先拉预构建镜像（NAS 不编译，见上文"用预构建镜像"一节）：
-   `docker compose pull && docker compose up -d`，数据目录不受影响。
-   只有 GitHub 不通或 CI 还没构建完时，才退回上传源码 + `docker compose up -d --build`。
+5. **升级**：改 `.env` 里的 `LOVE_IMAGE` 到目标 tag，然后 `docker compose pull && docker compose up -d`，
+   数据目录不受影响。升级前先把 `data/backups/` 里最新的备份确认一遍。
 
 ## 家庭设备 / NAS 部署
 
