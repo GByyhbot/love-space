@@ -305,8 +305,11 @@ def ensure_push_topic(c, user_id):
 
 
 PRIVATE = {'diary', 'draft', 'surprise'}
-SHARED_EDIT = {'album', 'anniversary', 'wish', 'habit'}
-KINDS = {'post', 'diary', 'draft', 'surprise', 'album', 'anniversary', 'wish', 'personal_wish', 'mood', 'note', 'question', 'habit', 'chat', 'quest', 'ledger'}
+# 静态加密的类型：私密记录 + 生理期（健康数据，库文件被拷走也不该是明文）。
+# 注意它和 PRIVATE 不等价：period 加密但可以按 shared 共享给另一半。
+ENCRYPTED = PRIVATE | {'period'}
+SHARED_EDIT = {'album', 'anniversary', 'wish', 'habit', 'quest', 'ledger', 'music'}
+KINDS = {'post', 'diary', 'draft', 'surprise', 'album', 'anniversary', 'wish', 'personal_wish', 'mood', 'note', 'question', 'habit', 'chat', 'quest', 'ledger', 'period', 'music'}
 
 # 聊天通知的合并窗口（秒）：短时间连发只弹一条推送，文案带未读数量。
 # 窗口越长合并越彻底、延迟越高；15s 在"及时"与"不刷屏"之间取平衡。
@@ -314,7 +317,7 @@ CHAT_DELAY = 15
 
 
 def body_encode(kind, record_id, body):
-    if kind in PRIVATE:
+    if kind in ENCRYPTED:
         from .security import private_record_encrypt
         return dumps({'_private_record': private_record_encrypt(record_id, kind, dumps(body))})
     return dumps(body)
@@ -322,14 +325,25 @@ def body_encode(kind, record_id, body):
 
 def body_decode(row):
     body = json.loads(row['body'])
-    if row['kind'] in PRIVATE and '_private_record' in body:
+    if row['kind'] in ENCRYPTED and '_private_record' in body:
         from .security import private_record_decrypt
         return json.loads(private_record_decrypt(row['id'], row['kind'], body['_private_record']))
     return body
 
 
 def visible(row, user_id):
-    return not row['deleted'] and (row['kind'] not in PRIVATE or row['author'] == user_id)
+    if row['deleted']:
+        return False
+    if row['kind'] in PRIVATE:
+        return row['author'] == user_id
+    if row['kind'] == 'period' and row['author'] != user_id:
+        # 生理期是健康数据：默认只有本人可见，作者显式打开「共享给 TA」才让对方看到。
+        # body 解析只发生在 period 行上，不影响其他类型的性能。
+        try:
+            return bool(body_decode(row).get('shared'))
+        except Exception:
+            return False
+    return True
 
 
 def media_ids(body):

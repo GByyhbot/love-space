@@ -406,7 +406,8 @@ def clean_body(c, kind, data, user_id, previous=None):
     if kind == 'personal_wish':
         raise HTTPException(422, '个人心愿请使用专属加密接口保存')
     permitted = {'title', 'content', 'date', 'media', 'album', 'publish_at', 'annual', 'remind_days',
-                 'category', 'done', 'emoji', 'target', 'completion_post', 'sticker', 'amount'}
+                 'category', 'done', 'emoji', 'target', 'completion_post', 'sticker', 'amount',
+                 'start', 'cycle', 'length', 'flow', 'symptoms', 'shared'}
     body = {k: v for k, v in data.items() if k in permitted}
     if 'sticker' in body and (not isinstance(body['sticker'], str)
                               or not re.fullmatch(r'/static/stickers/[a-z0-9]+/\d+\.(webm|webp)', body['sticker'])):
@@ -432,7 +433,27 @@ def clean_body(c, kind, data, user_id, previous=None):
         if not 0 <= amount <= 100000000:
             raise HTTPException(422, '金额需在 0–1 亿之间')
         body['amount'] = amount
-    for key in ('date', 'target'):
+    if kind == 'period':
+        # 生理期只收窄口字段：一天一条，start 是这次经期的第一天。
+        # cycle/length 允许用户手工改（默认由历史自动推算），但必须落在生理上说得通的区间，
+        # 否则日历和预测会画出不可能的格子。
+        for key in ('cycle', 'length'):
+            if body.get(key) in (None, ''):
+                body.pop(key, None)
+                continue
+            if type(body[key]) is not int or not (15 <= body[key] <= 60 if key == 'cycle' else 1 <= body[key] <= 15):
+                raise HTTPException(422, '周期需在 15–60 天、经期需在 1–15 天之间')
+        if 'shared' in body and not isinstance(body['shared'], bool):
+            raise HTTPException(422, '共享状态格式不正确')
+        if 'flow' in body and body['flow'] not in ('少', '中', '多'):
+            raise HTTPException(422, '经量只能选 少 / 中 / 多')
+        symptoms = body.get('symptoms')
+        if symptoms is not None:
+            if not isinstance(symptoms, list) or len(symptoms) > 12 \
+                    or any(not isinstance(s, str) or not s.strip() or len(s) > 16 for s in symptoms):
+                raise HTTPException(422, '症状最多十二项，每项不超过十六个字')
+            body['symptoms'] = list(dict.fromkeys(s.strip() for s in symptoms if s.strip()))
+    for key in ('date', 'target', 'start'):
         if body.get(key):
             try:
                 dt.date.fromisoformat(body[key])
@@ -440,11 +461,13 @@ def clean_body(c, kind, data, user_id, previous=None):
                 raise HTTPException(422, '日期格式不正确')
     if kind == 'anniversary' and not body.get('date'):
         raise HTTPException(422, '请选择纪念日日期')
+    if kind == 'period' and not body.get('start'):
+        raise HTTPException(422, '请选择这次经期开始的日期')
     mids = body.get('media', [])
     if not isinstance(mids, list) or len(mids) > 30 or any(not isinstance(m, str) for m in mids):
         raise HTTPException(422, '每条记录最多添加三十个附件')
     body['media'] = list(dict.fromkeys(mids))
-    if kind in {'album', 'anniversary', 'wish', 'habit', 'question'} and not body.get('title', '').strip():
+    if kind in {'album', 'anniversary', 'wish', 'habit', 'question', 'music'} and not body.get('title', '').strip():
         raise HTTPException(422, '请填写标题')
     if kind in {'post', 'diary', 'surprise', 'note', 'chat'} and not (body.get('content', '').strip() or mids or body.get('sticker')):
         raise HTTPException(422, '写点什么或添加一个附件吧')

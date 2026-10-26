@@ -817,3 +817,33 @@ body.cal-full{overflow:hidden;height:100dvh}
 .week-hero h2{font-size:19px;line-height:1.55;margin:8px 0 6px;color:var(--primary-dark)}
 .week-hero .eyebrow{font-size:11px;letter-spacing:.16em;color:var(--muted)}
 @media(max-width:560px){.bars{gap:4px}.bars .bar span{font-size:9px}.bars .bar:nth-child(even) span{visibility:hidden}}
+
+/* ———— 生理期 ———— */
+.period-month{margin:0 0 16px}
+.period-month:last-of-type{margin-bottom:0}
+.period-month h3{font-size:13px;font-weight:600;color:var(--muted);margin:0 0 8px}
+.cal-day.p-actual{background:var(--soft-strong)}
+.cal-day.p-actual span:first-child{color:var(--primary-dark);font-weight:700}
+.cal-day.p-predicted{border:1px dashed var(--primary);opacity:.75}
+.cal-day.p-ovulation::after{content:'';position:absolute;bottom:7px;width:6px;height:6px;border-radius:50%;background:var(--green)}
+.period-legend{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:4px 0 0}
+.period-legend .lg{width:11px;height:11px;border-radius:4px;display:inline-block;margin:0 4px 0 10px}
+.period-legend .lg:first-child{margin-left:0}
+.lg-actual{background:var(--soft-strong)}
+.lg-predicted{border:1px dashed var(--primary)}
+.lg-ovulation{background:var(--green);border-radius:50%}
+.sym-chips{display:flex;flex-wrap:wrap;gap:8px;margin:-2px 0 2px}
+.sym-chip{padding:7px 14px;border-radius:999px;border:1px solid var(--line);background:var(--surface);font-size:13px;color:var(--muted);cursor:pointer;transition:background var(--speed),color var(--speed),border-color var(--speed)}
+.sym-chip.on{background:var(--primary);border-color:var(--primary);color:var(--on-primary);font-weight:600}
+
+/* ———— 每日一句 / 共同歌单 ———— */
+.daily-quote{display:flex;align-items:center;gap:10px;margin:0 0 18px;padding:14px 18px;border-radius:var(--radius-s);background:var(--soft);color:var(--primary-dark)}
+.daily-quote .icon{width:18px;height:18px;flex:none;stroke:var(--primary)}
+.daily-quote span{font-size:14px;line-height:1.6;flex:1}
+.daily-quote small{font-size:11px;color:var(--muted);letter-spacing:.08em;flex:none}
+.song-line{display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)}
+.song-line:last-child{border-bottom:0;padding-bottom:0}
+.song-dot{width:26px;height:26px;border-radius:50%;background:var(--soft);color:var(--primary);display:flex;align-items:center;justify-content:center;font-size:13px;flex:none}
+.song-line strong{display:block;font-size:14px;line-height:1.4}
+.song-line small{display:block;font-size:12px;line-height:1.4}
+.song-audio{width:100%;margin-top:12px;height:38px}

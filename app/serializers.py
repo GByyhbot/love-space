@@ -13,10 +13,13 @@ from .security import open_sealed
 
 
 def serialize(c, row, user_id, related=None):
-    if row['kind'] in db.PRIVATE and row['author'] != user_id:
-        raise HTTPException(404, '记录不存在')
     result = dict(row)
     result['body'] = db.body_decode(row)
+    if row['kind'] in db.PRIVATE and row['author'] != user_id:
+        raise HTTPException(404, '记录不存在')
+    # 生理期：对方只有在作者打开共享后才能读；否则按"不存在"处理，别泄露"今天她记了点什么"
+    if row['kind'] == 'period' and row['author'] != user_id and not result['body'].get('shared'):
+        raise HTTPException(404, '记录不存在')
     if row['kind'] == 'personal_wish':
         stored = result['body']
         # 作者本人始终可见；对方输入过正确密码后也永久可见，不必反复输密码

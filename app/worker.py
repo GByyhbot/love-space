@@ -25,6 +25,10 @@ from . import notifications
 
 log = logging.getLogger('love.worker')
 
+# 相恋天数里程碑：整数关口 + 常见纪念数字。只在当天提醒一次（dedupe 带天数）。
+MILESTONES = {100, 200, 300, 365, 520, 600, 730, 800, 1000, 1314, 1500, 1825,
+              2000, 2555, 3000, 3650, 5000, 5555, 7300, 10000, 13140, 18250}
+
 # 投递循环的即时唤醒：请求线程写入新通知后调用 nudge()，worker 立刻跑一轮投递，
 # 聊天推送不再等 5s 轮询周期（配合 db.CHAT_DELAY，服务端出队延迟从最坏 ~13s 降到 ~3-4s）。
 wake = threading.Event()
@@ -230,6 +234,16 @@ def schedule():
             elif row['kind'] == 'wish' and body.get('target') and not body.get('done'):
                 if body['target'] <= today.isoformat():
                     db.notice(c, 'wish', '有一个共同愿望到了约定日期', row['id'], dedupe=f'wish:{row["id"]}:{body["target"]}')
+        # 相恋里程碑：100 / 365 / 1000 天这类日子只在当天提醒一次
+        space = db.setting(c, 'space', {}) or {}
+        days = None
+        if space.get('since'):
+            try:
+                days = (today - dt.date.fromisoformat(space['since'])).days + 1
+            except ValueError:
+                days = None
+        if days in MILESTONES:
+            db.notice(c, 'anniversary', f'今天是你们相恋 {days} 天，值得记一笔', dedupe=f'milestone:{days}')
         free = shutil.disk_usage(db.DATA).free
         if free < int(os.getenv('LOW_STORAGE_MB', '1024')) * 1024 * 1024:
             db.notice(c, 'storage', '空间剩余容量不足，请检查存储', dedupe='storage:' + today.isoformat())

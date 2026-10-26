@@ -34,6 +34,7 @@ KIND_LABELS = {
     'anniversary': '纪念日', 'wish': '共同愿望', 'personal_wish': '个人心愿',
     'mood': '每日心情', 'note': '留言板', 'question': '情侣问答', 'habit': '共同打卡',
     'chat': '聊天', 'album': '相册', 'quest': '恋爱清单', 'ledger': '共同账本',
+    'period': '生理期', 'music': '共同歌单',
 }
 
 # 固定东八区：Debian slim 镜像常常没有 tzdata，用 zoneinfo 会直接抛异常
@@ -66,6 +67,9 @@ def _title(rec):
     title = str(body.get('title') or '').strip()
     if title:
         return title
+    # 生理期没有标题，用开始日期当标题，导出的文件才不会一堆同名
+    if rec['kind'] == 'period' and body.get('start'):
+        return f"经期 {body['start']}"
     content = str(body.get('content') or '').strip()
     if content:
         return content.splitlines()[0][:40]
@@ -75,7 +79,8 @@ def _title(rec):
 
 
 def _day(rec):
-    date = str(rec['body'].get('date') or '').strip()
+    body = rec['body']
+    date = str(body.get('date') or body.get('start') or '').strip()
     if re.fullmatch(r'\d{4}-\d{2}-\d{2}', date):
         return date
     return _local(rec['created']).strftime('%Y-%m-%d')
@@ -130,6 +135,16 @@ def _render_record(rec, authors, media_links, prev_next, same_day, path, title_m
         except (TypeError, ValueError):
             amount = 0.0
         out += [f'- 金额：¥{amount:.2f}', f"- 分类：{body.get('category') or '其他'}"]
+    if kind == 'period':
+        out += [f"- 开始：{body.get('start') or '—'}",
+                f"- 经期：{body.get('length') or 5} 天"]
+        if body.get('cycle'):
+            out += [f"- 周期：{body['cycle']} 天"]
+        if body.get('flow'):
+            out += [f"- 经量：{body['flow']}"]
+        if body.get('symptoms'):
+            out += ['- 症状：' + '、'.join(str(s) for s in body['symptoms'])]
+        out += ['- 共享给 TA：' + ('是' if body.get('shared') else '否（仅自己可见）')]
     if kind == 'habit':
         checks = rec.get('checks') or []
         out += [f"- 打卡：{len(checks)} 次"]

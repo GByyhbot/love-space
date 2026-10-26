@@ -21,6 +21,7 @@ const paths = {
  mic:'M9 5a3 3 0 0 1 6 0v7a3 3 0 0 1-6 0V5ZM5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8', send:'m22 2-7 20-4-9-9-4 20-7ZM11 13 22 2',
  star:'m12 3 3 6 7 1-5 5 1 7-6-3-6 3 1-7-5-5 7-1 3-6', gear:'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8ZM9 3h6l1 3 3 1 2 5-2 5-3 1-1 3H9l-1-3-3-1-2-5 2-5 3-1 1-3', download:'M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5', clock:'M12 8v5l3 2M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z', check:'m5 12 4 4L19 6',
  moon:'M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z', sun:'M12 4V2M12 22v-2M4 12H2M22 12h-2M5 5 4 4M20 20l-1-1M19 5l1-1M4 20l1-1M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z', info:'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20Zm0-6v-4m0-4h.01',
+ play:'m8 5 12 7-12 7V5Z', pause:'M8 5h3v14H8V5Zm5 0h3v14h-3V5Z', music:'M9 18V6l10-2v12M9 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm10-2a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z', image:'M4 4h16v16H4V4Zm2 12 4-4 3 3 2-2 3 3',
  chat:'M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.4 8.4 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5Z'
 };
 const icon = name => `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="${paths[name] || paths.heart}"/></svg>`;
@@ -72,7 +73,7 @@ const avatar = (id, extra='') => {const u=person(id);return `<span class="avatar
 const dateLabel = timestamp => new Date(timestamp*1000).toLocaleString('zh-CN',{timeZone:state.me?.space.timezone || 'Asia/Shanghai',month:'long',day:'numeric',hour:'2-digit',minute:'2-digit'});
 const today = () => new Intl.DateTimeFormat('sv-SE',{timeZone:state.me?.space.timezone || 'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
 const daysBetween = (a,b) => Math.round((new Date(b+'T00:00:00Z')-new Date(a+'T00:00:00Z'))/86400000);
-const kindLabel = {post:'时光动态',diary:'私密日记',draft:'草稿',surprise:'定时惊喜',anniversary:'纪念日',wish:'共同愿望',personal_wish:'个人心愿',mood:'每日心情',note:'留言板',question:'情侣问答',habit:'共同打卡',chat:'聊天',album:'相册',quest:'恋爱清单',ledger:'共同账本'};
+const kindLabel = {post:'时光动态',diary:'私密日记',draft:'草稿',surprise:'定时惊喜',anniversary:'纪念日',wish:'共同愿望',personal_wish:'个人心愿',mood:'每日心情',note:'留言板',question:'情侣问答',habit:'共同打卡',chat:'聊天',album:'相册',quest:'恋爱清单',ledger:'共同账本',period:'生理期',music:'共同歌单'};
 const recordsOf = kind => state.records.filter(r=>r.kind===kind);
 const uuid = () => crypto.randomUUID ? crypto.randomUUID() : ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g,c=>(c^crypto.getRandomValues(new Uint8Array(1))[0]&15>>c/4).toString(16));
 
@@ -216,20 +217,62 @@ async function refresh(render=true){if(refreshing){state.pendingRefresh=true;ret
 function nextAnniversary() {
  return recordsOf('anniversary').map(r=>{let date=r.body.date;if(r.body.annual===true){const year=Number(today().slice(0,4));date=year+date.slice(4);if(date.endsWith('02-29')&&new Date(year,1,29).getMonth()!==1)date=year+'-02-28';if(date<today()){date=(year+1)+r.body.date.slice(4);if(date.endsWith('02-29')&&new Date(year+1,1,29).getMonth()!==1)date=(year+1)+'-02-28';}}return {...r,due:date,days:daysBetween(today(),date)};}).filter(r=>r.days>=0).sort((a,b)=>a.days-b.days)[0];
 }
+/* ———— 每日一句 / 相爱天数卡片 ———— */
+const DAILY_QUOTES=[
+ '喜欢是乍见之欢，爱是久处不厌。','日子很普通，但有你就不一样。','今天也想和你一起，把生活过成一件件小事。',
+ '你是我所有计划里，唯一不变的那一项。','一起吃饭，一起发呆，一起把日子过完。','世界很大，我的坐标是你。',
+ '想和你把「以后」两个字，慢慢过成具体的日子。','不必每天都惊喜，只要每天都有你。','我们不用很厉害，只要一直在一起。',
+ '喜欢你这件事，我做得最久。','天气预报说明天有雨，我记得带伞，也记得带你。','你笑的时候，我觉得今天没白过。',
+ '柴米油盐里，也藏着浪漫。','不用去很远的地方，回家就是最好的旅行。','你在的地方，就是我想去的地方。',
+ '想和你一起变老，慢慢的那种。','今天的月亮很好，你也在，就更好了。','爱是记得，也是愿意。',
+ '日子一天天过去，喜欢一天天变多。','我们把普通的日子，过成了纪念日。','你说话的时候，我在认真听。',
+ '抱一下，今天就算圆满。','一天很短，但装得下想念。','明天也一起吃早饭吧。'];
+const dailyQuote=()=>DAILY_QUOTES[dayNum(today())%DAILY_QUOTES.length];
+function dailyQuoteBlock(){return `<section class="daily-quote">${icon('star')}<span>${esc(dailyQuote())}</span><small>今天的一句</small></section>`;}
+function songsCard(){
+ const songs=recordsOf('music').slice().sort((a,b)=>b.created-a.created).slice(0,3);
+ return `<div class="card"><div class="section-heading"><h2>${icon('music')} 我们的歌</h2><button class="link-btn" data-action="tool-music">歌单 →</button></div>${songs.length?songs.map(r=>`<div class="song-line"><span class="song-dot">♪</span><div><strong>${esc(r.body.title||'未命名')}</strong><small class="meta">${esc(r.body.content||'')}</small></div></div>`).join(''):'<p class="meta">还没有歌，去放一首属于你们的第一首。</p>'}</div>`;
+}
+function loveCardImage(){
+ const {space,user,users}=state.me,partner=users.find(u=>u.id!==user.id);
+ const days=space.since?Math.max(0,daysBetween(space.since,today())+1):null;
+ if(days===null)return toast('先在「空间设置」里填上相恋日期');
+ const W=1080,H=1350,cv=document.createElement('canvas');cv.width=W;cv.height=H;
+ const x=cv.getContext('2d'),F='"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif';
+ const g=x.createLinearGradient(0,0,W,H);g.addColorStop(0,'#f9dfe6');g.addColorStop(.55,'#fdf3f1');g.addColorStop(1,'#f2d9e7');
+ x.fillStyle=g;x.fillRect(0,0,W,H);
+ x.save();x.globalAlpha=.45;x.fillStyle='#ffffff';
+ x.beginPath();x.arc(90,150,150,0,Math.PI*2);x.fill();
+ x.beginPath();x.arc(W-60,H-170,200,0,Math.PI*2);x.fill();x.restore();
+ x.textAlign='center';
+ x.fillStyle='#a75b70';x.font=`600 40px ${F}`;x.fillText('我 们 相 恋',W/2,300);
+ x.fillStyle='#c2557a';x.font=`800 300px ${F}`;x.fillText(String(days),W/2,640);
+ x.fillStyle='#a75b70';x.font=`600 54px ${F}`;x.fillText('天',W/2,730);
+ x.fillStyle='#8c4a5c';x.font=`600 46px ${F}`;x.fillText(partner?`${user.name} & ${partner.name}`:user.name,W/2,880);
+ x.fillStyle='#a9808d';x.font=`400 30px ${F}`;x.fillText(`从 ${space.since} 走到今天`,W/2,940);
+ x.fillStyle='#a9808d';x.font=`400 32px ${F}`;x.fillText(dailyQuote(),W/2,1120);
+ x.fillStyle='#c0a3ac';x.font=`400 24px ${F}`;x.fillText('恋爱空间 · 我们的每一天',W/2,1250);
+ cv.toBlob(blob=>{
+  if(!blob)return toast('导出失败，换个浏览器试试');
+  const a=document.createElement('a'),url=URL.createObjectURL(blob);
+  a.href=url;a.download=`我们的第${days}天-${today()}.png`;a.click();
+  setTimeout(()=>URL.revokeObjectURL(url),5000);toast('卡片已保存到下载');
+ },'image/png');
+}
 function homePage() {
  const {space,user,users}=state.me,partner=users.find(u=>u.id!==user.id),days=space.since?Math.max(0,daysBetween(space.since,today())+1):null,anniversary=nextAnniversary(),posts=recordsOf('post').slice(0,3),wishes=recordsOf('wish');
  const moodRows=users.map(u=>{const m=recordsOf('mood').find(r=>r.author===u.id&&r.body.date===today());return `<div class="mood-row">${avatar(u.id)}<span>${esc(u.name)}</span><span class="mood-bubble">${m?esc(m.body.emoji)+' '+esc(m.body.content||'已记录'):'等一个好心情'}</span></div>`;}).join('');
- const heroCopy=`<section class="hero">${space.cover?`<img class="hero-art hero-cover" src="/media/${esc(space.cover)}?preview=true" alt="我们的合照封面">`:'<img class="hero-art" src="/static/garden.svg" alt="两只小兔子守着共同的小家">'}<div class="hero-mask"></div><div class="hero-copy"><div class="hero-main"><span class="hero-tag">${icon('heart')} ${esc(space.name)}</span><div class="couple-line"><div class="couple-avatars">${avatar(user.id)}<span class="heart-symbol">♥</span>${partner?avatar(partner.id,'partner'):'<span class="avatar partner">?</span>'}</div><span class="hero-names-text">${partner?`${esc(user.name)} & ${esc(partner.name)}`:'等你，把另一半邀请进来'}</span></div>${partner?'':`<button class="link-btn" data-action="invite">发送邀请，让 TA 住进来 →</button>`}<div class="hero-days"><small>我们相恋</small><strong>${days??'—'}<em>天</em></strong>${days===null?`<button class="link-btn" data-action="space">设置相恋日期 →</button>`:`<span class="meta">${esc(space.since)} · 今天也要好好相爱</span>`}</div></div></div></section>`;
+ const heroCopy=`<section class="hero">${space.cover?`<img class="hero-art hero-cover" src="/media/${esc(space.cover)}?preview=true" alt="我们的合照封面">`:'<img class="hero-art" src="/static/garden.svg" alt="两只小兔子守着共同的小家">'}<div class="hero-mask"></div><div class="hero-copy"><div class="hero-main"><span class="hero-tag">${icon('heart')} ${esc(space.name)}</span><div class="couple-line"><div class="couple-avatars">${avatar(user.id)}<span class="heart-symbol">♥</span>${partner?avatar(partner.id,'partner'):'<span class="avatar partner">?</span>'}</div><span class="hero-names-text">${partner?`${esc(user.name)} & ${esc(partner.name)}`:'等你，把另一半邀请进来'}</span></div>${partner?'':`<button class="link-btn" data-action="invite">发送邀请，让 TA 住进来 →</button>`}<div class="hero-days"><small>我们相恋</small><strong>${days??'—'}<em>天</em></strong>${days===null?`<button class="link-btn" data-action="space">设置相恋日期 →</button>`:`<span class="meta">${esc(space.since)} · 今天也要好好相爱</span><button class="link-btn" data-action="love-card">存一张天数卡片 →</button>`}</div></div></div></section>`;
  const todayCard=`<section class="today-card" aria-label="今天的陪伴"><div class="today-cell"><span class="tiny">${icon('sun')} 今天的心情</span><div class="mood-inline">${moodRows}</div></div><div class="today-cell"><span class="tiny">${icon('calendar')} 最近纪念日</span>${anniversary?`<div class="countdown-mini"><strong>${anniversary.days}</strong><span>天后 · ${esc(anniversary.body.title)}</span></div><p class="meta">${anniversary.due} · 别忘了给彼此一个拥抱</p>`:`<div class="countdown-mini"><strong>♡</strong><span>留一个日子，给仪式感</span></div>${button('添加纪念日','new-anniversary','small secondary')}`}</div></section>`;
  const composeCta=`<button class="compose-cta" data-action="compose">${icon('edit')} 记录此刻</button>`;
  const homeHeading=heading('我们的每一天','一半是生活，一半是你。','compose','记录此刻','edit').replace('page-heading','page-heading home-heading');
- return `${homeHeading}${heroCopy}${todayCard}${composeCta}
+ return `${homeHeading}${heroCopy}${todayCard}${composeCta}${dailyQuoteBlock()}
  <div class="home-grid"><div class="home-main"><section><div class="section-heading"><h2>${icon('book')} 最近的小美好</h2><button class="link-btn" data-nav="timeline">所有时光 ${icon('arrow')}</button></div>${posts.length?posts.map(recordCard).join(''):`<div class="card">${empty('故事，从这一刻开始','一张照片、一句想说的话，都是值得收藏的小美好。','compose')}</div>`}</section>
  <section class="on-this-day" id="on-this-day"><div class="loading-heart" style="font-size:24px">♡</div><p class="meta meta-center">正在翻看这一天的回忆…</p></section>
  <section class="yearbook" id="yearbook"><h2>📖 今年的我们</h2><div class="yearbook-summary"><p>点开看看，这一年我们一起写下了什么。</p><span class="yearbook-toggle-row">${button('展开小年报','expand-yearbook','soft small','arrow')}</span></div></section></div>
  <aside class="home-aside"><div class="card mood-card"><div class="section-heading"><h2>☀ 今天的心情</h2><button class="link-btn" data-action="mood-history">回顾 →</button></div>${moodRows}${button('分享今天的心情','mood','soft')}</div>
  <div class="card anniversary-card"><div class="tiny">${icon('calendar')} 下一个值得期待的日子</div>${anniversary?`<h3>${esc(anniversary.body.title)}</h3><div class="countdown">${anniversary.days}<small>天后</small></div><p>${anniversary.due} · 别忘了给彼此一个拥抱</p>`:`<h3>留一个日子，给仪式感</h3><div class="countdown">♡</div>${button('添加纪念日','new-anniversary','small secondary')}`}</div>
- <div class="card"><div class="section-heading"><h2>✧ 我们的小心愿</h2><button class="link-btn" data-action="tool-wish">全部 →</button></div>${wishes.length?wishes.slice(0,3).map(r=>`<button class="wish-line ${r.body.done?'done':''}" data-action="toggle-wish" data-id="${r.id}"><span class="check-circle"></span>${esc(r.body.title)}</button>`).join(''):empty('一起期待下一件小事','想去的地方，想做的事情，都记在这里。','new-wish','许个心愿',true)}</div></aside></div>`;
+ <div class="card"><div class="section-heading"><h2>✧ 我们的小心愿</h2><button class="link-btn" data-action="tool-wish">全部 →</button></div>${wishes.length?wishes.slice(0,3).map(r=>`<button class="wish-line ${r.body.done?'done':''}" data-action="toggle-wish" data-id="${r.id}"><span class="check-circle"></span>${esc(r.body.title)}</button>`).join(''):empty('一起期待下一件小事','想去的地方，想做的事情，都记在这里。','new-wish','许个心愿',true)}</div>${songsCard()}</aside></div>`;
 }
 
 function mediaMarkup(media=[]) {
@@ -257,8 +300,9 @@ document.addEventListener('click',e=>{
 },true));
 function recordCard(r) {
  if(r.kind==='personal_wish')return personalWishCard(r);
- const own=r.author===state.me.user.id,sharedEdit=['album','anniversary','wish','habit','quest','ledger'].includes(r.kind),b=r.body;
- return `<article class="card" data-record="${r.id}"><div class="card-header">${avatar(r.author)}<div><strong>${esc(person(r.author).name)}</strong><small>${esc(b.date||dateLabel(r.created))}${['diary','draft','surprise'].includes(r.kind)?' · '+kindLabel[r.kind]:''}${b.was_surprise?' · 一份公开的惊喜':''}</small></div><div class="card-menu">${own||sharedEdit?`<details class="more-menu"><summary aria-label="更多操作" title="更多操作">⋯</summary><div class="menu-pop"><button data-action="edit-record" data-id="${r.id}">${icon('edit')} 编辑</button><button data-action="delete-record" data-id="${r.id}" class="danger">${icon('trash')} 删除</button></div></details>`:''}</div></div>${b.title?`<h3 class="card-title">${esc(b.title)}</h3>`:''}<p class="card-text">${esc(b.content||'')}</p>${mediaMarkup(r.media)}${r.kind==='surprise'?`<p class="hint">${icon('lock')} 将于 ${dateLabel(b.publish_at)} 公开，目前只有你能看见。</p>`:''}${r.kind==='anniversary'?`<p class="meta">${esc(b.date)} · ${b.annual==='lunar'?'每年农历日期':b.annual===false?'一次性纪念日':'每年公历日期'} · 提前 ${b.remind_days??1} 天提醒</p><div class="inline-actions">${button('回看这一天','anniversary-memories','small soft','calendar',`data-date="${esc(b.date)}"`)}</div>`:''}${r.kind==='wish'?`<p class="meta">${esc(b.category||'小心愿')}${b.target?' · 约定 '+esc(b.target):''}</p><div class="inline-actions">${button(b.done?'已完成 · 再次点亮期待':'完成这个心愿','toggle-wish','small soft','check',`data-id="${r.id}"`)}${b.done?button('记录实现的那一刻','wish-memory','small secondary','edit',`data-id="${r.id}"`):''}</div>`:''}${r.kind==='quest'?`<p class="meta">${esc(b.category||'日常')}${b.date?' · 计划 '+esc(b.date):''}</p><div class="inline-actions">${button(b.done?'已完成 · 取消勾选':'标记为完成','toggle-quest','small soft','check',`data-id="${r.id}"`)}${b.done?button('记录实现的那一刻','wish-memory','small secondary','edit',`data-id="${r.id}"`):''}</div>`:''}${r.kind==='ledger'?`<p class="meta"><strong>¥${Number(b.amount||0).toFixed(2)}</strong> · ${esc(b.category||'其他')}${b.date?' · '+esc(b.date):''}</p>`:''}${r.kind==='habit'?`<p class="meta">${(r.checks||[]).length} 次用心坚持 · 今天 ${new Set((r.checks||[]).filter(c=>c.day===today()).map(c=>c.author)).size}/2 人完成</p><div class="inline-actions">${button((r.checks||[]).some(c=>c.author===state.me.user.id&&c.day===today())?'今天已打卡':'今天也一起坚持','check','small soft','check',`data-id="${r.id}"`)}</div>`:''}${r.kind==='question'?`<p class="meta">${r.answer_count===2?'两个人的答案都到齐啦':'双方回答后，才会揭晓彼此的答案'}</p>${(r.answers||[]).map(a=>`<div class="answer-box"><strong>${esc(person(a.author).name)}</strong><br>${esc(a.content)}</div>`).join('')}<div class="inline-actions">${button('写下我的答案','answer','small soft','edit',`data-id="${r.id}"`)}</div>`:''}${r.kind==='mood'?`<div class="inline-actions">${esc(b.emoji||'☀')}</div>`:''}${r.kind==='draft'?`<div class="inline-actions">${button('继续编辑','edit-record','soft small','edit',`data-id="${r.id}"`)}</div>`:''}<div class="card-footer"><span class="date-tag">${icon('clock')} ${dateLabel(r.created)}</span>${!['draft','diary','surprise'].includes(r.kind)?`<button class="${r.likes.includes(state.me.user.id)?'liked':''}" data-action="like" data-id="${r.id}">${icon('heart')} ${r.likes.length||'喜欢'}</button><button data-action="comment" data-id="${r.id}">${icon('chat')} ${r.comments.length||'回复'}</button>`:`<span>${icon('lock')} 仅自己可见</span>`}</div>${r.comments.length?`<div class="comments">${r.comments.map(c=>`<div><strong>${esc(person(c.author).name)}：</strong>${esc(c.content)}${c.author===state.me.user.id?`<button class="comment-delete" data-action="delete-comment" data-id="${c.id}">删除</button>`:''}</div>`).join('')}</div>`:''}</article>`;
+ if(r.kind==='music')return musicCard(r);
+ const own=r.author===state.me.user.id,sharedEdit=['album','anniversary','wish','habit','quest','ledger','music'].includes(r.kind),b=r.body;
+ return `<article class="card" data-record="${r.id}"><div class="card-header">${avatar(r.author)}<div><strong>${esc(person(r.author).name)}</strong><small>${esc(b.date||dateLabel(r.created))}${['diary','draft','surprise'].includes(r.kind)?' · '+kindLabel[r.kind]:''}${b.was_surprise?' · 一份公开的惊喜':''}</small></div><div class="card-menu">${own||sharedEdit?`<details class="more-menu"><summary aria-label="更多操作" title="更多操作">⋯</summary><div class="menu-pop"><button data-action="edit-record" data-id="${r.id}">${icon('edit')} 编辑</button><button data-action="delete-record" data-id="${r.id}" class="danger">${icon('trash')} 删除</button></div></details>`:''}</div></div>${b.title?`<h3 class="card-title">${esc(b.title)}</h3>`:''}<p class="card-text">${esc(b.content||'')}</p>${mediaMarkup(r.media)}${r.kind==='surprise'?`<p class="hint">${icon('lock')} 将于 ${dateLabel(b.publish_at)} 公开，目前只有你能看见。</p>`:''}${r.kind==='anniversary'?`<p class="meta">${esc(b.date)} · ${b.annual==='lunar'?'每年农历日期':b.annual===false?'一次性纪念日':'每年公历日期'} · 提前 ${b.remind_days??1} 天提醒</p><div class="inline-actions">${button('回看这一天','anniversary-memories','small soft','calendar',`data-date="${esc(b.date)}"`)}</div>`:''}${r.kind==='wish'?`<p class="meta">${esc(b.category||'小心愿')}${b.target?' · 约定 '+esc(b.target):''}</p><div class="inline-actions">${button(b.done?'已完成 · 再次点亮期待':'完成这个心愿','toggle-wish','small soft','check',`data-id="${r.id}"`)}${b.done?button('记录实现的那一刻','wish-memory','small secondary','edit',`data-id="${r.id}"`):''}</div>`:''}${r.kind==='quest'?`<p class="meta">${esc(b.category||'日常')}${b.date?' · 计划 '+esc(b.date):''}</p><div class="inline-actions">${button(b.done?'已完成 · 取消勾选':'标记为完成','toggle-quest','small soft','check',`data-id="${r.id}"`)}${b.done?button('记录实现的那一刻','wish-memory','small secondary','edit',`data-id="${r.id}"`):''}</div>`:''}${r.kind==='ledger'?`<p class="meta"><strong>¥${Number(b.amount||0).toFixed(2)}</strong> · ${esc(b.category||'其他')}${b.date?' · '+esc(b.date):''}</p>`:''}${r.kind==='period'?`<p class="meta">${esc(b.start)} 开始 · 经期 ${b.length||5} 天${b.cycle?' · 周期 '+b.cycle+' 天':''}${b.shared?' · 已共享给 TA':' · 仅自己可见'}</p>`:''}${r.kind==='habit'?`<p class="meta">${(r.checks||[]).length} 次用心坚持 · 今天 ${new Set((r.checks||[]).filter(c=>c.day===today()).map(c=>c.author)).size}/2 人完成</p><div class="inline-actions">${button((r.checks||[]).some(c=>c.author===state.me.user.id&&c.day===today())?'今天已打卡':'今天也一起坚持','check','small soft','check',`data-id="${r.id}"`)}</div>`:''}${r.kind==='question'?`<p class="meta">${r.answer_count===2?'两个人的答案都到齐啦':'双方回答后，才会揭晓彼此的答案'}</p>${(r.answers||[]).map(a=>`<div class="answer-box"><strong>${esc(person(a.author).name)}</strong><br>${esc(a.content)}</div>`).join('')}<div class="inline-actions">${button('写下我的答案','answer','small soft','edit',`data-id="${r.id}"`)}</div>`:''}${r.kind==='mood'?`<div class="inline-actions">${esc(b.emoji||'☀')}</div>`:''}${r.kind==='draft'?`<div class="inline-actions">${button('继续编辑','edit-record','soft small','edit',`data-id="${r.id}"`)}</div>`:''}<div class="card-footer"><span class="date-tag">${icon('clock')} ${dateLabel(r.created)}</span>${!['draft','diary','surprise'].includes(r.kind)?`<button class="${r.likes.includes(state.me.user.id)?'liked':''}" data-action="like" data-id="${r.id}">${icon('heart')} ${r.likes.length||'喜欢'}</button><button data-action="comment" data-id="${r.id}">${icon('chat')} ${r.comments.length||'回复'}</button>`:`<span>${icon('lock')} 仅自己可见</span>`}</div>${r.comments.length?`<div class="comments">${r.comments.map(c=>`<div><strong>${esc(person(c.author).name)}：</strong>${esc(c.content)}${c.author===state.me.user.id?`<button class="comment-delete" data-action="delete-comment" data-id="${c.id}">删除</button>`:''}</div>`).join('')}</div>`:''}</article>`;
 }
 
 function timelinePage() {
@@ -563,12 +607,14 @@ function calendarPage(){
  const t=today(),todayDay=t.startsWith(`${y}-${String(m).padStart(2,'0')}`)?String(Number(t.slice(8))):'';
  return `<div class="calendar-page">${heading('共同年历','重要的日子，一眼看清。','')}<div class="tabs"><button data-action="tools-back">← 回到我们</button></div><div class="calendar-head"><button class="icon-btn" data-action="cal-prev" aria-label="上个月"><svg class="icon" viewBox="0 0 24 24" style="transform:scaleX(-1)"><path d="${'M9 6 15 12 9 18'}"/></svg></button><strong>${y} 年 ${m} 月</strong><button class="icon-btn" data-action="cal-next" aria-label="下个月">${icon('arrow')}</button></div><div class="calendar-grid">${['日','一','二','三','四','五','六'].map(w=>`<span class="cal-week">${w}</span>`).join('')}${cells.map(d=>{if(!d)return '<span></span>';const info=days[d],dots=info?[['anniversaries','var(--primary)','纪念日'],['moods','var(--green)','心情'],['posts','var(--primary-dark)','动态'],['checks','var(--primary)','打卡']].filter(([k])=>info[k]?.length).map(([k,c,t])=>`<i class="cal-dot" style="background:${c}" title="${t}"></i>`).join(''):'';return `<button class="cal-day ${selected===d?'selected':''} ${info?'has-events':''} ${String(Number(d))===todayDay?'is-today':''}" data-action="cal-day" data-id="${d}" aria-label="${m} 月 ${Number(d)} 日${info?'，有记录':''}"><span>${Number(d)}</span><span class="cal-dots">${dots}</span></button>`;}).join('')}</div><div id="cal-detail">${calDetailHTML()}</div></div>`;
 }
-const toolsList=[['calendar','🗓️','共同年历','重要的日子，一眼看清'],['anniversary','📅','纪念日','每个重要的日子，都认真对待'],['quest','💫','恋爱清单','一起做完这些小事，就是我们的故事'],['wish','✨','共同愿望','把一起想做的事，一件件实现'],['ledger','💰','共同账本','为了彼此花过的钱，也是一段回忆'],['personal-wish','💝','个人心愿','对方看得到心愿名称，输入一次密码后就能读到内容'],['mood','🌤','心情手记','晴天雨天，都想陪着你'],['note','💌','悄悄留言','有些喜欢，值得慢慢读'],['question','💭','情侣问答','每天再多了解彼此一点'],['habit','🌱','共同打卡','和你一起，成为更好的我们']];
+const toolsList=[['calendar','🗓️','共同年历','重要的日子，一眼看清'],['anniversary','📅','纪念日','每个重要的日子，都认真对待'],['quest','💫','恋爱清单','一起做完这些小事，就是我们的故事'],['wish','✨','共同愿望','把一起想做的事，一件件实现'],['ledger','💰','共同账本','为了彼此花过的钱，也是一段回忆'],['personal-wish','💝','个人心愿','对方看得到心愿名称，输入一次密码后就能读到内容'],['mood','🌤','心情手记','晴天雨天，都想陪着你'],['note','💌','悄悄留言','有些喜欢，值得慢慢读'],['question','💭','情侣问答','每天再多了解彼此一点'],['period','🌸','生理期','记下周期，把照顾提前一点'],['music','🎵','共同歌单','把属于我们的歌，放在一起'],['habit','🌱','共同打卡','和你一起，成为更好的我们']];
 function togetherPage() {
  if(state.tab==='calendar')return calendarPage();
  if(state.tab==='personal-wish')return personalWishPage();
  if(state.tab==='quest')return questPage();
  if(state.tab==='ledger')return ledgerPage();
+ if(state.tab==='period')return periodPage();
+ if(state.tab==='music')return musicPage();
  if(state.tab){const meta=toolsList.find(x=>x[0]===state.tab);if(meta)return `${heading(meta[2],meta[3],'new-'+state.tab,'添加'+({anniversary:'纪念日',wish:'愿望',mood:'心情',note:'留言',question:'问题',habit:'目标'}[state.tab]))}<div class="tabs"><button data-action="tools-back">← 回到我们</button></div>${state.tab==='question'?'<p class="hint">可以写下自己的问题，也可以从内置题目里挑一个。双方回答后才揭晓彼此的答案。</p>':''}${recordsOf(state.tab).length?recordsOf(state.tab).map(recordCard).join(''):empty('给我们，多一点小小的仪式感',meta[3],'new-'+state.tab,'现在开始')}`;}
  return `${heading('关于我们，还有好多好多','把喜欢落在实处，把日子过成纪念。')}<div class="tools-grid"><button class="tool-card" data-nav="dashboard"><span class="tool-emoji">📊</span><h3>数据看板</h3><p>我们的点滴，都在这里</p></button><button class="tool-card" data-nav="weekly"><span class="tool-emoji">✉️</span><h3>回忆周报</h3><p>把这一周，收进一封信</p></button>${toolsList.map(([id,emoji,title,desc])=>`<button class="tool-card" data-action="tool-${id}"><span class="tool-emoji">${emoji}</span><h3>${title}</h3><p>${desc}</p></button>`).join('')}</div><div class="section-heading settings-section-heading"><h2>${icon('gear')} 设置</h2></div><div class="tools-grid settings-tools"><button class="tool-card" data-action="space"><span class="tool-emoji">🏡</span><h3>空间设置</h3><p>空间名称、封面与相恋日期</p></button>${state.me.users.length<2?`<button class="tool-card" data-action="invite"><span class="tool-emoji">💌</span><h3>邀请另一半入住</h3><p>把你们的专属空间分享给 TA</p></button>`:''}<button class="tool-card" data-nav="channels"><span class="tool-emoji">🔔</span><h3>提醒设置</h3><p>通知渠道与提醒偏好</p></button><button class="tool-card" data-nav="settings"><span class="tool-emoji">⚙️</span><h3>全部设置</h3><p>账号资料、数据导出与备份</p></button></div>`;
 }
@@ -613,6 +659,122 @@ function ledgerPage(){
  return `${heading('共同账本','一起花的钱，也是共同生活的一部分。','new-ledger','记一笔','book')}${back}${summary}${items.length?items.map(recordCard).join(''):empty('账本还是空的','一起吃的那顿饭、一起买的那张票，都值得记下来。','new-ledger','记第一笔')}`;
 }
 
+/* ———— 生理期 ————
+   参考美柚的核心闭环：记一次经期 → 推算周期与下次 → 日历上标出来。
+   健康数据默认「只有本人可见」，作者自己打开「共享给 TA」对方才看得到；
+   这条规则后端 db.visible / serializers 也各挡一道。 */
+const PERIOD_SYMPTOMS=['腹痛','腰酸','胸胀','头痛','乏力','情绪波动','长痘','食欲变化','失眠','怕冷'];
+const DAY_MS=864e5;
+function dayNum(s){return Math.round(Date.parse(String(s).slice(0,10)+'T00:00:00Z')/DAY_MS);}
+function dayStr(n){return new Date(n*DAY_MS).toISOString().slice(0,10);}
+function periodData(){
+ const items=recordsOf('period').filter(r=>r.author===state.me.user.id&&r.body.start).slice().sort((a,b)=>String(a.body.start).localeCompare(String(b.body.start)));
+ const gaps=[];
+ for(let i=1;i<items.length;i++){const g=dayNum(items[i].body.start)-dayNum(items[i-1].body.start);if(g>=15&&g<=60)gaps.push(g);}
+ const last=items[items.length-1]||null;
+ const avg=gaps.length?Math.round(gaps.reduce((a,b)=>a+b,0)/gaps.length):(last?.body.cycle||28);
+ const length=items.length?Math.round(items.reduce((s,r)=>s+Number(r.body.length||5),0)/items.length):5;
+ const todayN=dayNum(today());
+ const startN=last?dayNum(last.body.start):null;
+ const nextStart=startN!=null?startN+avg:null;
+ const inWindow=startN!=null&&todayN>=startN&&todayN<startN+length;
+ return {items,gaps,cycle:avg,length,last,nextStart,todayN,inWindow,
+  dayOfPeriod:inWindow?todayN-startN+1:0,untilNext:nextStart!=null?nextStart-todayN:null};
+}
+function periodMonth(y,m,d){
+ const lead=new Date(Date.UTC(y,m-1,1)).getUTCDay(),days=new Date(Date.UTC(y,m,0)).getUTCDate();
+ const marks={};
+ const put=(n,cls)=>{const s=dayStr(n);if(!marks[s]||cls==='actual')marks[s]=cls;};
+ d.items.forEach(r=>{const s0=dayNum(r.body.start),len=Number(r.body.length||5);for(let i=0;i<len;i++)put(s0+i,'actual');});
+ if(d.nextStart!=null)for(let k=0;k<3;k++){
+  const s=d.nextStart+d.cycle*k;
+  if(d.last&&s<dayNum(d.last.body.start)+Number(d.last.body.length||5))continue;
+  for(let i=0;i<d.length;i++)put(s+i,'predicted');
+  put(s-14,'ovulation');
+ }
+ const cells=[...Array(lead).fill(0)];for(let i=1;i<=days;i++)cells.push(i);
+ const todayS=today();
+ return `<div class="period-month"><h3>${y} 年 ${m} 月</h3><div class="calendar-grid">${['日','一','二','三','四','五','六'].map(w=>`<span class="cal-week">${w}</span>`).join('')}${cells.map(v=>{
+  if(!v)return '<span></span>';
+  const iso=`${y}-${String(m).padStart(2,'0')}-${String(v).padStart(2,'0')}`,cls=marks[iso]||'';
+  return `<span class="cal-day${cls?' p-'+cls:''}${iso===todayS?' is-today':''}"><span>${v}</span></span>`;
+ }).join('')}</div></div>`;
+}
+function periodPage(){
+ const d=periodData(),back='<div class="tabs"><button data-action="tools-back">← 回到我们</button></div>';
+ const partner=state.me.users.find(u=>u.id!==state.me.user.id);
+ const theirs=recordsOf('period').filter(r=>r.author!==state.me.user.id&&r.body.start).sort((a,b)=>String(b.body.start).localeCompare(String(a.body.start)))[0];
+ let hero;
+ if(!d.items.length){
+  hero=`<section class="card"><div class="section-heading"><h2>🌸 开始记录</h2></div><p class="meta">记下这次经期开始的那一天，之后每次来都记一次，周期和下次时间就会自动推算出来。</p><p class="small-note">健康数据默认只有你自己能看到，想让他也知道，再打开「共享给 TA」。</p><div class="inline-actions">${button('记录这次经期','new-period','small primary','edit')}</div></section>`;
+ }else{
+  const badge=d.inWindow?`今天是经期第 <strong>${d.dayOfPeriod}</strong> 天`:(d.untilNext>=0?`预计还有 <strong>${d.untilNext}</strong> 天`:`已经推迟 <strong>${-d.untilNext}</strong> 天`);
+  hero=`<section class="card period-hero"><div class="eyebrow">CYCLE</div><h2>${badge}</h2><p class="meta">下次预计 ${Number(dayStr(d.nextStart).slice(5,7))} 月 ${Number(dayStr(d.nextStart).slice(8))} 日 · 周期 ${d.cycle} 天 · 经期 ${d.length} 天</p><div class="stats-hero" style="grid-template-columns:repeat(3,minmax(0,1fr));margin:14px 0 0"><div class="stat-card"><span>平均周期</span><strong>${d.cycle}<em>天</em></strong></div><div class="stat-card"><span>平均经期</span><strong>${d.length}<em>天</em></strong></div><div class="stat-card"><span>已记录</span><strong>${d.items.length}<em>次</em></strong></div></div><div class="inline-actions" style="margin-top:14px">${button(d.inWindow?'记录结束/更新':'记录这次经期','new-period','small primary','edit')}${button('编辑最近一条','edit-record','small secondary','edit',`data-id="${d.last.id}"`)}</div></section>`;
+ }
+ const months=d.items.length?[0,1].map(k=>{const t=new Date(Date.UTC(Number(today().slice(0,4)),Number(today().slice(5,7))-1+k,1));return periodMonth(t.getUTCFullYear(),t.getUTCMonth()+1,d);}).join(''):'';
+ const legend=months?`<p class="small-note period-legend"><i class="lg lg-actual"></i>经期 <i class="lg lg-predicted"></i>预测 <i class="lg lg-ovulation"></i>排卵日（推算）</p>`:'';
+ const spread=d.gaps.length>1?Math.max(...d.gaps)-Math.min(...d.gaps):0;
+ const symCount={};d.items.forEach(r=>(r.body.symptoms||[]).forEach(s=>symCount[s]=(symCount[s]||0)+1));
+ const syms=Object.entries(symCount).sort((a,b)=>b[1]-a[1]).slice(0,6);
+ const symBlock=syms.length?`<section class="card"><div class="section-heading"><h2>常出现的症状</h2></div>${syms.map(([s,n])=>`<div class="stat-row"><span>${esc(s)}</span><div class="stat-bar"><i style="width:${Math.round(n/d.items.length*100)}%"></i></div><b>${n} 次</b></div>`).join('')}<p class="small-note">${spread>7?`周期波动 ${spread} 天，波动大的时候多留一点休息的时间。`:'周期还算规律，保持记录会更准。'}</p></section>`:'';
+ const history=d.items.slice().reverse().map(r=>{
+  const len=Number(r.body.length||5),end=dayStr(dayNum(r.body.start)+len-1);
+  return `<article class="card"><div class="card-header">${avatar(r.author)}<div><strong>${esc(String(r.body.start).slice(5,7))} 月 ${esc(String(r.body.start).slice(8))} 日开始</strong><small>共 ${len} 天 · ${end.slice(5)} 结束${r.body.flow?' · 经量'+esc(r.body.flow):''}</small></div><div class="card-menu"><details class="more-menu"><summary aria-label="更多操作" title="更多操作">⋯</summary><div class="menu-pop"><button data-action="edit-record" data-id="${r.id}">${icon('edit')} 编辑</button><button data-action="toggle-period-share" data-id="${r.id}">${r.body.shared?'取消共享给 TA':'共享给 TA'}</button><button data-action="delete-record" data-id="${r.id}" class="danger">${icon('trash')} 删除</button></div></details></div></div>${(r.body.symptoms||[]).length?`<div class="tabs" style="flex-wrap:wrap;margin:8px 0 0">${r.body.symptoms.map(s=>`<span class="filter-chip">${esc(s)}</span>`).join('')}</div>`:''}${r.body.content?`<p class="card-text">${esc(r.body.content)}</p>`:''}<p class="meta">${r.body.shared?'<span class="status-pill sent">已共享给 TA</span>':'<span class="status-pill pending">仅自己可见</span>'}</p></article>`;
+ }).join('');
+ const partnerBlock=theirs?`<section class="card"><div class="section-heading"><h2>${icon('heart')} ${esc(partner?.name||'TA')} 的周期</h2></div><p class="meta">最近一次 ${esc(theirs.body.start)} 开始${theirs.body.shared?' · TA 已共享给你':''}</p><p class="small-note">这一块只有 TA 主动共享时才会出现。经期前后容易累，可以提前把家务、行程安排松一点。</p></section>`:'';
+ return `${heading('生理期','记下周期，把照顾提前一点。','new-period','记录经期','heart')}${back}<p class="hint">${icon('lock')} 只有你能看到自己的记录；需要让 TA 知道时，在记录菜单里打开「共享给 TA」。预测基于你自己记录的周期平均值，仅供参考。</p>${hero}${months?`<section class="card">${months}${legend}</section>`:''}${symBlock}${partnerBlock}${d.items.length?history:''}`;
+}
+function periodForm(record=null){
+ const b=record?.body||{},d=periodData(),chosen=new Set(b.symptoms||[]);
+ const chips=PERIOD_SYMPTOMS.map(s=>`<button type="button" class="sym-chip${chosen.has(s)?' on':''}" data-name="${s}" aria-pressed="${chosen.has(s)}">${s}</button>`).join('');
+ openModal(record?'编辑这次经期':'记录这次经期',`<form class="modal-form" id="period-form"><label>这次经期开始于<input name="start" type="date" required maxlength="10" value="${esc(b.start||today())}"></label><div class="form-row"><label>经期几天<input name="length" type="number" min="1" max="15" value="${b.length??d.length}"></label><label>周期几天<input name="cycle" type="number" min="15" max="60" value="${b.cycle??d.cycle}"></label></div>${selectField('经量','flow',[['','不记'],['少','少'],['中','中'],['多','多']],b.flow||'')}<label>身体的感受（可多选）</label><div class="sym-chips">${chips}</div><label>想说的话（可选）<textarea name="content" maxlength="20000" placeholder="这次特别难受，或者想让他知道的…">${esc(b.content||'')}</textarea></label><label class="switch-row">共享给 TA<input name="shared" type="checkbox" ${b.shared?'checked':''}></label><p class="small-note">周期默认按你自己历史记录的平均值填好，也可以手动改。数据加密保存在你自己的空间里。</p><div class="form-error" role="alert"></div><div class="form-actions">${button('取消','close-modal')}<button class="button primary" type="submit">保存</button></div></form>`);
+ $('#period-form').onclick=e=>{const chip=e.target.closest('.sym-chip');if(!chip)return;chip.classList.toggle('on');chip.setAttribute('aria-pressed',String(chip.classList.contains('on')));};
+ $('#period-form').onsubmit=async e=>{
+  e.preventDefault();const form=e.currentTarget,submit=$('button[type=submit]',form);
+  submit.disabled=true;
+  try{
+   const f=new FormData(form);
+   const body={start:f.get('start'),length:Number(f.get('length')||5),cycle:Number(f.get('cycle')||d.cycle),
+    flow:f.get('flow')||'',symptoms:$$('.sym-chip.on',form).map(c=>c.dataset.name),
+    shared:!!f.get('shared'),content:String(f.get('content')||'')};
+   if(record)await put('/records/'+record.id,{kind:'period',body});
+   else await post('/records',{kind:'period',body,client_id:uuid()});
+   closeModal();await refresh();toast('已记下这次');
+  }catch(err){$('.form-error',form).textContent=err.message;}
+  finally{submit.disabled=false;}
+ };
+}
+/* ———— 共同歌单 ————
+   不放隐藏播放器：每首歌就是一个原生 <audio>，能拖进度、能暂停，
+   手机上也不会有被浏览器拦下来的自动播放。 */
+function songMedia(r){return (r.media||[]).find(m=>String(m.mime||'').startsWith('audio/'))||null;}
+function musicCard(r){
+ const b=r.body||{},m=songMedia(r),own=r.author===state.me.user.id;
+ return `<article class="card music-card"><div class="card-header">${avatar(r.author)}<div><strong>${esc(person(r.author).name)} 放进来的歌</strong><small>${esc(dateLabel(r.created))}</small></div><div class="card-menu">${own?`<details class="more-menu"><summary aria-label="更多操作" title="更多操作">⋯</summary><div class="menu-pop"><button data-action="edit-record" data-id="${r.id}">${icon('edit')} 编辑</button><button data-action="delete-record" data-id="${r.id}" class="danger">${icon('trash')} 删除</button></div></details>`:''}</div></div><h3 class="card-title">${esc(b.title||'未命名')}</h3>${b.content?`<p class="card-text">${esc(b.content)}</p>`:''}${m?`<audio class="song-audio" controls preload="none" src="/media/${m.id}"></audio>`:'<p class="small-note">这首歌还没有音频文件，编辑时补上一个。</p>'}</article>`;
+}
+function musicPage(){
+ const items=recordsOf('music').slice().sort((a,b)=>b.created-a.created);
+ const back='<div class="tabs"><button data-action="tools-back">← 回到我们</button></div>';
+ return `${heading('共同歌单','把属于我们的歌，放在一起。','new-music','添加一首歌','heart')}${back}<p class="hint">放进来的一定要是你们自己的音频文件（mp3 / m4a / wav 都行）。歌单只有你们两个人能听，不会上传到任何第三方音乐平台。</p>${items.length?items.map(musicCard).join(''):empty('歌单还空着','那首一听就想起对方的歌，值得放进来。','new-music','添加第一首')}`;
+}
+function musicForm(record=null){
+ const b=record?.body||{};
+ openModal(record?'编辑这首歌':'添加一首歌',`<form class="modal-form" id="music-form"><label>歌名<input name="title" required maxlength="120" value="${esc(b.title||'')}" placeholder="例如：晚安"></label><label>歌手，或者想说的话<input name="content" maxlength="200" value="${esc(b.content||'')}" placeholder="例如：陈奕迅 · 那年冬天一直循环"></label><label>音频文件${record?'（不换就留空）':''}<input name="file" type="file" accept="audio/*" ${record?'':'required'}></label><p class="small-note">建议 mp3，单曲控制在 10 MB 以内，手机流量也不会太心疼。</p><div class="form-error" role="alert"></div><div class="form-actions">${button('取消','close-modal')}<button class="button primary" type="submit">保存</button></div></form>`);
+ $('#music-form').onsubmit=async e=>{
+  e.preventDefault();const form=e.currentTarget,submit=$('button[type=submit]',form);submit.disabled=true;
+  try{
+   const data=Object.fromEntries(new FormData(form)),file=$('[name=file]',form).files[0];
+   let media=record?(record.media||[]).map(m=>m.id):[];
+   if(file&&file.size>20*1024*1024)throw new Error('音频超过 20 MB，换个小一点的吧');
+   if(file)media=[(await uploadFile(file)).id];
+   const body={title:data.title,content:data.content||'',media};
+   if(record)await put('/records/'+record.id,{kind:'music',body});
+   else await post('/records',{kind:'music',body,client_id:uuid()});
+   closeModal();await refresh();toast('已经放进歌单了');
+  }catch(err){$('.form-error',form).textContent=err.message;}
+  finally{submit.disabled=false;}
+ };
+}
 function personalWishPage(){const wishes=recordsOf('personal_wish');return `${heading('个人心愿','写下的人可以直接回看，对方输入一次密码后就能一直看到。','new-personal-wish','许下心愿','heart')}<div class="tabs"><button data-action="tools-back">← 回到我们</button></div><p class="hint">心愿名称彼此可见。密码至少 6 位（建议纯数字），每条心愿都要不同；告诉对方后，对方解锁一次即可永久查看。</p>${wishes.length?wishes.map(personalWishCard).join(''):empty('留一份只差密码就能打开的心愿','对方能看见心愿名称，具体内容仍由你掌握。','new-personal-wish','许下第一份心愿')}`;}
 function dashboardPage(){
  const d=state.dashboard;
@@ -707,6 +869,8 @@ function composer(kind='post',record=null,prefill={}) {
 function localDateTime(timestamp){const d=new Date(timestamp*1000);return new Date(d-d.getTimezoneOffset()*60000).toISOString().slice(0,16);}
 
 function recordForm(kind,record=null) {
+ if(kind==='period')return periodForm(record);
+ if(kind==='music')return musicForm(record);
  if(['post','diary','draft','surprise','chat'].includes(kind))return composer(kind,record);
  const b=record?.body||{};let fields='';
  if(kind==='mood')fields=selectField('今天的心情','emoji',[['☀️','☀️ 开心'],['🥰','🥰 想你'],['😌','😌 平静'],['☁️','☁️ 有点低落'],['🌧️','🌧️ 想要抱抱'],['🌱','🌱 充满期待']],b.emoji||'☀️')+field('心情日期','date',b.date||today(),'date','required');
@@ -861,6 +1025,8 @@ async function act(action,id,el) {
  if(action==='toggle-wish'){await put('/records/'+id,{kind:'wish',body:{...r.body,done:!r.body.done}});return refresh();}
  if(action==='toggle-quest'){await put('/records/'+id,{kind:'quest',body:{...r.body,done:!r.body.done}});return refresh();}
  if(action==='add-quest'){await post('/records',{kind:'quest',body:{title:el.dataset.title,category:el.dataset.cat,done:false},client_id:uuid()});return refresh();}
+ if(action==='toggle-period-share'){await put('/records/'+id,{kind:'period',body:{...r.body,shared:!r.body.shared}});return refresh();}
+ if(action==='love-card')return loveCardImage();
  if(action==='wish-memory')return composer('post',null,{title:'一起实现：'+r.body.title,content:r.body.content||'',completion_post:r.id});
  if(action==='anniversary-memories'){state.filters={date:el.dataset.date};return navigate('timeline');}
  if(action==='photo')return photoModal(id);
