@@ -835,6 +835,11 @@ body.cal-full{overflow:hidden;height:100dvh}
 .cal-day.ph-luteal{background:rgba(196,150,70,.28)}
 /* 阶段短名：只出现在每段第一天，让"阶段切换"这件事看得见 */
 .cal-day em{font-style:normal;font-size:10px;font-weight:800;letter-spacing:.02em;line-height:1;padding:2px 5px;border-radius:5px;background:var(--surface);color:var(--ink);margin-top:-2px}
+/* 已经有记录的那一天：右上角一个小圆点，暗示"这天点进去是改，不是新建" */
+.cal-day.has-rec::before{content:'';position:absolute;top:6px;right:6px;width:5px;height:5px;border-radius:50%;background:var(--primary);opacity:.7}
+.cal-day:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
+.cal-owner{display:flex;align-items:center;gap:7px;margin:0 0 12px;padding:9px 12px;border-radius:10px;background:var(--soft);font-size:12.5px;color:var(--primary-dark)}
+.cal-owner .icon{width:15px;height:15px;flex:none;stroke:var(--primary)}
 .cal-day.ph-pred{opacity:.85}
 .cal-day.ph-period.ph-pred{background:transparent;border:1px dashed var(--primary)}
 .cal-day.ph-fertile.ph-ovu::after{content:'';position:absolute;bottom:4px;width:7px;height:7px;border-radius:50%;background:#8B72A8;box-shadow:0 0 0 2px rgba(139,114,168,.25)}
