@@ -445,6 +445,9 @@ def clean_body(c, kind, data, user_id, previous=None):
                 raise HTTPException(422, '周期需在 15–60 天、经期需在 1–15 天之间')
         if 'shared' in body and not isinstance(body['shared'], bool):
             raise HTTPException(422, '共享状态格式不正确')
+        # 生理期默认双人公开可见：另一半提前知道，才谈得上照顾。
+        # 想留私密就在表单里取消勾选（传 shared:false），或用 /api/period/share 一次性收回。
+        body.setdefault('shared', True)
         if 'flow' in body and body['flow'] not in ('少', '中', '多'):
             raise HTTPException(422, '经量只能选 少 / 中 / 多')
         symptoms = body.get('symptoms')
@@ -717,6 +720,35 @@ def update_record(rid: str, body: RecordInput, user=Depends(current_user)):
         if row['kind'] == 'draft' and body.kind == 'post':
             db.notice(c, 'activity', '你们的空间有了新记录', rid, user['id'])
         return serialize(c, c.execute('SELECT * FROM records WHERE id=?', (rid,)).fetchone(), user['id'])
+
+
+class PeriodShareInput(BaseModel):
+    shared: bool = True
+
+
+@app.post('/api/period/share')
+def period_share_all(body: PeriodShareInput, user=Depends(current_user)):
+    """把自己所有生理期记录一次性设为「双人公开可见」或收回为「仅自己可见」。
+
+    新建时默认就是共享（见 clean_body），这个接口处理两件事：
+    一是把历史记录（早期版本默认私有）一次性补成公开，二是随时整体收回。
+    只动 author=自己的记录；单条仍可在记录菜单里单独切换。
+    """
+    with connect() as c:
+        c.execute('BEGIN IMMEDIATE')
+        rows = c.execute("SELECT * FROM records WHERE kind='period' AND author=? AND deleted IS NULL",
+                         (user['id'],)).fetchall()
+        changed = 0
+        for row in rows:
+            data = db.body_decode(row)
+            if bool(data.get('shared')) == body.shared:
+                continue
+            data['shared'] = body.shared
+            # period 是 ENCRYPTED 类型，重新编码才会写回密文
+            c.execute('UPDATE records SET body=?,updated=? WHERE id=?',
+                      (db.body_encode('period', row['id'], data), now(), row['id']))
+            changed += 1
+        return {'ok': True, 'changed': changed, 'total': len(rows), 'shared': body.shared}
 
 
 @app.delete('/api/records/{rid}')
