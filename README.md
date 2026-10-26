@@ -9,7 +9,6 @@
 - **相册** — 动态照片自动汇总，可建主题相册；删除分类不删照片
 - **消息** — 双人即时聊天（文字/图片/语音/视频），断线重连、失败重试、防重复发送
 - **我们** — 纪念日（每年重复/提前提醒）、共同愿望清单、每日心情、留言板、情侣问答、共同打卡
-- **造型间** — 我们俩的 3D 卡通形象：可以分别换装（上装/下装/鞋子/发型/发色），也能摆姿势（并肩/牵手/单膝下跪/公主抱）。纯本地渲染，照片不出设备、不调任何接口
 - **个人角落** — 私密日记（完全账号隔离）、草稿箱、定时惊喜（到期自动公开）、回收站（30 天）
 - **通知中心** — 浏览器系统推送（含 iPhone 主屏幕网页）、Android 原生提醒，以及 SMTP、Bark、Server酱、PushPlus、企业微信机器人、Webhook、Telegram、钉钉、飞书、ntfy；失败自动重试
 - **数据保障** — 每日自动备份（保留 7 份）、手动备份、个人数据导出、完整恢复与迁移
@@ -227,7 +226,4 @@ pytest            # 全部测试：API 验收 + 媒体链路 + 安全 + 版本�
   `/api/events`（SSE）、`/media/`、`/api/export` 原样直出——压缩 SSE 会把帧攒在缓冲区里
   让实时推送失效，压缩视频则会让 Range 失效、进度条拖不动
 - 纪念日第一版使用公历；iPhone 网页推送需「添加到主屏幕」后使用
-- 造型间的 3D 引擎是**自托管**的 `static/vendor/three.module.min.js`（three.js r169，MIT，
-  687KB）。不用 CDN：CSP 是 `script-src 'self'`，而且 APK 离线时也要能打开造型间。
-  升级方式：`npm pack three@<版本>` 后从 tarball 里取 `build/three.module.min.js` 覆盖，
-  同时更新 `static/vendor/three-LICENSE.txt`。**不要改成从 CDN 加载**。
+- ~~造型间（3D 换装）已于 v102 移除~~：原自托管 `static/vendor/three.module.min.js` 已删除，`static/vendor/` 现为空目录，本仓库不再包含任何 3D 引擎依赖；贴图改由服务器 `/static/stickers/` 提供。
