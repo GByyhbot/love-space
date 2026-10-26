@@ -682,8 +682,10 @@ const PERIOD_SYMPTOMS=['腹痛','腰酸','胸胀','头痛','乏力','情绪波�
 const DAY_MS=864e5;
 function dayNum(s){return Math.round(Date.parse(String(s).slice(0,10)+'T00:00:00Z')/DAY_MS);}
 function dayStr(n){return new Date(n*DAY_MS).toISOString().slice(0,10);}
-function periodData(){
- const items=recordsOf('period').filter(r=>r.author===state.me.user.id&&r.body.start).slice().sort((a,b)=>String(a.body.start).localeCompare(String(b.body.start)));
+function periodData(uid){
+ /* uid 省略时算自己的。对方的记录只有共享的才在 recordsOf 里，所以传对方 id 天然只统计 TA 公开的那部分 */
+ const who=uid||state.me.user.id;
+ const items=recordsOf('period').filter(r=>r.author===who&&r.body.start).slice().sort((a,b)=>String(a.body.start).localeCompare(String(b.body.start)));
  const gaps=[];
  for(let i=1;i<items.length;i++){const g=dayNum(items[i].body.start)-dayNum(items[i-1].body.start);if(g>=15&&g<=60)gaps.push(g);}
  const last=items[items.length-1]||null;
@@ -694,7 +696,15 @@ function periodData(){
  const nextStart=startN!=null?startN+avg:null;
  const inWindow=startN!=null&&todayN>=startN&&todayN<startN+length;
  return {items,gaps,cycle:avg,length,last,nextStart,todayN,inWindow,
-  dayOfPeriod:inWindow?todayN-startN+1:0,untilNext:nextStart!=null?nextStart-todayN:null};
+  dayOfPeriod:inWindow?todayN-startN+1:0,untilNext:nextStart!=null?nextStart-todayN:null,
+  estimated:gaps.length===0};
+}
+/* 一句话说清"现在处于周期的什么位置"，自己的大卡和对方的卡片共用同一套口径 */
+function cycleStatus(x){
+ if(!x.items.length)return '';
+ if(x.inWindow)return `今天是经期第 ${x.dayOfPeriod} 天`;
+ if(x.untilNext>=0)return `预计还有 ${x.untilNext} 天`;
+ return `已推迟 ${-x.untilNext} 天`;
 }
 function periodMonth(y,m,d){
  const lead=new Date(Date.UTC(y,m-1,1)).getUTCDay(),days=new Date(Date.UTC(y,m,0)).getUTCDate();
@@ -718,13 +728,13 @@ function periodMonth(y,m,d){
 function periodPage(){
  const d=periodData(),back='<div class="tabs"><button data-action="tools-back">← 回到我们</button></div>';
  const partner=state.me.users.find(u=>u.id!==state.me.user.id);
- const theirs=recordsOf('period').filter(r=>r.author!==state.me.user.id&&r.body.start).sort((a,b)=>String(b.body.start).localeCompare(String(a.body.start)))[0];
+ const t=partner?periodData(partner.id):null;
  let hero;
  if(!d.items.length){
-  hero=`<section class="card"><div class="section-heading"><h2>🌸 开始记录</h2></div><p class="meta">记下这次经期开始的那一天，之后每次来都记一次，周期和下次时间就会自动推算出来。</p><p class="small-note">健康数据默认只有你自己能看到，想让他也知道，再打开「共享给 TA」。</p><div class="inline-actions">${button('记录这次经期','new-period','small primary','edit')}</div></section>`;
+  hero=`<section class="card"><div class="section-heading"><h2>🌸 开始记录</h2></div><p class="meta">记下这次经期开始的那一天，之后每次来都记一次，这里就会多出「下次预计日期」「两个月的日历」和「症状统计」。</p><p class="small-note">你俩都能看到彼此记录的周期；想单独留一次私密，记录时把「让 TA 也看到这次」取消勾选就行。</p><div class="inline-actions">${button('记录这次经期','new-period','small primary','edit')}</div></section>`;
  }else{
   const badge=d.inWindow?`今天是经期第 <strong>${d.dayOfPeriod}</strong> 天`:(d.untilNext>=0?`预计还有 <strong>${d.untilNext}</strong> 天`:`已经推迟 <strong>${-d.untilNext}</strong> 天`);
-  hero=`<section class="card period-hero"><div class="eyebrow">CYCLE</div><h2>${badge}</h2><p class="meta">下次预计 ${Number(dayStr(d.nextStart).slice(5,7))} 月 ${Number(dayStr(d.nextStart).slice(8))} 日 · 周期 ${d.cycle} 天 · 经期 ${d.length} 天</p><div class="stats-hero" style="grid-template-columns:repeat(3,minmax(0,1fr));margin:14px 0 0"><div class="stat-card"><span>平均周期</span><strong>${d.cycle}<em>天</em></strong></div><div class="stat-card"><span>平均经期</span><strong>${d.length}<em>天</em></strong></div><div class="stat-card"><span>已记录</span><strong>${d.items.length}<em>次</em></strong></div></div><div class="inline-actions" style="margin-top:14px">${button(d.inWindow?'记录结束/更新':'记录这次经期','new-period','small primary','edit')}${button('编辑最近一条','edit-record','small secondary','edit',`data-id="${d.last.id}"`)}</div></section>`;
+  hero=`<section class="card period-hero"><div class="eyebrow">CYCLE</div><h2>${badge}</h2><p class="meta">下次预计 ${Number(dayStr(d.nextStart).slice(5,7))} 月 ${Number(dayStr(d.nextStart).slice(8))} 日 · 周期 ${d.cycle} 天${d.estimated?'（参考值）':''} · 经期 ${d.length} 天</p><div class="stats-hero" style="grid-template-columns:repeat(3,minmax(0,1fr));margin:14px 0 0"><div class="stat-card"><span>平均周期</span><strong>${d.cycle}<em>天</em></strong></div><div class="stat-card"><span>平均经期</span><strong>${d.length}<em>天</em></strong></div><div class="stat-card"><span>已记录</span><strong>${d.items.length}<em>次</em></strong></div></div><div class="inline-actions" style="margin-top:14px">${button(d.inWindow?'记录结束/更新':'记录这次经期','new-period','small primary','edit')}${button('编辑最近一条','edit-record','small secondary','edit',`data-id="${d.last.id}"`)}</div></section>`;
  }
  const months=d.items.length?[0,1].map(k=>{const t=new Date(Date.UTC(Number(today().slice(0,4)),Number(today().slice(5,7))-1+k,1));return periodMonth(t.getUTCFullYear(),t.getUTCMonth()+1,d);}).join(''):'';
  const legend=months?`<p class="small-note period-legend"><i class="lg lg-actual"></i>经期 <i class="lg lg-predicted"></i>预测 <i class="lg lg-ovulation"></i>排卵日（推算）</p>`:'';
@@ -739,7 +749,10 @@ function periodPage(){
  /* 共享状态条：默认双人可见，但要能一眼看到"现在谁能看到"，并且一键收回 */
  const sharedCount=d.items.filter(r=>r.body.shared).length,allShared=d.items.length>0&&sharedCount===d.items.length;
  const shareBar=!d.items.length?'':`<section class="card share-bar"><div class="section-heading"><h2>${icon(allShared?'heart':'lock')} ${allShared?(partner?'你俩都可见':'已设为共享'):'仅你自己可见'}</h2><span class="status-pill ${allShared?'sent':'pending'}">${allShared?'双人公开':'私密'}</span></div><p class="meta">${allShared?`这 ${d.items.length} 次记录${partner?` ${esc(partner.name)} `:' TA '}都能看到周期、症状和备注，但改不了。`:`共 ${d.items.length} 次，其中 ${sharedCount} 次已共享。`}</p>${button(allShared?'收回，改为仅自己可见':`让 TA 也能看到（${d.items.length} 次）`,'period-share','small '+(allShared?'secondary':'primary'),allShared?'lock':'heart',`data-on="${allShared?'0':'1'}"`)}</section>`;
- const partnerBlock=theirs?`<section class="card"><div class="section-heading"><h2>${icon('heart')} ${esc(partner?.name||'TA')} 的周期</h2></div><p class="meta">最近一次 ${esc(theirs.body.start)} 开始${theirs.body.shared?' · TA 已共享给你':''}</p><p class="small-note">TA 设为双人可见时才看得到这一块。经期前后容易累，可以提前把家务、行程安排松一点。</p></section>`:'';
+ /* 对方的周期：既然双人可见，就不能只丢一行日期，要能直接回答"还有几天、现在第几天" */
+ const recent=t&&t.items.length?t.items.slice(-3).reverse().map(r=>`<span class="filter-chip">${Number(String(r.body.start).slice(5,7))} 月 ${Number(String(r.body.start).slice(8))} 日</span>`).join(''):'';
+ const care=t&&t.items.length?(t.inWindow?'她现在正在经期里，别把安排排太满，热水和甜的东西备一点。':t.untilNext<=3?'快来了，提前把家务和行程安排松一点。':'经期前后容易累，提前分担一点家务会让她轻松很多。'):'';
+ const partnerBlock=t&&t.items.length?`<section class="card partner-cycle"><div class="section-heading"><h2>${icon('heart')} ${esc(partner.name)} 的周期</h2><span class="status-pill sent">已共享给你</span></div><h3>${cycleStatus(t)}</h3><p class="meta">下次预计 ${Number(dayStr(t.nextStart).slice(5,7))} 月 ${Number(dayStr(t.nextStart).slice(8))} 日 · 周期 ${t.cycle} 天${t.estimated?'（参考值）':''} · 经期 ${t.length} 天</p><div class="stats-hero" style="grid-template-columns:repeat(3,minmax(0,1fr));margin:12px 0 0"><div class="stat-card"><span>平均周期</span><strong>${t.cycle}<em>天</em></strong></div><div class="stat-card"><span>平均经期</span><strong>${t.length}<em>天</em></strong></div><div class="stat-card"><span>已记录</span><strong>${t.items.length}<em>次</em></strong></div></div>${recent?`<div class="tabs" style="flex-wrap:wrap;margin:12px 0 0">${recent}</div>`:''}<p class="small-note">${care}</p></section>`:'';
  return `${heading('生理期','记下周期，把照顾提前一点。','new-period','记录经期','heart')}${back}<p class="hint">${icon('heart')} 生理期默认你俩都可见，可随时收回为仅自己可见。预测基于你自己记录的周期平均值，仅供参考。</p>${hero}${shareBar}${months?`<section class="card">${months}${legend}</section>`:''}${symBlock}${partnerBlock}${d.items.length?history:''}`;
 }
 function periodForm(record=null){
