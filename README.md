@@ -39,11 +39,15 @@ curl http://127.0.0.1:1314/health
 
 镜像由 GitHub Actions 自动构建并推送到 `ghcr.io/gbyyhbot/love-space`，标签规则：
 
-| 标签 | 触发 |
-| --- | --- |
-| `latest` | push 到 `main` |
-| `sha-xxxxxxx` | 每次 push，对应提交短哈希 |
-| `1.2.3` / `1.2` | 打 `v1.2.3` 这样的 tag |
+| 标签 | 触发 | 说明 |
+| --- | --- | --- |
+| `latest` | 打 `v*` tag | **只在正式发版时前进**，永远是"最近一次发布"，不是最新提交 |
+| `edge` | push 到 `main` | 跟随 main 最新提交，供尝鲜 |
+| `sha-xxxxxxx` | 每次 push | 对应提交短哈希，最精确 |
+| `1.2.3` / `1.2` | 打 `v1.2.3` 这样的 tag | 固定版本 |
+
+> ⚠️ 别默认盯 `latest`：它停在最近一次正式发布上，日常改完代码 push 之后
+> `latest` **不会**变，拉它到的是旧代码。想要"刚 push 的那次"就用 `sha-<短哈希>` 或 `edge`。
 
 ```bash
 # 直接拉镜像运行（需要先有 docker-compose.yml 与 .env）
@@ -60,9 +64,15 @@ echo "LOVE_IMAGE=ghcr.io/gbyyhbot/love-space:sha-2ac50a7" >> .env
 echo "<你的 GitHub PAT，需 read:packages 权限>" | docker login ghcr.io -u <GitHub 用户名> --password-stdin
 ```
 
-> 国内拉取 `ghcr.io` 偶尔会被重置连接（日志里是 `connection reset by peer`，**不是权限问题**）。
-> 先重试几次；如果一直失败——有些家宽/NAT 的 IPv6 出口是坏的，而 docker 解析后会优先走
-> IPv6——就退回 `docker compose up -d --build` 本地构建（走 apt/pip 国内镜像，反而更稳）。
+> 国内拉取 `ghcr.io` 常被重置连接（实测 `unexpected EOF`，**不是权限问题**）。
+> 更稳的办法是走 ghcr 镜像站，实测 40 秒拉完且 digest 与官方一致：
+>
+> ```bash
+> docker pull ghcr.nju.edu.cn/gbyyhbot/love-space:sha-xxxxxxx   # 南京大学 ghcr 镜像
+> ```
+>
+> 想直连就先重试几次；一直失败的话——有些家宽/NAT 的 IPv6 出口是坏的，而 docker 解析后会
+> 优先走 IPv6——就退回 `docker compose up -d --build` 本地构建（走 apt/pip 国内镜像，反而更稳）。
 
 容器默认带了日志轮转（`10m × 3`）和 2G 内存上限，避免长期运行把宿主的
 `/var/lib/docker` 撑爆、或视频转码时把整台 NAS 拖垮。内存上限可用 `.env` 覆盖：
@@ -143,7 +153,9 @@ cd android
 2. 设置 `PUBLIC_URL=https://love.example.com`；`SECURE_COOKIES` 默认开启，重启容器。
 3. **防火墙**：只放行 80/443；应用端口默认仅监听本机 `127.0.0.1:1314`。若反向代理在独立容器中，请改用私有网络或防火墙规则限制来源。
 4. **备份**：每日自动备份在 `data/backups/`，保留 7 份；可设 `BACKUP_EXTRA_DIR` 异地再存一份。
-5. **升级**：上传新版代码后 `docker compose up -d --build`，数据目录不受影响。
+5. **升级**：优先拉预构建镜像（NAS 不编译，见上文"用预构建镜像"一节）：
+   `docker compose pull && docker compose up -d`，数据目录不受影响。
+   只有 GitHub 不通或 CI 还没构建完时，才退回上传源码 + `docker compose up -d --build`。
 
 ## 家庭设备 / NAS 部署
 
