@@ -406,7 +406,12 @@ label{display:grid;gap:6px;font-size:13px;color:var(--muted)}
 .chat-panel.immersive .chat-header{padding-top:calc(14px + env(safe-area-inset-top,0px))}
 .chat-panel.immersive .chat-header h3,.chat-panel.immersive .chat-header small,.chat-panel.immersive .chat-time,.chat-panel.immersive .chat-recall{color:rgba(255,255,255,.82)}
 .chat-panel.immersive .chat-header h3{color:#fff;text-shadow:0 1px 8px rgba(0,0,0,.4)}
-.chat-panel.immersive .icon-btn{color:#fff}
+/* 图标按钮默认是白色实心圆（--surface）——压在照片上就是几个突兀的白团。
+   immersive 下彻底透明掉，只留白色图标（和主流聊天 App 一样）；
+   预设渐变那套留一层半透明白，免得按钮和玻璃栏糊成一片。 */
+.chat-panel.has-wallpaper .icon-btn{background:rgba(255,255,255,.5);border-color:rgba(255,255,255,.55)}
+.chat-panel.immersive .icon-btn{background:transparent;border-color:transparent;color:rgba(255,255,255,.92)}
+.chat-panel.immersive .icon-btn:hover{background:rgba(255,255,255,.18);border-color:transparent;color:#fff}
 .chat-panel.immersive .chat-bubble{background:rgba(30,27,34,.56);border-color:rgba(255,255,255,.16);color:#fff;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
 /* 自己的气泡别用高饱和的粉：在暗紫调的照片上会跳成一块糖果色，压深压暗才融得进去 */
 .chat-panel.immersive .mine .chat-bubble{background:rgba(139,54,84,.62);border-color:rgba(255,255,255,.2);color:#fff}
