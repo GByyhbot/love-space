@@ -349,7 +349,11 @@ label{display:grid;gap:6px;font-size:13px;color:var(--muted)}
 
 /* ── 5d. 消息与聊天 ─────────────────────────── */
 .chat-panel{display:flex;flex-direction:column;height:calc(100vh - 200px);min-height:420px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow)}
-.chat-header{display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--line);padding:14px 20px;flex-wrap:wrap}
+.chat-header{display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--line);padding:14px 20px;flex-wrap:nowrap}
+/* 标题区吃掉剩余宽度并省略，按钮固定不收缩——否则昵称一长，右侧按钮会被挤到第二行 */
+.chat-header>div{min-width:0;flex:1}
+.chat-header h3,.chat-header small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chat-header .icon-btn,.chat-header .avatar{flex-shrink:0}
 .chat-header small{display:block;color:var(--muted);margin-top:2px}
 .chat-header .link-btn{margin-left:auto}
 .chat-log{overflow-y:auto;flex:1;padding:16px 14px;display:flex;flex-direction:column;gap:10px}
@@ -382,26 +386,40 @@ label{display:grid;gap:6px;font-size:13px;color:var(--muted)}
 .chat-body{position:relative;flex:1;min-height:0;display:flex;overflow:hidden}
 .chat-wallpaper{position:absolute;inset:0;z-index:0;background-size:cover;background-position:center;background-repeat:no-repeat;pointer-events:none}
 .chat-wallpaper::after{content:'';position:absolute;inset:0;background:var(--veil,var(--bg));opacity:var(--chat-bg-dim,.35)}
-/* 照片壁纸用深色遮罩（浅色遮罩会把照片冲成灰白，白字气泡也读不清） */
+/* 照片壁纸用深色遮罩（浅色遮罩会把照片冲成灰白，白字也读不清），但只叠很薄一层：
+   气泡自己有深色底撑着对比度，遮罩压狠了照片就糊成一团黑，反而看不出那是你们的照片。 */
 .chat-wallpaper.photo{--veil:#0F0D14}
-:root.dark .chat-wallpaper.photo::after{opacity:var(--chat-bg-dim,.35)}
+.chat-wallpaper.photo::after{opacity:calc(var(--chat-bg-dim,.35) * .5)}
+:root.dark .chat-wallpaper.photo::after{opacity:calc(var(--chat-bg-dim,.35) * .62)}
 .chat-body .chat-log{position:relative;z-index:1;background:transparent;width:100%}
 /* 有壁纸时标题栏/输入栏变半透明玻璃，让底图真正"全屏" */
 .chat-panel.has-wallpaper{background:transparent;border-color:transparent;box-shadow:none}
 .chat-panel.has-wallpaper .chat-header,.chat-panel.has-wallpaper .chat-compose{background:rgba(255,255,255,.62);backdrop-filter:blur(16px) saturate(1.25);-webkit-backdrop-filter:blur(16px) saturate(1.25);border-color:rgba(255,255,255,.45)}
 .chat-panel.has-wallpaper .chat-compose textarea{background:rgba(255,255,255,.82)}
-/* ── 沉浸式：用照片当背景时，气泡/标题栏/输入栏换成半透明深色（主流聊天 App 的观感） ── */
-.chat-panel.immersive .chat-header,.chat-panel.immersive .chat-compose,.chat-panel.immersive .sticker-dock{background:rgba(16,14,20,.44);border-color:rgba(255,255,255,.14)}
+/* ── 沉浸式：用照片当背景时，气泡/标题栏/输入栏换成半透明深色（主流聊天 App 的观感） ──
+   标题栏/输入栏用**渐变**而不是整块实色：实色块会在照片上切出一条生硬的分界线，
+   渐变从上（下）往里淡出，和底图是连续过渡的，看起来才像"照片铺满了整屏"。 */
+.chat-panel.immersive .chat-header{background:linear-gradient(180deg,rgba(8,6,12,.58) 0%,rgba(8,6,12,.26) 58%,rgba(8,6,12,0) 100%);border:0}
+.chat-panel.immersive .chat-compose{background:linear-gradient(0deg,rgba(8,6,12,.62) 0%,rgba(8,6,12,.28) 55%,rgba(8,6,12,0) 100%);border:0}
+.chat-panel.immersive .sticker-dock{background:rgba(14,12,18,.78);border-color:rgba(255,255,255,.14)}
+/* APK 上聊天页延伸到状态栏下面（见 app.js 的 StatusBar overlay），顶部要给状态栏让出位置 */
+.chat-panel.immersive .chat-header{padding-top:calc(14px + env(safe-area-inset-top,0px))}
 .chat-panel.immersive .chat-header h3,.chat-panel.immersive .chat-header small,.chat-panel.immersive .chat-time,.chat-panel.immersive .chat-recall{color:rgba(255,255,255,.82)}
 .chat-panel.immersive .chat-header h3{color:#fff;text-shadow:0 1px 8px rgba(0,0,0,.4)}
 .chat-panel.immersive .icon-btn{color:#fff}
 .chat-panel.immersive .chat-bubble{background:rgba(30,27,34,.56);border-color:rgba(255,255,255,.16);color:#fff;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
-.chat-panel.immersive .mine .chat-bubble{background:rgba(176,72,107,.66);border-color:rgba(255,255,255,.22);color:#fff}
+/* 自己的气泡别用高饱和的粉：在暗紫调的照片上会跳成一块糖果色，压深压暗才融得进去 */
+.chat-panel.immersive .mine .chat-bubble{background:rgba(139,54,84,.62);border-color:rgba(255,255,255,.2);color:#fff}
+/* 沉浸式下「撤回 / 记入时光」常驻会让每条消息下面都挂一排小字，很杂乱：
+   桌面 hover、手机点一下消息才展开（.tap-ops 由 app.js 点击时切换）。 */
+.chat-panel.immersive .chat-line:not(.pending) .chat-time{opacity:0;transition:opacity .16s var(--speed)}
+.chat-panel.immersive .chat-line:not(.pending):hover .chat-time,
+.chat-panel.immersive .chat-line.tap-ops .chat-time{opacity:1}
 .chat-panel.immersive .chat-time button{color:#fff}
 .chat-panel.immersive .chat-day{align-self:center;display:inline-block;margin:14px auto 6px;padding:3px 12px;border-radius:999px;background:rgba(0,0,0,.3);color:rgba(255,255,255,.88);font-size:11.5px}
 .chat-panel.immersive .chat-day::before,.chat-panel.immersive .chat-day::after{display:none}
-.chat-panel.immersive .chat-compose textarea{background:rgba(255,255,255,.16);border-color:rgba(255,255,255,.22);color:#fff}
-.chat-panel.immersive .chat-compose textarea::placeholder{color:rgba(255,255,255,.66)}
+.chat-panel.immersive .chat-compose textarea{background:rgba(255,255,255,.18);border-color:rgba(255,255,255,.26);color:#fff}
+.chat-panel.immersive .chat-compose textarea::placeholder{color:rgba(255,255,255,.82)}
 .chat-panel.immersive .voice-chip{color:#fff}
 .chat-panel.immersive .voice-chip .voice-dur{color:rgba(255,255,255,.8)}
 .chat-panel.immersive .media-grid button{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.18)}

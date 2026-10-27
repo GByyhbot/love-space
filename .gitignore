@@ -20,6 +20,12 @@ secrets/
 !static/lovespace.apk
 恋爱空间.apk
 
+# ---- Android 签名密钥与本地签名配置，绝不能入库（泄露=别人能给你的 App 签名） ----
+*.jks
+*.keystore
+android-app/android/keys/
+android-app/android/keystore.properties
+
 # ---- 系统垃圾 ----
 .DS_Store
 Thumbs.db

@@ -81,6 +81,21 @@ const DARK_KEY = 'love-dark-mode';
 // —— Android APK 状态栏适配：颜色跟随明暗主题（浏览器/PWA 无 Capacitor 时跳过）——
 const _SB=(window.Capacitor&&window.Capacitor.Plugins)?window.Capacitor.Plugins.StatusBar:null;
 async function syncStatusBar(){if(!_SB)return;try{const dark=document.documentElement.classList.contains('dark');await _SB.setOverlaysWebView({overlay:false});await _SB.setStyle({style:dark?'Dark':'Light'});await _SB.setBackgroundColor({color:dark?'#211a1e':'#f8e9ef'});}catch{}}
+/* APK 上让聊天页延伸到状态栏底下：其它页面内容不该被状态栏压住，所以只在
+   「聊天页 + 照片壁纸」时才开 overlay，离开立刻恢复。浏览器/PWA 无此插件，自动跳过。 */
+let _sbOverlay = false;
+async function syncStatusBarOverlay(){
+ if(!_SB)return;
+ const want = state.page === 'messages' && chatBgIsPhoto();
+ if(want === _sbOverlay)return;
+ _sbOverlay = want;
+ try{
+  if(!want){await syncStatusBar();return;}
+  await _SB.setOverlaysWebView({overlay:true});
+  await _SB.setBackgroundColor({color:'#00000000'});
+  await _SB.setStyle({style:'Dark'});
+ }catch{}
+}
 function applyDarkMode() {
   const pref = localStorage.getItem(DARK_KEY) || 'auto';
   const dark = pref === 'on' || (pref === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches);
@@ -207,6 +222,7 @@ function renderPage() {
  if(state.page==='timeline'&&state.timelineHasMore)$('#timeline-list')?.insertAdjacentHTML('afterend',`<div class="timeline-more">${button('继续往前翻','load-more-timeline','secondary')}</div>`);
  if(state.page==='messages') {$('#chat-text').value=localStorage.getItem('chat-text:'+state.me.user.id)||'';autoGrow($('#chat-text'));scrollChat();$('#chat-text')?.addEventListener('focus',()=>{const d=$('#sticker-dock');if(d)d.hidden=true;});applyWallpaper();}
  if(state.page==='importdetail') initImportLog();
+ syncStatusBarOverlay();
  if(state.page==='home'){loadOnThisDay();loadYearbook();}
  if(state.page==='together'&&state.tab==='calendar') loadCalendar();
 }
@@ -301,6 +317,15 @@ function mediaMarkup(media=[]) {
 }
 /* 微信式语音消息：点击整条气泡播放；原生 <audio controls> 在 Android WebView 里样式不可控，已弃用 */
 const fmtVoiceTime=s=>{if(!isFinite(s)||s<=0)return "0''";return s<60?Math.round(s)+"''":Math.floor(s/60)+':'+String(Math.floor(s%60)).padStart(2,'0');};
+/* 沉浸式下「撤回 / 记入时光」默认收起（见 CSS），手机点一下这条消息才展开。
+   没有 hover 的触屏设备必须有这条路，否则操作永远摸不出来。
+   发出失败的那些行带 .pending，始终显示，别把"没发出去"也藏了。 */
+document.addEventListener('click',e=>{
+ const line=e.target.closest('.chat-line:not(.pending)');
+ if(!line)return;
+ document.querySelectorAll('.chat-line.tap-ops').forEach(x=>{if(x!==line)x.classList.remove('tap-ops');});
+ line.classList.toggle('tap-ops');
+});
 document.addEventListener('click',e=>{
  const chip=e.target.closest('[data-voice-play]');if(!chip)return;
  const audio=chip.querySelector('audio');if(!audio)return;
@@ -357,7 +382,7 @@ function chatRows() {
   const inner=sticker?`<div class="chat-sticker${sticker.endsWith('.webm')?' video':''}">${sticker.endsWith('.webm')?`<video src="${esc(sticker)}" autoplay loop muted playsinline></video>`:`<img src="${esc(sticker)}" alt="贴纸" loading="lazy">`}</div>`:`<div class="chat-bubble${voiceOnly?' voice':''}"><span style="white-space:pre-wrap">${esc(r.body.content)}</span>${mediaMarkup(r.media)}</div>`;
   return `${tl?`<div class="chat-day">${tl}</div>`:''}<div class="chat-line ${mine?'mine':''}">${avatar(r.author)}<div>${inner}${ops?`<div class="chat-time">${ops}</div>`:''}</div></div>`;
  }).join('');
- const pend=pending.map(p=>`<div class="chat-line mine">${avatar(state.me.user.id)}<div><div class="chat-bubble">${esc(p.body.content||'一个附件')}</div><div class="chat-time">尚未发送 <button data-action="retry-chat" data-id="${p.client_id}">点击重试</button></div></div></div>`).join('');
+ const pend=pending.map(p=>`<div class="chat-line mine pending">${avatar(state.me.user.id)}<div><div class="chat-bubble">${esc(p.body.content||'一个附件')}</div><div class="chat-time">尚未发送 <button data-action="retry-chat" data-id="${p.client_id}">点击重试</button></div></div></div>`).join('');
  return rows+pend||empty('今天，有什么想对 TA 说？','说说日常，也说说想念。');
 }
 /* 聊天壁纸：预设用 CSS 渐变/纹理，'photo' 用自己上传的照片。
