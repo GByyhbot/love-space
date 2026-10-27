@@ -356,7 +356,9 @@ label{display:grid;gap:6px;font-size:13px;color:var(--muted)}
 .chat-header .icon-btn,.chat-header .avatar{flex-shrink:0}
 .chat-header small{display:block;color:var(--muted);margin-top:2px}
 .chat-header .link-btn{margin-left:auto}
-.chat-log{overflow-y:auto;flex:1;padding:16px 14px;display:flex;flex-direction:column;gap:10px}
+/* 滚动条藏掉：微信/抖音都没有可见滚动条，Windows 上那条白色凹槽尤其突兀 */
+.chat-log{overflow-y:auto;flex:1;padding:16px 14px;display:flex;flex-direction:column;gap:10px;scrollbar-width:none}
+.chat-log::-webkit-scrollbar{display:none}
 .chat-line{display:flex;gap:10px;align-items:flex-start;max-width:85%}
 .chat-line.mine{align-self:flex-end;flex-direction:row-reverse}
 .chat-line .avatar{width:32px;height:32px;font-size:12px}
