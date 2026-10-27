@@ -1062,9 +1062,12 @@ function channelsPage(){
 }
 function backupsPage(){const s=state.storage||{};const fmt=b=>b>=1073741824?(b/1073741824).toFixed(2)+' GB':(b/1048576).toFixed(1)+' MB';const pct=s.disk_total?Math.round((1-s.disk_free/s.disk_total)*100):0;const kindBars=[['image','照片'],['video','视频'],['audio','语音']].map(([k,l])=>{const v=s.media_by_kind?.[k]||0;const total=s.media_by_kind?Object.values(s.media_by_kind).reduce((a,b)=>a+b,0):0;return `<div class="storage-bar"><span>${l}</span><div class="bar-track"><div class="bar-fill" style="width:${total?Math.round(v/total*100):0}%"></div></div><span class="meta">${fmt(v)}</span></div>`;}).join('');return `${heading('让回忆，有一个安心的家','完整备份、迁移和恢复。','backup','立即备份','download')}<section class="card storage-panel"><div class="section-heading"><h2>${icon('gear')} 存储占用</h2></div><div class="storage-overview"><div class="storage-stat"><strong>${fmt(s.total||0)}</strong><small>已使用</small></div><div class="storage-stat"><strong>${fmt(s.disk_free||0)}</strong><small>可用空间</small></div><div class="storage-stat"><strong>${pct}%</strong><small>磁盘占用率</small></div></div>${kindBars}<div class="storage-meta"><p class="meta">数据库 ${fmt(s.db||0)} · 备份 ${fmt(s.backups||0)} · ${s.record_count||0} 条记录 · ${s.media_count||0} 个媒体文件</p></div></section><p class="hint">每天自动备份，保留最近七份成功备份。完整备份包含双方数据与渠道密钥，仅供服务器管理员妥善保管。恢复操作通过服务器命令进行，并恢复到新的空目录。</p><section class="card">${(state.backups||[]).length?state.backups.map(b=>`<div class="delivery"><div class="backup-name"><p>${esc(b.name)}${b.encrypted?' <span class="status-pill sent">🔒 已加密</span>':''}</p><small class="meta">${dateLabel(b.created)} · ${(b.size/1024/1024).toFixed(2)} MB</small></div><a class="button secondary small" href="/api/backups/${encodeURIComponent(b.name)}" download>${icon('download')} 下载</a></div>`).join(''):empty('备份还未生成','可以现在创建第一份完整备份。')}</section>`;}
 
+/* 图片/视频查看器要占满视口，靠 .viewer 这个显式 class 定样式
+   （不用 CSS :has()，旧 WebView 不支持时会把舞台高度算塌） */
 function openModal(title,content,{wide=false,sheet=false,cleanup=null}={}) {
  closeModal(); focusReturn=document.activeElement;
- $('#modal-root').innerHTML=`<div class="modal-overlay${sheet?' sheet':''}"><section class="modal ${wide?'wide':''}${sheet?' sheet':''}" role="dialog" aria-modal="true" aria-labelledby="modal-title"><header class="modal-header"><h2 id="modal-title">${esc(title)}</h2><button class="icon-btn" data-action="close-modal" aria-label="关闭">${icon('close')}</button></header>${content}</section></div>`;
+ const viewer = wide && /class="lightbox-body"/.test(content);
+ $('#modal-root').innerHTML=`<div class="modal-overlay${sheet?' sheet':''}"><section class="modal ${wide?'wide':''}${sheet?' sheet':''}${viewer?' viewer':''}" role="dialog" aria-modal="true" aria-labelledby="modal-title"><header class="modal-header"><h2 id="modal-title">${esc(title)}</h2><button class="icon-btn" data-action="close-modal" aria-label="关闭">${icon('close')}</button></header>${content}</section></div>`;
  modalCleanup=cleanup;document.body.style.overflow='hidden';setTimeout(()=>$('.modal input:not([type=checkbox]),.modal textarea,.modal button')?.focus(),50);
 }
 function closeModal(){if(modalCleanup){modalCleanup();modalCleanup=null;}$('#modal-root').innerHTML='';document.body.style.overflow='';focusReturn?.focus?.();}
@@ -1207,6 +1210,132 @@ function profileForm(){const u=state.me.user;simpleForm('让 TA 一眼认出你'
 async function inviteModal(){const data=await post('/invite');const url=location.origin+'/?invite='+encodeURIComponent(data.token);openModal('邀请你，住进我的小世界',`<p class="meta">把这个链接私下发给另一半。邀请仅可使用一次，二十四小时内有效；重新生成会让旧链接失效。</p><label style="margin-top:18px">专属邀请链接<input id="invite-url" readonly value="${esc(url)}"></label><div class="form-actions" style="margin-top:18px">${button('复制邀请链接','copy-invite','primary')}</div>`);}
 let photoIndex = 0;
 function preloadPhoto(id){ if(!id) return; const im = new Image(); im.src = `/media/${id}?preview=true`; }
+/* ── 图片查看器：满屏铺展 + 缩放/拖拽 ─────────────────────────────
+   布局：.lightbox-wrap 是唯一舞台（flex:1，深色底），图片 contain 吃满；
+   缩放是叠加在 <img> 上的 transform，translate 以舞台中心为原点。
+   交互：滚轮 / 双指捏合（以指针为锚点）缩放，放大后拖拽平移到边缘为止，
+   双击或连续两次点按在「适应屏幕」与 2.5× 之间切换，
+   右下角浮条另有 −/+ 逐步缩放与「适应」复位。 */
+const lbZoom = { s: 1, x: 0, y: 0, MIN: 1, MAX: 6 };
+const lbPts = new Map();
+let lbDrag = null, lbPinch = null, lbTap = { t: 0, x: 0, y: 0 };
+
+function lbStageEl(){ return $('.lightbox-wrap'); }
+function lbImgEl(){ return $('.lightbox-image'); }
+
+function lbApply(){
+ const img = lbImgEl(); if(!img) return;
+ const stage = lbStageEl();
+ if(stage){
+  // 用 clientWidth/offsetWidth 而不是 getBoundingClientRect：
+  // 弹窗有 pop-in 缩放动画，rect 会被祖先 transform 缩放，量出来偏小
+  const sw = stage.clientWidth, sh = stage.clientHeight;
+  const w = img.offsetWidth, h = img.offsetHeight;
+  const maxX = Math.max(0, (w * lbZoom.s - sw) / 2);
+  const maxY = Math.max(0, (h * lbZoom.s - sh) / 2);
+  lbZoom.x = Math.min(maxX, Math.max(-maxX, lbZoom.x));
+  lbZoom.y = Math.min(maxY, Math.max(-maxY, lbZoom.y));
+ }
+ img.style.transform = `translate3d(${lbZoom.x}px,${lbZoom.y}px,0) scale(${lbZoom.s})`;
+ img.classList.toggle('zoomed', lbZoom.s > 1.01);
+ const val = $('.lightbox-zoomval');
+ if(val) val.textContent = Math.round(lbZoom.s * 100) + '%';
+}
+function lbReset(){ lbZoom.s = 1; lbZoom.x = 0; lbZoom.y = 0; lbApply(); }
+/* 把图缩放到 next 倍，并让 (cx,cy) 这个屏幕点在缩放前后停在原处 */
+function lbScaleTo(next, cx, cy){
+ const stage = lbStageEl(); if(!stage) return;
+ next = Math.min(lbZoom.MAX, Math.max(lbZoom.MIN, next));
+ if(Math.abs(next - lbZoom.s) < .002) return;
+ const r = stage.getBoundingClientRect();
+ const px = (cx == null ? r.left + r.width / 2 : cx) - (r.left + r.width / 2);
+ const py = (cy == null ? r.top + r.height / 2 : cy) - (r.top + r.height / 2);
+ const k = next / lbZoom.s;
+ lbZoom.x = px - (px - lbZoom.x) * k;
+ lbZoom.y = py - (py - lbZoom.y) * k;
+ lbZoom.s = next;
+ lbApply();
+}
+function lbStep(f){ lbScaleTo(lbZoom.s * f); }
+function lbToggle(cx, cy){ if(lbZoom.s > 1.01) lbReset(); else lbScaleTo(2.5, cx, cy); }
+
+document.addEventListener('wheel', e => {
+ const stage = lbStageEl();
+ if(!stage || !stage.contains(e.target)) return;
+ e.preventDefault();
+ lbScaleTo(lbZoom.s * (e.deltaY < 0 ? 1.16 : 1 / 1.16), e.clientX, e.clientY);
+}, { passive: false });
+
+document.addEventListener('pointerdown', e => {
+ const stage = lbStageEl();
+ if(!stage || !stage.contains(e.target) || e.target.closest('.photo-arrow,.lb-zoom')) return;
+ if(e.pointerType === 'mouse' && e.button !== 0) return;
+ lbPts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+ try { stage.setPointerCapture(e.pointerId); } catch(_) {}
+ if(lbPts.size === 1){
+  lbDrag = { x: e.clientX, y: e.clientY, ox: lbZoom.x, oy: lbZoom.y, moved: false, t: Date.now() };
+  lbPinch = null;
+ } else if(lbPts.size === 2){
+  const [a, b] = [...lbPts.values()];
+  lbPinch = { d: Math.hypot(a.x - b.x, a.y - b.y), s: lbZoom.s };
+  lbDrag = null;
+ }
+});
+
+document.addEventListener('pointermove', e => {
+ if(!lbPts.has(e.pointerId)) return;
+ lbPts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+ if(lbPinch && lbPts.size >= 2){
+  const [a, b] = [...lbPts.values()];
+  const d = Math.hypot(a.x - b.x, a.y - b.y);
+  if(lbPinch.d > 8) lbScaleTo(lbPinch.s * (d / lbPinch.d), (a.x + b.x) / 2, (a.y + b.y) / 2);
+  return;
+ }
+ if(!lbDrag || lbZoom.s <= 1.01) return;
+ const dx = e.clientX - lbDrag.x, dy = e.clientY - lbDrag.y;
+ if(!lbDrag.moved && Math.abs(dx) + Math.abs(dy) < 5) return;
+ lbDrag.moved = true;
+ lbZoom.x = lbDrag.ox + dx;
+ lbZoom.y = lbDrag.oy + dy;
+ lbApply();
+});
+
+function lbPointerEnd(e, allowTap){
+ const d = lbDrag;
+ if(lbPts.has(e.pointerId)) lbPts.delete(e.pointerId);
+ if(lbPts.size < 2) lbPinch = null;
+ if(lbPts.size === 0) lbDrag = null;
+ if(!allowTap || !d || d.moved || Date.now() - d.t > 320) return;
+ const now = Date.now();
+ if(now - lbTap.t < 340 && Math.hypot(e.clientX - lbTap.x, e.clientY - lbTap.y) < 44){
+  lbTap.t = 0;
+  lbToggle(e.clientX, e.clientY);
+ } else lbTap = { t: now, x: e.clientX, y: e.clientY };
+}
+document.addEventListener('pointerup', e => lbPointerEnd(e, true));
+document.addEventListener('pointercancel', e => lbPointerEnd(e, false));
+/* 换图（src 变更）后回到适应屏幕，避免带着上一张的缩放比；
+   同时按这张图的长宽比把外壳宽度收拢，别让竖图两边空着一大片黑 */
+document.addEventListener('load', e => {
+ const t = e.target;
+ if(t && t.classList && t.classList.contains('lightbox-image')){ lbReset(); lbFitFrame(); }
+}, true);
+
+function lbFitFrame(pass){
+ const modal = document.querySelector('.modal.wide');
+ const stage = lbStageEl(), img = lbImgEl();
+ if(!modal || !stage || !img || !img.naturalWidth) return;
+ if(window.innerWidth <= 640){ modal.style.removeProperty('--lb-w'); return; }
+ const sr = { w: stage.clientWidth, h: stage.clientHeight };
+ const want = Math.ceil(sr.h * (img.naturalWidth / img.naturalHeight)) + 2;
+ const target = Math.max(360, Math.min(want, Math.round(window.innerWidth * .94), 1240));
+ modal.style.setProperty('--lb-w', target + 'px');
+ // 收窄后底部按钮可能换行、舞台变矮，再纠一次
+ if(!pass) requestAnimationFrame(() => lbFitFrame(2));
+}
+window.addEventListener('resize', () => { if($('.lightbox-body')) lbFitFrame(); });
+
+const lbZoomBar = `<div class="lb-zoom"><button type="button" data-action="lb-out" aria-label="缩小">−</button><span class="lightbox-zoomval">100%</span><button type="button" data-action="lb-in" aria-label="放大">+</button><button type="button" class="lb-fit" data-action="lb-fit">适应</button></div>`;
 function photoBodyHtml(){
  const photos = state.photos || [];
  if (!photos.length) return '';
@@ -1215,7 +1344,7 @@ function photoBodyHtml(){
  const p = photos[photoIndex];
  const arrows = `${photoIndex > 0 ? `<button type="button" class="photo-arrow left" data-action="photo-prev" aria-label="上一张">${icon('back')}</button>` : ''}${photoIndex < photos.length - 1 ? `<button type="button" class="photo-arrow right" data-action="photo-next" aria-label="下一张">${icon('arrow')}</button>` : ''}`;
  const caption = (p.caption || '').trim();
- return `<div class="lightbox-wrap"><img class="lightbox-image" src="/media/${p.id}?preview=true" alt="${esc(p.caption||'我们的照片')}">${arrows}</div>${caption ? `<p class="lightbox-caption">${esc(caption)}</p>` : ''}<p class="lightbox-count">${photoIndex + 1} / ${photos.length}</p><div class="photo-detail-actions"><a class="button secondary small" href="/media/${p.id}?download=true" download>${icon('download')} 下载原文件</a>${button('回到这条时光','notice-detail','small soft','book',`data-id="${p.record_id}"`)}</div>`;
+ return `<div class="lightbox-wrap"><img class="lightbox-image" src="/media/${p.id}?preview=true" alt="${esc(p.caption||'我们的照片')}" decoding="async">${arrows}${lbZoomBar}</div>${caption ? `<p class="lightbox-caption">${esc(caption)}</p>` : ''}<div class="lightbox-bar"><span class="lightbox-count">${photoIndex + 1} / ${photos.length}</span><div class="photo-detail-actions"><a class="button secondary small" href="/media/${p.id}?download=true" download>${icon('download')} 下载原文件</a>${button('回到这条时光','notice-detail','small soft','book',`data-id="${p.record_id}"`)}</div></div>`;
 }
 function renderPhotoModal(){
  const photos = state.photos || [];
@@ -1281,7 +1410,7 @@ function recordMediaIds(mid){
 function mediaViewerHtml(innerOnly=false){
  const {ids,i}=mediaViewer;
  const arrows=`${i>0?`<button type="button" class="photo-arrow left" data-action="mv-prev" aria-label="上一张">${icon('back')}</button>`:''}${i<ids.length-1?`<button type="button" class="photo-arrow right" data-action="mv-next" aria-label="下一张">${icon('arrow')}</button>`:''}`;
- const inner=`<div class="lightbox-wrap"><img class="lightbox-image" src="/media/${ids[i]}?preview=true" alt="聊天图片">${arrows}</div>${ids.length>1?`<p class="lightbox-count">${i+1} / ${ids.length}</p>`:''}<div class="photo-detail-actions"><a class="button secondary small" href="/media/${ids[i]}?download=true" download>${icon('download')} 下载原文件</a></div>`;
+ const inner=`<div class="lightbox-wrap"><img class="lightbox-image" src="/media/${ids[i]}?preview=true" alt="聊天图片" decoding="async">${arrows}${lbZoomBar}</div><div class="lightbox-bar">${ids.length>1?`<span class="lightbox-count">${i+1} / ${ids.length}</span>`:'<span></span>'}<div class="photo-detail-actions"><a class="button secondary small" href="/media/${ids[i]}?download=true" download>${icon('download')} 下载原文件</a></div></div>`;
  return innerOnly?inner:`<div class="lightbox-body">${inner}</div>`;
 }
 function recordMediaModal(mid){
@@ -1362,6 +1491,9 @@ async function act(action,id,el) {
  if(action==='mv-prev')return moveMediaViewer(-1);
  if(action==='mv-next')return moveMediaViewer(1);
  if(action==='photo-prev'||action==='photo-next'){photoIndex += action==='photo-next' ? 1 : -1; return updatePhotoModal();}
+ if(action==='lb-in')return lbStep(1.6);
+ if(action==='lb-out')return lbStep(1/1.6);
+ if(action==='lb-fit')return lbReset();
  if(action==='space')return spaceForm();
  if(action==='profile')return profileForm();
  if(action==='invite')return inviteModal();
