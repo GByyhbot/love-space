@@ -402,6 +402,14 @@ label{display:grid;gap:6px;font-size:13px;color:var(--muted)}
 .chat-panel.immersive .chat-header{background:linear-gradient(180deg,rgba(8,6,12,.58) 0%,rgba(8,6,12,.26) 58%,rgba(8,6,12,0) 100%);border:0}
 .chat-panel.immersive .chat-compose{background:linear-gradient(0deg,rgba(8,6,12,.62) 0%,rgba(8,6,12,.28) 55%,rgba(8,6,12,0) 100%);border:0}
 .chat-panel.immersive .sticker-dock{background:rgba(14,12,18,.78);border-color:rgba(255,255,255,.14)}
+/* 表情面板里的浅色胶囊/浅色 hover 在深色面板上是一块块白团，一并压成半透明白 */
+.chat-panel.immersive .sticker-tabs button{background:rgba(255,255,255,.1);color:rgba(255,255,255,.86)}
+.chat-panel.immersive .sticker-tabs button.active{background:rgba(139,54,84,.72);color:#fff}
+.chat-panel.immersive .sticker-cell:hover,.chat-panel.immersive .sticker-cell:active{background:rgba(255,255,255,.14)}
+.chat-panel.immersive .sticker-add{border-color:rgba(255,255,255,.28);color:rgba(255,255,255,.9)}
+.chat-panel.immersive .sticker-dock .small-note,
+.chat-panel.immersive .sticker-dock .meta,
+.chat-panel.immersive .sticker-dock .meta-center{color:rgba(255,255,255,.72)}
 /* APK 上聊天页延伸到状态栏下面（见 app.js 的 StatusBar overlay），顶部要给状态栏让出位置 */
 .chat-panel.immersive .chat-header{padding-top:calc(14px + env(safe-area-inset-top,0px))}
 .chat-panel.immersive .chat-header h3,.chat-panel.immersive .chat-header small,.chat-panel.immersive .chat-time,.chat-panel.immersive .chat-recall{color:rgba(255,255,255,.82)}

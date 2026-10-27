@@ -435,7 +435,9 @@ def cleanup():
             used.update(json.loads(body).get('media', []))
         for row in c.execute(f'SELECT id,kind,body FROM records WHERE kind IN ({placeholders})', private):
             used.update(db.body_decode(row).get('media', []))
-        used.add(db.setting(c, 'space').get('cover', ''))
+        space = db.setting(c, 'space', {})
+        used.add(space.get('cover', ''))
+        used.update(db.chat_bg_media_ids(space))
         used.update(row[0] for row in c.execute('SELECT avatar FROM users'))
         # 未关联进任何记录/头像/封面的孤儿附件（上传后放弃发布）：24 小时后回收
         # status='processing' 的正在被转码线程持有，删了就会让它白干一场并把结果写进空气

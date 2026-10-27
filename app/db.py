@@ -415,6 +415,11 @@ def media_in_visible_record(c, media_id, user_id):
     return False
 
 
+def chat_bg_media_ids(space):
+    """所有个人聊天背景图的 id（两人各一份，可以互相代设）。"""
+    return [v.get('media') for v in (space or {}).get('chat_bg_users', {}).values() if v.get('media')]
+
+
 def media_visible(c, media_id, user_id):
     if not media_id:
         return False
@@ -426,7 +431,8 @@ def media_visible(c, media_id, user_id):
     if media_in_visible_record(c, media_id, user_id):
         return True
     space = setting(c, 'space', {})
-    if media_id in (space.get('cover'), space.get('chat_bg_media')):
+    # 对方替我设的背景图是他的，我这边要能取到（否则就是一张裂图）
+    if media_id in [space.get('cover'), space.get('chat_bg_media')] + chat_bg_media_ids(space):
         return True
     # 导入的聊天记录是两人共享的，里面的图片不能只让导入者看到
     if c.execute('SELECT 1 FROM import_messages WHERE media_id=? LIMIT 1', (media_id,)).fetchone():

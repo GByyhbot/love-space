@@ -334,9 +334,14 @@ class Space(BaseModel):
     timezone: str = 'Asia/Shanghai'
     # 聊天壁纸。None 表示"客户端没带这个字段"（旧版前端/旧 APK 保存空间设置时），
     # 此时沿用库里的原值——否则旧客户端一保存就把壁纸清空了。
+    # 空间级那三个字段是「没单独设置的人」用的共同默认值。
     chat_bg: str | None = Field(default=None, max_length=20)
     chat_bg_media: str | None = Field(default=None, max_length=64)
     chat_bg_dim: int | None = None
+    # 每人一份的聊天背景：{用户 id: {bg, media, dim}}。谁都能替对方设（这是两个人的空间）。
+    chat_bg_users: dict[str, dict] | None = None
+    # 这次要改谁的背景；留空表示改共同默认值（旧客户端的行为）
+    chat_bg_target: str | None = Field(default=None, max_length=64)
 
 
 # 内置壁纸预设（前端 CSS 里同名实现）；'photo' 表示用自己上传的照片，'' 表示默认无壁纸
@@ -365,18 +370,46 @@ def space(body: Space, user=Depends(current_user)):
     with connect() as c:
         old = db.setting(c, 'space') or {}
         data = body.model_dump()
-        # 旧客户端没带壁纸字段时保留原值，别把对方设好的背景抹掉
-        fallback = {'chat_bg': '', 'chat_bg_media': '', 'chat_bg_dim': CHAT_BG_DEFAULT_DIM}
-        for key in fallback:
-            if data.get(key) is None:
-                data[key] = old.get(key, fallback[key])
-        # 切回预设时清掉照片引用，否则这张图会一直被判定为"正在使用"而无法清理
-        if data['chat_bg'] != 'photo':
-            data['chat_bg_media'] = ''
-        elif not data['chat_bg_media']:
-            raise HTTPException(422, '请先选择一张照片作为聊天背景')
-        elif data['chat_bg_media'] != old.get('chat_bg_media'):
-            validate_owned_image(c, data['chat_bg_media'], user['id'])
+        # ── 聊天背景：每人一份，谁都能替对方设 ──
+        # 带 chat_bg_target 表示"改某个人那份"，此时不动空间级那三个字段（它们是共同默认值）。
+        target = data.pop('chat_bg_target', None)
+        if target:
+            members = [r['id'] for r in c.execute('SELECT id FROM users').fetchall()]
+            if target not in members:
+                raise HTTPException(422, '找不到要设置背景的人')
+            bg = data['chat_bg'] or ''
+            media = data['chat_bg_media'] or ''
+            dim = data['chat_bg_dim'] if data['chat_bg_dim'] is not None else CHAT_BG_DEFAULT_DIM
+            if bg not in CHAT_BG_PRESETS | {'', 'photo'} or not 0 <= dim <= 80:
+                raise HTTPException(422, '聊天背景参数不正确')
+            # 切回预设时清掉照片引用，否则这张图会一直被判定为"正在使用"而无法清理
+            if bg != 'photo':
+                media = ''
+            elif not media:
+                raise HTTPException(422, '请先选择一张照片作为聊天背景')
+            elif media != (old.get('chat_bg_users') or {}).get(target, {}).get('media'):
+                validate_owned_image(c, media, user['id'])
+            bg_users = dict(old.get('chat_bg_users') or {})
+            bg_users[target] = {'bg': bg, 'media': media, 'dim': dim}
+            data['chat_bg_users'] = bg_users
+            # 个人背景的改动不落到共同默认值上，否则两个人会互相顶掉对方的默认
+            for key, default in (('chat_bg', ''), ('chat_bg_media', ''), ('chat_bg_dim', CHAT_BG_DEFAULT_DIM)):
+                data[key] = old.get(key, default)
+        else:
+            # 旧客户端没带壁纸字段时保留原值，别把对方设好的背景抹掉
+            fallback = {'chat_bg': '', 'chat_bg_media': '', 'chat_bg_dim': CHAT_BG_DEFAULT_DIM}
+            for key in fallback:
+                if data.get(key) is None:
+                    data[key] = old.get(key, fallback[key])
+            # 切回预设时清掉照片引用，否则这张图会一直被判定为"正在使用"而无法清理
+            if data['chat_bg'] != 'photo':
+                data['chat_bg_media'] = ''
+            elif not data['chat_bg_media']:
+                raise HTTPException(422, '请先选择一张照片作为聊天背景')
+            elif data['chat_bg_media'] != old.get('chat_bg_media'):
+                validate_owned_image(c, data['chat_bg_media'], user['id'])
+        if data.get('chat_bg_users') is None:
+            data['chat_bg_users'] = old.get('chat_bg_users') or {}
         if body.cover != old.get('cover'):
             validate_owned_image(c, body.cover, user['id'])
         db.set_setting(c, 'space', data)
