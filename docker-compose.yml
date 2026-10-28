@@ -32,7 +32,8 @@ services:
       DATA_DIR: /data
       # 公网访问地址（用于来源校验与通知跳转）
       PUBLIC_URL: ${PUBLIC_URL:-https://love-space.iepose.cn}
-      # 登录会话 Cookie 仅通过 HTTPS 发送；HTTP 访问无法维持登录状态
+      # 会话 Cookie 是否带 Secure：默认 true（https 才发）。内网明文 http 访问时
+      # 后端会按请求协议自动降级，不需要为了局域网访问把它设成 false。
       SECURE_COOKIES: "${SECURE_COOKIES:-true}"
       # 首次远程初始化时，在 .env 中设置一次性随机口令；初始化后删除
       SETUP_TOKEN: "${SETUP_TOKEN:-}"

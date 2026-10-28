@@ -129,7 +129,7 @@ cd android
 
 | 变量 | 默认 | 说明 |
 |---|---|---|
-| `DATA_DIR` | `/data` | 数据目录（数据库、媒体、备份、密钥），必须持久化 |
+| `DATA_DIR` | `/data` | 数据目录（主库 `love.db`、生理期独立库 `period.db`、媒体、备份、密钥），必须持久化 |
 | `SETUP_TOKEN` | 空 | 首次远程初始化口令；使用一次性随机值，初始化完成后删除 |
 | `SECURE_COOKIES` | `true` | 会话 Cookie 仅通过 HTTPS 发送；生产环境保持开启 |
 | `LOVE_BIND_ADDRESS` | `127.0.0.1` | 宿主机监听地址；只允许同机反向代理连接。反向代理在独立容器时使用私有网络或防火墙限制来源，不要直接向公网开放应用端口 |
@@ -165,6 +165,7 @@ cd android
 2. 设置 `PUBLIC_URL=https://love.example.com`；`SECURE_COOKIES` 默认开启，重启容器。
 3. **防火墙**：只放行 80/443；应用端口默认仅监听本机 `127.0.0.1:1314`。若反向代理在独立容器中，请改用私有网络或防火墙规则限制来源。
 4. **备份**：每日自动备份在 `data/backups/`，保留 7 份；可设 `BACKUP_EXTRA_DIR` 异地再存一份。
+   备份包内含 `love.db` 与 `period.db`（生理期是独立数据库文件），恢复时一并还原。
 5. **升级**：改 `.env` 里的 `LOVE_IMAGE` 到目标 tag，然后 `docker compose pull && docker compose up -d`，
    数据目录不受影响。升级前先把 `data/backups/` 里最新的备份确认一遍。
 

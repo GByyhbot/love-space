@@ -355,6 +355,16 @@ def bump_shared(c):
     c.execute("UPDATE app_state SET value=value+1 WHERE key='content_revision'")
 
 
+def bump_user(c, user_id):
+    """只推进某个人自己的 revision。
+
+    用于「不该让对方知道有变化」的写入——比如生理期记录设成了仅自己可见，
+    那时推进共享 revision 等于告诉 TA「她刚记了点什么」。表里没有该用户的行时先插入。
+    """
+    c.execute('INSERT INTO user_revisions(user_id,value) VALUES (?,1)'
+              ' ON CONFLICT(user_id) DO UPDATE SET value=value+1', (user_id,))
+
+
 def media_shared_visible(c, mid):
     """这条附件是否属于「两人都看得到」的内容。
 

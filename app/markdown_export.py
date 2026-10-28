@@ -27,6 +27,7 @@ from pathlib import Path
 
 from . import db
 from .db import connect, now, uid
+from . import period
 from .serializers import serialize_many
 
 KIND_LABELS = {
@@ -246,6 +247,9 @@ def build_markdown_archive(user_id):
     with connect() as c:
         rows = [row for row in c.execute('SELECT * FROM records ORDER BY created') if db.visible(row, user_id)]
         records = serialize_many(c, rows, user_id)
+        # 生理期在独立的 period.db：第二大脑里同样要有这一段
+        records.extend(period.rows_for(user_id))
+        records.sort(key=lambda item: item['created'])
         authors = {u['id']: u['name'] for u in c.execute('SELECT id,name FROM users')}
         space = db.setting(c, 'space') or {}
         media_rows = {m['id']: dict(m) for m in c.execute('SELECT id,ext,mime,created,name FROM media')}

@@ -19,6 +19,7 @@ except Exception:
 
 from . import db
 from .db import connect, dumps, now
+from . import period
 from .security import PURPOSE_CHANNEL_CONFIG, cipher, decrypt_with_fallback
 from .backups import BackupRefused, create_backup, storage_lock
 from . import notifications
@@ -422,6 +423,11 @@ def remove_media(c, media):
 def cleanup():
     with storage_lock, connect() as c:
         c.execute('DELETE FROM records WHERE deleted IS NOT NULL AND deleted<?', (now() - 30 * 86400,))
+        # 生理期在独立的 period.db 里，回收站期限与主库保持一致
+        try:
+            period.purge_deleted(now() - 30 * 86400)
+        except Exception:
+            logging.getLogger('love').exception('清理生理期回收站失败')
         # 已读通知保留 90 天后回收；三张投递队列表对 notice 外键级联删除，一并清理
         c.execute('DELETE FROM notices WHERE seen=1 AND created<?', (now() - 90 * 86400,))
         # 「在用」的附件集合。注意**不能**只挑 deleted IS NULL 的记录：软删除后

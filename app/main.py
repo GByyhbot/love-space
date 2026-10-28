@@ -25,6 +25,7 @@ from starlette.middleware.gzip import GZipMiddleware
 
 from . import db
 from . import importers
+from . import period
 from .config import APK_VERSION, BUILD_ID, WEB_VERSION
 from .serializers import serialize, serialize_many
 from . import webpush as webpush_service
@@ -44,6 +45,15 @@ async def lifespan(app):
         # 迁移失败不该让整个应用起不来，但要留下原因——否则磁盘满/权限错会以
         # "附件莫名 404" 的形式出现，排查时一点线索都没有
         logging.getLogger('love').exception('媒体目录迁移失败，旧布局的附件可能不可访问')
+    # 生理期独立库：建表 + 把主库里遗留的 period 行搬过去（幂等，搬完就没有可搬的了）
+    try:
+        period.init()
+        moved = period.migrate_from_main()
+        if moved:
+            logging.getLogger('love').info('生理期已迁入独立库 period.db：%d 条', moved)
+    except Exception:
+        # 迁不动就退回到主库读取（接口两头都查），不能因为搬库失败让健康数据"消失"
+        logging.getLogger('love').exception('生理期迁库失败，暂时仍从主库读取')
     stop = threading.Event()
     from .worker import run
     worker = None
@@ -611,6 +621,15 @@ def records(kind: str = '', q: str = '', author: str = '', date: str = '', media
             params.extend(kinds)
         # 独立的排除列表：比让前端把十几个类型名拼进 kind 更好读，也不会漏
         excluded = [value for value in exclude.split(',') if value]
+        # 生理期在独立的 period.db 里：列表要把它并进来，前端不必知道换了库。
+        # 只有 period 一种类型时直接查分库，别白跑一遍主库。
+        only_period = kinds == ['period']
+        merge_period = (not only_period and (not kinds or 'period' in kinds)
+                        and 'period' not in excluded and not media_type)
+        # 还有没搬完的旧行（迁移失败/正在迁移）时，让主库查询照旧兜住它，别返回空列表
+        if only_period and not period.pending_count():
+            return period.rows_for(user['id'], author=author, date=date, q=q, trash=trash,
+                                   before=before, before_id=before_id, limit=limit)
         if excluded:
             clauses.append('kind NOT IN (' + ','.join('?' for _ in excluded) + ')')
             params.extend(excluded)
@@ -653,11 +672,100 @@ def records(kind: str = '', q: str = '', author: str = '', date: str = '', media
                 break
         if limit:
             result = result[:limit]
+        if merge_period:
+            # 分库的记录并进同一个倒序列表——前端 recordsOf('period') 照旧能拿到
+            result.extend(period.rows_for(user['id'], author=author, date=date, q=q, trash=trash,
+                                          before=before, before_id=before_id, limit=limit))
+            result.sort(key=lambda item: (item['created'], item['id']), reverse=True)
+            if limit:
+                result = result[:limit]
     return result
+
+
+# ── 生理期：独立库的读写入口 ────────────────────────────────────────
+# 校验仍旧复用 clean_body（字段白名单、数值区间、共享开关都在那儿），这里只管
+# "写哪个库"以及跨库副作用的顺序：先提交分库，再回主库推 revision / 发通知。
+
+def _period_revisions(author_id, shared, was_shared=False):
+    """分库写完之后回主库推进版本号。
+
+    现在或以前共享过 → 推进共享 revision（双方都要刷新）；
+    全程仅自己可见 → 只推作者自己的，否则对端收到一次 refresh 就等于
+    被告知「她刚记了点生理期」。
+    """
+    with connect() as c:
+        c.execute('BEGIN IMMEDIATE')
+        if shared or was_shared:
+            db.bump_shared(c)
+        else:
+            db.bump_user(c, author_id)
+
+
+def create_period_record(body, user):
+    with connect() as c:
+        author_id = user['id']
+        if body.author and body.author != user['id']:
+            # 替对方记：对象必须真实存在，且不能替她设成私密（否则你自己都看不到）
+            if not c.execute('SELECT 1 FROM users WHERE id=?', (body.author,)).fetchone():
+                raise HTTPException(422, '记录对象不存在')
+            author_id = body.author
+        existing = period.find_by_client(author_id, body.client_id)
+        if existing:
+            return period.serialize(existing, user['id'])
+        cleaned = clean_body(c, 'period', body.body, user['id'])
+        if author_id != user['id'] and not cleaned.get('shared', True):
+            raise HTTPException(422, '替对方记录时无法设为仅自己可见')
+    rid = uid()
+    period.insert(rid, author_id, cleaned, body.client_id)
+    if cleaned.get('shared'):
+        with connect() as c:
+            c.execute('BEGIN IMMEDIATE')
+            db.bump_shared(c)
+            # 仅自己可见时不发通知：对端看不到内容，收到提醒只会更困惑
+            db.notice(c, 'activity', '你们的空间有了新记录', rid, user['id'])
+        nudge_worker()
+    else:
+        _period_revisions(author_id, False)
+    return period.serialize(period.get(rid), user['id'])
+
+
+def update_period_record(rid, body, row, user):
+    if body.kind != 'period':
+        raise HTTPException(422, '已发布内容不能改变可见范围，请另建记录')
+    with connect() as c:
+        old_body = db.body_decode(row)
+        cleaned = clean_body(c, 'period', body.body, user['id'], old_body)
+    if row['author'] != user['id']:
+        # 另一半可以帮忙改内容（她说难受时你替她补症状），
+        # 但「共享给 TA」是隐私开关，只能由记录本人改
+        cleaned['shared'] = old_body.get('shared', True)
+    period.update(rid, cleaned)
+    _period_revisions(row['author'], bool(cleaned.get('shared')), bool(old_body.get('shared')))
+    return period.serialize(period.get(rid), user['id'])
+
+
+def delete_period_record(rid, row, user):
+    # 与主库保持一致：period 在 SHARED_EDIT 里，另一半也能删；恢复只有本人能做
+    shared = bool(db.body_decode(row).get('shared'))
+    if row['author'] != user['id'] and not shared:
+        raise HTTPException(404, '记录不存在')
+    period.soft_delete(rid)
+    _period_revisions(row['author'], False, shared)
+    return {'ok': True}
+
+
+def restore_period_record(rid, row, user):
+    if row['author'] != user['id']:
+        raise HTTPException(404, '记录不存在')
+    period.restore(rid)
+    _period_revisions(row['author'], bool(db.body_decode(row).get('shared')))
+    return {'ok': True}
 
 
 @app.post('/api/records')
 def create_record(body: RecordInput, user=Depends(current_user)):
+    if body.kind == 'period':
+        return create_period_record(body, user)
     with connect() as c:
         c.execute('BEGIN IMMEDIATE')
         author_id = user['id']
@@ -767,11 +875,19 @@ def get_record(c, rid, user, editable=False, include_deleted=False):
 @app.get('/api/records/{rid}')
 def record_detail(rid: str, user=Depends(current_user)):
     with connect() as c:
-        return serialize(c, get_record(c, rid, user), user['id'])
+        if c.execute('SELECT 1 FROM records WHERE id=?', (rid,)).fetchone():
+            return serialize(c, get_record(c, rid, user), user['id'])
+    prow = period.get(rid)
+    if not prow:
+        raise HTTPException(404, '记录不存在')
+    return period.serialize(prow, user['id'])
 
 
 @app.put('/api/records/{rid}')
 def update_record(rid: str, body: RecordInput, user=Depends(current_user)):
+    prow = period.get(rid)
+    if prow:
+        return update_period_record(rid, body, prow, user)
     with connect() as c:
         # 先读后写（读记录 → 读其他记录判断附件引用 → 写）：不先拿写锁，
         # 锁升级时会直接 SQLITE_BUSY 而不是等待
@@ -813,25 +929,17 @@ def period_share_all(body: PeriodShareInput, user=Depends(current_user)):
     一是把历史记录（早期版本默认私有）一次性补成公开，二是随时整体收回。
     只动 author=自己的记录；单条仍可在记录菜单里单独切换。
     """
-    with connect() as c:
-        c.execute('BEGIN IMMEDIATE')
-        rows = c.execute("SELECT * FROM records WHERE kind='period' AND author=? AND deleted IS NULL",
-                         (user['id'],)).fetchall()
-        changed = 0
-        for row in rows:
-            data = db.body_decode(row)
-            if bool(data.get('shared')) == body.shared:
-                continue
-            data['shared'] = body.shared
-            # period 是 ENCRYPTED 类型，重新编码才会写回密文
-            c.execute('UPDATE records SET body=?,updated=? WHERE id=?',
-                      (db.body_encode('period', row['id'], data), now(), row['id']))
-            changed += 1
-        return {'ok': True, 'changed': changed, 'total': len(rows), 'shared': body.shared}
+    changed, total = period.set_shared(user['id'], body.shared)
+    if changed:
+        _period_revisions(user['id'], body.shared, True)
+    return {'ok': True, 'changed': changed, 'total': total, 'shared': body.shared}
 
 
 @app.delete('/api/records/{rid}')
 def delete_record(rid: str, user=Depends(current_user)):
+    prow = period.get(rid)
+    if prow:
+        return delete_period_record(rid, prow, user)
     with connect() as c:
         c.execute('BEGIN IMMEDIATE')  # 先读后写，见 update_record 注释
         row = get_record(c, rid, user, True)
@@ -848,6 +956,9 @@ def delete_record(rid: str, user=Depends(current_user)):
 
 @app.post('/api/records/{rid}/restore')
 def restore_record(rid: str, user=Depends(current_user)):
+    prow = period.get(rid, include_deleted=True)
+    if prow:
+        return restore_period_record(rid, prow, user)
     with connect() as c:
         get_record(c, rid, user, include_deleted=True)
         c.execute('UPDATE records SET deleted=NULL,updated=? WHERE id=?', (now(), rid))
@@ -1617,13 +1728,16 @@ def storage_usage(user=Depends(current_user)):
                 by_month[month] = by_month.get(month, 0) + size
     db_size = (db.DATA / 'love.db').stat().st_size if (db.DATA / 'love.db').is_file() else 0
     wal_size = (db.DATA / 'love.db-wal').stat().st_size if (db.DATA / 'love.db-wal').is_file() else 0
+    # 生理期是独立文件，磁盘占用和记录条数都要算进来，否则看板上的数字对不上
+    pdb_size = period.db_path().stat().st_size if period.db_path().is_file() else 0
+    pwal_size = period.db_path().with_name('period.db-wal').stat().st_size if period.db_path().with_name('period.db-wal').is_file() else 0
     backups_size = sum(p.stat().st_size for p in (db.DATA / 'backups').glob('*.zip')) if (db.DATA / 'backups').is_dir() else 0
     with connect() as c:
-        record_count = c.execute('SELECT count(*) FROM records WHERE deleted IS NULL').fetchone()[0]
+        record_count = c.execute('SELECT count(*) FROM records WHERE deleted IS NULL').fetchone()[0] + period.count_active()
         media_count = c.execute('SELECT count(*) FROM media').fetchone()[0]
-    return {'total': sum(by_kind.values()) + db_size + wal_size + backups_size,
+    return {'total': sum(by_kind.values()) + db_size + wal_size + pdb_size + pwal_size + backups_size,
             'media_by_kind': by_kind, 'media_by_month': dict(sorted(by_month.items())[-12:]),
-            'db': db_size + wal_size, 'backups': backups_size,
+            'db': db_size + wal_size + pdb_size + pwal_size, 'backups': backups_size,
             'disk_free': usage.free, 'disk_total': usage.total,
             'record_count': record_count, 'media_count': media_count}
 

@@ -11,6 +11,7 @@ from pathlib import Path
 
 from . import db
 from .db import connect, dumps, now
+from . import period
 from .serializers import serialize  # 不再走 main，避免 main ↔ backups 循环导入
 
 storage_lock = threading.RLock()
@@ -100,9 +101,17 @@ def create_backup():
                     source.backup(destination)
                 finally:
                     destination.close()
+            # 生理期在独立的 period.db：备份必须把它一起带走，否则"恢复出来的世界"
+            # 会凭空少掉一个人的全部周期记录。老版本留下的包没有这个文件，照常恢复。
+            period_snapshot = Path(tmp) / 'period.db'
+            has_period = period.db_path().is_file()
+            if has_period:
+                period.copy_file(period_snapshot)
             try:
                 with zipfile.ZipFile(temp_target, 'w', zipfile.ZIP_DEFLATED, allowZip64=True) as archive:
                     archive.write(snapshot, 'love.db')
+                    if has_period:
+                        archive.write(period_snapshot, 'period.db')
                     # 主密钥单独再加密一遍：外层整包加密防止"备份被拷走即可读"，
                     # 这一层保证即使有人只拿到包内文件，也解不开私密记录
                     archive.writestr('secret.key.enc',
@@ -147,6 +156,9 @@ def user_export(user_id):
     path = db.DATA / 'tmp' / (db.uid() + '.zip')
     with storage_lock, connect() as c:
         records = [serialize(c, r, user_id) for r in c.execute('SELECT * FROM records ORDER BY created') if db.visible(r, user_id)]
+        # 生理期在独立的 period.db：导出「我们的回忆」时不能少掉这一块
+        records.extend(period.rows_for(user_id))
+        records.sort(key=lambda item: item['created'])
         mids = {mid for r in records for mid in r['body'].get('media', [])}
         users = [{k: u[k] for k in ('id', 'name')} for u in c.execute('SELECT * FROM users')]
         with zipfile.ZipFile(path, 'w', zipfile.ZIP_DEFLATED, allowZip64=True) as archive:
@@ -155,14 +167,23 @@ def user_export(user_id):
             for record in records:
                 body = record['body']
                 content = html.escape(body.get('content', '')).replace('\n', '<br>')
+                title = body.get('title', '')
+                date = body.get('date', '')
+                if record['kind'] == 'period' and body.get('start'):
+                    title = title or f"经期 {body['start']}"
+                    date = date or body['start']
                 attachments = []
                 for mid in body.get('media', []):
                     media = c.execute('SELECT * FROM media WHERE id=?', (mid,)).fetchone()
-                    attachments.append(f'<a href="media/{mid}{media["ext"]}">{html.escape(media["name"])}</a>')
-                sections.append(f'<article><small>{html.escape(record["kind"])} · {html.escape(body.get("date", ""))}</small><h2>{html.escape(body.get("title", ""))}</h2><p>{content}</p>{" · ".join(attachments)}</article>')
+                    # 附件可能已被孤儿清理回收（记录里的引用还在）：导出整包不能因此 500
+                    if media:
+                        attachments.append(f'<a href="media/{mid}{media["ext"]}">{html.escape(media["name"])}</a>')
+                sections.append(f'<article><small>{html.escape(record["kind"])} · {html.escape(date)}</small><h2>{html.escape(title)}</h2><p>{content}</p>{" · ".join(attachments)}</article>')
             archive.writestr('回忆.html', '<!doctype html><meta charset="utf-8"><title>我们的回忆</title><style>body{max-width:800px;margin:40px auto;font:16px/1.8 sans-serif;padding:20px}article{border-bottom:1px solid #ddd;padding:20px 0}small{color:#888}</style><h1>我们的回忆</h1>' + ''.join(sections))
             for mid in mids:
                 media = c.execute('SELECT * FROM media WHERE id=?', (mid,)).fetchone()
+                if not media:
+                    continue
                 source = db.media_dir(media['mime'], media['created']) / (mid + media['ext'])
                 if source.is_file():
                     archive.write(source, 'media/' + mid + media['ext'])
@@ -197,6 +218,17 @@ def restore_backup(source, destination, password=''):
         conn.commit()
     finally:
         conn.close()
+    # 生理期分库：老备份里没有这个文件，那就留给启动时的自动迁移去搬（主库里还留着那些行）
+    extra_db = destination / 'period.db'
+    if extra_db.is_file():
+        conn = sqlite3.connect(extra_db)
+        try:
+            if conn.execute('PRAGMA integrity_check').fetchone()[0] != 'ok':
+                raise ValueError('生理期数据库完整性检查失败')
+            conn.commit()
+        finally:
+            conn.close()
+        extra_db.chmod(0o600)
     (destination / 'secret.key').chmod(0o600)
     for folder in ('backups', 'tmp'):
         (destination / folder).mkdir(exist_ok=True)
@@ -222,7 +254,7 @@ def _extract_backup(archive, destination, password=''):
         raise ValueError('这份备份的主密钥是加密的，请提供备份密码')
     for item in archive.infolist():
         name = item.filename
-        if name not in {'love.db', 'secret.key', 'secret.key.enc', 'manifest.json'} and not name.startswith('media/'):
+        if name not in {'love.db', 'period.db', 'secret.key', 'secret.key.enc', 'manifest.json'} and not name.startswith('media/'):
             raise ValueError('备份包含未知文件')
         if not (destination / name).resolve().is_relative_to(destination) or '\\' in name:
             raise ValueError('备份路径不安全')
