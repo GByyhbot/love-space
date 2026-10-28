@@ -40,14 +40,42 @@ def test_openapi_schema_is_not_public(monkeypatch):
         assert client.get('/health').headers['strict-transport-security'] == 'max-age=31536000'
         assert 'wss://push.example.com' in client.get('/').headers['content-security-policy']
         assert client.get('/static/sw.js').headers['service-worker-allowed'] == '/'
-        raw_ip = client.get('http://testserver/', headers={'host': '192.168.31.95:1314'}, follow_redirects=False)
+        # 陌生公网主机 + 明文 → 踢回 HTTPS 域名；内网直连不放行到这条分支（见下个用例）
+        raw_ip = client.get('http://testserver/', headers={'host': '1.2.3.4:1314'}, follow_redirects=False)
         assert raw_ip.status_code == 308
         assert raw_ip.headers['location'] == 'https://love.example.com/'
-        blocked = client.post('http://testserver/api/login', headers={**HEADERS, 'host': '192.168.31.95:1314'}, json={})
+        blocked = client.post('http://testserver/api/login', headers={**HEADERS, 'host': '1.2.3.4:1314'}, json={})
         assert blocked.status_code == 403
         proxied = client.get('/', headers={'host': '172.30.0.1:1314', 'x-forwarded-proto': 'https'},
                              follow_redirects=False)
         assert proxied.status_code == 200
+
+
+def test_lan_plain_http_is_not_redirected(client_a, monkeypatch):
+    """局域网/本机直连走明文：不跳公网域名、不发 HSTS、cookie 不带 Secure。
+
+    以前这里一律 308 到 PUBLIC_URL，结果家里敲 192.168.x.x:1314 会被甩到公网域名上，
+    内网访问形同虚设（公网绕一圈甚至更快被墙）。
+    """
+    monkeypatch.setenv('PUBLIC_URL', 'https://love.example.com')
+    with TestClient(app, base_url='http://testserver', headers=HEADERS) as c:
+        for h in ('192.168.31.95:1314', 'localhost:1314', '10.0.0.8:1314', '172.20.0.5:1314',
+                  '[::1]:1314', 'nas:1314'):
+            r = c.get('/', headers={'host': h}, follow_redirects=False)
+            assert r.status_code == 200, (h, r.status_code, r.headers.get('location'))
+            assert 'strict-transport-security' not in r.headers, h
+        # 内网能正常登录，且 cookie 不带 Secure —— 否则浏览器在 http 下不回传，表现为"
+        # 登录成功又跳回登录页"
+        ok = c.post('/api/login', headers={**HEADERS, 'host': '192.168.31.95:1314'},
+                    json={'username': 'lover1', 'password': PASSWORD})
+        assert ok.status_code == 200, ok.text
+        assert 'secure' not in ok.headers['set-cookie'].lower()
+        # 公网域名走 HTTPS 时仍然带 Secure
+        pub = c.post('/api/login', headers={**HEADERS, 'host': 'love.example.com',
+                                            'x-forwarded-proto': 'https'},
+                     json={'username': 'lover1', 'password': PASSWORD})
+        assert pub.status_code == 200, pub.text
+        assert 'secure' in pub.headers['set-cookie'].lower()
 
 
 def test_chat_zip_import_enforces_expansion_and_image_limits():

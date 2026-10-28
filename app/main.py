@@ -2,6 +2,7 @@ import asyncio
 import contextlib
 import datetime as dt
 import io
+import ipaddress
 import json
 import logging
 import os
@@ -137,20 +138,45 @@ def origin_allowed(origin: str, request: Request) -> bool:
     return False
 
 
+def private_host(host: str | None) -> bool:
+    """内网/本机直连判定：私有 IP、回环、链路本地、单段主机名、.local/.lan 等。
+
+    局域网里敲 `http://192.168.31.95:1314` 或手机连同一个 WiFi 打开 nas 名字，
+    属于主人明确要的用法：这类请求放行明文，既不跳公网域名，也不下发 HSTS
+    （HSTS 一旦被浏览器记住，这个地址以后只能走 https，反而打不开）。
+    """
+    if not host:
+        return False
+    h = host.strip().strip('[]').lower()
+    if h.startswith('::ffff:'):  # IPv4-mapped IPv6
+        h = h[7:]
+    if h in {'localhost', 'localhost.localdomain'} or h.endswith(('.local', '.lan', '.internal', '.home')):
+        return True
+    try:
+        ip = ipaddress.ip_address(h)
+    except ValueError:
+        # 不带点的主机名（nas / fnos / love-space）当内网
+        return '.' not in h
+    return ip.is_private or ip.is_loopback or ip.is_link_local
+
+
 @app.middleware('http')
 async def protection(request, call_next):
     public_url = os.getenv('PUBLIC_URL', '').rstrip('/')
+    forwarded_host = request.headers.get('x-forwarded-host') or request.headers.get('host', '')
+    request_host = urlparse('//' + forwarded_host.split(',')[0].strip()).hostname
+    forwarded_proto = request.headers.get('x-forwarded-proto', '').split(',')[0].strip().lower()
+    is_https = forwarded_proto == 'https' or request.url.scheme == 'https'
+    # 内网**明文**直连：不跳公网域名、不发 HSTS。走 https 的内网请求照常按公网规则处理
+    local_access = private_host(request_host) and not is_https
     if public_url.startswith('https://') and request.url.path != '/health':
         public_host = urlparse(public_url).hostname
-        forwarded_host = request.headers.get('x-forwarded-host') or request.headers.get('host', '')
-        request_host = urlparse('//' + forwarded_host.split(',')[0].strip()).hostname
         origin = request.headers.get('origin', '')
         origin_host = urlparse(origin).hostname if origin else None
-        forwarded_proto = request.headers.get('x-forwarded-proto', '').split(',')[0].strip().lower()
         is_public_host = public_host and (
             any(host and host.lower() == public_host.lower() for host in (request_host, origin_host))
-            or forwarded_proto == 'https' or request.url.scheme == 'https')
-        if public_host and not is_public_host:
+            or is_https)
+        if public_host and not is_public_host and not local_access:
             if request.method in {'GET', 'HEAD'}:
                 return RedirectResponse(public_url + request.url.path + (('?' + request.url.query) if request.url.query else ''), status_code=308)
             return JSONResponse({'detail': '请通过 HTTPS 域名访问恋爱空间'}, status_code=403)
@@ -176,7 +202,7 @@ async def protection(request, call_next):
     push_port = f':{push_origin.port}' if push_origin.port and push_origin.port != 443 else ''
     connect_src = f"connect-src 'self' https://{push_host}{push_port} wss://{push_host}{push_port}"
     result.headers['Content-Security-Policy'] = f"default-src 'self'; img-src 'self' blob: data:; media-src 'self' blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; {connect_src}; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
-    if public_url.startswith('https://'):
+    if public_url.startswith('https://') and not local_access:
         result.headers['Strict-Transport-Security'] = 'max-age=31536000'
     if request.url.path.startswith(('/api/', '/media/')):
         result.headers['Cache-Control'] = 'no-store'
@@ -229,7 +255,7 @@ def setup(body: Credentials, request: Request, response: Response):
         user_id = uid()
         c.execute('INSERT INTO users(id,username,name,password,admin,created) VALUES (?,?,?,?,1,?)',
                   (user_id, body.username.lower(), body.name.strip(), hashed, now()))
-        login_session(c, user_id, response)
+        login_session(c, user_id, response, request)
     return {'ok': True}
 
 
@@ -240,7 +266,7 @@ def login(body: Credentials, request: Request, response: Response):
         row = c.execute('SELECT * FROM users WHERE username=?', (body.username.lower(),)).fetchone()
         if not row or not password_ok(body.password, row['password']):
             raise HTTPException(401, '账号或密码不正确')
-        login_session(c, row['id'], response)
+        login_session(c, row['id'], response, request)
     return {'ok': True}
 
 
@@ -279,7 +305,7 @@ def join(body: Credentials, request: Request, response: Response):
         c.execute('INSERT INTO users(id,username,name,password,created) VALUES (?,?,?,?,?)',
                   (user_id, body.username.lower(), body.name.strip(), hashed, now()))
         c.execute('UPDATE invites SET used=1')
-        login_session(c, user_id, response)
+        login_session(c, user_id, response, request)
         db.notice(c, 'system', '你们的双人空间已开启', actor=user_id)
     return {'ok': True}
 

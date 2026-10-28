@@ -136,11 +136,26 @@ def digest_token(token):
     return hashlib.sha256(token.encode()).hexdigest()
 
 
-def login_session(c, user_id, response):
+def cookie_secure(request=None):
+    """会话 cookie 的 Secure 标志按当前访问协议决定。
+
+    公网 https → 带 Secure；局域网明文 http（192.168.x.x:1314）→ 不带。
+    否则浏览器不会在 http 请求里回传 cookie，内网会表现成「登录成功了又跳回登录页」。
+    SECURE_COOKIES=false 仍可整体关闭。
+    """
+    if os.getenv('SECURE_COOKIES', 'true').lower() != 'true':
+        return False
+    if request is None:
+        return True
+    proto = request.headers.get('x-forwarded-proto') or request.url.scheme
+    return proto.split(',')[0].strip().lower() == 'https'
+
+
+def login_session(c, user_id, response, request=None):
     token = secrets.token_urlsafe(32)
     c.execute('INSERT INTO sessions VALUES (?,?,?)', (digest_token(token), user_id, now() + 30 * 86400))
     response.set_cookie('love_session', token, httponly=True, samesite='strict',
-                        secure=os.getenv('SECURE_COOKIES', 'true').lower() == 'true', max_age=30 * 86400)
+                        secure=cookie_secure(request), max_age=30 * 86400)
 
 
 def current_user(request: Request):
