@@ -277,6 +277,17 @@ label{display:grid;gap:6px;font-size:13px;color:var(--muted)}
 .today-cell .countdown-mini strong{font:26px var(--serif);color:var(--primary-dark);font-weight:500}
 .today-cell .countdown-mini small{color:var(--muted)}
 .today-cell .link-btn{margin-top:4px}
+/* 两格都可点：心情的每一行是按钮（自己的点开记录/修改，对方的点进心情手记），
+   纪念日整格是按钮（进纪念日页）。右上一个箭头暗示「点得动」。 */
+.today-cell .tiny .tiny-go{margin-left:auto;display:inline-flex;color:var(--muted);opacity:.7}
+.today-cell .tiny .tiny-go .icon{width:14px;height:14px;stroke-width:2}
+.today-cell-link{display:block;width:100%;text-align:left;transition:transform var(--speed),box-shadow var(--speed)}
+.today-cell-link:hover{transform:translateY(-1px);box-shadow:var(--shadow-lift)}
+.today-cell-link:hover .tiny-go{opacity:1;color:var(--primary-dark)}
+button.mood-row{width:calc(100% + 12px);text-align:left;padding:3px 6px;margin:0 -6px;border-radius:10px;transition:background var(--speed)}
+button.mood-row:hover,button.mood-row:active{background:var(--soft)}
+.mood-bubble.empty{color:var(--muted);background:transparent;border-style:dashed}
+button.mood-row.no-mood .mood-bubble.empty{color:var(--primary-dark)}
 
 /* 愿望清单 */
 .wish-line{padding:12px 0;display:flex;align-items:center;gap:10px;font-size:14px;border-bottom:1px dashed var(--line);text-align:left;width:100%}
@@ -299,6 +310,12 @@ label{display:grid;gap:6px;font-size:13px;color:var(--muted)}
 .countdown{font:42px var(--serif);color:var(--primary);line-height:1.2}
 .countdown small{font:12px var(--font);margin-left:6px;color:var(--muted)}
 .anniversary-card p{font-size:12px;color:var(--muted);margin-top:6px}
+/* 有纪念日时整张卡可点（进纪念日页），没的时候保留「添加纪念日」按钮，避免按钮套按钮 */
+.anniversary-link{display:block;width:100%;padding:2px 0;border-radius:12px;transition:transform var(--speed)}
+.anniversary-link:hover{transform:translateY(-1px)}
+.anniversary-card .tiny .tiny-go{margin-left:2px;display:inline-flex;color:var(--muted);opacity:.7}
+.anniversary-card .tiny .tiny-go .icon{width:14px;height:14px;stroke-width:2}
+.anniversary-link:hover .tiny-go{opacity:1;color:var(--primary-dark)}
 .mood-card .button{width:100%;margin-top:14px}
 
 /* 时光机：历史上的今天 */
@@ -773,7 +790,7 @@ body.cal-full{overflow:hidden;height:100dvh}
   .today-card .mood-row{grid-template-columns:26px minmax(0,1fr);row-gap:4px}
   .today-card .mood-row .avatar{grid-column:1;grid-row:1}
   .today-card .mood-row>span:nth-child(2){grid-column:2;grid-row:1}
-  .today-card .mood-bubble{grid-column:2;grid-row:2;justify-self:start;width:auto;max-width:100%}
+  .today-card .mood-bubble{grid-column:1/-1;grid-row:2;justify-self:start;width:auto;max-width:100%}
   .today-card .countdown-mini,.today-card .countdown-mini>span{min-width:0}
   .today-card .countdown-mini>span,.today-card>.today-cell>.meta{overflow-wrap:anywhere}
   .photo-grid{grid-template-columns:repeat(3,1fr)}

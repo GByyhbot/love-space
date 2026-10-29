@@ -74,6 +74,8 @@ const dateLabel = timestamp => new Date(timestamp*1000).toLocaleString('zh-CN',{
 const today = () => new Intl.DateTimeFormat('sv-SE',{timeZone:state.me?.space.timezone || 'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
 const daysBetween = (a,b) => Math.round((new Date(b+'T00:00:00Z')-new Date(a+'T00:00:00Z'))/86400000);
 const kindLabel = {post:'时光动态',diary:'私密日记',draft:'草稿',surprise:'定时惊喜',anniversary:'纪念日',wish:'共同愿望',personal_wish:'个人心愿',mood:'每日心情',note:'留言板',question:'情侣问答',habit:'共同打卡',chat:'聊天',album:'相册',quest:'恋爱清单',ledger:'共同账本',period:'生理期',music:'共同歌单'};
+/* 心情的六种表情：首页快捷记录和心情手记的完整表单共用同一份，选项别分叉 */
+const MOOD_OPTIONS=[['☀️','☀️ 开心'],['🥰','🥰 想你'],['😌','😌 平静'],['☁️','☁️ 有点低落'],['🌧️','🌧️ 想要抱抱'],['🌱','🌱 充满期待']];
 const recordsOf = kind => state.records.filter(r=>r.kind===kind);
 const uuid = () => crypto.randomUUID ? crypto.randomUUID() : ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g,c=>(c^crypto.getRandomValues(new Uint8Array(1))[0]&15>>c/4).toString(16));
 
@@ -314,9 +316,23 @@ function loveCardImage(){
 }
 function homePage() {
  const {space,user,users}=state.me,partner=users.find(u=>u.id!==user.id),days=space.since?Math.max(0,daysBetween(space.since,today())+1):null,anniversary=nextAnniversary(),posts=recordsOf('post').slice(0,3),wishes=recordsOf('wish');
- const moodRows=users.map(u=>{const m=recordsOf('mood').find(r=>r.author===u.id&&r.body.date===today());return `<div class="mood-row">${avatar(u.id)}<span>${esc(u.name)}</span><span class="mood-bubble">${m?esc(m.body.emoji)+' '+esc(m.body.content||'已记录'):'等一个好心情'}</span></div>`;}).join('');
+ /* 今天的心情：每一行都是一颗按钮——自己的没记就去记，已记就点开改（改的仍是心情手记里那条），
+    对方的点进去看心情手记。moodRows 同时用在手机上那两格和桌面右栏的心情卡。 */
+ const moodRows=users.map(u=>{
+  const m=recordsOf('mood').find(r=>r.author===u.id&&r.body.date===today());
+  const mine=u.id===state.me.user.id;
+  const act=m?(mine?`data-action="edit-record" data-id="${m.id}"`:'data-action="mood-history"'):(mine?'data-action="mood-quick"':'data-action="mood-history"');
+  const bubble=m?`${esc(m.body.emoji)+' '+esc(m.body.content||'已记录')}`:(mine?'＋ 记一笔':'等一个好心情');
+  const label=`${esc(u.name)}${m?'：'+esc(m.body.emoji||'')+' '+esc(m.body.content||'已记录'):(mine?'，今天还没记，点这里记一笔':'，还没记')}`;
+  return `<button type="button" class="mood-row${m?'':' no-mood'}" ${act} aria-label="${label}">${avatar(u.id)}<span>${esc(u.name)}</span><span class="mood-bubble${m?'':' empty'}">${bubble}</span></button>`;
+ }).join('');
+ const moodCell=`<div class="today-cell"><span class="tiny">${icon('sun')} 今天的心情</span><div class="mood-inline">${moodRows}</div></div>`;
+ /* 最近纪念日：整格可点，进纪念日页；一个都没有时保留原来的「添加纪念日」按钮 */
+ const annCell=anniversary
+  ?`<button type="button" class="today-cell today-cell-link" data-action="tool-anniversary" aria-label="最近纪念日：${esc(anniversary.body.title)}，${anniversary.days} 天后"><span class="tiny">${icon('calendar')} 最近纪念日<span class="tiny-go">${icon('arrow')}</span></span><div class="countdown-mini"><strong>${anniversary.days}</strong><span>天后 · ${esc(anniversary.body.title)}</span></div><p class="meta">${anniversary.due} · 别忘了给彼此一个拥抱</p></button>`
+  :`<div class="today-cell"><span class="tiny">${icon('calendar')} 最近纪念日</span><div class="countdown-mini"><strong>♡</strong><span>留一个日子，给仪式感</span></div>${button('添加纪念日','new-anniversary','small secondary')}</div>`;
+ const todayCard=`<section class="today-card" aria-label="今天的陪伴">${moodCell}${annCell}</section>`;
  const heroCopy=`<section class="hero">${space.cover?`<img class="hero-art hero-cover" src="/media/${esc(space.cover)}?preview=true" alt="我们的合照封面">`:'<img class="hero-art" src="/static/garden.svg" alt="两只小兔子守着共同的小家">'}<div class="hero-mask"></div><div class="hero-copy"><div class="hero-main"><span class="hero-tag">${icon('heart')} ${esc(space.name)}</span><div class="couple-line"><div class="couple-avatars">${avatar(user.id)}<span class="heart-symbol">♥</span>${partner?avatar(partner.id,'partner'):'<span class="avatar partner">?</span>'}</div><span class="hero-names-text">${partner?`${esc(user.name)} & ${esc(partner.name)}`:'等你，把另一半邀请进来'}</span></div>${partner?'':`<button class="link-btn" data-action="invite">发送邀请，让 TA 住进来 →</button>`}<div class="hero-days"><small>我们相恋</small><strong>${days??'—'}<em>天</em></strong>${days===null?`<button class="link-btn" data-action="space">设置相恋日期 →</button>`:`<span class="meta">${esc(space.since)} · 今天也要好好相爱</span><button class="link-btn" data-action="love-card">存一张天数卡片 →</button>`}</div></div></div></section>`;
- const todayCard=`<section class="today-card" aria-label="今天的陪伴"><div class="today-cell"><span class="tiny">${icon('sun')} 今天的心情</span><div class="mood-inline">${moodRows}</div></div><div class="today-cell"><span class="tiny">${icon('calendar')} 最近纪念日</span>${anniversary?`<div class="countdown-mini"><strong>${anniversary.days}</strong><span>天后 · ${esc(anniversary.body.title)}</span></div><p class="meta">${anniversary.due} · 别忘了给彼此一个拥抱</p>`:`<div class="countdown-mini"><strong>♡</strong><span>留一个日子，给仪式感</span></div>${button('添加纪念日','new-anniversary','small secondary')}`}</div></section>`;
  const composeCta=`<button class="compose-cta" data-action="compose">${icon('edit')} 记录此刻</button>`;
  const homeHeading=heading('我们的每一天','一半是生活，一半是你。','compose','记录此刻','edit').replace('page-heading','page-heading home-heading');
  return `${homeHeading}${heroCopy}${todayCard}${composeCta}${dailyQuoteBlock()}
@@ -324,7 +340,7 @@ function homePage() {
  <section class="on-this-day" id="on-this-day"><div class="loading-heart" style="font-size:24px">♡</div><p class="meta meta-center">正在翻看这一天的回忆…</p></section>
  <section class="yearbook" id="yearbook"><h2>📖 今年的我们</h2><div class="yearbook-summary"><p>点开看看，这一年我们一起写下了什么。</p><span class="yearbook-toggle-row">${button('展开小年报','expand-yearbook','soft small','arrow')}</span></div></section></div>
  <aside class="home-aside"><div class="card mood-card"><div class="section-heading"><h2>☀ 今天的心情</h2><button class="link-btn" data-action="mood-history">回顾 →</button></div>${moodRows}${button('分享今天的心情','mood','soft')}</div>
- <div class="card anniversary-card"><div class="tiny">${icon('calendar')} 下一个值得期待的日子</div>${anniversary?`<h3>${esc(anniversary.body.title)}</h3><div class="countdown">${anniversary.days}<small>天后</small></div><p>${anniversary.due} · 别忘了给彼此一个拥抱</p>`:`<h3>留一个日子，给仪式感</h3><div class="countdown">♡</div>${button('添加纪念日','new-anniversary','small secondary')}`}</div>
+ <div class="card anniversary-card">${anniversary?`<button type="button" class="anniversary-link" data-action="tool-anniversary" aria-label="最近纪念日：${esc(anniversary.body.title)}，${anniversary.days} 天后"><span class="tiny">${icon('calendar')} 下一个值得期待的日子<span class="tiny-go">${icon('arrow')}</span></span><h3>${esc(anniversary.body.title)}</h3><div class="countdown">${anniversary.days}<small>天后</small></div><p>${anniversary.due} · 别忘了给彼此一个拥抱</p></button>`:`<span class="tiny">${icon('calendar')} 下一个值得期待的日子</span><h3>留一个日子，给仪式感</h3><div class="countdown">♡</div>${button('添加纪念日','new-anniversary','small secondary')}`}</div>
  <div class="card"><div class="section-heading"><h2>✧ 我们的小心愿</h2><button class="link-btn" data-action="tool-wish">全部 →</button></div>${wishes.length?wishes.slice(0,3).map(r=>`<button class="wish-line ${r.body.done?'done':''}" data-action="toggle-wish" data-id="${r.id}"><span class="check-circle"></span>${esc(r.body.title)}</button>`).join(''):empty('一起期待下一件小事','想去的地方，想做的事情，都记在这里。','new-wish','许个心愿',true)}</div>${songsCard()}</aside></div>`;
 }
 
@@ -1172,7 +1188,7 @@ function recordForm(kind,record=null) {
  if(kind==='music')return musicForm(record);
  if(['post','diary','draft','surprise','chat'].includes(kind))return composer(kind,record);
  const b=record?.body||{};let fields='';
- if(kind==='mood')fields=selectField('今天的心情','emoji',[['☀️','☀️ 开心'],['🥰','🥰 想你'],['😌','😌 平静'],['☁️','☁️ 有点低落'],['🌧️','🌧️ 想要抱抱'],['🌱','🌱 充满期待']],b.emoji||'☀️')+field('心情日期','date',b.date||today(),'date','required');
+ if(kind==='mood')fields=selectField('今天的心情','emoji',MOOD_OPTIONS,b.emoji||'☀️')+field('心情日期','date',b.date||today(),'date','required');
  else if(kind!=='note'&&kind!=='ledger')fields+=field(kind==='question'?'想问 TA 的问题':'标题','title',b.title||'','text','required maxlength="200"');
  if(kind==='question')fields+='<label>或挑选一个内置问题<select id="preset-question"><option value="">选择一个问题…</option><option>第一次心动，是哪个瞬间？</option><option>今年最想和我一起完成什么事？</option><option>什么样的陪伴让你最有安全感？</option><option>如果可以重温一天，你会选哪天？</option></select></label>';
  if(kind==='anniversary')fields+=`<div class="form-row">${field('日期','date',b.date||today(),'date','required')}${field('提前几天提醒','remind_days',b.remind_days??1,'number','min="0" max="365"')}</div><label class="switch-row">重复方式<select name="annual"><option value="true" ${b.annual===true||b.annual===undefined?'selected':''}>每年公历日期</option><option value="lunar" ${b.annual==='lunar'?'selected':''}>每年农历日期</option><option value="false" ${b.annual===false?'selected':''}>只纪念一次</option></select></label>`;
@@ -1184,6 +1200,16 @@ function recordForm(kind,record=null) {
  if(kind==='question')$('#preset-question').onchange=e=>{$('#simple-form [name=title]').value=e.target.value;};
 }
 
+/* 首页「今天的心情」快捷记录：只有表情 + 一句话，日期固定今天。
+   存下去就是一条 kind=mood 记录，和「心情手记」完全同一张表——记完两边立刻都能看到。 */
+function quickMoodForm() {
+ const fields=selectField('今天的心情','emoji',MOOD_OPTIONS,'☀️')
+  +`<label>再说一句今天的心情<textarea name="content" maxlength="2000" placeholder="今天怎么样？一句话就好"></textarea></label>`
+  +'<p class="small-note">记完会出现在「心情手记」里；想补标题或换日期，去那里编辑。</p>';
+ simpleForm('今天的心情',fields,async data=>{
+  await post('/records',{kind:'mood',body:{emoji:data.emoji,date:today(),content:(data.content||'').trim()},client_id:uuid()});
+ },'记下今天');
+}
 function spaceForm() {
  const s=state.me.space;
  const darkPref=localStorage.getItem(DARK_KEY)||'auto';
@@ -1527,6 +1553,7 @@ async function act(action,id,el) {
  if(action.startsWith('tool-'))return navigate('together',action.slice(5));
  if(action==='tools-back')return navigate('together');
  if(action==='mood')return recordForm('mood');
+ if(action==='mood-quick')return quickMoodForm();
  if(action==='mood-history')return navigate('together','mood');
  if(action==='personal-tab')return id==='settings'?navigate('settings'):navigate('personal',id);
  if(action==='album-filter'){state.album=id;return renderPage();}
