@@ -1617,6 +1617,11 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape'){const menu=$('.more
 const NATIVE_UA=/LoveSpaceApp\/([0-9][0-9.]*)/i;
 function nativeUaVersion(){const m=NATIVE_UA.exec(navigator.userAgent||'');return m?m[1].replace(/\.+$/,''):'';}
 function isNativeApp(){return Boolean(window.Capacitor&&Capacitor.isNativePlatform&&Capacitor.isNativePlatform())||Boolean(nativeUaVersion())||Boolean(window.LoveNative);}
+/* 原生 App 里网页会铺到状态栏下面（Android 15 起强制 edge-to-edge），
+   这里给 <html> 打标记，让 CSS 用 --safe-top 给顶栏让出状态栏高度。
+   浏览器不加这个类，排版完全不变。脚本是 defer 的，此时 <html> 已存在，
+   首屏绘制前就生效，不会出现「先顶上去再跳下来」的闪动。 */
+if(isNativeApp())document.documentElement.classList.add('is-native-app');
 /* 本机 App 版本：原生桥 > UA 标记，都拿不到才认输（返回 unknown）。 */
 async function detectAppVersion(){
  let nv='unknown';

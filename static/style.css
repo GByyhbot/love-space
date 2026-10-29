@@ -158,6 +158,12 @@ label{display:grid;gap:6px;font-size:13px;color:var(--muted)}
 .more-menu .menu-pop .icon{width:16px;height:16px}
 
 /* ── 4. 布局骨架 ─────────────────────────────── */
+/* 原生 App 里（Android 15 起强制 edge-to-edge）网页会一直铺到状态栏下面，
+   顶栏第一排圆形按钮会被时间与信号图标压住。这里统一用 --safe-top 让位：
+   浏览器里恒为 0px，排版与以前完全一致；App 里取 env(safe-area-inset-top)
+   （有刘海/挖孔的机器给出真实高度），取不到就按标准状态栏高度兜底。
+   类名由 app.js 在启动时按 UA 标记判定后加在 <html> 上。 */
+html.is-native-app{--safe-top:max(env(safe-area-inset-top,0px),24px)}
 .shell{min-height:100vh;display:grid;grid-template-columns:228px minmax(0,1fr)}
 .sidebar{position:fixed;inset:0 auto 0 0;width:228px;border-right:1px solid var(--line);padding:36px 20px;background:var(--surface);display:flex;flex-direction:column;z-index:20}
 .brand{display:flex;align-items:center;gap:10px;margin:0 8px 40px}
@@ -194,9 +200,11 @@ label{display:grid;gap:6px;font-size:13px;color:var(--muted)}
 .profile-btn:hover{background:var(--soft-strong);border-color:var(--soft-strong)}
 .profile-btn strong{font-size:14px}
 .profile-btn small{display:block;color:var(--muted);margin-top:2px;font-size:11px}
-.main{grid-column:2;min-width:0;max-width:1200px;width:100%;margin:0 auto;padding:28px 36px 48px}
+.main{grid-column:2;min-width:0;max-width:1200px;width:100%;margin:0 auto;padding:calc(28px + var(--safe-top,0px)) 36px 48px}
 .topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:26px;color:var(--muted);font-size:13px}
-.topbar-right{display:flex;align-items:center;gap:12px}
+/* 右侧图标组永远贴右：以前靠左侧的「恋爱空间」logo 撑着，删掉 logo 后
+   justify-content:space-between 只剩一个可见子元素，整组就跑到左边去了。 */
+.topbar-right{display:flex;align-items:center;gap:12px;margin-left:auto}
 .topbar .account-menu>summary{width:44px;height:44px;padding:2px;border:1px solid var(--line);background:var(--surface)}
 .topbar .account-menu .menu-pop{position:absolute;top:calc(100% + 10px);right:0;width:250px;max-width:calc(100vw - 36px);padding:8px;z-index:40}
 .topbar .account-menu .menu-pop button{min-height:44px;font-size:14px}
@@ -517,7 +525,7 @@ label{display:grid;gap:6px;font-size:13px;color:var(--muted)}
 body.chat-full{overflow:hidden;height:100dvh}
 .shell.chat-full{grid-template-columns:minmax(0,1fr);height:100dvh;min-height:0;overflow:hidden}
 .shell.chat-full .sidebar,.shell.chat-full .topbar,.shell.chat-full .footer-note{display:none}
-.shell.chat-full .main{grid-column:1;max-width:none;padding:0;height:100dvh;overflow:hidden;display:flex;flex-direction:column}
+.shell.chat-full .main{grid-column:1;max-width:none;padding:var(--safe-top,0px) 0 0;height:100dvh;overflow:hidden;display:flex;flex-direction:column}
 .shell.chat-full #page{flex:1;min-height:0;display:flex;flex-direction:column}
 .shell.chat-full .chat-panel{flex:1;min-height:0;height:auto;border-radius:0;border:0;box-shadow:none}
 
@@ -630,7 +638,7 @@ body.cal-full{overflow:hidden;height:100dvh}
 .backup-name{font-size:14px;overflow-wrap:anywhere;min-width:0}
 
 /* ── 5g. 登录与绑定 ─────────────────────────── */
-.auth-page{min-height:100vh;display:grid;place-items:center;padding:24px;background:radial-gradient(ellipse at 18% 18%,var(--soft),transparent 52%),radial-gradient(ellipse at 85% 82%,var(--green-soft),transparent 48%),var(--bg)}
+.auth-page{min-height:100vh;display:grid;place-items:center;padding:calc(24px + var(--safe-top,0px)) 24px 24px;background:radial-gradient(ellipse at 18% 18%,var(--soft),transparent 52%),radial-gradient(ellipse at 85% 82%,var(--green-soft),transparent 48%),var(--bg)}
 .auth-card{width:min(920px,100%);display:grid;grid-template-columns:1fr 1fr;background:var(--surface);border:1px solid var(--line);border-radius:24px;overflow:hidden;box-shadow:var(--shadow-lift)}
 .auth-art{padding:44px 34px;background:var(--soft);display:flex;flex-direction:column;justify-content:center;text-align:center}
 .auth-art .brand{justify-content:center;margin:0 0 22px}
@@ -783,10 +791,9 @@ body.cal-full{overflow:hidden;height:100dvh}
   .nav .nav-fab{flex:0 0 auto;align-self:center;width:52px;height:52px;min-height:0;padding:0;margin-top:0;border-radius:16px;display:grid;place-items:center;color:var(--on-primary);box-shadow:0 6px 18px rgba(0,0,0,.20)}
   .nav .nav-fab span{display:none}
   .nav .nav-fab .icon{width:26px;height:26px}
-  .main{padding:18px var(--pad-x) 100px}
+  .main{padding:calc(18px + var(--safe-top,0px)) var(--pad-x) 100px}
   /* 情侣摆拍参考：移动端参考框高度 */
   .figure-ref-frame{max-height:68vh}
-  .mobile-brand{display:flex}
   .topbar{margin-bottom:20px}
   .topbar>.desktop-date{display:none}
   .topbar-right{gap:9px}
@@ -841,7 +848,7 @@ body.cal-full{overflow:hidden;height:100dvh}
   .chat-line{max-width:92%}
   .chat-bubble{padding:10px 13px}
   .chat-line .avatar{width:28px;height:28px}
-  .auth-page{padding:16px;align-items:start}
+  .auth-page{padding:calc(16px + var(--safe-top,0px)) 16px 16px;align-items:start}
   .auth-card{grid-template-columns:1fr;max-width:430px}
   .auth-art{padding:26px 22px 18px}
   .auth-art img.garden{display:none}
