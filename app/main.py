@@ -265,7 +265,7 @@ def status():
         count = c.execute('SELECT count(*) FROM users').fetchone()[0]
     return {'initialized': count > 0, 'paired': count == 2, 'setup_token_required': bool(os.getenv('SETUP_TOKEN')),
             'version': WEB_VERSION, 'build': BUILD_ID,
-            'apk_version': APK_VERSION, 'apk_url': '/static/lovespace.apk'}
+            'apk_version': APK_VERSION, 'apk_url': f'/static/lovespace.apk?v={APK_VERSION}'}
 
 
 @app.get('/health')
