@@ -22,8 +22,8 @@ import com.getcapacitor.BridgeWebViewClient;
 
 public class MainActivity extends BridgeActivity {
     private static final String TAG = "LoveSpace/Main";
-    private static final String SPACE_URL = "https://love-space.iepose.cn/";
-        private static final String SPACE_HOST = "love-space.iepose.cn";
+    private static final String SPACE_URL = "https://love.yangyuhui.xyz/";
+        private static final String SPACE_HOST = "love.yangyuhui.xyz";
         private static final String OFFLINE_PAGE = "file:///android_asset/lovespace-offline.html";
     private static final String PREFS = "lovespace_prefs";
     private static final String KEY_FIRST_LAUNCH = "first_launch_done";

@@ -3,7 +3,7 @@
   "appName": "恋爱空间",
   "webDir": "www",
   "server": {
-    "url": "https://love-space.iepose.cn",
+    "url": "https://love.yangyuhui.xyz",
     "androidScheme": "https",
     "cleartext": false
   },
