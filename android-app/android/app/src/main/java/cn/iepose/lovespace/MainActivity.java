@@ -16,17 +16,38 @@ import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 
+import java.net.URL;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import javax.net.ssl.HttpsURLConnection;
+
 import com.getcapacitor.Bridge;
 import com.getcapacitor.BridgeActivity;
 import com.getcapacitor.BridgeWebViewClient;
 
 public class MainActivity extends BridgeActivity {
     private static final String TAG = "LoveSpace/Main";
-    private static final String SPACE_URL = "https://love.yangyuhui.xyz/";
-        private static final String SPACE_HOST = "love.yangyuhui.xyz";
-        private static final String OFFLINE_PAGE = "file:///android_asset/lovespace-offline.html";
+    // 多线路候选：均指向同一后端。不同域名的登录态(cookie)相互独立，
+    // 故优先粘住上次可用线路，仅在它挂掉/明显过慢时才切换，避免频繁掉登录。
+    private static final String[] SPACE_URLS = {
+        "https://love.yangyuhui.xyz/",
+        "https://love-space.iepose.cn/",
+        "https://fn.350921.xyz:1314/",
+        "https://yangyuhui86.top:1314/"
+    };
+    private static final String SPACE_URL = SPACE_URLS[0];
+    private static final String OFFLINE_PAGE = "file:///android_asset/lovespace-offline.html";
     private static final String PREFS = "lovespace_prefs";
     private static final String KEY_FIRST_LAUNCH = "first_launch_done";
+    private static final String KEY_BEST_URL = "best_url";
+    private static final int PROBE_TIMEOUT_MS = 3000;
+    private volatile String currentUrl = SPACE_URL;
+    private volatile boolean probing = false;
+    private final Set<String> attemptedUrls = Collections.synchronizedSet(new HashSet<String>());
 
     @Override
     protected void load() {
@@ -34,6 +55,16 @@ public class MainActivity extends BridgeActivity {
         // 保留 Capacitor 的所有 WebView 处理，只在主页面连不上时切到 APK 内置的恢复页。
         if (getBridge() != null) {
             getBridge().setWebViewClient(new RecoveryWebViewClient(getBridge()));
+            // 上次记住的最优线路：直接用它（保持登录态），首启用默认线路
+            String remembered = prefs().getString(KEY_BEST_URL, null);
+            if (remembered == null || remembered.isEmpty()) remembered = SPACE_URL;
+            currentUrl = remembered;
+            WebView wv = getBridge().getWebView();
+            if (wv != null && !remembered.equals(SPACE_URL)) {
+                wv.loadUrl(remembered); // 覆盖 super.load() 的默认地址
+            }
+            // 后台并行探测各线路，按需切到最快可用线路
+            startUrlProbe(false);
         }
     }
 
@@ -144,12 +175,14 @@ public class MainActivity extends BridgeActivity {
         private boolean handleRecoveryAction(WebView view, Uri uri) {
             if (!"lovespace".equals(uri.getScheme())) return false;
             if ("retry".equals(uri.getHost())) {
-                view.loadUrl(SPACE_URL);
+                attemptedUrls.clear();
+                startUrlProbe(true);
                 return true;
             }
             if ("browser".equals(uri.getHost())) {
                 try {
-                    startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(SPACE_URL)));
+                    String target = currentUrl != null ? currentUrl : SPACE_URL;
+                    startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(target)));
                 } catch (Exception e) {
                     Log.w(TAG, "没有可用的浏览器", e);
                 }
@@ -164,7 +197,7 @@ public class MainActivity extends BridgeActivity {
             if (request.isForMainFrame()) {
                 CharSequence message = error == null ? null : error.getDescription();
                 String description = message == null ? "无法连接服务器" : message.toString();
-                showRecoveryPage(view, description);
+                failover(view, description);
             }
         }
 
@@ -172,8 +205,15 @@ public class MainActivity extends BridgeActivity {
         public void onReceivedHttpError(WebView view, WebResourceRequest request, WebResourceResponse response) {
             super.onReceivedHttpError(view, request, response);
             if (request.isForMainFrame() && response.getStatusCode() >= 500) {
-                showRecoveryPage(view, "服务器暂时不可用（HTTP " + response.getStatusCode() + "）");
+                failover(view, "服务器暂时不可用（HTTP " + response.getStatusCode() + "）");
             }
+        }
+
+        @Override
+        public void onPageFinished(WebView view, String url) {
+            super.onPageFinished(view, url);
+            // 真正的应用页面加载成功 → 重置已尝试线路，供下次导航重新择优
+            if (url != null && !url.startsWith("file:")) attemptedUrls.clear();
         }
     }
 
@@ -221,5 +261,156 @@ public class MainActivity extends BridgeActivity {
         // 通知权限（Android 13+）：通过 Capacitor LocalNotifications 插件在 JS 层请求
         // 这里不做原生请求，由 app.js 的 initNotify() 在 boot 时调用
         Log.i(TAG, "首次启动，权限引导标记已设置（通知权限由 WebView 侧请求）");
+    }
+
+    private SharedPreferences prefs() {
+        return getSharedPreferences(PREFS, MODE_PRIVATE);
+    }
+
+    private void saveBest(String url) {
+        try {
+            prefs().edit().putString(KEY_BEST_URL, url).apply();
+        } catch (Exception e) {
+            Log.w(TAG, "保存最优线路失败", e);
+        }
+    }
+
+    private static int indexOf(String[] arr, String v) {
+        if (v == null) return -1;
+        for (int i = 0; i < arr.length; i++) if (arr[i].equals(v)) return i;
+        return -1;
+    }
+
+    /**
+     * 后台并行探测所有线路，按需切换到最快可用线路。
+     * force=true（离线页「重试」）时强制重新择优；否则保留上次线路（免重登），
+     * 仅当它不可达或明显过慢时才切换。
+     */
+    private void startUrlProbe(final boolean force) {
+        if (probing) return;
+        probing = true;
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    long[] lat = probeAll();
+                    WebView wv = getBridge() == null ? null : getBridge().getWebView();
+                    if (wv == null) return;
+                    int bestIdx = -1;
+                    long bestMs = Long.MAX_VALUE;
+                    for (int i = 0; i < lat.length; i++) {
+                        if (lat[i] >= 0 && lat[i] < bestMs) { bestMs = lat[i]; bestIdx = i; }
+                    }
+                    if (bestIdx < 0) {
+                        wv.post(new Runnable() { public void run() { showRecoveryPage(wv, "所有线路均无法连接"); } });
+                        return;
+                    }
+                    final String best = SPACE_URLS[bestIdx];
+                    int ci = indexOf(SPACE_URLS, currentUrl);
+                    long curMs = ci >= 0 ? lat[ci] : -1;
+                    // 上次线路可用且不算太慢（<= 最优*2+400ms）→ 保留，避免换域重登
+                    boolean keepCurrent = !force && curMs >= 0 && curMs <= bestMs * 2 + 400;
+                    if (keepCurrent) {
+                        saveBest(currentUrl);
+                        return;
+                    }
+                    if (!best.equals(currentUrl)) {
+                        currentUrl = best;
+                        saveBest(best);
+                        wv.post(new Runnable() { public void run() { attemptedUrls.clear(); wv.loadUrl(best); } });
+                    } else {
+                        saveBest(best);
+                    }
+                } catch (Exception e) {
+                    Log.w(TAG, "线路探测异常", e);
+                } finally {
+                    probing = false;
+                }
+            }
+        }, "url-probe").start();
+    }
+
+    /** 主页面加载失败时，自动切到「未尝试过且最快可达」的线路；全部试完才显示离线页。 */
+    private void failover(WebView view, String reason) {
+        if (currentUrl != null) attemptedUrls.add(currentUrl);
+        if (probing) return; // 探测进行中，交给探测结果处理
+        final String why = reason == null ? "连接失败" : reason;
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    long[] lat = probeAll();
+                    int bestIdx = -1;
+                    long bestMs = Long.MAX_VALUE;
+                    for (int i = 0; i < lat.length; i++) {
+                        String u = SPACE_URLS[i];
+                        if (lat[i] >= 0 && !attemptedUrls.contains(u) && lat[i] < bestMs) { bestMs = lat[i]; bestIdx = i; }
+                    }
+                    if (bestIdx < 0) {
+                        view.post(new Runnable() { public void run() { showRecoveryPage(view, "所有线路均无法连接（" + why + "）"); } });
+                        return;
+                    }
+                    final String next = SPACE_URLS[bestIdx];
+                    currentUrl = next;
+                    saveBest(next);
+                    view.post(new Runnable() { public void run() { attemptedUrls.clear(); view.loadUrl(next); } });
+                } catch (Exception e) {
+                    Log.w(TAG, "线路切换异常", e);
+                }
+            }
+        }, "url-failover").start();
+    }
+
+    /** 并行探测全部线路，返回与 SPACE_URLS 对齐的延迟数组（不可达为 -1）。 */
+    private long[] probeAll() {
+        final long[] lat = new long[SPACE_URLS.length];
+        Arrays.fill(lat, -1);
+        final CountDownLatch latch = new CountDownLatch(SPACE_URLS.length);
+        for (int i = 0; i < SPACE_URLS.length; i++) {
+            final int idx = i;
+            Thread t = new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        lat[idx] = probeLatency(SPACE_URLS[idx]);
+                    } catch (Throwable ignored) {
+                    } finally {
+                        latch.countDown();
+                    }
+                }
+            }, "probe-" + idx);
+            t.setDaemon(true);
+            t.start();
+        }
+        try {
+            latch.await(PROBE_TIMEOUT_MS + 1500L, TimeUnit.MILLISECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        return lat;
+    }
+
+    /** 对单条线路发一次 GET /api/status，返回耗时毫秒；不可达/非 2xx-3xx 返回 -1。 */
+    private long probeLatency(String base) {
+        HttpsURLConnection conn = null;
+        try {
+            URL url = new URL(new URL(base), "api/status");
+            conn = (HttpsURLConnection) url.openConnection();
+            conn.setConnectTimeout(PROBE_TIMEOUT_MS);
+            conn.setReadTimeout(PROBE_TIMEOUT_MS);
+            conn.setUseCaches(false);
+            conn.setRequestMethod("GET");
+            conn.setInstanceFollowRedirects(true);
+            long t0 = System.nanoTime();
+            int code = conn.getResponseCode();
+            long ms = (System.nanoTime() - t0) / 1_000_000L;
+            return (code >= 200 && code < 400) ? ms : -1;
+        } catch (Exception e) {
+            return -1;
+        } finally {
+            if (conn != null) {
+                try { conn.disconnect(); } catch (Exception ignored) {}
+            }
+        }
     }
 }

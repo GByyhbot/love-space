@@ -1,0 +1,15 @@
+{
+	"appId": "cn.iepose.lovespace",
+	"appName": "恋爱空间",
+	"webDir": "www",
+	"server": {
+		"url": "https://love.yangyuhui.xyz",
+		"androidScheme": "https",
+		"cleartext": false,
+		"allowNavigation": ["love.yangyuhui.xyz", "love-space.iepose.cn", "fn.350921.xyz", "yangyuhui86.top"]
+	},
+	"android": {
+		"allowMixedContent": false,
+		"backgroundColor": "#FCF8F9"
+	}
+}
