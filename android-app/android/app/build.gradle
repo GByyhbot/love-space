@@ -16,8 +16,8 @@ android {
         applicationId "cn.iepose.lovespace"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 20261031
-        versionName "1.2.9"
+        versionCode 20261101
+        versionName "1.3.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // 贴图已是压缩格式：不二次压缩，保证 AssetManager.openFd() 可用（支持 Range 的短视频贴图）

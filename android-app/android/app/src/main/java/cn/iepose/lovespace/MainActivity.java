@@ -9,7 +9,10 @@ import android.net.Network;
 import android.net.NetworkCapabilities;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.util.Log;
+import android.webkit.CookieManager;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
@@ -46,7 +49,19 @@ public class MainActivity extends BridgeActivity {
     private static final String PREFS = "lovespace_prefs";
     private static final String KEY_FIRST_LAUNCH = "first_launch_done";
     private static final String KEY_BEST_URL = "best_url";
+    private static final String KEY_SESSION = "session_token";
+    private static final String SESSION_COOKIE = "love_session";
     private static final int PROBE_TIMEOUT_MS = 3000;
+    private final Handler sessionHandler = new Handler(Looper.getMainLooper());
+    private final Runnable sessionTick = new Runnable() {
+        @Override public void run() {
+            try {
+                WebView wv = getBridge() == null ? null : getBridge().getWebView();
+                if (wv != null) captureAndShareSession(wv.getUrl());
+            } catch (Exception ignored) {}
+            sessionHandler.postDelayed(this, 6000);
+        }
+    };
     private volatile String currentUrl = SPACE_URL;
     private volatile boolean probing = false;
     private final Set<String> attemptedUrls = Collections.synchronizedSet(new HashSet<String>());
@@ -58,15 +73,20 @@ public class MainActivity extends BridgeActivity {
         if (getBridge() != null) {
             getBridge().setWebViewClient(new RecoveryWebViewClient(getBridge()));
             // 上次记住的最优线路：直接用它（保持登录态），首启用默认线路
+            CookieManager.getInstance().setAcceptCookie(true);
             String remembered = prefs().getString(KEY_BEST_URL, null);
             if (remembered == null || remembered.isEmpty()) remembered = SPACE_URL;
             currentUrl = remembered;
             WebView wv = getBridge().getWebView();
             if (wv != null && !remembered.equals(SPACE_URL)) {
+                seedSessionForHost(remembered); // 先把登录 cookie 种到这条线路
                 wv.loadUrl(remembered); // 覆盖 super.load() 的默认地址
             }
             // 后台并行探测各线路，按需切到最快可用线路
             startUrlProbe(false);
+            // 定期把登录 cookie 同步到全部线路，切域免重登
+            sessionHandler.removeCallbacks(sessionTick);
+            sessionHandler.postDelayed(sessionTick, 6000);
         }
     }
 
@@ -214,8 +234,11 @@ public class MainActivity extends BridgeActivity {
         @Override
         public void onPageFinished(WebView view, String url) {
             super.onPageFinished(view, url);
-            // 真正的应用页面加载成功 → 重置已尝试线路，供下次导航重新择优
-            if (url != null && !url.startsWith("file:")) attemptedUrls.clear();
+            // 真正的应用页面加载成功 → 重置已尝试线路，并抓取登录 cookie 同步到全部线路
+            if (url != null && !url.startsWith("file:")) {
+                attemptedUrls.clear();
+                captureAndShareSession(url);
+            }
         }
     }
 
@@ -248,6 +271,12 @@ public class MainActivity extends BridgeActivity {
     public void onPause() {
         super.onPause();
         NtfyStreamService.appForeground = false;
+    }
+
+    @Override
+    public void onDestroy() {
+        try { sessionHandler.removeCallbacks(sessionTick); } catch (Exception ignored) {}
+        super.onDestroy();
     }
 
     /**
@@ -319,7 +348,7 @@ public class MainActivity extends BridgeActivity {
                     if (!best.equals(currentUrl)) {
                         currentUrl = best;
                         saveBest(best);
-                        wv.post(new Runnable() { public void run() { attemptedUrls.clear(); wv.loadUrl(best); } });
+                        wv.post(new Runnable() { public void run() { seedSessionForHost(best); attemptedUrls.clear(); wv.loadUrl(best); } });
                     } else {
                         saveBest(best);
                     }
@@ -355,7 +384,7 @@ public class MainActivity extends BridgeActivity {
                     final String next = SPACE_URLS[bestIdx];
                     currentUrl = next;
                     saveBest(next);
-                    view.post(new Runnable() { public void run() { attemptedUrls.clear(); view.loadUrl(next); } });
+                    view.post(new Runnable() { public void run() { seedSessionForHost(next); attemptedUrls.clear(); view.loadUrl(next); } });
                 } catch (Exception e) {
                     Log.w(TAG, "线路切换异常", e);
                 }
@@ -414,5 +443,75 @@ public class MainActivity extends BridgeActivity {
                 try { conn.disconnect(); } catch (Exception ignored) {}
             }
         }
+    }
+
+    /** 读取当前页面的登录 cookie，并同步到全部线路，切域免重登。 */
+    private void captureAndShareSession(String url) {
+        if (url == null || url.startsWith("file:")) return;
+        try {
+            String token = extractCookie(CookieManager.getInstance().getCookie(url), SESSION_COOKIE);
+            if (token == null || token.isEmpty()) {
+                // 已登出（cookie 被清）→ 忘记保存的 token，并清掉其它线路的旧 cookie
+                if (prefs().contains(KEY_SESSION)) {
+                    prefs().edit().remove(KEY_SESSION).apply();
+                    clearSessionOnAll();
+                }
+                return;
+            }
+            String prev = prefs().getString(KEY_SESSION, null);
+            if (token.equals(prev)) return;
+            prefs().edit().putString(KEY_SESSION, token).apply();
+            shareSessionToAll(token);
+            Log.i(TAG, "已同步登录态到全部线路");
+        } catch (Exception e) {
+            Log.w(TAG, "同步登录态失败", e);
+        }
+    }
+
+    private void shareSessionToAll(String token) {
+        CookieManager cm = CookieManager.getInstance();
+        for (String u : SPACE_URLS) seedCookie(cm, u, token);
+        cm.flush();
+    }
+
+    /** 切换线路前先给目标 host 种上已保存的登录 cookie。 */
+    private void seedSessionForHost(String url) {
+        try {
+            String token = prefs().getString(KEY_SESSION, null);
+            if (token == null || token.isEmpty()) return;
+            CookieManager cm = CookieManager.getInstance();
+            seedCookie(cm, url, token);
+            cm.flush();
+        } catch (Exception ignored) {}
+    }
+
+    private void clearSessionOnAll() {
+        CookieManager cm = CookieManager.getInstance();
+        for (String u : SPACE_URLS) {
+            try {
+                URL url = new URL(u);
+                String base = "https://" + url.getHost() + (url.getPort() > 0 ? ":" + url.getPort() : "") + "/";
+                cm.setCookie(base, SESSION_COOKIE + "=; Path=/; Max-Age=0; Secure");
+            } catch (Exception ignored) {}
+        }
+        cm.flush();
+    }
+
+    private void seedCookie(CookieManager cm, String url, String token) {
+        try {
+            URL u = new URL(url);
+            String base = "https://" + u.getHost() + (u.getPort() > 0 ? ":" + u.getPort() : "") + "/";
+            cm.setCookie(base, SESSION_COOKIE + "=" + token + "; Path=/; Max-Age=2592000; Secure; HttpOnly; SameSite=Lax");
+        } catch (Exception ignored) {}
+    }
+
+    private static String extractCookie(String header, String name) {
+        if (header == null) return null;
+        for (String part : header.split(";")) {
+            String p = part.trim();
+            int eq = p.indexOf('=');
+            if (eq > 0 && p.substring(0, eq).equals(name)) return p.substring(eq + 1);
+        }
+        return null;
     }
 }
