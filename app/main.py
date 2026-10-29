@@ -177,8 +177,11 @@ async def protection(request, call_next):
     request_host = urlparse('//' + forwarded_host.split(',')[0].strip()).hostname
     forwarded_proto = request.headers.get('x-forwarded-proto', '').split(',')[0].strip().lower()
     is_https = forwarded_proto == 'https' or request.url.scheme == 'https'
-    # 内网**明文**直连：不跳公网域名、不发 HSTS。走 https 的内网请求照常按公网规则处理
-    local_access = private_host(request_host) and not is_https
+    # 内网**明文**直连：不跳公网域名、不发 HSTS。判定同时看 Host 与真实对端 IP——
+    # 用带点的内网主机名/DDNS 域名（如 xxx.ddns.net、路由器域名）从局域网访问时，Host 不像
+    # 内网，但对端 IP 是内网；必须视为内网访问，否则会被 308 跳到公网穿透地址（被封时直接打不开）。
+    peer_host = request.client.host if request.client else ''
+    local_access = (private_host(request_host) or private_host(peer_host)) and not is_https
     if public_url.startswith('https://') and request.url.path != '/health':
         public_host = urlparse(public_url).hostname
         origin = request.headers.get('origin', '')
