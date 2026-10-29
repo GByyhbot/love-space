@@ -8,9 +8,6 @@ if ('serviceWorker' in navigator) {
 }
 
 const $ = (q, root = document) => root.querySelector(q);
-// figure.js（3D 小人儿）按需动态加载，用当前 app.js 自己的 ?v= 做缓存击穿，
-// 否则 Service Worker 会一直喂旧的 figure.js（cache-first），改完代码看不到效果
-const ASSET_V = (document.currentScript && (document.currentScript.src.match(/[?&]v=(\d+)/) || [,''])[1]) || '';
 const $$ = (q, root = document) => [...root.querySelectorAll(q)];
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const paths = {
@@ -205,8 +202,7 @@ function renderShell() {
  // 正在翻相册/看时光的人会被不断弹回顶部——所以重渲染前后把位置接回去。
  // 主动切页时 navigate() 会在之后显式 scrollTo(0,0)，不受这里影响。
  const keepScroll=window.scrollY||0;
-  stopFigure(); // 整页 innerHTML 要换掉了：先把 3D 的 canvas 摘下来存着，别让 WebGL 上下文被回收
- const navs=[['home','home','首页'],['timeline','book','时光'],['albums','photo','相册'],['together','heart','我们']];
+  const navs=[['home','home','首页'],['timeline','book','时光'],['albums','photo','相册'],['together','heart','我们']];
  const navActive=['personal','settings','channels','backups','notices','imports','importdetail'].includes(state.page)?'together':state.page;
  const navHtml=navs.map(([id,ico,label])=>`<button data-nav="${id}" class="${navActive===id?'active':''}" ${navActive===id?'aria-current="page"':''}>${icon(ico)}<span>${label}</span></button>`);navHtml.splice(2,0,`<button class="nav-fab" data-action="compose" aria-label="记录此刻">${icon('plus')}<span>记录</span></button>`);
  const themeClass='theme-'+state.me.space.theme,motion=state.me.space.motion?'':'reduced-motion',root=document.documentElement;
@@ -228,8 +224,7 @@ function renderPage() {
  if(state.page==='importdetail') initImportLog();
  syncStatusBarOverlay();
  if(state.page==='home'){loadOnThisDay();loadYearbook();}
- if(state.page==='together'&&state.tab==='calendar') loadCalendar();
- if(state.page==='figure') mountFigure();
+  if(state.page==='together'&&state.tab==='calendar') loadCalendar();
 }
 /* state.me 还没到时不要渲染：boot() 是异步的，用户在首屏加载完之前点导航（或 hashchange 抢跑）
    会让 renderShell 读到 null.space 抛 TypeError，被 catch 成一条吓人的报错提示。
@@ -237,8 +232,7 @@ function renderPage() {
 async function navigate(page,tab='') {if(!state.me)return;if(page!=='messages')state.chatReturn={page,tab};if(page==='messages'&&state.me){state.me.chat_unread=0;post('/notices/read?event=chat').catch(()=>{});}state.page=page;state.tab=tab;location.hash=page;try{if(page==='timeline')await loadTimeline(true);await loadSpecial();renderShell();window.scrollTo({top:0});}catch(e){toast(e.message);}}
 function figurePage() {
   const back = `<div class="tabs"><button data-action="tools-back">← 回到我们</button></div>`;
-  return `${heading('我们的小人儿', '摆个姿势，照着参考图，拍一张属于你们的照片。')}${back}
-    <div id="dressup-root" class="dressup-root"><p class="hint">正在准备 3D 小人儿…</p></div>
+  return `${heading('情侣摆拍参考', '照着下面的姿势参考，拍一张属于你们的照片。')}${back}
     <section class="card figure-ref">
       <div class="section-heading">
         <h2>${icon('photo')} 情侣摆拍参考</h2>
@@ -249,19 +243,6 @@ function figurePage() {
       </div>
       <p class="small-note">参考图来自开源项目 ai-pose-gallery（原作者ギア，汉化 anhao），版权归原作者所有，仅作两人拍照参考。该页面需联网加载。</p>
     </section>`;
-}
-
-// 3D 小人儿按需加载：figure.js 自带 three.js（约 687KB），只在打开本页时拉取，
-// 不进首屏包体；ASSET_V 用于击穿 Service Worker 的缓存
-let figureMod = null;
-function stopFigure() { if (figureMod && figureMod.pause) figureMod.pause(); }
-function mountFigure() {
-  const root = $('#dressup-root');
-  if (!root) return;
-  import(`/static/figure.js${ASSET_V ? `?v=${ASSET_V}` : ''}`).then(mod => {
-    figureMod = mod;
-    if (state.page === 'figure' && $('#dressup-root') === root) mod.mount(root, { userId: state.me.user.id });
-  }).catch(err => { root.innerHTML = `<p class="hint">3D 小人儿没能打开：${esc(err.message)}</p>`; });
 }
 
 async function loadSpecial(){
@@ -774,7 +755,7 @@ function togetherPage() {
  if(state.tab==='period')return periodPage();
  if(state.tab==='music')return musicPage();
  if(state.tab){const meta=toolsList.find(x=>x[0]===state.tab);if(meta)return `${heading(meta[2],meta[3],'new-'+state.tab,'添加'+({anniversary:'纪念日',wish:'愿望',mood:'心情',note:'留言',question:'问题',habit:'目标'}[state.tab]))}<div class="tabs"><button data-action="tools-back">← 回到我们</button></div>${state.tab==='question'?'<p class="hint">可以写下自己的问题，也可以从内置题目里挑一个。双方回答后才揭晓彼此的答案。</p>':''}${recordsOf(state.tab).length?recordsOf(state.tab).map(recordCard).join(''):empty('给我们，多一点小小的仪式感',meta[3],'new-'+state.tab,'现在开始')}`;}
- return `${heading('关于我们，还有好多好多','把喜欢落在实处，把日子过成纪念。')}<div class="tools-grid"><button class="tool-card" data-nav="dashboard"><span class="tool-emoji">📊</span><h3>数据看板</h3><p>我们的点滴，都在这里</p></button><button class="tool-card" data-nav="weekly"><span class="tool-emoji">✉️</span><h3>回忆周报</h3><p>把这一周，收进一封信</p></button><button class="tool-card" data-nav="figure"><span class="tool-emoji">🧍</span><h3>我们的小人儿</h3><p>摆姿势，照着参考图拍</p></button>${toolsList.map(([id,emoji,title,desc])=>`<button class="tool-card" data-action="tool-${id}"><span class="tool-emoji">${emoji}</span><h3>${title}</h3><p>${desc}</p></button>`).join('')}</div><div class="section-heading settings-section-heading"><h2>${icon('gear')} 设置</h2></div><div class="tools-grid settings-tools"><button class="tool-card" data-action="space"><span class="tool-emoji">🏡</span><h3>空间设置</h3><p>空间名称、封面与相恋日期</p></button>${state.me.users.length<2?`<button class="tool-card" data-action="invite"><span class="tool-emoji">💌</span><h3>邀请另一半入住</h3><p>把你们的专属空间分享给 TA</p></button>`:''}<button class="tool-card" data-nav="channels"><span class="tool-emoji">🔔</span><h3>提醒设置</h3><p>通知渠道与提醒偏好</p></button><button class="tool-card" data-nav="settings"><span class="tool-emoji">⚙️</span><h3>全部设置</h3><p>账号资料、数据导出与备份</p></button></div>`;
+ return `${heading('关于我们，还有好多好多','把喜欢落在实处，把日子过成纪念。')}<div class="tools-grid"><button class="tool-card" data-nav="dashboard"><span class="tool-emoji">📊</span><h3>数据看板</h3><p>我们的点滴，都在这里</p></button><button class="tool-card" data-nav="weekly"><span class="tool-emoji">✉️</span><h3>回忆周报</h3><p>把这一周，收进一封信</p></button><button class="tool-card" data-nav="figure"><span class="tool-emoji">📸</span><h3>情侣摆拍参考</h3><p>照着姿势参考，拍一张</p></button>${toolsList.map(([id,emoji,title,desc])=>`<button class="tool-card" data-action="tool-${id}"><span class="tool-emoji">${emoji}</span><h3>${title}</h3><p>${desc}</p></button>`).join('')}</div><div class="section-heading settings-section-heading"><h2>${icon('gear')} 设置</h2></div><div class="tools-grid settings-tools"><button class="tool-card" data-action="space"><span class="tool-emoji">🏡</span><h3>空间设置</h3><p>空间名称、封面与相恋日期</p></button>${state.me.users.length<2?`<button class="tool-card" data-action="invite"><span class="tool-emoji">💌</span><h3>邀请另一半入住</h3><p>把你们的专属空间分享给 TA</p></button>`:''}<button class="tool-card" data-nav="channels"><span class="tool-emoji">🔔</span><h3>提醒设置</h3><p>通知渠道与提醒偏好</p></button><button class="tool-card" data-nav="settings"><span class="tool-emoji">⚙️</span><h3>全部设置</h3><p>账号资料、数据导出与备份</p></button></div>`;
 }
 /* 恋爱清单：对齐「小恩爱 200+ 件小事」的思路，但只用 40 条精选做引子，
    不批量灌库——清单是两个人的，不是产品的。 */
