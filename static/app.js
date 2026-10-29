@@ -245,7 +245,6 @@ function figurePage() {
       <div class="figure-ref-frame">
         <iframe class="figure-ref-iframe" src="/pose-gallery/" title="情侣姿势参考" loading="lazy" referrerpolicy="no-referrer"></iframe>
       </div>
-      <p class="small-note">参考图来自开源项目 ai-pose-gallery（原作者ギア，汉化 anhao），已托管在本地，无需联网。版权归原作者所有，仅作两人拍照参考。</p>
     </section>`;
 }
 
