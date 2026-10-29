@@ -61,3 +61,36 @@ def test_apk_version_matches_gradle():
         f'{config.APK_VERSION}（app/config.py 的默认值或 LOVE_APK_VERSION）——'
         '两者不同号，客户端"检查更新"会一直提示有新版本'
     )
+
+
+# ---- 版本号必须是纯数字 ---------------------------------------------------
+# 以前 CI 用 `git describe --tags --always`，main 上构建出来是 1.2.7-6-g3534f2f。
+# 这个带字母后缀的串既上了关于页，又被 App 内"检查更新"拿去跟 APK 版本比对，
+# 于是装 1.2.9 的用户会被判成"已是最新版本 v1.2.7-…"。现在一律纯版本号。
+
+@pytest.mark.parametrize('raw,expected', [
+    ('1.2.7-6-g3534f2f', '1.2.7'),
+    ('v1.3.0', '1.3.0'),
+    ('1.2.3-rc1', '1.2.3'),
+    ('  1.3.0  ', '1.3.0'),
+    ('1.3', '1.3'),
+])
+def test_clean_version_strips_suffix(raw, expected):
+    assert config.clean_version(raw, 'dev') == expected
+
+
+def test_clean_version_keeps_non_version_default():
+    """本地没注入时的 dev / 空串不能被清成空，否则关于页会显示空白。"""
+    assert config.clean_version('dev', 'dev') == 'dev'
+    assert config.clean_version('', 'dev') == 'dev'
+    assert config.clean_version('   ', 'dev') == 'dev'
+
+
+def test_config_module_cleans_env():
+    """即便环境变量还是旧格式（NAS 上的镜像/`.env` 可能是老的），也要吐纯版本号。"""
+    assert config.clean_version('1.2.7-6-g3534f2f') == '1.2.7'
+    assert config.clean_version('1.3.0+g4e99c90') == '1.3.0'
+
+
+def test_apk_version_never_has_letters():
+    assert re.fullmatch(r'\d+(?:\.\d+){1,2}', config.APK_VERSION), config.APK_VERSION

@@ -146,7 +146,7 @@ async function boot() {
  try {
   applyDarkMode();
   const status = await api('/status');
-  state.localVersion=status.version||'1.1.0';state.appVersion={version:status.version||'1.1.0',build:status.build||''};
+  state.localVersion=status.version||'1.1.0';state.localBuild=status.build||'';state.appVersion={version:status.version||'1.1.0',build:status.build||''};
   /* 原生 APK 版本（供关于页展示 + 应用内更新对比） */
   if(isNativeApp()){try{const version=await nativePushBridge()?.version?.();if(version?.version&&version.version!=='unknown')state.apkVersion=version.version;}catch{}}
   const invite = new URLSearchParams(location.search).get('invite');
@@ -1058,7 +1058,7 @@ function settingsPage() {
  const fmtSize=b=>b>=1073741824?(b/1073741824).toFixed(2)+' GB':(b/1048576).toFixed(1)+' MB';
  const isAdmin=!!state.me.user.admin;
  const storageStrip=isAdmin&&st?`<button class="storage-strip" data-nav="backups"><span class="storage-strip-icon">${icon('gear')}</span><span class="storage-strip-body"><strong>已用 ${fmtSize(st.total||0)}</strong><small>可用 ${fmtSize(st.disk_free||0)} · ${st.record_count||0} 条记录 · ${st.media_count||0} 个媒体文件</small></span><span class="storage-strip-more">存储占用与备份 ${icon('arrow')}</span></button>`:'';
- return `${heading('设置','管理空间、账号和数据。')}<div class="settings-grid"><section class="card"><h2>${icon('home')} 空间设置</h2><div class="setting-list"><button data-action="space">名称、封面与主题 ${icon('arrow')}</button>${state.me.users.length<2?`<button data-action="invite">邀请另一半 ${icon('arrow')}</button>`:''}<button data-nav="channels">通知渠道与提醒偏好 ${icon('arrow')}</button></div></section><section class="card"><h2>${icon('gear')} 我的账号</h2><div class="setting-list"><button data-action="profile">头像、昵称与密码 ${icon('arrow')}</button><button data-action="logout">退出登录 ${icon('arrow')}</button></div></section><section class="card"><h2>${icon('download')} 数据管理</h2>${storageStrip}<div class="setting-list"><a href="/api/export" download>导出我有权查看的记录与原文件 ${icon('download')}</a><a href="/api/export/markdown" download>导出 Markdown 知识库（第二大脑） ${icon('download')}</a>${state.me.user.admin?`<button data-nav="backups">完整备份与存储占用 ${icon('arrow')}</button>`:''}</div><p class="small-note">第二大脑是纯 Markdown 文件夹，可拖进 Obsidian / Logseq，也可直接给 AI 当长期记忆；只含你自己可见的内容，个人心愿只导出标题。私密日记按账号隔离，完整备份由服务器管理员管理。</p></section><section class="card"><h2>${icon('info')} 关于</h2><div class="setting-list"><div style="display:flex;align-items:center;gap:10px;padding:12px 0"><span class="stat-icon" style="font-size:28px">💕</span><div><h3 style="margin:0;font-size:15px">恋爱空间</h3><p class="meta" style="margin:2px 0 0">${v.version?'v'+v.version+' · '+v.build+(state.apkVersion?' · APK v'+state.apkVersion:''):'加载中…'}</p></div></div><button data-action="check-update">检查更新 ${icon('arrow')}</button></div><p class="small-note">网页功能自动更新；原生功能（如后台通知）需下载新版 APK，可在检查更新中获取。</p></section></div>`;
+ return `${heading('设置','管理空间、账号和数据。')}<div class="settings-grid"><section class="card"><h2>${icon('home')} 空间设置</h2><div class="setting-list"><button data-action="space">名称、封面与主题 ${icon('arrow')}</button>${state.me.users.length<2?`<button data-action="invite">邀请另一半 ${icon('arrow')}</button>`:''}<button data-nav="channels">通知渠道与提醒偏好 ${icon('arrow')}</button></div></section><section class="card"><h2>${icon('gear')} 我的账号</h2><div class="setting-list"><button data-action="profile">头像、昵称与密码 ${icon('arrow')}</button><button data-action="logout">退出登录 ${icon('arrow')}</button></div></section><section class="card"><h2>${icon('download')} 数据管理</h2>${storageStrip}<div class="setting-list"><a href="/api/export" download>导出我有权查看的记录与原文件 ${icon('download')}</a><a href="/api/export/markdown" download>导出 Markdown 知识库（第二大脑） ${icon('download')}</a>${state.me.user.admin?`<button data-nav="backups">完整备份与存储占用 ${icon('arrow')}</button>`:''}</div><p class="small-note">第二大脑是纯 Markdown 文件夹，可拖进 Obsidian / Logseq，也可直接给 AI 当长期记忆；只含你自己可见的内容，个人心愿只导出标题。私密日记按账号隔离，完整备份由服务器管理员管理。</p></section><section class="card"><h2>${icon('info')} 关于</h2><div class="setting-list"><div style="display:flex;align-items:center;gap:10px;padding:12px 0"><span class="stat-icon" style="font-size:28px">💕</span><div><h3 style="margin:0;font-size:15px">恋爱空间</h3><p class="meta" style="margin:2px 0 0">${v.version?(state.apkVersion?'APK v'+state.apkVersion+' · 网页 v'+v.version:'网页 v'+v.version):'加载中…'}</p></div></div><button data-action="check-update">检查更新 ${icon('arrow')}</button></div><p class="small-note">网页功能自动更新；原生功能（如后台通知）需下载新版 APK，可在检查更新中获取。</p></section></div>`;
 }
 function personalPage() {
  const tab=state.tab||'diary',tabs=[['diary','私密日记'],['draft','草稿箱'],['surprise','定时惊喜'],['trash','回收站']];
@@ -1521,15 +1521,28 @@ async function act(action,id,el) {
  if(action==='read-notices'){await post('/notices/read');return refresh();}
  if(action==='delete-read-notices'){const count=state.notices.filter(n=>n.event!=='chat'&&n.seen).length;if(!count)return toast('没有可删除的已读提醒');return confirmAction('删除已读提醒？',`将删除 ${count} 条已读提醒，不会影响未读提醒、动态或聊天记录。`,async()=>{const result=await api('/notices/read',{method:'DELETE'});toast(`已删除 ${result.deleted||0} 条已读提醒`);});}
  if(action==='check-update'){try{const s=await api('/status');state.appVersion={version:s.version,build:s.build};renderShell();
-  if(window.Capacitor&&Capacitor.isNativePlatform&&Capacitor.isNativePlatform()){
-   /* APK：对比原生版本与服务器托管的 apk_version，新版本直接下载安装 */
-   try{let nv='unknown';try{const version=await nativePushBridge()?.version?.();if(typeof version?.version==='string'&&/^\d+(?:\.\d+){1,2}$/.test(version.version))nv=version.version;}catch{}
-    state.apkVersion=nv;
-    if(s.apk_version&&s.apk_url&&(nv==='unknown'||newerVer(s.apk_version,nv))){const installed=nv==='unknown'?'当前版本暂不可读取':`当前 v${nv}`;openModal('发现新版本',`<div style="text-align:center;padding:10px 0"><div style="font-size:48px;margin-bottom:12px">⬇️</div><p>新版本 <strong>v${s.apk_version}</strong> 已发布（${installed}）</p><p class="meta">下载完成后点击通知安装；如果 App 内下载没有反应，请复制下载地址后用手机浏览器打开。</p><div class="form-actions"><button class="button" data-action="close-modal">稍后再说</button><button class="button primary" id="apk-dl">下载新版本</button></div></div>`);setTimeout(()=>{const b=$('#apk-dl');if(b)b.onclick=()=>{closeModal();toast('正在打开 APK 下载地址');location.href=new URL(s.apk_url,location.origin).href;};},50);}
-    else if(nv==='unknown')toast('无法读取当前 APK 版本，请从手机浏览器重新安装最新版 v'+s.apk_version);
-    else toast('已是最新版本 v'+nv+'（网页 v'+s.version+'）');
+  if(isNativeApp()){
+   /* App 内只比 App 版本：网页是随服务器一起更新的，与这里的判断无关。
+      以前把网页版本混进提示里，装 1.2.9 的用户会看到「已是最新版本 v1.2.7-…」
+      这种串味结果，其实服务器上的 APK 早就比本机新了。 */
+   let nv='unknown';
+   try{const version=await nativePushBridge()?.version?.();const raw=typeof version?.version==='string'?version.version.trim():'';const m=raw.match(/\d+(?:\.\d+){1,2}/);if(m)nv=m[0];}catch{}
+   state.apkVersion=nv;
+   const latest=String(s.apk_version||'').trim();
+   try{
+    if(!latest)toast('服务器暂未提供 APK 版本信息，请稍后再试');
+    else if(nv==='unknown')toast('无法读取当前 APK 版本，请从手机浏览器重新安装最新版 v'+latest);
+    else if(!s.apk_url)toast('服务器暂未提供 APK 下载地址，请稍后再试');
+    else if(newerVer(latest,nv)){const installed=`当前 v${nv}`;openModal('发现新版本',`<div style="text-align:center;padding:10px 0"><div style="font-size:48px;margin-bottom:12px">⬇️</div><p>新版本 <strong>v${latest}</strong> 已发布（${installed}）</p><p class="meta">下载完成后点击通知安装；如果 App 内下载没有反应，请复制下载地址后用手机浏览器打开。</p><div class="form-actions"><button class="button" data-action="close-modal">稍后再说</button><button class="button primary" id="apk-dl">下载新版本</button></div></div>`);setTimeout(()=>{const b=$('#apk-dl');if(b)b.onclick=()=>{closeModal();toast('正在打开 APK 下载地址');location.href=new URL(s.apk_url,location.origin).href;};},50);}
+    else toast('已是最新版本 v'+nv);
    }catch{toast('检查更新失败，请稍后再试');}
-  } else toast(s.version===state.localVersion?'已是最新版本 v'+s.version:'发现新版本 v'+s.version+'，请刷新页面更新');
+  } else {
+   /* 浏览器：页面靠 Service Worker 自动更新，用构建号（sha-日期）判断本页是否最新，
+      版本号相同也能发现新构建，不必再靠字母后缀区分。 */
+   const latestBuild=String(s.build||''),mine=String(state.localBuild||'');
+   if(latestBuild&&mine&&latestBuild!==mine)toast('网页已更新到 v'+s.version+'，刷新页面即可加载新版');
+   else toast('已是最新版本 v'+s.version);
+  }
  }catch{toast('检查更新失败，请稍后再试');}return;}
  if(action==='notice-detail'){closeModal();const detail=await api('/records/'+id);const unread=state.notices.filter(n=>n.record_id===id&&!n.seen);if(unread.length){try{await post('/notices/read?record_id='+encodeURIComponent(id));await refresh();}catch{}}if(detail.kind==='chat')return navigate('messages');openModal('这一刻的故事',recordCard(detail),{wide:true});return;}
  if(action==='chat-attachment')return composer('chat');
