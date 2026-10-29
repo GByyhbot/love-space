@@ -565,6 +565,14 @@ body.cal-full{overflow:hidden;height:100dvh}
 .tool-card .tool-emoji{font-size:26px;display:block;margin-bottom:14px;line-height:1}
 .tool-card h3{font-size:15px;margin-bottom:6px}
 .tool-card p{font-size:13px;color:var(--muted);line-height:1.6}
+/* 生理期：置顶并独占一行（吃掉整行格子位），所以改成横向排布，别留一片空 */
+.tool-card-wide{grid-column:1/-1;display:flex;align-items:center;gap:14px;padding:15px 18px;background:linear-gradient(120deg,var(--soft),var(--surface) 64%)}
+.tool-card-wide .tool-emoji{margin:0;font-size:24px;flex:none}
+.tool-card-wide .tool-wide-copy{display:flex;flex-direction:column;gap:2px;min-width:0}
+.tool-card-wide .tool-wide-copy h3{margin:0;font-size:16px}
+.tool-card-wide .tool-wide-copy p{margin:0}
+.tool-card-wide .tool-wide-go{margin-left:auto;flex:none;display:flex;align-items:center;color:var(--muted)}
+.tool-card-wide .tool-wide-go .icon{width:18px;height:18px}
 .settings-section-heading{margin-top:30px}
 .settings-tools .tool-card{min-height:132px}
 
@@ -974,16 +982,29 @@ body.cal-full{overflow:hidden;height:100dvh}
 .s-fertile{background:rgba(139,114,168,.34)}
 .s-luteal{background:rgba(196,150,70,.28)}
 .phase-cursor{position:absolute;top:-5px;bottom:-5px;width:3px;border-radius:2px;background:var(--primary-dark);transform:translateX(-1.5px);box-shadow:0 0 0 3px rgba(176,72,107,.13)}
-.phase-label{display:inline-flex;align-items:center;gap:7px;font-size:13px;color:var(--ink);margin:10px 0 0;padding:7px 14px;border-radius:999px;background:var(--soft);line-height:1.35}
-.phase-label::before{content:'';width:8px;height:8px;border-radius:50%;background:var(--primary);flex:none}
-.phase-label strong{font-size:14.5px;font-weight:800;color:var(--primary-dark)}
-.phase-label.now-period{background:var(--soft-strong)}
-.phase-label.now-follicular{background:rgba(95,138,90,.2)}
-.phase-label.now-fertile{background:rgba(139,114,168,.26)}
-.phase-label.now-luteal{background:rgba(196,150,70,.22)}
-.phase-label.now-follicular::before{background:#5F8A5A}
-.phase-label.now-fertile::before{background:#8B72A8}
-.phase-label.now-luteal::before{background:#C4964B}
+/* 周期主视觉卡：粉色大卡替代原来的「现在处于 X」灰绿胶囊。
+   左侧问候 + 当前阶段 + 一句照护提示，右侧环形进度（SVG 描边，不依赖背景色）。 */
+.cycle-hero{position:relative;display:flex;align-items:center;gap:12px;padding:16px 18px;border-radius:18px;background:linear-gradient(135deg,#FFB7C9,#FF9CB8 62%,#FFA6C1);color:#fff;box-shadow:0 10px 24px rgba(232,121,143,.28);overflow:hidden;margin:0 0 14px}
+.cycle-hero::after{content:'';position:absolute;right:-34px;top:-46px;width:136px;height:136px;border-radius:50%;background:rgba(255,255,255,.10);pointer-events:none}
+.cycle-hero-copy{position:relative;z-index:1;flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.cycle-hero-hi{font-size:12.5px;opacity:.94;letter-spacing:.02em}
+.cycle-hero-phase{font-size:19px;font-weight:800;line-height:1.4;letter-spacing:.01em;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.cycle-hero-pred{font-style:normal;font-size:10.5px;font-weight:600;padding:2px 7px;border-radius:999px;background:rgba(255,255,255,.28);letter-spacing:.02em}
+.cycle-hero-tip{font-size:12.5px;line-height:1.6;opacity:.95}
+.cycle-hero-side{position:relative;z-index:1;flex:none;display:flex;flex-direction:column;align-items:center;gap:4px}
+.cycle-ring{width:74px;height:74px;display:block;flex:none}
+.cycle-ring .ring-track{fill:none;stroke:rgba(255,255,255,.34);stroke-width:9}
+.cycle-ring .ring-fill{fill:none;stroke:#fff;stroke-width:9;stroke-linecap:round;transition:stroke-dashoffset .4s ease}
+.cycle-ring text{fill:#fff;font-size:23px;font-weight:800;font-family:var(--font)}
+.cycle-hero-day{font-size:11px;opacity:.94;line-height:1.4;white-space:nowrap}
+.period-hero .meta{margin-top:0}
+.partner-cycle .cycle-hero{margin:12px 0 12px}
+@media(max-width:640px){
+  .cycle-hero{padding:14px 15px;gap:10px;border-radius:16px}
+  .cycle-hero-phase{font-size:17.5px}
+  .cycle-ring{width:68px;height:68px}
+  .cycle-ring text{font-size:21px}
+}
 .sym-chips{display:flex;flex-wrap:wrap;gap:8px;margin:-2px 0 2px}
 .sym-chip{padding:7px 14px;border-radius:999px;border:1px solid var(--line);background:var(--surface);font-size:13px;color:var(--muted);cursor:pointer;transition:background var(--speed),color var(--speed),border-color var(--speed)}
 .sym-chip.on{background:var(--primary);border-color:var(--primary);color:var(--on-primary);font-weight:600}

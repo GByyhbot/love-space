@@ -749,7 +749,7 @@ function calendarPage(){
  const t=today(),todayDay=t.startsWith(`${y}-${String(m).padStart(2,'0')}`)?String(Number(t.slice(8))):'';
  return `<div class="calendar-page">${heading('共同年历','重要的日子，一眼看清。','')}<div class="calendar-head"><button class="icon-btn" data-action="cal-prev" aria-label="上个月"><svg class="icon" viewBox="0 0 24 24" style="transform:scaleX(-1)"><path d="${'M9 6 15 12 9 18'}"/></svg></button><strong>${y} 年 ${m} 月</strong><button class="icon-btn" data-action="cal-next" aria-label="下个月">${icon('arrow')}</button></div><div class="calendar-grid">${['日','一','二','三','四','五','六'].map(w=>`<span class="cal-week">${w}</span>`).join('')}${cells.map(d=>{if(!d)return '<span></span>';const info=days[d],dots=info?[['anniversaries','var(--primary)','纪念日'],['moods','var(--green)','心情'],['posts','var(--primary-dark)','动态'],['checks','var(--primary)','打卡']].filter(([k])=>info[k]?.length).map(([k,c,t])=>`<i class="cal-dot" style="background:${c}" title="${t}"></i>`).join(''):'';return `<button class="cal-day ${selected===d?'selected':''} ${info?'has-events':''} ${String(Number(d))===todayDay?'is-today':''}" data-action="cal-day" data-id="${d}" aria-label="${m} 月 ${Number(d)} 日${info?'，有记录':''}"><span>${Number(d)}</span><span class="cal-dots">${dots}</span></button>`;}).join('')}</div><div id="cal-detail">${calDetailHTML()}</div></div>`;
 }
-const toolsList=[['calendar','🗓️','共同年历','重要的日子，一眼看清'],['anniversary','📅','纪念日','每个重要的日子，都认真对待'],['quest','💫','恋爱清单','一起做完这些小事，就是我们的故事'],['wish','✨','共同愿望','把一起想做的事，一件件实现'],['ledger','💰','共同账本','为了彼此花过的钱，也是一段回忆'],['personal-wish','💝','个人心愿','对方看得到心愿名称，输入一次密码后就能读到内容'],['mood','🌤','心情手记','晴天雨天，都想陪着你'],['note','💌','悄悄留言','有些喜欢，值得慢慢读'],['question','💭','情侣问答','每天再多了解彼此一点'],['period','🌸','生理期','记下周期，把照顾提前一点'],['music','🎵','共同歌单','把属于我们的歌，放在一起'],['habit','🌱','共同打卡','和你一起，成为更好的我们']];
+const toolsList=[['calendar','🗓️','共同年历','重要的日子，一眼看清'],['anniversary','📅','纪念日','每个重要的日子，都认真对待'],['quest','💫','恋爱清单','一起做完这些小事，就是我们的故事'],['wish','✨','共同愿望','把一起想做的事，一件件实现'],['ledger','💰','共同账本','为了彼此花过的钱，也是一段回忆'],['personal-wish','💝','个人心愿','对方看得到心愿名称，输入一次密码后就能读到内容'],['mood','🌤','心情手记','晴天雨天，都想陪着你'],['note','💌','悄悄留言','有些喜欢，值得慢慢读'],['question','💭','情侣问答','每天再多了解彼此一点'],['music','🎵','共同歌单','把属于我们的歌，放在一起'],['habit','🌱','共同打卡','和你一起，成为更好的我们']];
 function togetherPage() {
  if(state.tab==='calendar')return calendarPage();
  if(state.tab==='personal-wish')return personalWishPage();
@@ -758,7 +758,7 @@ function togetherPage() {
  if(state.tab==='period')return periodPage();
  if(state.tab==='music')return musicPage();
  if(state.tab){const meta=toolsList.find(x=>x[0]===state.tab);if(meta)return `${heading(meta[2],meta[3],'new-'+state.tab,'添加'+({anniversary:'纪念日',wish:'愿望',mood:'心情',note:'留言',question:'问题',habit:'目标'}[state.tab]))}${state.tab==='question'?'<p class="hint">可以写下自己的问题，也可以从内置题目里挑一个。双方回答后才揭晓彼此的答案。</p>':''}${recordsOf(state.tab).length?recordsOf(state.tab).map(recordCard).join(''):empty('给我们，多一点小小的仪式感',meta[3],'new-'+state.tab,'现在开始')}`;}
- return `${heading('关于我们，还有好多好多','把喜欢落在实处，把日子过成纪念。')}<div class="tools-grid"><button class="tool-card" data-nav="dashboard"><span class="tool-emoji">📊</span><h3>数据看板</h3><p>我们的点滴，都在这里</p></button><button class="tool-card" data-nav="weekly"><span class="tool-emoji">✉️</span><h3>回忆周报</h3><p>把这一周，收进一封信</p></button><button class="tool-card" data-nav="figure"><span class="tool-emoji">📸</span><h3>情侣摆拍参考</h3><p>照着姿势参考，拍一张</p></button>${toolsList.map(([id,emoji,title,desc])=>`<button class="tool-card" data-action="tool-${id}"><span class="tool-emoji">${emoji}</span><h3>${title}</h3><p>${desc}</p></button>`).join('')}</div><div class="section-heading settings-section-heading"><h2>${icon('gear')} 设置</h2></div><div class="tools-grid settings-tools"><button class="tool-card" data-action="space"><span class="tool-emoji">🏡</span><h3>空间设置</h3><p>空间名称、封面与相恋日期</p></button>${state.me.users.length<2?`<button class="tool-card" data-action="invite"><span class="tool-emoji">💌</span><h3>邀请另一半入住</h3><p>把你们的专属空间分享给 TA</p></button>`:''}<button class="tool-card" data-nav="channels"><span class="tool-emoji">🔔</span><h3>提醒设置</h3><p>通知渠道与提醒偏好</p></button><button class="tool-card" data-nav="settings"><span class="tool-emoji">⚙️</span><h3>全部设置</h3><p>账号资料、数据导出与备份</p></button></div>`;
+ return `${heading('关于我们，还有好多好多','把喜欢落在实处，把日子过成纪念。')}<div class="tools-grid"><button class="tool-card tool-card-wide" data-action="tool-period"><span class="tool-emoji">🌸</span><span class="tool-wide-copy"><h3>生理期</h3><p>记下周期，把照顾提前一点</p></span><span class="tool-wide-go">${icon('arrow')}</span></button><button class="tool-card" data-nav="dashboard"><span class="tool-emoji">📊</span><h3>数据看板</h3><p>我们的点滴，都在这里</p></button><button class="tool-card" data-nav="weekly"><span class="tool-emoji">✉️</span><h3>回忆周报</h3><p>把这一周，收进一封信</p></button><button class="tool-card" data-nav="figure"><span class="tool-emoji">📸</span><h3>情侣摆拍参考</h3><p>照着姿势参考，拍一张</p></button>${toolsList.map(([id,emoji,title,desc])=>`<button class="tool-card" data-action="tool-${id}"><span class="tool-emoji">${emoji}</span><h3>${title}</h3><p>${desc}</p></button>`).join('')}</div><div class="section-heading settings-section-heading"><h2>${icon('gear')} 设置</h2></div><div class="tools-grid settings-tools"><button class="tool-card" data-action="space"><span class="tool-emoji">🏡</span><h3>空间设置</h3><p>空间名称、封面与相恋日期</p></button>${state.me.users.length<2?`<button class="tool-card" data-action="invite"><span class="tool-emoji">💌</span><h3>邀请另一半入住</h3><p>把你们的专属空间分享给 TA</p></button>`:''}<button class="tool-card" data-nav="channels"><span class="tool-emoji">🔔</span><h3>提醒设置</h3><p>通知渠道与提醒偏好</p></button><button class="tool-card" data-nav="settings"><span class="tool-emoji">⚙️</span><h3>全部设置</h3><p>账号资料、数据导出与备份</p></button></div>`;
 }
 /* 恋爱清单：对齐「小恩爱 200+ 件小事」的思路，但只用 40 条精选做引子，
    不批量灌库——清单是两个人的，不是产品的。 */
@@ -826,13 +826,6 @@ function periodData(uid){
   dayOfPeriod:inWindow?todayN-startN+1:0,untilNext:nextStart!=null?nextStart-todayN:null,
   estimated:gaps.length===0};
 }
-/* 一句话说清"现在处于周期的什么位置"，自己的大卡和对方的卡片共用同一套口径 */
-function cycleStatus(x){
- if(!x.items.length)return '';
- if(x.inWindow)return `今天是经期第 ${x.dayOfPeriod} 天`;
- if(x.untilNext>=0)return `预计还有 ${x.untilNext} 天`;
- return `已推迟 ${-x.untilNext} 天`;
-}
 /* 美柚式四阶段：月经期 / 卵泡期 / 排卵期 / 黄体期
    锚点是每次月经开始日，排卵日按"下次月经前 14 天"推（黄体期长度相对固定），
    所以黄体期天数恒定、卵泡期随周期长短伸缩，这也符合真实生理规律。 */
@@ -879,6 +872,58 @@ function periodMonth(y,m,d,owner){
   return `<button type="button" class="cal-day${cls}${iso===todayS?' is-today':''}${rec?' has-rec':''}" data-action="period-day" data-day="${iso}" data-owner="${owner}" title="${tip}" aria-label="${m} 月 ${v} 日，${tip}"><span>${v}</span>${tag?`<em>${tag}</em>`:''}</button>`;
  }).join('')}</div></div>`;
 }
+/* 阶段短名用两字，日历格子里放得下；主视觉卡上要念全称，单独一份 */
+const PHASE_CARD={period:'经期',follicular:'卵泡期',fertile:'排卵期',luteal:'黄体期'};
+/* 每个阶段一句照护提示——比"现在处于 X"多给一点能落地的事。
+   长度控制在 15 字内：卡片左边只剩 ~15 个字宽，长一句就会折出孤字。 */
+const PHASE_CARE={
+ period:'多休息、保暖',
+ follicular:'状态正好，适合一起出门走走',
+ fertile:'身体状态不错，别熬夜就行',
+ luteal:'容易情绪起伏，多担待一点'
+};
+function greetWord(){
+ const h=new Date().getHours();
+ if(h<5)return '夜深了';
+ if(h<9)return '早上好';
+ if(h<12)return '上午好';
+ if(h<14)return '中午好';
+ if(h<18)return '下午好';
+ if(h<23)return '晚上好';
+ return '夜深了';
+}
+/* 周期主视觉卡：左边问候 + 当前阶段 + 一句照护提示，右边环形进度标「周期第 N 天」。
+   自己的大卡和「她的周期」共用这一个组件，口径不会分叉。 */
+function cycleHero(d,name=''){
+ if(!d.items.length)return '';
+ const ph=todayPhase(d);
+ const cyc=Math.max(1,d.cycle);
+ const startN=dayNum(d.last.body.start);
+ const dayIn=Math.min(cyc,Math.max(1,d.todayN-startN+1));
+ const pct=Math.max(4,Math.round(dayIn/cyc*100));   // 至少留一点弧，0% 看着像没加载出来
+ const R=31,C=+(2*Math.PI*R).toFixed(1);
+ const title=ph
+  ?`当前阶段：${PHASE_CARD[ph.phase]}${ph.predicted?'<em class="cycle-hero-pred">预测</em>':''}`
+  :(d.untilNext<0?`已推迟 ${-d.untilNext} 天`:'周期还在推算');
+ const tip=d.inWindow
+  ?`今天是经期第 ${d.dayOfPeriod} 天，${PHASE_CARE.period}`
+  :(ph?PHASE_CARE[ph.phase]:(d.untilNext>=0?`预计还有 ${d.untilNext} 天`:'记一次就能重新推算'));
+ return `<div class="cycle-hero">
+  <div class="cycle-hero-copy">
+   <span class="cycle-hero-hi">${greetWord()}${name?'，'+esc(name):''}</span>
+   <strong class="cycle-hero-phase">${title}</strong>
+   <span class="cycle-hero-tip">${tip}</span>
+  </div>
+  <div class="cycle-hero-side">
+   <svg class="cycle-ring" viewBox="0 0 72 72" role="img" aria-label="周期第 ${dayIn} 天，共 ${cyc} 天">
+    <circle class="ring-track" cx="36" cy="36" r="${R}"></circle>
+    <circle class="ring-fill" cx="36" cy="36" r="${R}" stroke-dasharray="${C}" stroke-dashoffset="${(C*(1-pct/100)).toFixed(1)}" transform="rotate(-90 36 36)"></circle>
+    <text x="36" y="36" text-anchor="middle" dominant-baseline="central">${dayIn}</text>
+   </svg>
+   <span class="cycle-hero-day">周期第 ${dayIn} 天</span>
+  </div>
+ </div>`;
+}
 /* 阶段进度条：一条 bar 摊开整个周期，游标就是今天，当前段高亮。
    ⚠️ flex 权重必须是「周期内第几天」这种相对天数，别拿绝对天数（dayNum）去当权重，
    否则某一段会被撑成两万多天、整条 bar 塌成一段。 */
@@ -889,8 +934,7 @@ function phaseBar(d){
              ['fertile','排卵期',7],['luteal','黄体期',Math.max(1,cyc-ovuRel-2)]];
  const pos=Math.min(100,Math.max(0,(d.todayN-s+1)/cyc*100));
  const ph=todayPhase(d),cur=ph?ph.phase:'';
- const label=ph?`现在处于 <strong>${PHASE_NAMES[ph.phase]}</strong>${ph.predicted?'（预测）':''} · 周期第 ${Math.min(cyc,d.todayN-s+1)} 天`:`已超过预测日期 ${-d.untilNext} 天，记一次就能重新推算`;
- return `<div class="phase-wrap"><div class="phase-bar">${segs.map(([k,nm,nd])=>`<span class="phase-seg s-${k}${k===cur?' current':''}" style="flex:${nd}" title="${nm}约 ${nd} 天"><b>${nm}</b><small>${nd}天</small></span>`).join('')}<i class="phase-cursor" style="left:${pos}%" aria-hidden="true"></i></div><p class="phase-label${cur?` now-${cur}`:''}">${label}</p></div>`;
+ return `<div class="phase-wrap"><div class="phase-bar">${segs.map(([k,nm,nd])=>`<span class="phase-seg s-${k}${k===cur?' current':''}" style="flex:${nd}" title="${nm}约 ${nd} 天"><b>${nm}</b><small>${nd}天</small></span>`).join('')}<i class="phase-cursor" style="left:${pos}%" aria-hidden="true"></i></div></div>`;
 }
 function periodPage(){
  const d=periodData(),back='';
@@ -904,8 +948,7 @@ function periodPage(){
  // 再放一张同名空状态卡只会重复。
  hero=hers?'':`<section class="card"><div class="section-heading"><h2>🌸 开始记录</h2></div><p class="meta">记下这次经期开始的那一天，之后每次来都记一次，这里就会多出「下次预计日期」「两个月的日历」和「症状统计」。</p><p class="small-note">生理期默认你俩都可见、也都能记。想单独留一次私密，记录时把「让 TA 也看到这次」取消勾选。</p><div class="inline-actions">${button('记录这次经期','new-period','small primary','edit')}</div></section>`;
  }else{
-  const badge=d.inWindow?`今天是经期第 <strong>${d.dayOfPeriod}</strong> 天`:(d.untilNext>=0?`预计还有 <strong>${d.untilNext}</strong> 天`:`已经推迟 <strong>${-d.untilNext}</strong> 天`);
-  hero=`<section class="card period-hero"><h2>${badge}</h2><p class="meta">下次预计 ${Number(dayStr(d.nextStart).slice(5,7))} 月 ${Number(dayStr(d.nextStart).slice(8))} 日 · 周期 ${d.cycle} 天${d.estimated?'（参考值）':''} · 经期 ${d.length} 天</p>${phaseBar(d)}<div class="stats-hero" style="grid-template-columns:repeat(3,minmax(0,1fr));margin:14px 0 0"><div class="stat-card"><span>平均周期</span><strong>${d.cycle}<em>天</em></strong></div><div class="stat-card"><span>平均经期</span><strong>${d.length}<em>天</em></strong></div><div class="stat-card"><span>已记录</span><strong>${d.items.length}<em>次</em></strong></div></div><div class="inline-actions" style="margin-top:14px">${button(d.inWindow?'记录结束/更新':'记录这次经期','new-period','small primary','edit')}${button('编辑最近一条','edit-record','small secondary','edit',`data-id="${d.last.id}"`)}</div></section>`;
+  hero=`<section class="card period-hero">${cycleHero(d,state.me.user.name)}<p class="meta">下次预计 ${Number(dayStr(d.nextStart).slice(5,7))} 月 ${Number(dayStr(d.nextStart).slice(8))} 日${d.estimated?'（参考值）':''} · ${d.untilNext>=0?`还有 ${d.untilNext} 天`:`已推迟 ${-d.untilNext} 天`}</p>${phaseBar(d)}<div class="stats-hero" style="grid-template-columns:repeat(3,minmax(0,1fr));margin:14px 0 0"><div class="stat-card"><span>平均周期</span><strong>${d.cycle}<em>天</em></strong></div><div class="stat-card"><span>平均经期</span><strong>${d.length}<em>天</em></strong></div><div class="stat-card"><span>已记录</span><strong>${d.items.length}<em>次</em></strong></div></div><div class="inline-actions" style="margin-top:14px">${button(d.inWindow?'记录结束/更新':'记录这次经期','new-period','small primary','edit')}${button('编辑最近一条','edit-record','small secondary','edit',`data-id="${d.last.id}"`)}</div></section>`;
  }
  /* 自己一条都没记时，直接把她的日历顶上来 —— 否则整页连日历都不出现，只剩一句"开始记录"。
     这也是"点日历某一天就能改"的落点：日历永远属于某个人（data-owner），点了记到对的人名下。 */
@@ -929,7 +972,7 @@ function periodPage(){
  /* 对方的周期：既然双人可见，就不能只丢一行日期，要能直接回答"还有几天、现在第几天" */
  const recent=t&&t.items.length?t.items.slice(-3).reverse().map(r=>`<span class="filter-chip">${Number(String(r.body.start).slice(5,7))} 月 ${Number(String(r.body.start).slice(8))} 日</span>`).join(''):'';
  const care=t&&t.items.length?(t.inWindow?'她现在正在经期里，别把安排排太满，热水和甜的东西备一点。':t.untilNext<=3?'快来了，提前把家务和行程安排松一点。':'经期前后容易累，提前分担一点家务会让她轻松很多。'):'';
- const partnerBlock=t&&t.items.length?`<section class="card partner-cycle"><div class="section-heading"><h2>${icon('heart')} ${esc(partner.name)} 的周期</h2><span class="status-pill sent">已共享给你</span></div><h3>${cycleStatus(t)}</h3>${todayPhase(t)?`<p class="phase-label now-${todayPhase(t).phase}">现在处于 <strong>${PHASE_NAMES[todayPhase(t).phase]}</strong>${todayPhase(t).predicted?'（预测）':''}</p>`:''}<p class="meta">下次预计 ${Number(dayStr(t.nextStart).slice(5,7))} 月 ${Number(dayStr(t.nextStart).slice(8))} 日 · 周期 ${t.cycle} 天${t.estimated?'（参考值）':''} · 经期 ${t.length} 天</p><div class="stats-hero" style="grid-template-columns:repeat(3,minmax(0,1fr));margin:12px 0 0"><div class="stat-card"><span>平均周期</span><strong>${t.cycle}<em>天</em></strong></div><div class="stat-card"><span>平均经期</span><strong>${t.length}<em>天</em></strong></div><div class="stat-card"><span>已记录</span><strong>${t.items.length}<em>次</em></strong></div></div>${recent?`<div class="tabs" style="flex-wrap:wrap;margin:12px 0 0">${recent}</div>`:''}<p class="small-note">${care}</p><div class="inline-actions" style="margin-top:12px">${button('替她记一次','new-period-for','small soft','edit',`data-author="${partner.id}"`)}${t.last?button('改最近一次','edit-record','small secondary','edit',`data-id="${t.last.id}"`):''}</div></section>`:'';
+ const partnerBlock=t&&t.items.length?`<section class="card partner-cycle"><div class="section-heading"><h2>${icon('heart')} ${esc(partner.name)} 的周期</h2><span class="status-pill sent">已共享给你</span></div>${cycleHero(t,partner.name)}<p class="meta">下次预计 ${Number(dayStr(t.nextStart).slice(5,7))} 月 ${Number(dayStr(t.nextStart).slice(8))} 日${t.estimated?'（参考值）':''} · ${t.untilNext>=0?`还有 ${t.untilNext} 天`:`已推迟 ${-t.untilNext} 天`}</p><div class="stats-hero" style="grid-template-columns:repeat(3,minmax(0,1fr));margin:12px 0 0"><div class="stat-card"><span>平均周期</span><strong>${t.cycle}<em>天</em></strong></div><div class="stat-card"><span>平均经期</span><strong>${t.length}<em>天</em></strong></div><div class="stat-card"><span>已记录</span><strong>${t.items.length}<em>次</em></strong></div></div>${recent?`<div class="tabs" style="flex-wrap:wrap;margin:12px 0 0">${recent}</div>`:''}<p class="small-note">${care}</p><div class="inline-actions" style="margin-top:12px">${button('替她记一次','new-period-for','small soft','edit',`data-author="${partner.id}"`)}${t.last?button('改最近一次','edit-record','small secondary','edit',`data-id="${t.last.id}"`):''}</div></section>`:'';
  /* 自己没记录时，主视角应该是"她的周期 → 她的日历 → 她的记录"；
     自己有记录时才是"我的英雄区 → 我的共享状态 → 日历 → 症状 → 她的卡片 → 我的记录"。 */
  const calBlock=months?`<section class="card">${calCaption}${months}${legend}</section>`:'';
@@ -939,7 +982,7 @@ function periodPage(){
  /* 右上角那颗主按钮也跟着换：自己没周期的人点进来，最想干的是"替她记" */
  const forHer=!d.items.length&&hers;
  const headBar=heading('生理期','记下周期，把照顾提前一点。',forHer?'new-period-for':'new-period',forHer?'替她记一次':'记录经期','heart',forHer?`data-author="${partner.id}"`:'');
- return `${headBar}${back}<p class="hint">${icon('heart')} 生理期默认你俩都可见、也都能记：她不舒服的时候你可以替她记一条、帮她改。点日历上任意一天就能记或改。预测基于记录的周期平均值，仅供参考。</p>${body}`;
+ return `${headBar}${back}${body}`;
 }
 function periodForm(record=null, forWhom=null, presetDay=null){
  /* forWhom：点「替她记一次」时预选的对象。替对方记时共享开关强制打开（后端也会校验），
