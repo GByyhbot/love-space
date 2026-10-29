@@ -248,6 +248,12 @@ async def protection(request, call_next):
     result = await call_next(request)
     result.headers['X-Content-Type-Options'] = 'nosniff'
     result.headers['Referrer-Policy'] = 'same-origin'
+    # HTML 外壳（唯一一个 index.html）必须每次回源校验：以前只有 ETag/Last-Modified，
+    # 没有 Cache-Control，Android WebView 会按"启发式缓存"直接吃本地副本，可能连续几天
+    # 用旧的 index.html 和旧的 ?v= 资源——正是「刚发完版 App 里还是老逻辑」的元凶。
+    # 静态资源仍靠 ?v= 破缓存，离线由 Service Worker 兜底，所以这里 no-store 不会牺牲可用性。
+    if request.url.path in ('/', '/index.html') or request.url.path.endswith('.html'):
+        result.headers['Cache-Control'] = 'no-store'
     # /pose-gallery/ 是同源被本应用 iframe 嵌入的姿势参考站，必须允许同源框入；
     # 其余响应保持 DENY，避免被任意第三方框入（与 CSP frame-ancestors 'none' 双保险）。
     result.headers['X-Frame-Options'] = (

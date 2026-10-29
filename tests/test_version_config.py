@@ -119,3 +119,24 @@ def test_append_user_agent_matches_apk_version(path):
         f'{path.parent.name}/{path.name} 里 appendUserAgent 是 {ua!r}，'
         f'但 APK 版本是 {config.APK_VERSION}——两者不同号，App 内「检查更新」会误判版本'
     )
+
+
+# ---- HTML 外壳不能被 WebView 启发式缓存 ------------------------------------
+# 只有 ETag/Last-Modified 而没有 Cache-Control 时，Android WebView 会按
+# "距 Last-Modified 的 10%" 自行决定缓存多久，可能连续几天不回来校验，
+# 于是发完版 App 里还在跑旧 index.html + 旧 ?v= 资源。这里钉死 no-store。
+
+def test_html_shell_is_no_store(client_a):
+    res = client_a.get('/')
+    assert res.status_code == 200
+    assert 'no-store' in res.headers.get('cache-control', ''), (
+        'index.html 必须带 Cache-Control: no-store，否则 WebView 可能吃旧副本，'
+        '刚发布的版本在 App 里看不到'
+    )
+
+
+def test_static_assets_keep_versioned_cache(client_a):
+    """静态资源不能跟着变成 no-store，否则每次进页面都要重下 CSS/JS（靠 ?v= 破缓存即可）。"""
+    res = client_a.get('/static/app.js')
+    assert res.status_code == 200
+    assert 'no-store' not in res.headers.get('cache-control', '')
