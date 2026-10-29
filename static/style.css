@@ -778,6 +778,16 @@ body.cal-full{overflow:hidden;height:100dvh}
   .brand strong{font-size:16px}
   .home-grid{grid-template-columns:minmax(0,1.5fr) minmax(240px,1fr)}
   .tools-grid{grid-template-columns:repeat(2,1fr)}
+  /* 工具宫格：普通卡压到原来的 2/3 高（emoji 缩一号、说明最多两行），
+     生理期那张整行卡反而加高一点，跟旁边的小卡齐平，别显得塌。 */
+  .tool-card{padding:12px 12px 13px}
+  .tool-card .tool-emoji{font-size:20px;margin-bottom:7px}
+  .tool-card h3{font-size:14px;margin-bottom:3px}
+  .tool-card p{font-size:12px;line-height:1.45;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+  .tool-card-wide{min-height:104px;padding:18px 16px}
+  .tool-card-wide .tool-emoji{font-size:26px}
+  .tool-card-wide .tool-wide-copy h3{font-size:16px}
+  .tool-card-wide .tool-wide-copy p{display:block;-webkit-line-clamp:none;font-size:12.5px}
   .hero{min-height:270px}
 }
 @media (max-width:850px){
@@ -899,7 +909,6 @@ body.cal-full{overflow:hidden;height:100dvh}
   .hero-names-text{font-size:17px}
   .hero-days strong{font-size:36px}
   .form-row{grid-template-columns:1fr}
-  .tool-card{padding:16px 14px}
 }
 
 /* ── 9. 夜间主题 ─────────────────────────────── */
@@ -1195,3 +1204,8 @@ html.is-native-app .topbar{
   background:color-mix(in srgb,var(--bg) 88%,transparent);   /* 新内核：半透明 + 毛玻璃 */
   -webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);
 }
+/* 摆拍参考页（figure-full）是 flex 列 + 顶栏 sticky，负上边距在这里会被 sticky 顶回来，
+   结果「主区内边距 + 顶栏内边距」算了两次，顶栏整个下沉一大截（真机上约 84px）。
+   这一路不用抵消法：主区上内边距直接归零，状态栏高度只由顶栏自己的 padding-top 让。 */
+html.is-native-app .shell.figure-full .main{padding-top:0}
+html.is-native-app .shell.figure-full .topbar{margin-top:0}
