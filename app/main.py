@@ -202,7 +202,10 @@ async def protection(request, call_next):
     result = await call_next(request)
     result.headers['X-Content-Type-Options'] = 'nosniff'
     result.headers['Referrer-Policy'] = 'same-origin'
-    result.headers['X-Frame-Options'] = 'DENY'
+    # /pose-gallery/ 是同源被本应用 iframe 嵌入的姿势参考站，必须允许同源框入；
+    # 其余响应保持 DENY，避免被任意第三方框入（与 CSP frame-ancestors 'none' 双保险）。
+    result.headers['X-Frame-Options'] = (
+        'SAMEORIGIN' if request.url.path.startswith('/pose-gallery/') else 'DENY')
     if request.url.path == '/static/sw.js':
         result.headers['Service-Worker-Allowed'] = '/'
     push_origin = urlparse(ntfy_server_url())
