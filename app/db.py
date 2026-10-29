@@ -336,13 +336,6 @@ def visible(row, user_id):
         return False
     if row['kind'] in PRIVATE:
         return row['author'] == user_id
-    if row['kind'] == 'period' and row['author'] != user_id:
-        # 生理期是健康数据：默认只有本人可见，作者显式打开「共享给 TA」才让对方看到。
-        # body 解析只发生在 period 行上，不影响其他类型的性能。
-        try:
-            return bool(body_decode(row).get('shared'))
-        except Exception:
-            return False
     return True
 
 

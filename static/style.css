@@ -132,7 +132,6 @@ label{display:grid;gap:6px;font-size:13px;color:var(--muted)}
 .form-error{color:var(--danger);font-size:13px;line-height:1.6;min-height:8px}
 .switch-row{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:14px;color:var(--ink);padding:12px 14px;border:1px solid var(--line);border-radius:var(--radius-s);background:var(--soft);cursor:pointer}
 .switch-row span{display:grid;gap:3px;min-width:0}
-.switch-note{font-size:11.5px;font-style:normal;color:var(--muted);font-weight:400}
 .switch-row input[type=checkbox]{width:22px;height:22px;flex:none;margin:0;accent-color:var(--primary);cursor:pointer}
 .switch-row input[type=checkbox]:disabled{cursor:not-allowed;opacity:.6}
 .answer-box{padding:13px 15px;background:var(--soft);border-radius:var(--radius-s);font-size:14px;line-height:1.7;margin-top:10px;white-space:pre-wrap;overflow-wrap:anywhere}
@@ -972,8 +971,6 @@ body.cal-full{overflow:hidden;height:100dvh}
 /* 已经有记录的那一天：右上角一个小圆点，暗示"这天点进去是改，不是新建" */
 .cal-day.has-rec::before{content:'';position:absolute;top:6px;right:6px;width:5px;height:5px;border-radius:50%;background:var(--primary);opacity:.7}
 .cal-day:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
-.cal-owner{display:flex;align-items:center;gap:7px;margin:0 0 12px;padding:9px 12px;border-radius:10px;background:var(--soft);font-size:12.5px;color:var(--primary-dark)}
-.cal-owner .icon{width:15px;height:15px;flex:none;stroke:var(--primary)}
 .cal-day.ph-pred{opacity:.85}
 .cal-day.ph-period.ph-pred{background:transparent;border:1px dashed var(--primary)}
 .cal-day.ph-fertile.ph-ovu::after{content:'';position:absolute;bottom:4px;width:7px;height:7px;border-radius:50%;background:#8B72A8;box-shadow:0 0 0 2px rgba(139,114,168,.25)}
@@ -1015,7 +1012,6 @@ body.cal-full{overflow:hidden;height:100dvh}
 .cycle-ring text{fill:#fff;font-size:23px;font-weight:800;font-family:var(--font)}
 .cycle-hero-day{font-size:11px;opacity:.94;line-height:1.4;white-space:nowrap}
 .period-hero .meta{margin-top:0}
-.partner-cycle .cycle-hero{margin:12px 0 12px}
 @media(max-width:640px){
   .cycle-hero{padding:14px 15px;gap:10px;border-radius:16px}
   .cycle-hero-phase{font-size:17.5px}
@@ -1038,12 +1034,9 @@ body.cal-full{overflow:hidden;height:100dvh}
 .song-line small{display:block;font-size:12px;line-height:1.4}
 .song-audio{width:100%;margin-top:12px;height:38px}
 /* 对方的周期卡：一句话结论 + 三个数字，和他的记录区分开 */
-.partner-cycle{border-color:var(--soft-strong);background:linear-gradient(160deg,var(--soft),var(--surface))}
-.partner-cycle h3{font-size:21px;line-height:1.4;margin:8px 0 4px;color:var(--primary-dark);font-weight:700}
 /* 这两张之前压根没有样式定义，掉回纯白 .card：
    「谁能看到这次周期」是隐私边界，必须一眼区别于普通数据卡；
    网页系统通知属于「待办 / 待开启」，用琥珀信号色和 rose 主色调错开。 */
-.share-bar{background:linear-gradient(165deg,var(--soft),var(--surface) 72%);border-color:var(--soft-strong)}
 .webpush-card{background:linear-gradient(165deg,var(--amber-soft),var(--surface) 66%);border-color:rgba(160,107,56,.22)}
 
 /* ═══════════════════════════════════════════════════════════════

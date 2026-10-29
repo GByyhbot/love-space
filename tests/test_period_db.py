@@ -2,7 +2,7 @@
 
 覆盖四件事：
 1. 写入只落在 period.db，主库 records 里查不到；
-2. 共享/私密的可见性语义没变（对方看不到私密那条，列表也不返回）；
+2. 两个人共用同一条周期：谁记的对方都看得见、都能改（没有共享/私密开关）；
 3. 老数据迁移幂等，迁完主库不留 period 行；
 4. 备份包里有 period.db，导出内容里有生理期。
 """
@@ -55,43 +55,38 @@ def test_period_lives_only_in_its_own_file(client_a):
     assert client_a.get(f'/api/records/{rec["id"]}').json()['body']['content'] == '这次腰很酸'
 
 
-def test_period_privacy_still_works(client_a, client_b):
-    private = make_period(client_a, '2026-07-01', shared=False, content='不想让她担心')
-    shared = make_period(client_a, '2026-06-01', shared=True, content='这次还行')
-    # 对方：私密那条列表里不出现、详情 404
+def test_period_shared_between_both(client_a, client_b):
+    """生理期没有共享/私密之分：谁记的对方都看得见，列表和详情同一口径。"""
+    rec = make_period(client_a, '2026-07-01', shared=False, content='不想让她担心')
     other = client_b.get('/api/records?kind=period&limit=1000').json()
-    ids = {item['id'] for item in other}
-    assert private['id'] not in ids
-    assert shared['id'] in ids
-    assert client_b.get(f'/api/records/{private["id"]}').status_code == 404
-    # 本人两条都在
-    mine = {item['id'] for item in client_a.get('/api/records?kind=period&limit=1000').json()}
-    assert {private['id'], shared['id']} <= mine
+    assert any(item['id'] == rec['id'] for item in other)
+    detail = client_b.get(f'/api/records/{rec["id"]}')
+    assert detail.status_code == 200
+    assert detail.json()['body']['content'] == '不想让她担心'
+    # 老记录里残留的 shared 字段不再生效，也不会被再写回去
+    assert 'shared' not in detail.json()['body']
 
 
-def test_period_toggle_share_edits_and_recycle(client_a, client_b):
-    rec = make_period(client_a, '2026-05-01', shared=True)
-    # 批量收回
-    out = client_a.post('/api/period/share', headers=HEADERS, json={'shared': False}).json()
-    assert out['shared'] is False and out['total'] >= 1
-    assert client_b.get(f'/api/records/{rec["id"]}').status_code == 404
-    # 再放出来
-    client_a.post('/api/period/share', headers=HEADERS, json={'shared': True})
-    assert client_b.get(f'/api/records/{rec["id"]}').status_code == 200
-    # 对方可以帮忙改内容，但拨不动隐私开关
+def test_period_edit_and_recycle(client_a, client_b):
+    rec = make_period(client_a, '2026-05-01')
+    # 谁都能改：没有「替谁记」的边界，两个人维护同一条周期
     edited = client_b.put(f'/api/records/{rec["id"]}', headers=HEADERS,
-                          json={'kind': 'period', 'body': {'start': '2026-05-01', 'shared': False,
-                                                           'content': '替她补一句'}})
+                          json={'kind': 'period', 'body': {'start': '2026-05-01', 'length': 6,
+                                                           'content': '一起补一句'}})
     assert edited.status_code == 200, edited.text
-    assert edited.json()['body']['shared'] is True          # 开关仍是作者说了算
-    assert edited.json()['body']['content'] == '替她补一句'
-    # 删除 → 本人能在回收站看到 → 恢复
-    assert client_a.delete(f'/api/records/{rec["id"]}').status_code == 200
+    assert edited.json()['body']['content'] == '一起补一句'
+    assert edited.json()['body']['length'] == 6
+    # 谁都能删；回收站按人分，只有作者自己能恢复
+    assert client_b.delete(f'/api/records/{rec["id"]}').status_code == 200
     assert period_row(rec['id'])['deleted'] is not None
-    trash = client_a.get('/api/records?trash=true&kind=period&limit=1000').json()
-    assert any(item['id'] == rec['id'] for item in trash)
+    listed = {item['id'] for item in client_a.get('/api/records?kind=period&limit=1000').json()}
+    assert rec['id'] not in listed
+    assert client_b.post(f'/api/records/{rec["id"]}/restore', headers=HEADERS).status_code == 404
     assert client_a.post(f'/api/records/{rec["id"]}/restore', headers=HEADERS).status_code == 200
     assert period_row(rec['id'])['deleted'] is None
+    # 旧的「整体共享 / 收回」接口已经下线
+    assert client_a.post('/api/period/share', headers=HEADERS,
+                         json={'shared': True}).status_code in (404, 405)
 
 
 def test_legacy_period_rows_migrate_once(client_a):

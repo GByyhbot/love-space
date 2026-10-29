@@ -522,8 +522,6 @@ class RecordInput(BaseModel):
     kind: str
     body: dict
     client_id: str | None = Field(default=None, max_length=100)
-    # 仅 kind=period 使用：替另一半记录（她不舒服的时候，你替她记一条）
-    author: str | None = Field(default=None, max_length=64)
 
 
 class PersonalWishInput(BaseModel):
@@ -544,7 +542,7 @@ def clean_body(c, kind, data, user_id, previous=None):
         raise HTTPException(422, '个人心愿请使用专属加密接口保存')
     permitted = {'title', 'content', 'date', 'media', 'album', 'publish_at', 'annual', 'remind_days',
                  'category', 'done', 'emoji', 'target', 'completion_post', 'sticker', 'amount',
-                 'start', 'cycle', 'length', 'flow', 'symptoms', 'shared'}
+                 'start', 'cycle', 'length', 'flow', 'symptoms'}
     body = {k: v for k, v in data.items() if k in permitted}
     if 'sticker' in body and (not isinstance(body['sticker'], str)
                               or not re.fullmatch(r'/static/stickers/[a-z0-9]+/\d+\.(webm|webp)', body['sticker'])):
@@ -580,11 +578,6 @@ def clean_body(c, kind, data, user_id, previous=None):
                 continue
             if type(body[key]) is not int or not (15 <= body[key] <= 60 if key == 'cycle' else 1 <= body[key] <= 15):
                 raise HTTPException(422, '周期需在 15–60 天、经期需在 1–15 天之间')
-        if 'shared' in body and not isinstance(body['shared'], bool):
-            raise HTTPException(422, '共享状态格式不正确')
-        # 生理期默认双人公开可见：另一半提前知道，才谈得上照顾。
-        # 想留私密就在表单里取消勾选（传 shared:false），或用 /api/period/share 一次性收回。
-        body.setdefault('shared', True)
         if body.get('flow') in (None, ''):
             body.pop('flow', None)
         elif body['flow'] not in ('少', '中', '多'):
@@ -749,49 +742,30 @@ def records(kind: str = '', q: str = '', author: str = '', date: str = '', media
 
 
 # ── 生理期：独立库的读写入口 ────────────────────────────────────────
-# 校验仍旧复用 clean_body（字段白名单、数值区间、共享开关都在那儿），这里只管
-# "写哪个库"以及跨库副作用的顺序：先提交分库，再回主库推 revision / 发通知。
+# 生理期在你们两个人之间没有"共享/私密"之分：谁都能记、谁都能改，
+# 页面看到的也是同一份周期。这里只管"写哪个库"以及跨库副作用的顺序：
+# 先提交分库，再回主库推 revision / 发通知。
 
-def _period_revisions(author_id, shared, was_shared=False):
-    """分库写完之后回主库推进版本号。
-
-    现在或以前共享过 → 推进共享 revision（双方都要刷新）；
-    全程仅自己可见 → 只推作者自己的，否则对端收到一次 refresh 就等于
-    被告知「她刚记了点生理期」。
-    """
+def _period_touch():
+    """分库写完之后回主库推进版本号：两边都要刷新。"""
     with connect() as c:
         c.execute('BEGIN IMMEDIATE')
-        if shared or was_shared:
-            db.bump_shared(c)
-        else:
-            db.bump_user(c, author_id)
+        db.bump_shared(c)
 
 
 def create_period_record(body, user):
     with connect() as c:
-        author_id = user['id']
-        if body.author and body.author != user['id']:
-            # 替对方记：对象必须真实存在，且不能替她设成私密（否则你自己都看不到）
-            if not c.execute('SELECT 1 FROM users WHERE id=?', (body.author,)).fetchone():
-                raise HTTPException(422, '记录对象不存在')
-            author_id = body.author
-        existing = period.find_by_client(author_id, body.client_id)
+        existing = period.find_by_client(user['id'], body.client_id)
         if existing:
             return period.serialize(existing, user['id'])
         cleaned = clean_body(c, 'period', body.body, user['id'])
-        if author_id != user['id'] and not cleaned.get('shared', True):
-            raise HTTPException(422, '替对方记录时无法设为仅自己可见')
     rid = uid()
-    period.insert(rid, author_id, cleaned, body.client_id)
-    if cleaned.get('shared'):
-        with connect() as c:
-            c.execute('BEGIN IMMEDIATE')
-            db.bump_shared(c)
-            # 仅自己可见时不发通知：对端看不到内容，收到提醒只会更困惑
-            db.notice(c, 'activity', '你们的空间有了新记录', rid, user['id'])
-        nudge_worker()
-    else:
-        _period_revisions(author_id, False)
+    period.insert(rid, user['id'], cleaned, body.client_id)
+    with connect() as c:
+        c.execute('BEGIN IMMEDIATE')
+        db.bump_shared(c)
+        db.notice(c, 'activity', '你们的空间有了新记录', rid, user['id'])
+    nudge_worker()
     return period.serialize(period.get(rid), user['id'])
 
 
@@ -801,22 +775,15 @@ def update_period_record(rid, body, row, user):
     with connect() as c:
         old_body = db.body_decode(row)
         cleaned = clean_body(c, 'period', body.body, user['id'], old_body)
-    if row['author'] != user['id']:
-        # 另一半可以帮忙改内容（她说难受时你替她补症状），
-        # 但「共享给 TA」是隐私开关，只能由记录本人改
-        cleaned['shared'] = old_body.get('shared', True)
     period.update(rid, cleaned)
-    _period_revisions(row['author'], bool(cleaned.get('shared')), bool(old_body.get('shared')))
+    _period_touch()
     return period.serialize(period.get(rid), user['id'])
 
 
 def delete_period_record(rid, row, user):
-    # 与主库保持一致：period 在 SHARED_EDIT 里，另一半也能删；恢复只有本人能做
-    shared = bool(db.body_decode(row).get('shared'))
-    if row['author'] != user['id'] and not shared:
-        raise HTTPException(404, '记录不存在')
+    # period 在 SHARED_EDIT 里：谁都能删，恢复只有本人能做（回收站是按人分的）
     period.soft_delete(rid)
-    _period_revisions(row['author'], False, shared)
+    _period_touch()
     return {'ok': True}
 
 
@@ -824,7 +791,7 @@ def restore_period_record(rid, row, user):
     if row['author'] != user['id']:
         raise HTTPException(404, '记录不存在')
     period.restore(rid)
-    _period_revisions(row['author'], bool(db.body_decode(row).get('shared')))
+    _period_touch()
     return {'ok': True}
 
 
@@ -835,22 +802,11 @@ def create_record(body: RecordInput, user=Depends(current_user)):
     with connect() as c:
         c.execute('BEGIN IMMEDIATE')
         author_id = user['id']
-        if body.author and body.author != user['id']:
-            # 只对生理期开放"代记"：两个人的周期由两个人一起维护，
-            # 别的类型仍必须是本人写的，否则点赞评论的作者归属会乱。
-            if body.kind != 'period':
-                raise HTTPException(422, '只有生理期支持替对方记录')
-            if not c.execute('SELECT 1 FROM users WHERE id=?', (body.author,)).fetchone():
-                raise HTTPException(422, '记录对象不存在')
-            author_id = body.author
         if body.client_id:
             existing = c.execute('SELECT * FROM records WHERE author=? AND client_id=?', (author_id, body.client_id)).fetchone()
             if existing:
                 return serialize(c, existing, user['id'])
         cleaned = clean_body(c, body.kind, body.body, user['id'])
-        if author_id != user['id'] and not cleaned.get('shared', True):
-            # 替她记一条私密记录，你自己却看不到，只会两头困惑
-            raise HTTPException(422, '替对方记录时无法设为仅自己可见')
         rid = uid()
         timestamp = now()
         c.execute('INSERT INTO records VALUES (?,?,?,?,?,?,NULL,?,?)',
@@ -981,24 +937,6 @@ def update_record(rid: str, body: RecordInput, user=Depends(current_user)):
         if row['kind'] == 'draft' and body.kind == 'post':
             db.notice(c, 'activity', '你们的空间有了新记录', rid, user['id'])
         return serialize(c, c.execute('SELECT * FROM records WHERE id=?', (rid,)).fetchone(), user['id'])
-
-
-class PeriodShareInput(BaseModel):
-    shared: bool = True
-
-
-@app.post('/api/period/share')
-def period_share_all(body: PeriodShareInput, user=Depends(current_user)):
-    """把自己所有生理期记录一次性设为「双人公开可见」或收回为「仅自己可见」。
-
-    新建时默认就是共享（见 clean_body），这个接口处理两件事：
-    一是把历史记录（早期版本默认私有）一次性补成公开，二是随时整体收回。
-    只动 author=自己的记录；单条仍可在记录菜单里单独切换。
-    """
-    changed, total = period.set_shared(user['id'], body.shared)
-    if changed:
-        _period_revisions(user['id'], body.shared, True)
-    return {'ok': True, 'changed': changed, 'total': total, 'shared': body.shared}
 
 
 @app.delete('/api/records/{rid}')

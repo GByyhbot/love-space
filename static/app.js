@@ -380,7 +380,7 @@ function recordCard(r) {
  if(r.kind==='personal_wish')return personalWishCard(r);
  if(r.kind==='music')return musicCard(r);
  const own=r.author===state.me.user.id,sharedEdit=['album','anniversary','wish','habit','quest','ledger','music'].includes(r.kind),b=r.body;
- return `<article class="card kind-${r.kind}" data-record="${r.id}"><div class="card-header">${avatar(r.author)}<div><strong>${esc(person(r.author).name)}</strong><small>${esc(b.date||dateLabel(r.created))}${['diary','draft','surprise'].includes(r.kind)?' · '+kindLabel[r.kind]:''}${b.was_surprise?' · 一份公开的惊喜':''}</small></div><div class="card-menu">${own||sharedEdit?`<details class="more-menu"><summary aria-label="更多操作" title="更多操作">⋯</summary><div class="menu-pop"><button data-action="edit-record" data-id="${r.id}">${icon('edit')} 编辑</button><button data-action="delete-record" data-id="${r.id}" class="danger">${icon('trash')} 删除</button></div></details>`:''}</div></div>${b.title?`<h3 class="card-title">${esc(b.title)}</h3>`:''}<p class="card-text">${esc(b.content||'')}</p>${mediaMarkup(r.media)}${r.kind==='surprise'?`<p class="hint">${icon('lock')} 将于 ${dateLabel(b.publish_at)} 公开，目前只有你能看见。</p>`:''}${r.kind==='anniversary'?`<p class="meta">${esc(b.date)} · ${b.annual==='lunar'?'每年农历日期':b.annual===false?'一次性纪念日':'每年公历日期'} · 提前 ${b.remind_days??1} 天提醒</p><div class="inline-actions">${button('回看这一天','anniversary-memories','small soft','calendar',`data-date="${esc(b.date)}"`)}</div>`:''}${r.kind==='wish'?`<p class="meta">${esc(b.category||'小心愿')}${b.target?' · 约定 '+esc(b.target):''}</p><div class="inline-actions">${button(b.done?'已完成 · 再次点亮期待':'完成这个心愿','toggle-wish','small soft','check',`data-id="${r.id}"`)}${b.done?button('记录实现的那一刻','wish-memory','small secondary','edit',`data-id="${r.id}"`):''}</div>`:''}${r.kind==='quest'?`<p class="meta">${esc(b.category||'日常')}${b.date?' · 计划 '+esc(b.date):''}</p><div class="inline-actions">${button(b.done?'已完成 · 取消勾选':'标记为完成','toggle-quest','small soft','check',`data-id="${r.id}"`)}${b.done?button('记录实现的那一刻','wish-memory','small secondary','edit',`data-id="${r.id}"`):''}</div>`:''}${r.kind==='ledger'?`<p class="meta"><strong>¥${Number(b.amount||0).toFixed(2)}</strong> · ${esc(b.category||'其他')}${b.date?' · '+esc(b.date):''}</p>`:''}${r.kind==='period'?`<p class="meta">${esc(b.start)} 开始 · 经期 ${b.length||5} 天${b.cycle?' · 周期 '+b.cycle+' 天':''}${b.shared?' · 已共享给 TA':' · 仅自己可见'}</p>`:''}${r.kind==='habit'?`<p class="meta">${(r.checks||[]).length} 次用心坚持 · 今天 ${new Set((r.checks||[]).filter(c=>c.day===today()).map(c=>c.author)).size}/2 人完成</p><div class="inline-actions">${button((r.checks||[]).some(c=>c.author===state.me.user.id&&c.day===today())?'今天已打卡':'今天也一起坚持','check','small soft','check',`data-id="${r.id}"`)}</div>`:''}${r.kind==='question'?`<p class="meta">${r.answer_count===2?'两个人的答案都到齐啦':'双方回答后，才会揭晓彼此的答案'}</p>${(r.answers||[]).map(a=>`<div class="answer-box"><strong>${esc(person(a.author).name)}</strong><br>${esc(a.content)}</div>`).join('')}<div class="inline-actions">${button('写下我的答案','answer','small soft','edit',`data-id="${r.id}"`)}</div>`:''}${r.kind==='mood'?`<div class="inline-actions">${esc(b.emoji||'☀')}</div>`:''}${r.kind==='draft'?`<div class="inline-actions">${button('继续编辑','edit-record','soft small','edit',`data-id="${r.id}"`)}</div>`:''}<div class="card-footer"><span class="date-tag">${icon('clock')} ${dateLabel(r.created)}</span>${!['draft','diary','surprise'].includes(r.kind)?`<button class="${r.likes.includes(state.me.user.id)?'liked':''}" data-action="like" data-id="${r.id}">${icon('heart')} ${r.likes.length||'喜欢'}</button><button data-action="comment" data-id="${r.id}">${icon('chat')} ${r.comments.length||'回复'}</button>`:`<span>${icon('lock')} 仅自己可见</span>`}</div>${r.comments.length?`<div class="comments">${r.comments.map(c=>`<div><strong>${esc(person(c.author).name)}：</strong>${esc(c.content)}${c.author===state.me.user.id?`<button class="comment-delete" data-action="delete-comment" data-id="${c.id}">删除</button>`:''}</div>`).join('')}</div>`:''}</article>`;
+ return `<article class="card kind-${r.kind}" data-record="${r.id}"><div class="card-header">${avatar(r.author)}<div><strong>${esc(person(r.author).name)}</strong><small>${esc(b.date||dateLabel(r.created))}${['diary','draft','surprise'].includes(r.kind)?' · '+kindLabel[r.kind]:''}${b.was_surprise?' · 一份公开的惊喜':''}</small></div><div class="card-menu">${own||sharedEdit?`<details class="more-menu"><summary aria-label="更多操作" title="更多操作">⋯</summary><div class="menu-pop"><button data-action="edit-record" data-id="${r.id}">${icon('edit')} 编辑</button><button data-action="delete-record" data-id="${r.id}" class="danger">${icon('trash')} 删除</button></div></details>`:''}</div></div>${b.title?`<h3 class="card-title">${esc(b.title)}</h3>`:''}<p class="card-text">${esc(b.content||'')}</p>${mediaMarkup(r.media)}${r.kind==='surprise'?`<p class="hint">${icon('lock')} 将于 ${dateLabel(b.publish_at)} 公开，目前只有你能看见。</p>`:''}${r.kind==='anniversary'?`<p class="meta">${esc(b.date)} · ${b.annual==='lunar'?'每年农历日期':b.annual===false?'一次性纪念日':'每年公历日期'} · 提前 ${b.remind_days??1} 天提醒</p><div class="inline-actions">${button('回看这一天','anniversary-memories','small soft','calendar',`data-date="${esc(b.date)}"`)}</div>`:''}${r.kind==='wish'?`<p class="meta">${esc(b.category||'小心愿')}${b.target?' · 约定 '+esc(b.target):''}</p><div class="inline-actions">${button(b.done?'已完成 · 再次点亮期待':'完成这个心愿','toggle-wish','small soft','check',`data-id="${r.id}"`)}${b.done?button('记录实现的那一刻','wish-memory','small secondary','edit',`data-id="${r.id}"`):''}</div>`:''}${r.kind==='quest'?`<p class="meta">${esc(b.category||'日常')}${b.date?' · 计划 '+esc(b.date):''}</p><div class="inline-actions">${button(b.done?'已完成 · 取消勾选':'标记为完成','toggle-quest','small soft','check',`data-id="${r.id}"`)}${b.done?button('记录实现的那一刻','wish-memory','small secondary','edit',`data-id="${r.id}"`):''}</div>`:''}${r.kind==='ledger'?`<p class="meta"><strong>¥${Number(b.amount||0).toFixed(2)}</strong> · ${esc(b.category||'其他')}${b.date?' · '+esc(b.date):''}</p>`:''}${r.kind==='period'?`<p class="meta">${esc(b.start)} 开始 · 经期 ${b.length||5} 天${b.cycle?' · 周期 '+b.cycle+' 天':''}</p>`:''}${r.kind==='habit'?`<p class="meta">${(r.checks||[]).length} 次用心坚持 · 今天 ${new Set((r.checks||[]).filter(c=>c.day===today()).map(c=>c.author)).size}/2 人完成</p><div class="inline-actions">${button((r.checks||[]).some(c=>c.author===state.me.user.id&&c.day===today())?'今天已打卡':'今天也一起坚持','check','small soft','check',`data-id="${r.id}"`)}</div>`:''}${r.kind==='question'?`<p class="meta">${r.answer_count===2?'两个人的答案都到齐啦':'双方回答后，才会揭晓彼此的答案'}</p>${(r.answers||[]).map(a=>`<div class="answer-box"><strong>${esc(person(a.author).name)}</strong><br>${esc(a.content)}</div>`).join('')}<div class="inline-actions">${button('写下我的答案','answer','small soft','edit',`data-id="${r.id}"`)}</div>`:''}${r.kind==='mood'?`<div class="inline-actions">${esc(b.emoji||'☀')}</div>`:''}${r.kind==='draft'?`<div class="inline-actions">${button('继续编辑','edit-record','soft small','edit',`data-id="${r.id}"`)}</div>`:''}<div class="card-footer"><span class="date-tag">${icon('clock')} ${dateLabel(r.created)}</span>${!['draft','diary','surprise'].includes(r.kind)?`<button class="${r.likes.includes(state.me.user.id)?'liked':''}" data-action="like" data-id="${r.id}">${icon('heart')} ${r.likes.length||'喜欢'}</button><button data-action="comment" data-id="${r.id}">${icon('chat')} ${r.comments.length||'回复'}</button>`:`<span>${icon('lock')} 仅自己可见</span>`}</div>${r.comments.length?`<div class="comments">${r.comments.map(c=>`<div><strong>${esc(person(c.author).name)}：</strong>${esc(c.content)}${c.author===state.me.user.id?`<button class="comment-delete" data-action="delete-comment" data-id="${c.id}">删除</button>`:''}</div>`).join('')}</div>`:''}</article>`;
 }
 
 function timelinePage() {
@@ -819,16 +819,15 @@ function ledgerPage(){
 
 /* ———— 生理期 ————
    参考美柚的核心闭环：记一次经期 → 推算周期与下次 → 日历上标出来。
-   健康数据默认「只有本人可见」，作者自己打开「共享给 TA」对方才看得到；
-   这条规则后端 db.visible / serializers 也各挡一道。 */
+   这里没有「共享 / 私密」也没有「替谁记」：两个人共同维护同一条周期，
+   谁都能记、能改，页面看到的完全一样（后端 period.visible / db.visible 同口径）。 */
 const PERIOD_SYMPTOMS=['腹痛','腰酸','胸胀','头痛','乏力','情绪波动','长痘','食欲变化','失眠','怕冷'];
 const DAY_MS=864e5;
 function dayNum(s){return Math.round(Date.parse(String(s).slice(0,10)+'T00:00:00Z')/DAY_MS);}
 function dayStr(n){return new Date(n*DAY_MS).toISOString().slice(0,10);}
-function periodData(uid){
- /* uid 省略时算自己的。对方的记录只有共享的才在 recordsOf 里，所以传对方 id 天然只统计 TA 公开的那部分 */
- const who=uid||state.me.user.id;
- const items=recordsOf('period').filter(r=>r.author===who&&r.body.start).slice().sort((a,b)=>String(a.body.start).localeCompare(String(b.body.start)));
+function periodData(){
+ /* 两个人共同维护同一条周期：不按作者区分，谁记的都算进去，界面也就只有一套 */
+ const items=recordsOf('period').filter(r=>r.body.start).slice().sort((a,b)=>String(a.body.start).localeCompare(String(b.body.start)));
  const gaps=[];
  for(let i=1;i<items.length;i++){const g=dayNum(items[i].body.start)-dayNum(items[i-1].body.start);if(g>=15&&g<=60)gaps.push(g);}
  const last=items[items.length-1]||null;
@@ -865,14 +864,14 @@ function cyclePhases(d){
  return map;
 }
 function todayPhase(d){const ph=cyclePhases(d)[today()];return ph||null;}
-function periodMonth(y,m,d,owner){
+function periodMonth(y,m,d){
  const lead=new Date(Date.UTC(y,m-1,1)).getUTCDay(),days=new Date(Date.UTC(y,m,0)).getUTCDate();
  const phases=cyclePhases(d),todayS=today();
  const cells=[...Array(lead).fill(0)];for(let i=1;i<=days;i++)cells.push(i);
  // 月初第一格的"上一段"要取上月最后一天，否则每月 1 号都会被误标成阶段第一天
  const firstIso=`${y}-${String(m).padStart(2,'0')}-01`;
  let prevPhase=(phases[dayStr(dayNum(firstIso)-1)]||{}).phase||'';
- // 格子上带 data-day / data-owner：点哪天就改哪天，没记录的那天直接按那天新建
+ // 格子上带 data-day：点哪天就改哪天，没记录的那天直接按那天新建
  const recs=new Map();
  d.items.forEach(r=>recs.set(String(r.body.start).slice(0,10),r));
  return `<div class="period-month"><h3>${y} 年 ${m} 月</h3><div class="calendar-grid">${['日','一','二','三','四','五','六'].map(w=>`<span class="cal-week">${w}</span>`).join('')}${cells.map(v=>{
@@ -885,7 +884,7 @@ function periodMonth(y,m,d,owner){
   const cls=ph?` ph-${ph.phase}${ph.predicted?' ph-pred':''}${ph.ovu?' ph-ovu':''}${isStart?' ph-start':''}`:'';
   const parts=[ph?`${PHASE_NAMES[ph.phase]}${ph.predicted?'（预测）':''}`:'还没有记录',ph&&ph.ovu?'排卵日':'',rec?'点一下改这天':'点一下记这天'].filter(Boolean);
   const tip=parts.join(' · ');
-  return `<button type="button" class="cal-day${cls}${iso===todayS?' is-today':''}${rec?' has-rec':''}" data-action="period-day" data-day="${iso}" data-owner="${owner}" title="${tip}" aria-label="${m} 月 ${v} 日，${tip}"><span>${v}</span>${tag?`<em>${tag}</em>`:''}</button>`;
+  return `<button type="button" class="cal-day${cls}${iso===todayS?' is-today':''}${rec?' has-rec':''}" data-action="period-day" data-day="${iso}" title="${tip}" aria-label="${m} 月 ${v} 日，${tip}"><span>${v}</span>${tag?`<em>${tag}</em>`:''}</button>`;
  }).join('')}</div></div>`;
 }
 /* 阶段短名用两字，日历格子里放得下；主视觉卡上要念全称，单独一份 */
@@ -954,78 +953,32 @@ function phaseBar(d){
 }
 function periodPage(){
  const d=periodData(),back='';
- const partner=state.me.users.find(u=>u.id!==state.me.user.id);
- const t=partner?periodData(partner.id):null;
- let hero;
- const hers=!!(t&&t.items.length);
- if(!d.items.length){
- // 这条分支最常见的其实是「男方账号」：他自己永远不会有周期记录。
- // 她已有记录时这里不插卡——下面的「她的周期」已经把预测、按钮、照护建议说完了，
- // 再放一张同名空状态卡只会重复。
- hero=hers?'':`<section class="card"><div class="section-heading"><h2>🌸 开始记录</h2></div><p class="meta">记下这次经期开始的那一天，之后每次来都记一次，这里就会多出「下次预计日期」「两个月的日历」和「症状统计」。</p><p class="small-note">生理期默认你俩都可见、也都能记。想单独留一次私密，记录时把「让 TA 也看到这次」取消勾选。</p><div class="inline-actions">${button('记录这次经期','new-period','small primary','edit')}</div></section>`;
- }else{
-  hero=`<section class="card period-hero">${cycleHero(d,state.me.user.name)}<p class="meta">下次预计 ${Number(dayStr(d.nextStart).slice(5,7))} 月 ${Number(dayStr(d.nextStart).slice(8))} 日${d.estimated?'（参考值）':''} · ${d.untilNext>=0?`还有 ${d.untilNext} 天`:`已推迟 ${-d.untilNext} 天`}</p>${phaseBar(d)}<div class="stats-hero" style="grid-template-columns:repeat(3,minmax(0,1fr));margin:14px 0 0"><div class="stat-card"><span>平均周期</span><strong>${d.cycle}<em>天</em></strong></div><div class="stat-card"><span>平均经期</span><strong>${d.length}<em>天</em></strong></div><div class="stat-card"><span>已记录</span><strong>${d.items.length}<em>次</em></strong></div></div><div class="inline-actions" style="margin-top:14px">${button(d.inWindow?'记录结束/更新':'记录这次经期','new-period','small primary','edit')}${button('编辑最近一条','edit-record','small secondary','edit',`data-id="${d.last.id}"`)}</div></section>`;
- }
- /* 自己一条都没记时，直接把她的日历顶上来 —— 否则整页连日历都不出现，只剩一句"开始记录"。
-    这也是"点日历某一天就能改"的落点：日历永远属于某个人（data-owner），点了记到对的人名下。 */
- const calOwner=d.items.length?state.me.user.id:(t&&t.items.length?partner.id:'');
- const calData=calOwner&&calOwner!==state.me.user.id?t:d;
- const months=calOwner?[0,1].map(k=>{const dt=new Date(Date.UTC(Number(today().slice(0,4)),Number(today().slice(5,7))-1+k,1));return periodMonth(dt.getUTCFullYear(),dt.getUTCMonth()+1,calData,calOwner);}).join(''):'';
- const calCaption=calOwner&&calOwner!==state.me.user.id?`<p class="cal-owner">${icon('heart')} 这是 ${esc(person(calOwner).name)} 的日历 · 点任意一天就能帮她记或改</p>`:'';
+ /* 生理期不分「我的 / 她的」：两个人共同维护同一条周期，页面长得一样，谁记的都算数。 */
+ const hero=d.items.length
+  ?`<section class="card period-hero">${cycleHero(d,state.me.user.name)}<p class="meta">下次预计 ${Number(dayStr(d.nextStart).slice(5,7))} 月 ${Number(dayStr(d.nextStart).slice(8))} 日${d.estimated?'（参考值）':''} · ${d.untilNext>=0?`还有 ${d.untilNext} 天`:`已推迟 ${-d.untilNext} 天`}</p>${phaseBar(d)}<div class="stats-hero" style="grid-template-columns:repeat(3,minmax(0,1fr));margin:14px 0 0"><div class="stat-card"><span>平均周期</span><strong>${d.cycle}<em>天</em></strong></div><div class="stat-card"><span>平均经期</span><strong>${d.length}<em>天</em></strong></div><div class="stat-card"><span>已记录</span><strong>${d.items.length}<em>次</em></strong></div></div><div class="inline-actions" style="margin-top:14px">${button(d.inWindow?'记录结束/更新':'记录这次经期','new-period','small primary','edit')}${button('编辑最近一条','edit-record','small secondary','edit',`data-id="${d.last.id}"`)}</div></section>`
+  :`<section class="card"><div class="section-heading"><h2>🌸 开始记录</h2></div><p class="meta">记下这次经期开始的那一天，之后每次来都记一次，这里就会多出「下次预计日期」「两个月的日历」和「症状统计」。谁记都行，两个人看到的是同一份。</p><div class="inline-actions">${button('记录这次经期','new-period','small primary','edit')}</div></section>`;
+ /* 日历就是这一条周期的日历；点任意一天，记下或改那天，记的时候不分是谁的 */
+ const months=d.items.length?[0,1].map(k=>{const dt=new Date(Date.UTC(Number(today().slice(0,4)),Number(today().slice(5,7))-1+k,1));return periodMonth(dt.getUTCFullYear(),dt.getUTCMonth()+1,d);}).join(''):'';
  const legend=months?`<p class="period-legend"><span class="lg-pill p-period">月经期</span><span class="lg-pill p-follicular">卵泡期</span><span class="lg-pill p-fertile">排卵期</span><span class="lg-pill p-luteal">黄体期</span><span class="lg-pill p-pred">虚框＝预测</span></p>`:'';
+ const calBlock=months?`<section class="card">${months}${legend}</section>`:'';
  const spread=d.gaps.length>1?Math.max(...d.gaps)-Math.min(...d.gaps):0;
  const symCount={};d.items.forEach(r=>(r.body.symptoms||[]).forEach(s=>symCount[s]=(symCount[s]||0)+1));
  const syms=Object.entries(symCount).sort((a,b)=>b[1]-a[1]).slice(0,6);
  const symBlock=syms.length?`<section class="card"><div class="section-heading"><h2>常出现的症状</h2></div>${syms.map(([s,n])=>`<div class="stat-row"><span>${esc(s)}</span><div class="stat-bar"><i style="width:${Math.round(n/d.items.length*100)}%"></i></div><b>${n} 次</b></div>`).join('')}<p class="small-note">${spread>7?`周期波动 ${spread} 天，波动大的时候多留一点休息的时间。`:'周期还算规律，保持记录会更准。'}</p></section>`:'';
- const histOf=items=>items.slice().reverse().map(r=>{
+ const hist=d.items.slice().reverse().map(r=>{
   const len=Number(r.body.length||5),end=dayStr(dayNum(r.body.start)+len-1);
-  const mine=r.author===state.me.user.id;
-  return `<article class="card"><div class="card-header">${avatar(r.author)}<div><strong>${esc(String(r.body.start).slice(5,7))} 月 ${esc(String(r.body.start).slice(8))} 日开始</strong><small>共 ${len} 天 · ${end.slice(5)} 结束${r.body.flow?' · 经量'+esc(r.body.flow):''}${mine?'':' · 她的记录'}</small></div><div class="card-menu"><details class="more-menu"><summary aria-label="更多操作" title="更多操作">⋯</summary><div class="menu-pop"><button data-action="edit-record" data-id="${r.id}">${icon('edit')} 编辑</button>${mine?`<button data-action="toggle-period-share" data-id="${r.id}">${r.body.shared?'取消共享给 TA':'共享给 TA'}</button>`:''}<button data-action="delete-record" data-id="${r.id}" class="danger">${icon('trash')} 删除</button></div></details></div></div>${(r.body.symptoms||[]).length?`<div class="tabs" style="flex-wrap:wrap;margin:8px 0 0">${r.body.symptoms.map(s=>`<span class="filter-chip">${esc(s)}</span>`).join('')}</div>`:''}${r.body.content?`<p class="card-text">${esc(r.body.content)}</p>`:''}<p class="meta">${r.body.shared?'<span class="status-pill sent">已共享给 TA</span>':'<span class="status-pill pending">仅自己可见</span>'}</p></article>`;
+  return `<article class="card"><div class="card-header">${avatar(r.author)}<div><strong>${esc(String(r.body.start).slice(5,7))} 月 ${esc(String(r.body.start).slice(8))} 日开始</strong><small>共 ${len} 天 · ${end.slice(5)} 结束${r.body.flow?' · 经量'+esc(r.body.flow):''} · ${esc(person(r.author).name)} 记录</small></div><div class="card-menu"><details class="more-menu"><summary aria-label="更多操作" title="更多操作">⋯</summary><div class="menu-pop"><button data-action="edit-record" data-id="${r.id}">${icon('edit')} 编辑</button><button data-action="delete-record" data-id="${r.id}" class="danger">${icon('trash')} 删除</button></div></details></div></div>${(r.body.symptoms||[]).length?`<div class="tabs" style="flex-wrap:wrap;margin:8px 0 0">${r.body.symptoms.map(s=>`<span class="filter-chip">${esc(s)}</span>`).join('')}</div>`:''}${r.body.content?`<p class="card-text">${esc(r.body.content)}</p>`:''}</article>`;
  }).join('');
- /* 共享状态条：默认双人可见，但要能一眼看到"现在谁能看到"，并且一键收回 */
- const sharedCount=d.items.filter(r=>r.body.shared).length,allShared=d.items.length>0&&sharedCount===d.items.length;
- const shareBar=!d.items.length?'':`<section class="card share-bar"><div class="section-heading"><h2>${icon(allShared?'heart':'lock')} ${allShared?(partner?'你俩都可见':'已设为共享'):'仅你自己可见'}</h2><span class="status-pill ${allShared?'sent':'pending'}">${allShared?'双人公开':'私密'}</span></div><p class="meta">${allShared?`这 ${d.items.length} 次记录${partner?` ${esc(partner.name)} `:' TA '}都能看到周期、症状和备注，也能帮你补记或修改（隐私开关只有你能拨）。`:`共 ${d.items.length} 次，其中 ${sharedCount} 次已共享。`}</p>${button(allShared?'收回，改为仅自己可见':`让 TA 也能看到（${d.items.length} 次）`,'period-share','small '+(allShared?'secondary':'primary'),allShared?'lock':'heart',`data-on="${allShared?'0':'1'}"`)}</section>`;
- /* 对方的周期：既然双人可见，就不能只丢一行日期，要能直接回答"还有几天、现在第几天" */
- const recent=t&&t.items.length?t.items.slice(-3).reverse().map(r=>`<span class="filter-chip">${Number(String(r.body.start).slice(5,7))} 月 ${Number(String(r.body.start).slice(8))} 日</span>`).join(''):'';
- const care=t&&t.items.length?(t.inWindow?'她现在正在经期里，别把安排排太满，热水和甜的东西备一点。':t.untilNext<=3?'快来了，提前把家务和行程安排松一点。':'经期前后容易累，提前分担一点家务会让她轻松很多。'):'';
- const partnerBlock=t&&t.items.length?`<section class="card partner-cycle"><div class="section-heading"><h2>${icon('heart')} ${esc(partner.name)} 的周期</h2><span class="status-pill sent">已共享给你</span></div>${cycleHero(t,partner.name)}<p class="meta">下次预计 ${Number(dayStr(t.nextStart).slice(5,7))} 月 ${Number(dayStr(t.nextStart).slice(8))} 日${t.estimated?'（参考值）':''} · ${t.untilNext>=0?`还有 ${t.untilNext} 天`:`已推迟 ${-t.untilNext} 天`}</p><div class="stats-hero" style="grid-template-columns:repeat(3,minmax(0,1fr));margin:12px 0 0"><div class="stat-card"><span>平均周期</span><strong>${t.cycle}<em>天</em></strong></div><div class="stat-card"><span>平均经期</span><strong>${t.length}<em>天</em></strong></div><div class="stat-card"><span>已记录</span><strong>${t.items.length}<em>次</em></strong></div></div>${recent?`<div class="tabs" style="flex-wrap:wrap;margin:12px 0 0">${recent}</div>`:''}<p class="small-note">${care}</p><div class="inline-actions" style="margin-top:12px">${button('替她记一次','new-period-for','small soft','edit',`data-author="${partner.id}"`)}${t.last?button('改最近一次','edit-record','small secondary','edit',`data-id="${t.last.id}"`):''}</div></section>`:'';
- /* 自己没记录时，主视角应该是"她的周期 → 她的日历 → 她的记录"；
-    自己有记录时才是"我的英雄区 → 我的共享状态 → 日历 → 症状 → 她的卡片 → 我的记录"。 */
- const calBlock=months?`<section class="card">${calCaption}${months}${legend}</section>`:'';
- const body=d.items.length
-  ? `${hero}${shareBar}${calBlock}${symBlock}${partnerBlock}${histOf(d.items)}`
-  : `${hero}${partnerBlock}${calBlock}${histOf(t?t.items:[])}`;
- /* 右上角那颗主按钮也跟着换：自己没周期的人点进来，最想干的是"替她记" */
- const forHer=!d.items.length&&hers;
- const headBar=heading('生理期','记下周期，把照顾提前一点。',forHer?'new-period-for':'new-period',forHer?'替她记一次':'记录经期','heart',forHer?`data-author="${partner.id}"`:'');
- return `${headBar}${back}${body}`;
+ const headBar=heading('生理期','记下周期，把照顾提前一点。','new-period','记录经期','heart');
+ return `${headBar}${back}${hero}${calBlock}${symBlock}${hist}`;
 }
-function periodForm(record=null, forWhom=null, presetDay=null){
- /* forWhom：点「替她记一次」时预选的对象。替对方记时共享开关强制打开（后端也会校验），
-    编辑对方记录时共享开关整个隐藏 —— 那座开关是隐私边界，只有本人能拨。
+function periodForm(record=null, presetDay=null){
+ /* 只填内容，不问「记给谁」：记录人永远是当前账号，两个人一起维护同一条周期。
     presetDay：从日历格子点进来的那天，直接预填到「这次经期开始于」。 */
- const partner=state.me.users.find(u=>u.id!==state.me.user.id);
- const owner=record?record.author:(forWhom||state.me.user.id);
- const b=record?.body||{},d=periodData(owner),chosen=new Set(b.symptoms||[]);
- const isOther=owner!==state.me.user.id;
+ const b=record?.body||{},d=periodData(),chosen=new Set(b.symptoms||[]);
  const chips=PERIOD_SYMPTOMS.map(s=>`<button type="button" class="sym-chip${chosen.has(s)?' on':''}" data-name="${s}" aria-pressed="${chosen.has(s)}">${s}</button>`).join('');
- const whoField=!record&&partner?`<label>这一条记给谁<select name="author"><option value="${state.me.user.id}"${isOther?'':' selected'}>我自己</option><option value="${partner.id}"${isOther?' selected':''}>${esc(partner.name)}</option></select></label>`:'';
- const shareField=record&&isOther?'':`<label class="switch-row"><span>${isOther?'让她也能看到这次':'让 TA 也看到这次'}${isOther?'<em class="switch-note">替她记时固定共享，收回由她自己决定</em>':''}</span><input name="shared" type="checkbox" ${isOther||b.shared===true||(!record&&!isOther)?'checked':''}${isOther?' disabled':''}></label>`;
- openModal(record?'编辑这次经期':'记录这次经期',`<form class="modal-form" id="period-form">${whoField}<label>这次经期开始于<input name="start" type="date" required maxlength="10" value="${esc(b.start||presetDay||today())}"></label><div class="form-row"><label>经期几天<input name="length" type="number" min="1" max="15" value="${b.length??d.length}"></label><label>周期几天<input name="cycle" type="number" min="15" max="60" value="${b.cycle??d.cycle}"></label></div>${selectField('经量','flow',[['','不记'],['少','少'],['中','中'],['多','多']],b.flow||'')}<label>身体的感受（可多选）</label><div class="sym-chips">${chips}</div><label>想说的话（可选）<textarea name="content" maxlength="20000" placeholder="这次特别难受，或者想让他知道的…">${esc(b.content||'')}</textarea></label>${shareField}<p class="small-note">周期默认按${isOther?esc(person(owner).name):'你自己'}历史记录的平均值填好，也可以手动改。数据加密保存，两个人一起维护同一条周期。</p><div class="form-error" role="alert"></div><div class="form-actions">${button('取消','close-modal')}<button class="button primary" type="submit">保存</button></div></form>`);
+ openModal(record?'编辑这次经期':'记录这次经期',`<form class="modal-form" id="period-form"><label>这次经期开始于<input name="start" type="date" required maxlength="10" value="${esc(b.start||presetDay||today())}"></label><div class="form-row"><label>经期几天<input name="length" type="number" min="1" max="15" value="${b.length??d.length}"></label><label>周期几天<input name="cycle" type="number" min="15" max="60" value="${b.cycle??d.cycle}"></label></div>${selectField('经量','flow',[['','不记'],['少','少'],['中','中'],['多','多']],b.flow||'')}<label>身体的感受（可多选）</label><div class="sym-chips">${chips}</div><label>想说的话（可选）<textarea name="content" maxlength="20000" placeholder="这次特别难受，或者想让他知道的…">${esc(b.content||'')}</textarea></label><p class="small-note">周期默认按历史记录的平均值填好，也可以手动改。数据加密保存，两个人一起维护同一条周期。</p><div class="form-error" role="alert"></div><div class="form-actions">${button('取消','close-modal')}<button class="button primary" type="submit">保存</button></div></form>`);
  $('#period-form').onclick=e=>{const chip=e.target.closest('.sym-chip');if(!chip)return;chip.classList.toggle('on');chip.setAttribute('aria-pressed',String(chip.classList.contains('on')));};
- const whoSel=$('[name=author]',$('#period-form'));
- if(whoSel)whoSel.onchange=()=>{
-  const other=whoSel.value!==state.me.user.id,sw=$('[name=shared]',$('#period-form'));
-  if(sw){sw.checked=true;sw.disabled=other;}
-  // 换人就把「经期几天 / 周期几天」的默认值换成那个人的历史平均值，
-  // 否则替她记会用我自己的周期当默认，写出来的记录是错的。
-  const t=periodData(whoSel.value);
-  const lenEl=$('[name=length]',$('#period-form')),cycEl=$('[name=cycle]',$('#period-form'));
-  if(lenEl)lenEl.value=t.length;
-  if(cycEl)cycEl.value=t.cycle;
-  const note=$('.modal-form .small-note',$('#period-form'));
-  if(note)note.textContent=`周期默认按${other?person(whoSel.value).name:'你自己'}历史记录的平均值填好，也可以手动改。数据加密保存，两个人一起维护同一条周期。`;
- };
  $('#period-form').onsubmit=async e=>{
   e.preventDefault();const form=e.currentTarget,submit=$('button[type=submit]',form);
   submit.disabled=true;
@@ -1034,17 +987,8 @@ function periodForm(record=null, forWhom=null, presetDay=null){
    const body={start:f.get('start'),length:Number(f.get('length')||5),cycle:Number(f.get('cycle')||d.cycle),
     flow:f.get('flow')||'',symptoms:$$('.sym-chip.on',form).map(c=>c.dataset.name),
     content:String(f.get('content')||'')};
-   // 编辑别人的记录时不发 shared：后端会沿用记录本人的设置。
-   // 替对方记时那个开关是 disabled 的（FormData 里根本没有它），不能当成 false 发出去，
-   // 否则后端会判成「替记还设私密」直接 422。
-   if(!(record&&isOther)){const sw=$('[name=shared]',form);body.shared=sw&&!sw.disabled?!!f.get('shared'):true;}
    if(record)await put('/records/'+record.id,{kind:'period',body});
-   else{
-    const payload={kind:'period',body,client_id:uuid()};
-    const target=f.get('author');
-    if(target&&target!==state.me.user.id)payload.author=target;
-    await post('/records',payload);
-   }
+   else await post('/records',{kind:'period',body,client_id:uuid()});
    closeModal();await refresh();toast('已记下这次');
   }catch(err){$('.form-error',form).textContent=err.message;}
   finally{submit.disabled=false;}
@@ -1541,12 +1485,11 @@ async function act(action,id,el) {
  if(action==='record-audio')return;
  if(action==='compose')return composer();
  if(action==='upload-album')return composer('post',null,{album:state.album||''});
- if(action==='new-period-for')return periodForm(null,el.dataset.author);
- // 点日历某一天：这天已有记录 → 改这条；没有 → 按这天新建（记给日历的主人）
+ // 点日历某一天：这天已有记录 → 改这条；没有 → 按这天新建。周期只有一条，不区分是谁的
  if(action==='period-day'){
-  const day=el.dataset.day||'',owner=el.dataset.owner||state.me.user.id;
-  const rec=recordsOf('period').find(r=>r.author===owner&&String(r.body.start).slice(0,10)===day);
-  return rec?periodForm(rec):periodForm(null,owner===state.me.user.id?null:owner,day);
+  const day=el.dataset.day||'';
+  const rec=recordsOf('period').find(r=>String(r.body.start).slice(0,10)===day);
+  return rec?periodForm(rec):periodForm(null,day);
  }
  if(action.startsWith('new-')){const kind=action.slice(4);return kind==='channel'?channelForm():kind==='personal-wish'?personalWishForm():recordForm(kind);}
  if(action==='unlock-personal-wish')return unlockPersonalWish(id);
@@ -1568,9 +1511,7 @@ async function act(action,id,el) {
  if(action==='toggle-wish'){await put('/records/'+id,{kind:'wish',body:{...r.body,done:!r.body.done}});return refresh();}
  if(action==='toggle-quest'){await put('/records/'+id,{kind:'quest',body:{...r.body,done:!r.body.done}});return refresh();}
  if(action==='add-quest'){await post('/records',{kind:'quest',body:{title:el.dataset.title,category:el.dataset.cat,done:false},client_id:uuid()});return refresh();}
- if(action==='toggle-period-share'){await put('/records/'+id,{kind:'period',body:{...r.body,shared:!r.body.shared}});return refresh();}
  /* 整页批量：默认双人可见，但健康数据必须能一键收回 */
- if(action==='period-share'){const on=el.dataset.on==='1';await post('/period/share',{shared:on});await refresh();return toast(on?'已经设为双人可见':'已收回，只有你自己能看到');}
  if(action==='love-card')return loveCardImage();
  if(action==='wish-memory')return composer('post',null,{title:'一起实现：'+r.body.title,content:r.body.content||'',completion_post:r.id});
  if(action==='anniversary-memories'){state.filters={date:el.dataset.date};return navigate('timeline');}

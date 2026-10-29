@@ -22,7 +22,6 @@ import contextlib
 import datetime as dt
 import sqlite3
 
-from fastapi import HTTPException
 
 from . import db
 
@@ -127,21 +126,12 @@ def migrate_from_main():
 # ── 读 ───────────────────────────────────────────────────────────────
 
 def visible(row, user_id):
-    if row['deleted']:
-        return False
-    if row['author'] == user_id:
-        return True
-    try:
-        return bool(db.body_decode(row).get('shared'))
-    except Exception:
-        return False
+    # 生理期在两个人之间没有"共享/私密"：谁记的都看得见，两个人一起维护同一条周期。
+    return not row['deleted']
 
 
 def serialize(row, user_id, body=None):
     body = db.body_decode(row) if body is None else body
-    if row['author'] != user_id and not body.get('shared'):
-        # 对方没被共享：按"不存在"处理，别泄露"今天她记了点什么"
-        raise HTTPException(404, '记录不存在')
     result = dict(row)
     result['body'] = body
     result['likes'] = []
@@ -237,25 +227,6 @@ def restore(rid):
     with connect() as c:
         c.execute('BEGIN IMMEDIATE')
         c.execute('UPDATE period SET deleted=NULL,updated=? WHERE id=?', (db.now(), rid))
-
-
-def set_shared(author, shared):
-    """把某个人的全部记录一次性设为共享 / 收回，返回 (改动条数, 总数)。"""
-    changed = total = 0
-    with connect() as c:
-        c.execute('BEGIN IMMEDIATE')
-        rows = c.execute('SELECT * FROM period WHERE author=? AND deleted IS NULL',
-                         (author,)).fetchall()
-        total = len(rows)
-        for row in rows:
-            body = db.body_decode(row)
-            if bool(body.get('shared')) == shared:
-                continue
-            body['shared'] = shared
-            c.execute('UPDATE period SET body=?,updated=? WHERE id=?',
-                      (db.body_encode('period', row['id'], body), db.now(), row['id']))
-            changed += 1
-    return changed, total
 
 
 def purge_deleted(cutoff):
