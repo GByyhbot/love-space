@@ -129,21 +129,50 @@ def ntfy_server_url():
 # 已下沉到 app/config.py（webpush 要用它，而 main 又 import 了 webpush）
 
 
+# 多线路（不同域名）共用同一后端时，Origin 常被中间层（节点小宝等反代）改写成内网地址；
+# 以 Host / X-Forwarded-Host 命中的「已知线路域名」判定来源即可。写操作另有 X-Love-Space
+# 头把关（跨站表单/请求无法携带自定义头），故这里放宽到一组可信域名是安全的。
+_BUILTIN_TRUSTED_HOSTS = {
+    'love.yangyuhui.xyz', 'love-space.iepose.cn', 'love.350921.xyz',
+    'love-space.yangyuhui.xyz', 'fn.350921.xyz', 'yangyuhui86.top',
+}
+
+
+def _trusted_hosts() -> set:
+    hosts = {h.lower() for h in _BUILTIN_TRUSTED_HOSTS}
+    pu = os.getenv('PUBLIC_URL', '').rstrip('/')
+    if pu:
+        h = urlparse(pu).hostname
+        if h:
+            hosts.add(h.lower())
+    for h in os.getenv('ALLOWED_HOSTS', '').split(','):
+        h = h.strip().lower()
+        if h:
+            hosts.add(h)
+    return hosts
+
+
 def origin_allowed(origin: str, request: Request) -> bool:
-    allowed = os.getenv('PUBLIC_URL', '').rstrip('/')
-    public_host = urlparse(allowed).hostname if allowed else None
+    trusted = _trusted_hosts()
     forwarded = request.headers.get('x-forwarded-host') or request.headers.get('host', '')
     req_host = urlparse('//' + forwarded.split(',')[0].strip()).hostname
-    # 内网穿透/反代（节点小宝）会改写 Origin；只要请求本身是经公网域名进来的
-    #（Host / X-Forwarded-Host 命中公网主机），即视为同源，不再死磕被改写的 Origin
-    if public_host and req_host and req_host.lower() == public_host.lower():
+    host_hdr = request.headers.get('host', '')
+    host_name = urlparse('//' + host_hdr.split(',')[0].strip()).hostname
+    # 请求经已知线路域名进来（Host / X-Forwarded-Host 命中）→ 放行，不再死磕被改写的 Origin
+    if req_host and req_host.lower() in trusted:
+        return True
+    if host_name and host_name.lower() in trusted:
         return True
     if not origin:
         return True
     origin_host = urlparse(origin).hostname
-    if public_host and origin_host and origin_host.lower() == public_host.lower():
+    if not origin_host:
         return True
-    if req_host and origin_host and origin_host.lower() == req_host.lower():
+    if origin_host.lower() in trusted:
+        return True
+    if req_host and origin_host.lower() == req_host.lower():
+        return True
+    if host_name and origin_host.lower() == host_name.lower():
         return True
     return False
 
@@ -195,8 +224,13 @@ async def protection(request, call_next):
         public_host = urlparse(public_url).hostname
         origin = request.headers.get('origin', '')
         origin_host = urlparse(origin).hostname if origin else None
+        trusted = _trusted_hosts()
+        host_trusted = bool(
+            (request_host and request_host.lower() in trusted)
+            or (origin_host and origin_host.lower() in trusted))
         is_public_host = public_host and (
-            any(host and host.lower() == public_host.lower() for host in (request_host, origin_host))
+            host_trusted
+            or any(host and host.lower() == public_host.lower() for host in (request_host, origin_host))
             or is_https)
         if public_host and not is_public_host and not local_access:
             if request.method in {'GET', 'HEAD'}:
