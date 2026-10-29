@@ -27,6 +27,8 @@ services:
       - /tmp:rw,noexec,nosuid,size=256m
     volumes:
       - ./data:/data
+      # 情侣摆拍参考图库（ai-pose-gallery-zh 静态站）：同源托管，只读挂载，不进镜像
+      - /vol1/1000/pose-gallery:/srv/pose-gallery:ro
     environment:
       TZ: Asia/Shanghai
       DATA_DIR: /data

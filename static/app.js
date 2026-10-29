@@ -236,12 +236,12 @@ function figurePage() {
     <section class="card figure-ref">
       <div class="section-heading">
         <h2>${icon('photo')} 情侣摆拍参考</h2>
-        <a class="link-btn" href="https://ai-pose-gallery.anhao.app/" target="_blank" rel="noopener">新标签打开 ${icon('arrow')}</a>
+        <a class="link-btn" href="/pose-gallery/" target="_blank" rel="noopener">新标签打开 ${icon('arrow')}</a>
       </div>
       <div class="figure-ref-frame">
-        <iframe class="figure-ref-iframe" src="https://ai-pose-gallery.anhao.app/" title="情侣姿势参考" loading="lazy" referrerpolicy="no-referrer"></iframe>
+        <iframe class="figure-ref-iframe" src="/pose-gallery/" title="情侣姿势参考" loading="lazy" referrerpolicy="no-referrer"></iframe>
       </div>
-      <p class="small-note">参考图来自开源项目 ai-pose-gallery（原作者ギア，汉化 anhao），版权归原作者所有，仅作两人拍照参考。该页面需联网加载。</p>
+      <p class="small-note">参考图来自开源项目 ai-pose-gallery（原作者ギア，汉化 anhao），已托管在本地，无需联网。版权归原作者所有，仅作两人拍照参考。</p>
     </section>`;
 }
 

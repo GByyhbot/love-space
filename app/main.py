@@ -211,9 +211,18 @@ async def protection(request, call_next):
         push_host = '[' + push_host + ']'
     push_port = f':{push_origin.port}' if push_origin.port and push_origin.port != 443 else ''
     connect_src = f"connect-src 'self' https://{push_host}{push_port} wss://{push_host}{push_port}"
-    # frame-src 放行姿势参考站（ai-pose-gallery.anhao.app）：人模页以 iframe 嵌入该开源
-    # 姿势画廊作为情侣摆拍参考；图片版权归原作者，我们不落本地，仅引用其公开页面
-    result.headers['Content-Security-Policy'] = f"default-src 'self'; img-src 'self' blob: data:; media-src 'self' blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; frame-src 'self' https://ai-pose-gallery.anhao.app; {connect_src}; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+    # 姿势参考图库（/pose-gallery/）已同源托管在本地（原外链 ai-pose-gallery.anhao.app 退役）：
+    # 它是我们自己静态目录里的开源静态站，允许其内联脚本/样式运行（原生 JS 画廊常含内联脚本，
+    # 严格 CSP 会把它整页拦成空白）；该路径与主体接口隔离，放宽不波及其余请求。
+    if request.url.path.startswith('/pose-gallery/'):
+        result.headers['Content-Security-Policy'] = (
+            "default-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; "
+            "style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; "
+            "frame-src 'self'; connect-src 'self'; base-uri 'self'; form-action 'self'"
+        )
+    else:
+        # frame-src 仅 'self'：figure 页的姿势参考 iframe 现为同源 /pose-gallery/
+        result.headers['Content-Security-Policy'] = f"default-src 'self'; img-src 'self' blob: data:; media-src 'self' blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; frame-src 'self'; {connect_src}; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
     if public_url.startswith('https://') and not local_access:
         result.headers['Strict-Transport-Security'] = 'max-age=31536000'
     if request.url.path.startswith(('/api/', '/media/')):
@@ -1958,6 +1967,12 @@ def import_delete(iid: str, user=Depends(current_user)):
 
 
 app.mount('/static', StaticFiles(directory=db.ROOT / 'static'), name='static')
+
+# 情侣摆拍参考图库：同源托管在 /srv/pose-gallery，由 NAS 以 :ro 卷挂载进容器。
+# 仅在目录存在时挂载——本地/CI 没有这个目录时不应因此启动失败（线上容器始终挂载）。
+_POSE_GALLERY_DIR = '/srv/pose-gallery'
+if os.path.isdir(_POSE_GALLERY_DIR):
+    app.mount('/pose-gallery', StaticFiles(directory=_POSE_GALLERY_DIR, html=True), name='pose-gallery')
 
 
 @app.get('/')
