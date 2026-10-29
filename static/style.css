@@ -773,6 +773,9 @@ body.cal-full{overflow:hidden;height:100dvh}
   .nav .nav-fab span{display:none}
   .nav .nav-fab .icon{width:26px;height:26px}
   .main{padding:18px var(--pad-x) 100px}
+  /* 人模页：移动端把 3D 舞台与参考框都压矮一点，少滚一点 */
+  .dressup-canvas-host{max-height:54vh}
+  .figure-ref-frame{max-height:56vh}
   .mobile-brand{display:flex}
   .topbar{margin-bottom:20px}
   .topbar>.desktop-date{display:none}
@@ -1104,3 +1107,27 @@ body.cal-full{overflow:hidden;height:100dvh}
 :root.dark .tool-card::before{background:linear-gradient(90deg,var(--primary),var(--soft-strong))}
 :root.dark .empty-icon{background:linear-gradient(160deg,var(--soft),var(--bg));box-shadow:var(--shadow-xs)}
 :root.dark .stat::after{background:radial-gradient(circle,var(--soft),transparent 70%)}
+
+/* ════════════ 人模 / 3D 小人儿（figure.js） ════════════ */
+.dressup-root{display:block}
+.dressup-wrap{display:grid;grid-template-columns:1fr;gap:16px;align-items:start}
+.dressup-stage{margin:0;padding:16px;display:flex;flex-direction:column;align-items:center;gap:10px}
+.dressup-canvas-host{width:100%;aspect-ratio:4/5;max-height:min(64vh,560px);border-radius:16px;overflow:hidden;
+  background:radial-gradient(120% 92% at 50% 8%,var(--soft) 0%,var(--surface) 58%,var(--soft-strong) 100%);
+  touch-action:none;cursor:grab;position:relative}
+.dressup-canvas-host:active{cursor:grabbing}
+.dressup-canvas-host canvas{display:block;width:100%!important;height:100%!important}
+.dressup-hint{margin:0;text-align:center}
+.dressup-stage .inline-actions{margin-top:2px;justify-content:center}
+.dressup-poses{justify-content:center;width:100%;gap:6px;margin:0 0 2px}
+.dressup-poses .dressup-chip{padding:6px 11px;font-size:12.5px}
+.dressup-chip{display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border-radius:999px;
+  border:1px solid var(--line);background:var(--surface);color:var(--ink);font:inherit;font-size:13px;
+  line-height:1.3;cursor:pointer;transition:background var(--speed),border-color var(--speed),transform var(--speed)}
+.dressup-chip:hover{border-color:var(--soft-strong);background:var(--soft);transform:translateY(-1px)}
+.dressup-chip.active{border-color:var(--primary);background:var(--soft);color:var(--primary-dark);font-weight:600}
+.dressup-chip:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
+/* 情侣摆拍参考：嵌外部姿势参考站，不落本地（作者版权非 MIT、体积 659MB） */
+.figure-ref{margin:0}
+.figure-ref-frame{position:relative;width:100%;aspect-ratio:3/4;max-height:72vh;border-radius:16px;overflow:hidden;background:var(--soft)}
+.figure-ref-iframe{width:100%;height:100%;border:0;display:block}

@@ -211,7 +211,9 @@ async def protection(request, call_next):
         push_host = '[' + push_host + ']'
     push_port = f':{push_origin.port}' if push_origin.port and push_origin.port != 443 else ''
     connect_src = f"connect-src 'self' https://{push_host}{push_port} wss://{push_host}{push_port}"
-    result.headers['Content-Security-Policy'] = f"default-src 'self'; img-src 'self' blob: data:; media-src 'self' blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; {connect_src}; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+    # frame-src 放行姿势参考站（ai-pose-gallery.anhao.app）：人模页以 iframe 嵌入该开源
+    # 姿势画廊作为情侣摆拍参考；图片版权归原作者，我们不落本地，仅引用其公开页面
+    result.headers['Content-Security-Policy'] = f"default-src 'self'; img-src 'self' blob: data:; media-src 'self' blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; frame-src 'self' https://ai-pose-gallery.anhao.app; {connect_src}; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
     if public_url.startswith('https://') and not local_access:
         result.headers['Strict-Transport-Security'] = 'max-age=31536000'
     if request.url.path.startswith(('/api/', '/media/')):
