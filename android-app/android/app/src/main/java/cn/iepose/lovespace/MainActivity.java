@@ -36,6 +36,8 @@ public class MainActivity extends BridgeActivity {
     private static final String[] SPACE_URLS = {
         "https://love.yangyuhui.xyz/",
         "https://love-space.iepose.cn/",
+        "https://love.350921.xyz/",
+        "https://love-space.yangyuhui.xyz:4019/",
         "https://fn.350921.xyz:1314/",
         "https://yangyuhui86.top:1314/"
     };

@@ -6,7 +6,7 @@
     "url": "https://love.yangyuhui.xyz",
     "androidScheme": "https",
     "cleartext": false,
-    "allowNavigation": ["love.yangyuhui.xyz", "love-space.iepose.cn", "fn.350921.xyz", "yangyuhui86.top"]
+    "allowNavigation": ["love.yangyuhui.xyz", "love-space.iepose.cn", "love.350921.xyz", "love-space.yangyuhui.xyz", "fn.350921.xyz", "yangyuhui86.top"]
   },
   "android": {
     "allowMixedContent": false,
