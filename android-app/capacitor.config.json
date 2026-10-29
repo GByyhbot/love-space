@@ -2,6 +2,7 @@
   "appId": "cn.iepose.lovespace",
   "appName": "恋爱空间",
   "webDir": "www",
+  "appendUserAgent": "LoveSpaceApp/1.3.1",
   "server": {
     "url": "https://love.yangyuhui.xyz",
     "androidScheme": "https",

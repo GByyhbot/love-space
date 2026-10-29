@@ -8,6 +8,7 @@ build-arg → 环境变量 → app/config.py），这里守住三件事：
 2. `main.py` 真的用了 config 里的值，而不是又写死一份；
 3. `/api/status` 报的 APK 版本和 android-app 里真正打包用的 versionName 同号。
 """
+import json
 import re
 from pathlib import Path
 
@@ -94,3 +95,27 @@ def test_config_module_cleans_env():
 
 def test_apk_version_never_has_letters():
     assert re.fullmatch(r'\d+(?:\.\d+){1,2}', config.APK_VERSION), config.APK_VERSION
+
+
+# ---- UA 标记必须和 APK 版本同号 -------------------------------------------
+# APK 是远程加载模式，Capacitor 的桥接脚本不保证注入，网页端靠 UA 里的
+# `LoveSpaceApp/<版本>` 判断「我在 App 里」并读出版本号。这条标记写死在
+# capacitor.config.json 里，忘了跟着 versionName 一起改，App 就会误判
+# 自己是不是最新版（正是「装 1.2.9 却说已是最新」那个 bug 的来源之一）。
+
+CAP_CONFIGS = [
+    ROOT / 'android-app' / 'capacitor.config.json',
+    ROOT / 'android-app' / 'android' / 'app' / 'src' / 'main' / 'assets' / 'capacitor.config.json',
+]
+
+
+@pytest.mark.parametrize('path', CAP_CONFIGS)
+def test_append_user_agent_matches_apk_version(path):
+    if not path.is_file():
+        pytest.skip(f'{path.name} 不在当前工作副本里')
+    cfg = json.loads(path.read_text(encoding='utf-8'))
+    ua = cfg.get('appendUserAgent') or ''
+    assert ua == f'LoveSpaceApp/{config.APK_VERSION}', (
+        f'{path.parent.name}/{path.name} 里 appendUserAgent 是 {ua!r}，'
+        f'但 APK 版本是 {config.APK_VERSION}——两者不同号，App 内「检查更新」会误判版本'
+    )

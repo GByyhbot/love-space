@@ -148,7 +148,7 @@ async function boot() {
   const status = await api('/status');
   state.localVersion=status.version||'1.1.0';state.localBuild=status.build||'';state.appVersion={version:status.version||'1.1.0',build:status.build||''};
   /* 原生 APK 版本（供关于页展示 + 应用内更新对比） */
-  if(isNativeApp()){try{const version=await nativePushBridge()?.version?.();if(version?.version&&version.version!=='unknown')state.apkVersion=version.version;}catch{}}
+  if(isNativeApp()){const nv=await detectAppVersion();if(nv!=='unknown')state.apkVersion=nv;}
   const invite = new URLSearchParams(location.search).get('invite');
   try {state.me = await api('/me');} catch {state.me=null;}
   if (!state.me) return renderAuth(status,invite);
@@ -1525,13 +1525,12 @@ async function act(action,id,el) {
    /* App 内只比 App 版本：网页是随服务器一起更新的，与这里的判断无关。
       以前把网页版本混进提示里，装 1.2.9 的用户会看到「已是最新版本 v1.2.7-…」
       这种串味结果，其实服务器上的 APK 早就比本机新了。 */
-   let nv='unknown';
-   try{const version=await nativePushBridge()?.version?.();const raw=typeof version?.version==='string'?version.version.trim():'';const m=raw.match(/\d+(?:\.\d+){1,2}/);if(m)nv=m[0];}catch{}
+   let nv=await detectAppVersion();
    state.apkVersion=nv;
    const latest=String(s.apk_version||'').trim();
    try{
     if(!latest)toast('服务器暂未提供 APK 版本信息，请稍后再试');
-    else if(nv==='unknown')toast('无法读取当前 APK 版本，请从手机浏览器重新安装最新版 v'+latest);
+    else if(nv==='unknown')toast('读不到当前 App 版本（这个安装包太旧），请用手机浏览器打开本站下载 v'+latest+' 覆盖安装');
     else if(!s.apk_url)toast('服务器暂未提供 APK 下载地址，请稍后再试');
     else if(newerVer(latest,nv)){const installed=`当前 v${nv}`;openModal('发现新版本',`<div style="text-align:center;padding:10px 0"><div style="font-size:48px;margin-bottom:12px">⬇️</div><p>新版本 <strong>v${latest}</strong> 已发布（${installed}）</p><p class="meta">下载完成后点击通知安装；如果 App 内下载没有反应，请复制下载地址后用手机浏览器打开。</p><div class="form-actions"><button class="button" data-action="close-modal">稍后再说</button><button class="button primary" id="apk-dl">下载新版本</button></div></div>`);setTimeout(()=>{const b=$('#apk-dl');if(b)b.onclick=()=>{closeModal();toast('正在打开 APK 下载地址');location.href=new URL(s.apk_url,location.origin).href;};},50);}
     else toast('已是最新版本 v'+nv);
@@ -1610,7 +1609,21 @@ document.addEventListener('input',e=>{if(e.target.id==='chat-text'){localStorage
 document.addEventListener('change',e=>{const map={'filter-author':'author','filter-date':'date','filter-media':'media'};if(map[e.target.id]){state.filters={...(state.filters||{}),[map[e.target.id]]:e.target.value};state.timelineCursor=null;loadTimeline(true).then(renderPage).catch(err=>toast(err.message));}});
 document.addEventListener('keydown',e=>{if(e.key==='Escape'){const menu=$('.more-menu[open]');if(menu){menu.removeAttribute('open');$('summary',menu)?.focus();}}if(e.key==='Escape'&&$('.modal'))closeModal();if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing&&e.target?.id==='chat-text'){e.preventDefault();const form=$('#chat-form'),btn=form&&$('button[type=submit]',form);if(form&&btn&&!btn.disabled)form.requestSubmit();}if(e.key==='Tab'&&$('.modal')){const els=$$('button,input,textarea,select,a[href]',$('.modal')).filter(el=>!el.disabled),first=els[0],last=els.at(-1);if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}}});
 // —— Android APK 系统通知桥（浏览器/PWA 无 Capacitor 时自动跳过，零影响）——
-function isNativeApp(){return Boolean(window.Capacitor&&Capacitor.isNativePlatform&&Capacitor.isNativePlatform());}
+/* 原生环境识别不能只赌 window.Capacitor：APK 是「远程加载模式」（server.url 指向线上站），
+   Capacitor 的桥接脚本只注入由它本地服务器提供的页面，远程页面里 window.Capacitor 常常是空的，
+   于是以前「检查更新」永远走浏览器分支、拿网页版本去比，装 1.2.9 却说已是最新 1.2.7。
+   现在 APK 在 capacitor.config.json 里配了 appendUserAgent，UA 里带 LoveSpaceApp/<版本>，
+   这条信息不依赖任何注入，任何页面、任何请求都在，既当原生标记又当版本号来源。 */
+const NATIVE_UA=/LoveSpaceApp\/([0-9][0-9.]*)/i;
+function nativeUaVersion(){const m=NATIVE_UA.exec(navigator.userAgent||'');return m?m[1].replace(/\.+$/,''):'';}
+function isNativeApp(){return Boolean(window.Capacitor&&Capacitor.isNativePlatform&&Capacitor.isNativePlatform())||Boolean(nativeUaVersion())||Boolean(window.LoveNative);}
+/* 本机 App 版本：原生桥 > UA 标记，都拿不到才认输（返回 unknown）。 */
+async function detectAppVersion(){
+ let nv='unknown';
+ try{const version=await nativePushBridge()?.version?.();const raw=typeof version?.version==='string'?version.version.trim():'';const m=raw.match(/\d+(?:\.\d+){1,2}/);if(m)nv=m[0];}catch{}
+ if(nv==='unknown'&&nativeUaVersion())nv=nativeUaVersion();
+ return nv;
+}
 function nativePushBridge(){return window.Capacitor?.Plugins?.PushBridge||null;}
 function browserPushSupported(){return 'serviceWorker' in navigator&&'PushManager' in window&&'Notification' in window;}
 function fromBase64Url(value){const padded=value.replace(/-/g,'+').replace(/_/g,'/')+'='.repeat((4-value.length%4)%4);return Uint8Array.from(atob(padded),c=>c.charCodeAt(0));}
