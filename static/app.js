@@ -205,6 +205,10 @@ function renderShell() {
   const navs=[['home','home','首页'],['timeline','book','时光'],['albums','photo','相册'],['together','heart','我们']];
  const navActive=['personal','settings','channels','backups','notices','imports','importdetail'].includes(state.page)?'together':state.page;
  const navHtml=navs.map(([id,ico,label])=>`<button data-nav="${id}" class="${navActive===id?'active':''}" ${navActive===id?'aria-current="page"':''}>${icon(ico)}<span>${label}</span></button>`);navHtml.splice(2,0,`<button class="nav-fab" data-action="compose" aria-label="记录此刻">${icon('plus')}<span>记录</span></button>`);
+ // 「我们」的子工具页（figure/dashboard/weekly 或 together 带 tab）在导航栏最左侧放「回到我们」，
+ // 取代原先各页顶部那排 back 条（已移除），回到 together 根页。
+ const toolsSub=state.page==='figure'||state.page==='dashboard'||state.page==='weekly'||(state.page==='together'&&!!state.tab);
+ if(toolsSub)navHtml.unshift(`<button class="nav-back" data-action="tools-back" aria-label="回到我们">${icon('back')}<span>回到我们</span></button>`);
  const themeClass='theme-'+state.me.space.theme,motion=state.me.space.motion?'':'reduced-motion',root=document.documentElement;
  [themeClass,'theme-rose','theme-peach','theme-lavender','theme-custom','reduced-motion'].forEach(c=>root.classList.remove(c));
  root.classList.add(state.me.space.theme==='peach'||state.me.space.theme==='lavender'||state.me.space.theme==='custom'?themeClass:'theme-rose');
@@ -231,7 +235,7 @@ function renderPage() {
    直接返回即可——boot() 结束时会按 location.hash 渲染到正确的页面。 */
 async function navigate(page,tab='') {if(!state.me)return;if(page!=='messages')state.chatReturn={page,tab};if(page==='messages'&&state.me){state.me.chat_unread=0;post('/notices/read?event=chat').catch(()=>{});}state.page=page;state.tab=tab;location.hash=page;try{if(page==='timeline')await loadTimeline(true);await loadSpecial();renderShell();window.scrollTo({top:0});}catch(e){toast(e.message);}}
 function figurePage() {
-  const back = `<div class="tabs"><button data-action="tools-back">← 回到我们</button></div>`;
+  const back = ``;
   return `${heading('情侣摆拍参考', '照着下面的姿势参考，拍一张属于你们的照片。')}${back}
     <section class="card figure-ref">
       <div class="section-heading">
@@ -744,7 +748,7 @@ function calendarPage(){
  const days=state.calDays||{};
  const selected=state.calSelected;
  const t=today(),todayDay=t.startsWith(`${y}-${String(m).padStart(2,'0')}`)?String(Number(t.slice(8))):'';
- return `<div class="calendar-page">${heading('共同年历','重要的日子，一眼看清。','')}<div class="tabs"><button data-action="tools-back">← 回到我们</button></div><div class="calendar-head"><button class="icon-btn" data-action="cal-prev" aria-label="上个月"><svg class="icon" viewBox="0 0 24 24" style="transform:scaleX(-1)"><path d="${'M9 6 15 12 9 18'}"/></svg></button><strong>${y} 年 ${m} 月</strong><button class="icon-btn" data-action="cal-next" aria-label="下个月">${icon('arrow')}</button></div><div class="calendar-grid">${['日','一','二','三','四','五','六'].map(w=>`<span class="cal-week">${w}</span>`).join('')}${cells.map(d=>{if(!d)return '<span></span>';const info=days[d],dots=info?[['anniversaries','var(--primary)','纪念日'],['moods','var(--green)','心情'],['posts','var(--primary-dark)','动态'],['checks','var(--primary)','打卡']].filter(([k])=>info[k]?.length).map(([k,c,t])=>`<i class="cal-dot" style="background:${c}" title="${t}"></i>`).join(''):'';return `<button class="cal-day ${selected===d?'selected':''} ${info?'has-events':''} ${String(Number(d))===todayDay?'is-today':''}" data-action="cal-day" data-id="${d}" aria-label="${m} 月 ${Number(d)} 日${info?'，有记录':''}"><span>${Number(d)}</span><span class="cal-dots">${dots}</span></button>`;}).join('')}</div><div id="cal-detail">${calDetailHTML()}</div></div>`;
+ return `<div class="calendar-page">${heading('共同年历','重要的日子，一眼看清。','')}<div class="calendar-head"><button class="icon-btn" data-action="cal-prev" aria-label="上个月"><svg class="icon" viewBox="0 0 24 24" style="transform:scaleX(-1)"><path d="${'M9 6 15 12 9 18'}"/></svg></button><strong>${y} 年 ${m} 月</strong><button class="icon-btn" data-action="cal-next" aria-label="下个月">${icon('arrow')}</button></div><div class="calendar-grid">${['日','一','二','三','四','五','六'].map(w=>`<span class="cal-week">${w}</span>`).join('')}${cells.map(d=>{if(!d)return '<span></span>';const info=days[d],dots=info?[['anniversaries','var(--primary)','纪念日'],['moods','var(--green)','心情'],['posts','var(--primary-dark)','动态'],['checks','var(--primary)','打卡']].filter(([k])=>info[k]?.length).map(([k,c,t])=>`<i class="cal-dot" style="background:${c}" title="${t}"></i>`).join(''):'';return `<button class="cal-day ${selected===d?'selected':''} ${info?'has-events':''} ${String(Number(d))===todayDay?'is-today':''}" data-action="cal-day" data-id="${d}" aria-label="${m} 月 ${Number(d)} 日${info?'，有记录':''}"><span>${Number(d)}</span><span class="cal-dots">${dots}</span></button>`;}).join('')}</div><div id="cal-detail">${calDetailHTML()}</div></div>`;
 }
 const toolsList=[['calendar','🗓️','共同年历','重要的日子，一眼看清'],['anniversary','📅','纪念日','每个重要的日子，都认真对待'],['quest','💫','恋爱清单','一起做完这些小事，就是我们的故事'],['wish','✨','共同愿望','把一起想做的事，一件件实现'],['ledger','💰','共同账本','为了彼此花过的钱，也是一段回忆'],['personal-wish','💝','个人心愿','对方看得到心愿名称，输入一次密码后就能读到内容'],['mood','🌤','心情手记','晴天雨天，都想陪着你'],['note','💌','悄悄留言','有些喜欢，值得慢慢读'],['question','💭','情侣问答','每天再多了解彼此一点'],['period','🌸','生理期','记下周期，把照顾提前一点'],['music','🎵','共同歌单','把属于我们的歌，放在一起'],['habit','🌱','共同打卡','和你一起，成为更好的我们']];
 function togetherPage() {
@@ -754,7 +758,7 @@ function togetherPage() {
  if(state.tab==='ledger')return ledgerPage();
  if(state.tab==='period')return periodPage();
  if(state.tab==='music')return musicPage();
- if(state.tab){const meta=toolsList.find(x=>x[0]===state.tab);if(meta)return `${heading(meta[2],meta[3],'new-'+state.tab,'添加'+({anniversary:'纪念日',wish:'愿望',mood:'心情',note:'留言',question:'问题',habit:'目标'}[state.tab]))}<div class="tabs"><button data-action="tools-back">← 回到我们</button></div>${state.tab==='question'?'<p class="hint">可以写下自己的问题，也可以从内置题目里挑一个。双方回答后才揭晓彼此的答案。</p>':''}${recordsOf(state.tab).length?recordsOf(state.tab).map(recordCard).join(''):empty('给我们，多一点小小的仪式感',meta[3],'new-'+state.tab,'现在开始')}`;}
+ if(state.tab){const meta=toolsList.find(x=>x[0]===state.tab);if(meta)return `${heading(meta[2],meta[3],'new-'+state.tab,'添加'+({anniversary:'纪念日',wish:'愿望',mood:'心情',note:'留言',question:'问题',habit:'目标'}[state.tab]))}${state.tab==='question'?'<p class="hint">可以写下自己的问题，也可以从内置题目里挑一个。双方回答后才揭晓彼此的答案。</p>':''}${recordsOf(state.tab).length?recordsOf(state.tab).map(recordCard).join(''):empty('给我们，多一点小小的仪式感',meta[3],'new-'+state.tab,'现在开始')}`;}
  return `${heading('关于我们，还有好多好多','把喜欢落在实处，把日子过成纪念。')}<div class="tools-grid"><button class="tool-card" data-nav="dashboard"><span class="tool-emoji">📊</span><h3>数据看板</h3><p>我们的点滴，都在这里</p></button><button class="tool-card" data-nav="weekly"><span class="tool-emoji">✉️</span><h3>回忆周报</h3><p>把这一周，收进一封信</p></button><button class="tool-card" data-nav="figure"><span class="tool-emoji">📸</span><h3>情侣摆拍参考</h3><p>照着姿势参考，拍一张</p></button>${toolsList.map(([id,emoji,title,desc])=>`<button class="tool-card" data-action="tool-${id}"><span class="tool-emoji">${emoji}</span><h3>${title}</h3><p>${desc}</p></button>`).join('')}</div><div class="section-heading settings-section-heading"><h2>${icon('gear')} 设置</h2></div><div class="tools-grid settings-tools"><button class="tool-card" data-action="space"><span class="tool-emoji">🏡</span><h3>空间设置</h3><p>空间名称、封面与相恋日期</p></button>${state.me.users.length<2?`<button class="tool-card" data-action="invite"><span class="tool-emoji">💌</span><h3>邀请另一半入住</h3><p>把你们的专属空间分享给 TA</p></button>`:''}<button class="tool-card" data-nav="channels"><span class="tool-emoji">🔔</span><h3>提醒设置</h3><p>通知渠道与提醒偏好</p></button><button class="tool-card" data-nav="settings"><span class="tool-emoji">⚙️</span><h3>全部设置</h3><p>账号资料、数据导出与备份</p></button></div>`;
 }
 /* 恋爱清单：对齐「小恩爱 200+ 件小事」的思路，但只用 40 条精选做引子，
@@ -776,7 +780,7 @@ const money=n=>'¥'+Number(n||0).toFixed(2);
 function questPage(){
  const items=recordsOf('quest').slice().sort((a,b)=>(a.body.done?1:0)-(b.body.done?1:0));
  const done=items.filter(r=>r.body.done).length,total=items.length,pct=total?Math.round(done/total*100):0;
- const back='<div class="tabs"><button data-action="tools-back">← 回到我们</button></div>';
+ const back='';
  const progress=total?`<section class="card"><div class="section-heading"><h2>💫 一起完成 ${done} / ${total}</h2></div><div class="stat-bar big"><i style="width:${pct}%"></i></div><p class="meta">${pct}% · ${pct>=100?'全部做完了，可以写新的清单了':pct>=50?'已经过半，继续':'慢慢来，一件一件做'}</p></section>`:'';
  const ideas=QUEST_IDEAS.filter(([,t])=>!items.some(r=>r.body.title===t));
  const ideaBlock=`<details class="card"><summary style="cursor:pointer;font-weight:600">没灵感？从精选清单里挑（剩余 ${ideas.length} 条）</summary><div class="tabs" style="flex-wrap:wrap;margin-top:12px">${ideas.length?ideas.map(([c,t])=>`<button data-action="add-quest" data-title="${esc(t)}" data-cat="${esc(c)}">＋ ${esc(t)}</button>`).join(''):'<p class="meta">精选清单已经全部添加过了。</p>'}</div></details>`;
@@ -793,7 +797,7 @@ function ledgerPage(){
  const byCat={};inMonth.forEach(r=>{const k=r.body.category||'其他';byCat[k]=(byCat[k]||0)+Number(r.body.amount||0);});
  const cats=Object.entries(byCat).sort((a,b)=>b[1]-a[1]);
  const peak=Math.max(1,...cats.map(c=>c[1]));
- const back='<div class="tabs"><button data-action="tools-back">← 回到我们</button></div>';
+ const back='';
  const summary=items.length?`<section class="card"><div class="section-heading"><h2>💰 ${month} 账本</h2></div><div class="stats-hero" style="grid-template-columns:repeat(2,minmax(0,1fr));margin:0 0 6px"><div class="stat-card"><span>本月一起花了</span><strong>${money(monthTotal)}</strong></div><div class="stat-card"><span>累计记录</span><strong>${money(allTotal)}</strong></div></div>${byUser.map(x=>`<div class="stat-row"><span>${esc(x.u.name)}</span><div class="stat-bar"><i style="width:${monthTotal?Math.round(x.v/monthTotal*100):0}%"></i></div><b>${money(x.v)}</b></div>`).join('')}${cats.length?`<div class="section-heading" style="margin-top:14px"><h2>花在哪</h2></div>${cats.map(([k,v])=>`<div class="stat-row"><span>${esc(k)}</span><div class="stat-bar"><i style="width:${Math.round(v/peak*100)}%"></i></div><b>${money(v)}</b></div>`).join('')}`:''}<p class="small-note">付款人就是记录作者；金额只在你们两个人之间可见。</p></section>`:'';
  return `${heading('共同账本','一起花的钱，也是共同生活的一部分。','new-ledger','记一笔','book')}${back}${summary}${items.length?items.map(recordCard).join(''):empty('账本还是空的','一起吃的那顿饭、一起买的那张票，都值得记下来。','new-ledger','记第一笔')}`;
 }
@@ -890,7 +894,7 @@ function phaseBar(d){
  return `<div class="phase-wrap"><div class="phase-bar">${segs.map(([k,nm,nd])=>`<span class="phase-seg s-${k}${k===cur?' current':''}" style="flex:${nd}" title="${nm}约 ${nd} 天"><b>${nm}</b><small>${nd}天</small></span>`).join('')}<i class="phase-cursor" style="left:${pos}%" aria-hidden="true"></i></div><p class="phase-label${cur?` now-${cur}`:''}">${label}</p></div>`;
 }
 function periodPage(){
- const d=periodData(),back='<div class="tabs"><button data-action="tools-back">← 回到我们</button></div>';
+ const d=periodData(),back='';
  const partner=state.me.users.find(u=>u.id!==state.me.user.id);
  const t=partner?periodData(partner.id):null;
  let hero;
@@ -998,7 +1002,7 @@ function musicCard(r){
 }
 function musicPage(){
  const items=recordsOf('music').slice().sort((a,b)=>b.created-a.created);
- const back='<div class="tabs"><button data-action="tools-back">← 回到我们</button></div>';
+ const back='';
  return `${heading('共同歌单','把属于我们的歌，放在一起。','new-music','添加一首歌','heart')}${back}<p class="hint">放进来的一定要是你们自己的音频文件（mp3 / m4a / wav 都行）。歌单只有你们两个人能听，不会上传到任何第三方音乐平台。</p>${items.length?items.map(musicCard).join(''):empty('歌单还空着','那首一听就想起对方的歌，值得放进来。','new-music','添加第一首')}`;
 }
 function musicForm(record=null){
@@ -1019,10 +1023,10 @@ function musicForm(record=null){
   finally{submit.disabled=false;}
  };
 }
-function personalWishPage(){const wishes=recordsOf('personal_wish');return `${heading('个人心愿','写下的人可以直接回看，对方输入一次密码后就能一直看到。','new-personal-wish','许下心愿','heart')}<div class="tabs"><button data-action="tools-back">← 回到我们</button></div><p class="hint">心愿名称彼此可见。密码至少 6 位（建议纯数字），每条心愿都要不同；告诉对方后，对方解锁一次即可永久查看。</p>${wishes.length?wishes.map(personalWishCard).join(''):empty('留一份只差密码就能打开的心愿','对方能看见心愿名称，具体内容仍由你掌握。','new-personal-wish','许下第一份心愿')}`;}
+function personalWishPage(){const wishes=recordsOf('personal_wish');return `${heading('个人心愿','写下的人可以直接回看，对方输入一次密码后就能一直看到。','new-personal-wish','许下心愿','heart')}<p class="hint">心愿名称彼此可见。密码至少 6 位（建议纯数字），每条心愿都要不同；告诉对方后，对方解锁一次即可永久查看。</p>${wishes.length?wishes.map(personalWishCard).join(''):empty('留一份只差密码就能打开的心愿','对方能看见心愿名称，具体内容仍由你掌握。','new-personal-wish','许下第一份心愿')}`;}
 function dashboardPage(){
  const d=state.dashboard;
- const back='<div class="tabs"><button data-action="tools-back">← 回到我们</button></div>';
+ const back='';
  if(!d)return `${heading('数据看板','我们的点点滴滴，都在这里。')}${back}<p class="hint">正在整理数据…</p>`;
  const months=d.months||[],peak=Math.max(1,...months.map(m=>m.count));
  const bars=months.length?months.map(m=>`<div class="bar" title="${esc(m.month)} · ${m.count} 条"><i style="height:${Math.max(4,Math.round(m.count/peak*100))}%"></i><span>${Number(m.month.slice(5))}月</span></div>`).join(''):'<p class="meta">还没有记录，写下第一条就会出现在这里。</p>';
@@ -1036,7 +1040,7 @@ function dashboardPage(){
 }
 function weeklyPage(){
  const w=state.weekly;
- const back='<div class="tabs"><button data-action="tools-back">← 回到我们</button></div>';
+ const back='';
  if(!w)return `${heading('回忆周报','把这一周，收进一封小小的信。')}${back}<p class="hint">正在整理这一周…</p>`;
  const off=w.offset||0,short=d=>d.slice(5).replace('-','.');
  const delta=w.delta>0?`比上一周多写了 ${w.delta} 条`:w.delta<0?`比上一周少了 ${-w.delta} 条`:'和上一周一样多';
@@ -1044,7 +1048,7 @@ function weeklyPage(){
  const kindRows=kinds.length?kinds.map(([k,n])=>`<div class="stat-row"><span>${kindLabel[k]}</span><div class="stat-bar"><i style="width:${Math.round(n/total*100)}%"></i></div><b>${n}</b></div>`).join(''):'<p class="meta">这一周还没有记录。</p>';
  const moods=Object.entries(w.moods||{}).sort((a,b)=>b[1]-a[1]),peak=Math.max(1,...moods.map(x=>x[1]));
  const moodRows=moods.length?moods.map(([e,n])=>`<div class="mood-stat"><span class="mood-emoji">${esc(e)}</span><div class="stat-bar"><i style="width:${Math.round(n/peak*100)}%"></i></div><b>${n}</b></div>`).join(''):'<p class="meta">这一周还没有心情记录。</p>';
- return `${heading('回忆周报','把这一周，收进一封小小的信。')}${back}<div class="tabs week-switch"><button data-action="week-prev">← 上一周</button><span class="week-range">${w.start.slice(0,4)} 年 · ${short(w.start)} – ${short(w.end)}</span><button data-action="week-next" ${off>=0?'disabled':''}>下一周 →</button></div><section class="card week-hero"><div class="eyebrow">WEEKLY LETTER</div><h2>${esc(w.message)}</h2><p class="meta">${esc(delta)}${w.top_mood?` · 这周最常见的心情是 ${esc(w.top_mood)}`:''}</p></section><div class="stats-hero"><div class="stat-card"><span>记录</span><strong>${w.total}<em>条</em></strong></div><div class="stat-card"><span>有记录的天数</span><strong>${w.days_active}<em>天</em></strong></div><div class="stat-card"><span>照片</span><strong>${w.photos}<em>张</em></strong></div><div class="stat-card"><span>互动</span><strong>${(w.likes||0)+(w.comments||0)}<em>次</em></strong></div></div><div class="grid-2"><section class="card"><div class="section-heading"><h2>这一周写了什么</h2></div>${kindRows}</section><section class="card"><div class="section-heading"><h2>心情分布</h2></div>${moodRows}</section></div>${w.highlights.length?`<div class="section-heading"><h2>${icon('heart')} 本周精选</h2></div>${w.highlights.map(recordCard).join('')}`:empty('这一周的信封还是空的','写下一点什么，下一封周报就会有了。','compose','记录此刻')}<div class="inline-actions" style="margin-top:16px">${button('复制文字版','week-copy','small soft','download')}${button('回到我们','tools-back','small secondary')}</div>`;
+ return `${heading('回忆周报','把这一周，收进一封小小的信。')}${back}<div class="tabs week-switch"><button data-action="week-prev">← 上一周</button><span class="week-range">${w.start.slice(0,4)} 年 · ${short(w.start)} – ${short(w.end)}</span><button data-action="week-next" ${off>=0?'disabled':''}>下一周 →</button></div><section class="card week-hero"><div class="eyebrow">WEEKLY LETTER</div><h2>${esc(w.message)}</h2><p class="meta">${esc(delta)}${w.top_mood?` · 这周最常见的心情是 ${esc(w.top_mood)}`:''}</p></section><div class="stats-hero"><div class="stat-card"><span>记录</span><strong>${w.total}<em>条</em></strong></div><div class="stat-card"><span>有记录的天数</span><strong>${w.days_active}<em>天</em></strong></div><div class="stat-card"><span>照片</span><strong>${w.photos}<em>张</em></strong></div><div class="stat-card"><span>互动</span><strong>${(w.likes||0)+(w.comments||0)}<em>次</em></strong></div></div><div class="grid-2"><section class="card"><div class="section-heading"><h2>这一周写了什么</h2></div>${kindRows}</section><section class="card"><div class="section-heading"><h2>心情分布</h2></div>${moodRows}</section></div>${w.highlights.length?`<div class="section-heading"><h2>${icon('heart')} 本周精选</h2></div>${w.highlights.map(recordCard).join('')}`:empty('这一周的信封还是空的','写下一点什么，下一封周报就会有了。','compose','记录此刻')}<div class="inline-actions" style="margin-top:16px">${button('复制文字版','week-copy','small soft','download')}</div>`;
 }
 function settingsPage() {
  const v=state.appVersion||{};
