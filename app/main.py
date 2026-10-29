@@ -177,11 +177,20 @@ async def protection(request, call_next):
     request_host = urlparse('//' + forwarded_host.split(',')[0].strip()).hostname
     forwarded_proto = request.headers.get('x-forwarded-proto', '').split(',')[0].strip().lower()
     is_https = forwarded_proto == 'https' or request.url.scheme == 'https'
-    # 内网**明文**直连：不跳公网域名、不发 HSTS。判定同时看 Host 与真实对端 IP——
-    # 用带点的内网主机名/DDNS 域名（如 xxx.ddns.net、路由器域名）从局域网访问时，Host 不像
-    # 内网，但对端 IP 是内网；必须视为内网访问，否则会被 308 跳到公网穿透地址（被封时直接打不开）。
+    # 内网**明文**直连：不跳公网域名、不发 HSTS。判定看 Host，并在「Host 是域名（非 IP）
+    # 且对端 IP 是内网」时也视为内网——用 DDNS/路由器域名从局域网访问时 Host 不像内网，
+    # 但对端是内网，若不豁免会被 308 甩到公网穿透地址（穿透被封时直接打不开）。
+    # 注意：Host 是纯 IP 时**不**走对端豁免，公网 IP 仍按原规则跳公网域名（见验收测试）。
     peer_host = request.client.host if request.client else ''
-    local_access = (private_host(request_host) or private_host(peer_host)) and not is_https
+    peer_private = private_host(peer_host) if peer_host else False
+    host_is_domain = bool(request_host)
+    if host_is_domain:
+        try:
+            ipaddress.ip_address(request_host.strip().strip('[]'))
+            host_is_domain = False
+        except ValueError:
+            pass
+    local_access = (private_host(request_host) or (peer_private and host_is_domain)) and not is_https
     if public_url.startswith('https://') and request.url.path != '/health':
         public_host = urlparse(public_url).hostname
         origin = request.headers.get('origin', '')
