@@ -879,6 +879,9 @@ body.cal-full{overflow:hidden;height:100dvh}
   .lightbox-image{max-height:100%}
   /* 手机上图片查看器直接全屏，一点不留白 */
   .modal.wide.viewer{width:100vw;max-width:none;height:100dvh;max-height:100dvh;border-radius:0;border:0}
+  /* 全屏后标题和右上角关闭按钮会被手机状态栏压住：在原本的 12px 上再加一个状态栏高度。
+     --safe-top 只对 APK 生效（见文件末尾的原生块），浏览器里回落到 env()，没有刘海就是 0。 */
+  .modal.wide.viewer .modal-header{padding-top:calc(12px + var(--safe-top, env(safe-area-inset-top, 0px)))}
   .lightbox-bar{padding-bottom:max(13px,env(safe-area-inset-bottom))}
   .yearbook-grid{grid-template-columns:repeat(2,1fr)}
   .storage-overview{grid-template-columns:1fr 1fr}
