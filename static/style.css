@@ -785,8 +785,11 @@ body.cal-full{overflow:hidden;height:100dvh}
   .nav .nav-fab span{display:none}
   .nav .nav-fab .icon{width:26px;height:26px}
   .main{padding:18px var(--pad-x) 100px}
-  /* 情侣摆拍参考：移动端参考框高度 */
-  .figure-ref-frame{max-height:68vh}
+  /* 情侣摆拍参考：iframe 铺到底部导航上方，标题说明只留一行 */
+  .shell.figure-full .main{padding-bottom:calc(66px + env(safe-area-inset-bottom) + 8px)}
+  .figure-page{gap:8px}
+  .figure-page .page-heading p{display:none}
+  .figure-frame{border-radius:14px}
   .topbar{margin-bottom:20px}
   .topbar>.desktop-date{display:none}
   .topbar-right{gap:9px}
@@ -1116,10 +1119,20 @@ body.cal-full{overflow:hidden;height:100dvh}
 :root.dark .empty-icon{background:linear-gradient(160deg,var(--soft),var(--bg));box-shadow:var(--shadow-xs)}
 :root.dark .stat::after{background:radial-gradient(circle,var(--soft),transparent 70%)}
 
-/* ════════════ 情侣摆拍参考（figure 页，仅嵌外站 iframe） ════════════ */
-.figure-ref{margin:0}
-.figure-ref-frame{position:relative;width:100%;aspect-ratio:3/4;max-height:82vh;border-radius:16px;overflow:hidden;background:var(--soft)}
-.figure-ref-iframe{width:100%;height:100%;border:0;display:block}
+/* ════════════ 情侣摆拍参考（figure 页，仅嵌外站 iframe） ════════════
+   整页一屏：顶栏固定、标题紧凑、iframe 用 flex:1 吃掉下方全部空间。
+   不再套 .card —— 那圈边框/圆角/22px 内边距正是原来四周留白与下方空白的来源。 */
+body.figure-full{overflow:hidden;height:100dvh}
+.shell.figure-full{height:100dvh;min-height:0;overflow:hidden}
+.shell.figure-full .main{height:100dvh;display:flex;flex-direction:column;overflow:hidden}
+.shell.figure-full .main>.topbar{flex:none}
+.shell.figure-full #page{flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden}
+.shell.figure-full .footer-note{display:none}
+.figure-page{flex:1;min-height:0;display:flex;flex-direction:column;gap:12px}
+.figure-page .page-heading{flex:none;margin-bottom:0;align-items:center}
+.figure-page .figure-open{flex:none;white-space:nowrap}
+.figure-frame{flex:1;min-height:0;position:relative;border-radius:18px;overflow:hidden;background:var(--soft)}
+.figure-iframe{width:100%;height:100%;border:0;display:block}
 
 /* ════════════ 原生 App：状态栏避让 + 顶栏钉住 ════════════
    只对 APK 生效（app.js 按 UA 里的 LoveSpaceApp/ 标记给 <html> 加 .is-native-app），

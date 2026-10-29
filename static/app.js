@@ -213,9 +213,9 @@ function renderShell() {
  [themeClass,'theme-rose','theme-peach','theme-lavender','theme-custom','reduced-motion'].forEach(c=>root.classList.remove(c));
  root.classList.add(state.me.space.theme==='peach'||state.me.space.theme==='lavender'||state.me.space.theme==='custom'?themeClass:'theme-rose');
  if(!state.me.space.motion)root.classList.add('reduced-motion');
- document.body.className=state.page==='messages'?'chat-full':(state.page==='together'&&state.tab==='calendar'?'cal-full':'');
+ document.body.className=state.page==='messages'?'chat-full':(state.page==='together'&&state.tab==='calendar'?'cal-full':(state.page==='figure'?'figure-full':''));
  applyCustomColor(state.me.space.theme,state.me.space.custom_color);
- $('#app').innerHTML=`<div class="shell${state.page==='messages'?' chat-full':''}"><aside class="sidebar"><div class="brand"><img src="/static/icon.svg" alt=""><div><strong>恋爱空间</strong><small>LOVE, EVERY DAY</small></div></div><nav class="nav" aria-label="主要导航">${navHtml.join('')}</nav><div class="sidebar-bottom"><div class="little-note"><span>❀</span><br>把喜欢，写进每一天。<br>little things, lasting love</div><button class="profile-btn" data-nav="personal">${avatar(state.me.user.id)}<div><strong>${esc(state.me.user.name)}</strong><small>我的小角落 ${icon('arrow')}</small></div></button></div></aside><main class="main"><header class="topbar${toolsSub?' has-back':''}">${toolsSub?`<button class="nav-back topbar-back" data-action="tools-back" aria-label="回到我们">${icon('back')}</button>`:''}<span class="desktop-date">${new Date().toLocaleDateString('zh-CN',{timeZone:state.me.space.timezone,month:'long',day:'numeric',weekday:'long'})} · 今天也要好好相爱</span><div class="topbar-right"><span class="pill">${icon('lock')} 双人私密空间</span><button class="icon-btn" id="dark-toggle" data-action="toggle-dark" aria-label="切换深浅色">${icon(document.documentElement.classList.contains('dark')?'sun':'moon')}</button><button class="icon-btn" data-nav="messages" aria-label="私聊">${icon('chat')}${state.me.chat_unread&&state.page!=='messages'?`<span class="badge">${state.me.chat_unread>99?'99+':state.me.chat_unread}</span>`:''}</button><button class="icon-btn" data-nav="notices" aria-label="通知">${icon('bell')}${state.me.unread?`<span class="badge">${state.me.unread>99?'99+':state.me.unread}</span>`:''}</button><details class="more-menu account-menu"><summary class="mobile-profile" aria-label="打开账号菜单" title="账号菜单">${avatar(state.me.user.id)}</summary><div class="menu-pop account-popover"><div class="account-menu-heading"><strong>${esc(state.me.user.name)}</strong><small>我的账号</small></div><button data-action="profile">${icon('edit')} 账号资料</button><button data-nav="personal">${icon('lock')} 个人小角落</button><button data-nav="settings">${icon('gear')} 设置</button><button data-action="logout" class="danger account-logout">${icon('arrow')} 退出登录</button></div></details></div></header>${!state.online?'<div class="offline-banner">网络暂时断开，正在等待重连。未发送的文字会为你保留。</div>':''}<div id="page"></div><p class="footer-note">♡ 有你在，平凡的日子也闪闪发光。</p></main></div>`;
+ $('#app').innerHTML=`<div class="shell${state.page==='messages'?' chat-full':''}${state.page==='figure'?' figure-full':''}"><aside class="sidebar"><div class="brand"><img src="/static/icon.svg" alt=""><div><strong>恋爱空间</strong><small>LOVE, EVERY DAY</small></div></div><nav class="nav" aria-label="主要导航">${navHtml.join('')}</nav><div class="sidebar-bottom"><div class="little-note"><span>❀</span><br>把喜欢，写进每一天。<br>little things, lasting love</div><button class="profile-btn" data-nav="personal">${avatar(state.me.user.id)}<div><strong>${esc(state.me.user.name)}</strong><small>我的小角落 ${icon('arrow')}</small></div></button></div></aside><main class="main"><header class="topbar${toolsSub?' has-back':''}">${toolsSub?`<button class="nav-back topbar-back" data-action="tools-back" aria-label="回到我们">${icon('back')}</button>`:''}<span class="desktop-date">${new Date().toLocaleDateString('zh-CN',{timeZone:state.me.space.timezone,month:'long',day:'numeric',weekday:'long'})} · 今天也要好好相爱</span><div class="topbar-right"><span class="pill">${icon('lock')} 双人私密空间</span><button class="icon-btn" id="dark-toggle" data-action="toggle-dark" aria-label="切换深浅色">${icon(document.documentElement.classList.contains('dark')?'sun':'moon')}</button><button class="icon-btn" data-nav="messages" aria-label="私聊">${icon('chat')}${state.me.chat_unread&&state.page!=='messages'?`<span class="badge">${state.me.chat_unread>99?'99+':state.me.chat_unread}</span>`:''}</button><button class="icon-btn" data-nav="notices" aria-label="通知">${icon('bell')}${state.me.unread?`<span class="badge">${state.me.unread>99?'99+':state.me.unread}</span>`:''}</button><details class="more-menu account-menu"><summary class="mobile-profile" aria-label="打开账号菜单" title="账号菜单">${avatar(state.me.user.id)}</summary><div class="menu-pop account-popover"><div class="account-menu-heading"><strong>${esc(state.me.user.name)}</strong><small>我的账号</small></div><button data-action="profile">${icon('edit')} 账号资料</button><button data-nav="personal">${icon('lock')} 个人小角落</button><button data-nav="settings">${icon('gear')} 设置</button><button data-action="logout" class="danger account-logout">${icon('arrow')} 退出登录</button></div></details></div></header>${!state.online?'<div class="offline-banner">网络暂时断开，正在等待重连。未发送的文字会为你保留。</div>':''}<div id="page"></div><p class="footer-note">♡ 有你在，平凡的日子也闪闪发光。</p></main></div>`;
  renderPage();
  if(keepScroll>0)window.scrollTo({top:keepScroll});
 }
@@ -234,18 +234,18 @@ function renderPage() {
    会让 renderShell 读到 null.space 抛 TypeError，被 catch 成一条吓人的报错提示。
    直接返回即可——boot() 结束时会按 location.hash 渲染到正确的页面。 */
 async function navigate(page,tab='') {if(!state.me)return;if(page!=='messages')state.chatReturn={page,tab};if(page==='messages'&&state.me){state.me.chat_unread=0;post('/notices/read?event=chat').catch(()=>{});}state.page=page;state.tab=tab;location.hash=page;try{if(page==='timeline')await loadTimeline(true);await loadSpecial();renderShell();window.scrollTo({top:0});}catch(e){toast(e.message);}}
+/* 摆拍参考：整页一屏（body/shell 加 figure-full 修饰类），iframe 直接吃掉标题以下的
+   全部空间——不再套 .card 的边框/圆角/内边距，下方不留白。 */
 function figurePage() {
-  const back = ``;
-  return `${heading('情侣摆拍参考', '照着下面的姿势参考，拍一张属于你们的照片。')}${back}
-    <section class="card figure-ref">
-      <div class="section-heading">
-        <h2>${icon('photo')} 情侣摆拍参考</h2>
-        <a class="link-btn" href="/pose-gallery/" target="_blank" rel="noopener">新标签打开 ${icon('arrow')}</a>
-      </div>
-      <div class="figure-ref-frame">
-        <iframe class="figure-ref-iframe" src="/pose-gallery/" title="情侣姿势参考" loading="lazy" referrerpolicy="no-referrer"></iframe>
-      </div>
-    </section>`;
+  return `<div class="figure-page">
+    <div class="page-heading">
+      <div><h1>情侣摆拍参考</h1><p>照着下面的姿势参考，拍一张属于你们的照片。</p></div>
+      <a class="link-btn figure-open" href="/pose-gallery/" target="_blank" rel="noopener">新标签打开 ${icon('arrow')}</a>
+    </div>
+    <div class="figure-frame">
+      <iframe class="figure-iframe" src="/pose-gallery/" title="情侣姿势参考" loading="lazy" referrerpolicy="no-referrer"></iframe>
+    </div>
+  </div>`;
 }
 
 async function loadSpecial(){
