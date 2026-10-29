@@ -182,8 +182,8 @@ label{display:grid;gap:6px;font-size:13px;color:var(--muted)}
    不再出现在移动端底部固定 tab 栏（避免"返回"被塞到下方） */
 .topbar.has-back{justify-content:flex-start;gap:8px}
 .topbar.has-back .topbar-right{margin-left:auto}
-.topbar-back{display:inline-flex;align-items:center;gap:5px;color:var(--primary-dark);font-weight:600;font-size:14px;background:var(--soft);border:0;border-radius:10px;padding:7px 12px;cursor:pointer;white-space:nowrap}
-.topbar-back .icon{width:16px;height:16px}
+.topbar-back{display:inline-flex;align-items:center;justify-content:center;color:var(--primary-dark);background:var(--soft);border:0;border-radius:50%;width:40px;height:40px;padding:0;cursor:pointer;flex:0 0 auto}
+.topbar-back .icon{width:20px;height:20px}
 .topbar-back:hover{background:var(--primary);color:var(--on-primary)}
 .sidebar-bottom{margin-top:auto}
 .little-note{text-align:center;font-family:var(--serif);color:var(--muted);line-height:2;font-size:12px;padding-bottom:24px;opacity:.85}
