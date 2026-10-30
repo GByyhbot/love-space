@@ -1341,7 +1341,7 @@ const paMD=s=>`${Number(String(s).slice(5,7))} 月 ${Number(String(s).slice(8,10
 
 /* 分组柱：每天一组，左边本周期、右边近半年；没记的那根画虚线空框（照美柚的「未记录」） */
 function paGrouped(rows,opt={}){
- const W=320,h=opt.h||128,top=10,base=h-22,n=rows.length||1,slot=W/n;
+ const W=320,h=opt.h||(rows.length<=2?84:104),top=10,base=h-22,n=rows.length||1,slot=W/n;
  const max=opt.max||Math.max(1,...rows.flatMap(r=>[r.cur,r.hist]).filter(v=>typeof v==='number'));
  const bw=Math.min(12,slot*0.26);
  const y=v=>base-(base-top)*(v/max);
@@ -1357,7 +1357,7 @@ function paGrouped(rows,opt={}){
 }
 /* 单系列竖柱：近期经期天数、每月爱爱次数 */
 function paVBars(rows,opt={}){
- const W=320,h=opt.h||118,top=14,base=h-24,n=rows.length||1,slot=W/n;
+ const W=320,h=opt.h||(rows.length<=3?86:96),top=12,base=h-22,n=rows.length||1,slot=W/n;
  const max=opt.max||Math.max(1,...rows.map(r=>r.v||0));
  const bw=Math.min(18,slot*0.44);
  return `<svg class="pa-svg" viewBox="0 0 ${W} ${h}" width="100%" height="${h}" role="img" aria-label="${esc(opt.aria||'')}">`
@@ -1374,7 +1374,7 @@ function paVBars(rows,opt={}){
 function paLine(pts,opt={}){
  const list=(pts||[]).filter(p=>typeof p.v==='number');
  if(list.length<2)return '';
- const W=320,h=opt.h||132,top=20,base=h-26;
+ const W=320,h=opt.h||104,top=18,base=h-22;
  let lo=Math.min(...list.map(p=>p.v)),hi=Math.max(...list.map(p=>p.v));
  if(hi-lo<.4){hi+=.2;lo-=.2;}
  const X=p=>18+(W-36)*p.i/(list.length-1);
@@ -1509,7 +1509,7 @@ function periodAnalysisPage(){
    <div><span>记录天数</span><strong>${periodDayRows().length}<em>天</em></strong></div>
   </div>
   ${warns.length?`<div class="pa-warns"><strong>需要留意</strong>${warns.map(w=>`<p>${esc(w)}</p>`).join('')}<small>按记录推算，不能替代医生判断。</small></div>`:''}
-  <p class="pa-mini">受孕概率按日历阶段推算（低 / 中 / 高），仅供参考，不能作为避孕依据。</p>
+  <p class="pa-mini">受孕概率为日历推算（低 / 中 / 高），不能作为避孕依据。</p>
   </section>`;
 
  /* ② 经期预测：一周日期条，正中那天是预测日，左右两天算"可能" */
@@ -1531,7 +1531,7 @@ function periodAnalysisPage(){
 
  /* ③ 周期变化：最近一个周期 + 历史横向条 */
  const cycleSec=(()=>{
-  const rows=a.cycleRows.slice(0,8).map(r=>{
+  const rows=a.cycleRows.slice(0,6).map(r=>{
    if(r.cur)return `<div class="pa-row"><span class="pa-date">${paMD(dayStr(r.date))}</span><span class="pa-chip">当前第 ${r.days} 天</span><span class="pa-track"><i style="width:${Math.round(r.days/a.cycleMax*100)}%"></i></span><b>${r.days}天</b></div>`;
    const diff=r.gap-Math.round(d.cycle);
    return `<div class="pa-row"><span class="pa-date">${paMD(dayStr(r.date))}</span><span class="pa-diff${diff<0?' early':diff>0?' late':''}">${diff===0?'准时':diff<0?`提前 ${-diff} 天`:`推迟 ${diff} 天`}</span><span class="pa-track"><i style="width:${Math.round(r.gap/a.cycleMax*100)}%"></i></span><b>${r.gap}天</b></div>`;
