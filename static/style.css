@@ -443,7 +443,7 @@ button.mood-row.no-mood .mood-bubble.empty{color:var(--primary-dark)}
 .chat-panel.immersive .sticker-dock .meta,
 .chat-panel.immersive .sticker-dock .meta-center{color:rgba(255,255,255,.72)}
 /* APK 上聊天页延伸到状态栏下面（见 app.js 的 StatusBar overlay），顶部要给状态栏让出位置 */
-.chat-panel.immersive .chat-header{padding-top:calc(14px + env(safe-area-inset-top,0px))}
+.chat-panel.immersive .chat-header{padding-top:calc(18px + env(safe-area-inset-top,0px))}
 .chat-panel.immersive .chat-header h3,.chat-panel.immersive .chat-header small,.chat-panel.immersive .chat-time,.chat-panel.immersive .chat-recall{color:rgba(255,255,255,.82)}
 .chat-panel.immersive .chat-header h3{color:#fff;text-shadow:0 1px 8px rgba(0,0,0,.4)}
 /* 图标按钮默认是白色实心圆（--surface）——压在照片上就是几个突兀的白团。
@@ -873,7 +873,7 @@ body.cal-full{overflow:hidden;height:100dvh}
   .shell.cal-full .calendar-head{margin-bottom:10px}
   .shell.cal-full .calendar-grid{gap:4px}
   .shell.cal-full .cal-day{min-height:48px}
-  .chat-header{padding:12px 14px}
+  .chat-header{padding:18px 14px}
   .chat-log{padding:14px}
   .chat-compose{padding:10px 12px calc(10px + env(safe-area-inset-bottom))}
   .chat-line{max-width:92%}
@@ -1431,4 +1431,4 @@ html.is-native-app .shell.figure-full .topbar{margin-top:0}
    铺上去就看不见了——只有深色壁纸 + 顶部渐变才撑得住白图标。
    body.chat-immersive 由 app.js 的 renderShell 按 chatBgIsPhoto() 打上，不用 :has()（旧 WebView 不支持）。 */
 html.is-native-app body.chat-immersive .shell.chat-full .main{padding-top:0}
-html.is-native-app body.chat-immersive .shell.chat-full .chat-panel.immersive .chat-header{padding-top:calc(var(--safe-top,0px) + 14px)}
+html.is-native-app body.chat-immersive .shell.chat-full .chat-panel.immersive .chat-header{padding-top:calc(var(--safe-top,0px) + 18px)}
