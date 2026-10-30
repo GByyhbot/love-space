@@ -51,6 +51,8 @@ a{color:var(--primary-dark);text-decoration:none}
 svg{vertical-align:middle}
 .icon{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}
 button{cursor:pointer;color:inherit;border:0;background:none;font:inherit;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+/* 可点的 div（记录行、日历格）也要自己关掉点按高亮，否则按里面的小按钮会整行闪一层蓝 */
+html{-webkit-tap-highlight-color:transparent}
 button:disabled{opacity:.45;cursor:wait}
 a,input,textarea,select{-webkit-tap-highlight-color:transparent;touch-action:manipulation}
 :focus-visible{outline:2px solid var(--primary);outline-offset:2px;border-radius:4px}
@@ -987,13 +989,16 @@ body.cal-full{overflow:hidden;height:100dvh}
 .cal-day.ph-period.ph-pred{background:transparent;border:1px dashed var(--primary)}
 .cal-day.ph-fertile.ph-ovu::after{content:'';position:absolute;bottom:4px;width:7px;height:7px;border-radius:50%;background:#8B72A8;box-shadow:0 0 0 2px rgba(139,114,168,.25)}
 .period-legend{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin:10px 0 0}
-.lg-pill{padding:4px 11px;border-radius:999px;font-size:12px;font-weight:600;color:var(--ink);border:1px solid transparent;line-height:1.5}
+.lg-pill{display:inline-flex;align-items:center;justify-content:center;gap:5px;height:26px;padding:0 12px;border-radius:999px;font-size:12px;font-weight:600;color:var(--ink);border:1px solid transparent;line-height:1;box-sizing:border-box;white-space:nowrap}
 .lg-pill.p-period{background:#FF5C8A;color:#fff}
 .lg-pill.p-follicular{background:rgba(95,138,90,.26)}
 .lg-pill.p-fertile{background:rgba(139,114,168,.34)}
 .lg-pill.p-luteal{background:rgba(196,150,70,.28)}
-.lg-pill.p-ovu{background:rgba(139,114,168,.18);color:#5D4A78;display:inline-flex;align-items:center;gap:5px}
-.lg-pill.p-ovu i{width:6px;height:6px;border-radius:50%;background:#8B72A8}
+.lg-pill.p-ovu{background:rgba(139,114,168,.18);color:var(--ink)}
+.lg-pill.p-ovu i{width:6px;height:6px;flex:none;border-radius:50%;background:#8B72A8}
+/* 深色下硬编码的深紫几乎看不见，换成亮紫；底色也提一点，跟旁边三颗的亮度对上 */
+:root.dark .lg-pill.p-ovu{background:rgba(139,114,168,.3)}
+:root.dark .lg-pill.p-ovu i{background:#B7A0D8}
 .lg-pill.p-pred{border:1px dashed var(--primary);color:var(--primary-dark);font-weight:500;background:rgba(255,92,138,.06)}
 
 /* 阶段进度条：一条 bar 摊开整个周期，游标就是今天，当前段描边高亮 */
@@ -1060,7 +1065,7 @@ body.cal-full{overflow:hidden;height:100dvh}
 .plog-head strong{display:block;font-size:16px;line-height:1.4}
 .plog-head small{font-size:12px;color:var(--muted)}
 .plog-head .link-btn{font-size:12.5px;flex:none;white-space:nowrap}
-.plog-row{display:flex;align-items:center;gap:10px;width:100%;padding:11px 0;border-top:1px solid var(--line);text-align:left;background:none;cursor:pointer}
+.plog-row{display:flex;align-items:center;gap:10px;width:100%;padding:11px 0;border-top:1px solid var(--line);text-align:left;background:none;cursor:pointer;user-select:none;-webkit-user-select:none}
 .plog-ico{width:27px;height:27px;flex:none;display:flex;align-items:center;justify-content:center;border-radius:9px;background:var(--soft);font-size:14px;line-height:1}
 .plog-name{font-size:14px;color:var(--ink);flex:none}
 .plog-val{flex:1;min-width:0;text-align:right;font-size:12.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
