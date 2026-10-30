@@ -1420,3 +1420,15 @@ html.is-native-app .topbar{
    这一路不用抵消法：主区上内边距直接归零，状态栏高度只由顶栏自己的 padding-top 让。 */
 html.is-native-app .shell.figure-full .main{padding-top:0}
 html.is-native-app .shell.figure-full .topbar{margin-top:0}
+/* 聊天页（chat-full）是同一类毛病但错法不同：有照片壁纸时（body.chat-immersive）
+   主区让了 --safe-top，.chat-panel.immersive .chat-header 又让了一次 env(safe-area-inset-top)，
+   两截叠起来 → 状态栏那条缝没有壁纸（透出 App 黑底），下面还白白多出 40 多 dp。
+   有壁纸时改成「主区归零 + 只由 header 让一次」，面板铺到屏幕顶端，状态栏后面也是壁纸。
+   用 --safe-top（已 clamp 封顶 36px）而不是 env()，躲开某些机型 env() 多报的问题；
+   权重 (0,3,2) 高于 .chat-panel.immersive .chat-header 的 (0,2,1)，能盖住它。
+
+   不带壁纸时保持原样（主区让位）：那种情况头部是浅色的，而 App 的状态栏图标是白的，
+   铺上去就看不见了——只有深色壁纸 + 顶部渐变才撑得住白图标。
+   body.chat-immersive 由 app.js 的 renderShell 按 chatBgIsPhoto() 打上，不用 :has()（旧 WebView 不支持）。 */
+html.is-native-app body.chat-immersive .shell.chat-full .main{padding-top:0}
+html.is-native-app body.chat-immersive .shell.chat-full .chat-panel.immersive .chat-header{padding-top:calc(var(--safe-top,0px) + 14px)}
