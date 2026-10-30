@@ -542,7 +542,8 @@ def clean_body(c, kind, data, user_id, previous=None):
         raise HTTPException(422, '个人心愿请使用专属加密接口保存')
     permitted = {'title', 'content', 'date', 'media', 'album', 'publish_at', 'annual', 'remind_days',
                  'category', 'done', 'emoji', 'target', 'completion_post', 'sticker', 'amount',
-                 'start', 'cycle', 'length', 'flow', 'symptoms'}
+                 'start', 'cycle', 'length', 'flow', 'symptoms',
+                 'color', 'pain', 'sex', 'mood', 'weight', 'discharge', 'temp'}
     body = {k: v for k, v in data.items() if k in permitted}
     if 'sticker' in body and (not isinstance(body['sticker'], str)
                               or not re.fullmatch(r'/static/stickers/[a-z0-9]+/\d+\.(webm|webp)', body['sticker'])):
@@ -569,7 +570,9 @@ def clean_body(c, kind, data, user_id, previous=None):
             raise HTTPException(422, '金额需在 0–1 亿之间')
         body['amount'] = amount
     if kind == 'period':
-        # 生理期只收窄口字段：一天一条，start 是这次经期的第一天。
+        # 生理期只有一种 kind，靠字段分两类行：
+        #   · 经期行：有 start，记这次从哪天来、来几天，参与周期推算
+        #   · 日记录行：有 date、没有 start，记那一天的量/色/痛感/心情/体重/体温
         # cycle/length 允许用户手工改（默认由历史自动推算），但必须落在生理上说得通的区间，
         # 否则日历和预测会画出不可能的格子。
         for key in ('cycle', 'length'):
@@ -578,15 +581,45 @@ def clean_body(c, kind, data, user_id, previous=None):
                 continue
             if type(body[key]) is not int or not (15 <= body[key] <= 60 if key == 'cycle' else 1 <= body[key] <= 15):
                 raise HTTPException(422, '周期需在 15–60 天、经期需在 1–15 天之间')
-        if body.get('flow') in (None, ''):
+        # flow 从「少/中/多」扩成 1–5 档，旧数据里的中文档位继续认，不至于打不开老记录
+        flow = body.get('flow')
+        if flow in (None, ''):
             body.pop('flow', None)
-        elif body['flow'] not in ('少', '中', '多'):
-            raise HTTPException(422, '经量只能选 少 / 中 / 多')
+        elif not (flow in ('少', '中', '多') or (type(flow) is int and 1 <= flow <= 5)):
+            raise HTTPException(422, '经量只能是 1–5 档')
+        # 档位字段统一按 1..N 编号落库：文案和图标只活在前端，加选项不用改后端
+        for key, top, name in (('color', 5, '颜色'), ('pain', 5, '痛感'),
+                               ('discharge', 5, '白带'), ('mood', 20, '心情')):
+            if key not in body:
+                continue
+            value = body[key]
+            if value in (None, ''):
+                body.pop(key)
+                continue
+            if type(value) is not int or not 1 <= value <= top:
+                raise HTTPException(422, f'{name}的档位不正确')
+        sex = body.get('sex')
+        if sex is not None:
+            if not isinstance(sex, list) or len(sex) > 4 \
+                    or any(type(item) is not int or not 1 <= item <= 10 for item in sex):
+                raise HTTPException(422, '避孕方式的选项不正确')
+            body['sex'] = list(dict.fromkeys(sex))
+        for key, low, high, name in (('weight', 20.0, 300.0, '体重'), ('temp', 30.0, 45.0, '体温')):
+            if key not in body:
+                continue
+            try:
+                value = round(float(body[key]), 1)
+            except (TypeError, ValueError):
+                body.pop(key)
+                continue
+            if not low <= value <= high:
+                raise HTTPException(422, f'{name}需在 {low:g}–{high:g} 之间')
+            body[key] = value
         symptoms = body.get('symptoms')
         if symptoms is not None:
-            if not isinstance(symptoms, list) or len(symptoms) > 12 \
+            if not isinstance(symptoms, list) or len(symptoms) > 20 \
                     or any(not isinstance(s, str) or not s.strip() or len(s) > 16 for s in symptoms):
-                raise HTTPException(422, '症状最多十二项，每项不超过十六个字')
+                raise HTTPException(422, '症状最多二十项，每项不超过十六个字')
             body['symptoms'] = list(dict.fromkeys(s.strip() for s in symptoms if s.strip()))
     for key in ('date', 'target', 'start'):
         if body.get(key):
@@ -596,7 +629,7 @@ def clean_body(c, kind, data, user_id, previous=None):
                 raise HTTPException(422, '日期格式不正确')
     if kind == 'anniversary' and not body.get('date'):
         raise HTTPException(422, '请选择纪念日日期')
-    if kind == 'period' and not body.get('start'):
+    if kind == 'period' and not (body.get('start') or body.get('date')):
         raise HTTPException(422, '请选择这次经期开始的日期')
     mids = body.get('media', [])
     if not isinstance(mids, list) or len(mids) > 30 or any(not isinstance(m, str) for m in mids):

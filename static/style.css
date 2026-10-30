@@ -973,32 +973,33 @@ body.cal-full{overflow:hidden;height:100dvh}
 .period-month{margin:0 0 16px}
 .period-month:last-of-type{margin-bottom:0}
 .period-month h3{font-size:13px;font-weight:600;color:var(--muted);margin:0 0 8px}
-.cal-day.ph-period{background:var(--soft-strong);box-shadow:inset 0 0 0 1px rgba(176,72,107,.16)}
-.cal-day.ph-period span:first-child{color:var(--primary-dark);font-weight:700}
-.cal-day.ph-follicular{background:rgba(95,138,90,.26)}
-.cal-day.ph-fertile{background:rgba(139,114,168,.34)}
-.cal-day.ph-luteal{background:rgba(196,150,70,.28)}
+.cal-day.ph-period{background:#FF5C8A;box-shadow:none}
+.cal-day.ph-period span:first-child{color:#fff;font-weight:700}
+.cal-day.ph-period em{background:rgba(255,255,255,.22);color:#fff}
+/* 卵泡期 / 黄体期不铺底色：整月涂色会变成一块调色板，只在 tooltip 里说清楚就够了 */
+.cal-day.ph-follicular,.cal-day.ph-luteal{background:transparent}
 /* 阶段短名：只出现在每段第一天，让"阶段切换"这件事看得见 */
-.cal-day em{font-style:normal;font-size:10px;font-weight:800;letter-spacing:.02em;line-height:1;padding:2px 5px;border-radius:5px;background:var(--surface);color:var(--ink);margin-top:-2px}
+.cal-day em{font-style:normal;font-size:9.5px;font-weight:700;letter-spacing:.02em;line-height:1;padding:0;background:transparent;color:var(--muted);margin-top:-1px}
 /* 已经有记录的那一天：右上角一个小圆点，暗示"这天点进去是改，不是新建" */
 .cal-day.has-rec::before{content:'';position:absolute;top:6px;right:6px;width:5px;height:5px;border-radius:50%;background:var(--primary);opacity:.7}
+.cal-day.ph-period.has-rec::before{display:none}
 .cal-day:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
-.cal-day.ph-pred{opacity:.85}
+.cal-day.ph-pred{opacity:.9}
 .cal-day.ph-period.ph-pred{background:transparent;border:1px dashed var(--primary)}
 .cal-day.ph-fertile.ph-ovu::after{content:'';position:absolute;bottom:4px;width:7px;height:7px;border-radius:50%;background:#8B72A8;box-shadow:0 0 0 2px rgba(139,114,168,.25)}
 .period-legend{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin:10px 0 0}
 .lg-pill{padding:4px 11px;border-radius:999px;font-size:12px;font-weight:600;color:var(--ink);border:1px solid transparent;line-height:1.5}
-.lg-pill.p-period{background:var(--soft-strong);color:var(--primary-dark)}
+.lg-pill.p-period{background:#FF5C8A;color:#fff}
 .lg-pill.p-follicular{background:rgba(95,138,90,.26)}
 .lg-pill.p-fertile{background:rgba(139,114,168,.34)}
 .lg-pill.p-luteal{background:rgba(196,150,70,.28)}
-.lg-pill.p-pred{border:1px dashed var(--primary);color:var(--muted);font-weight:500;background:rgba(176,72,107,.05)}
+.lg-pill.p-pred{border:1px dashed var(--primary);color:var(--primary-dark);font-weight:500;background:rgba(255,92,138,.06)}
 
 /* 阶段进度条：一条 bar 摊开整个周期，游标就是今天，当前段描边高亮 */
 .phase-wrap{margin:14px 0 0}
 .phase-bar{display:flex;gap:3px;position:relative;height:40px}
-.phase-seg{display:flex;flex-direction:column;align-items:center;justify-content:center;min-width:0;border-radius:9px;line-height:1.25;overflow:hidden;white-space:nowrap}
-.phase-seg b{font-size:12px;font-weight:700;color:var(--ink);opacity:.9}
+.phase-seg{display:flex;flex-direction:column;align-items:center;justify-content:center;min-width:48px;border-radius:9px;line-height:1.25;overflow:hidden;white-space:nowrap}
+.phase-seg b{font-size:11px;font-weight:700;color:var(--ink);opacity:.9}
 .phase-seg small{font-size:10.5px;color:var(--muted)}
 .phase-seg.current{box-shadow:inset 0 0 0 2px var(--primary),0 3px 10px rgba(176,72,107,.14)}
 .phase-seg.current b{opacity:1;color:var(--primary-dark)}
@@ -1007,7 +1008,8 @@ body.cal-full{overflow:hidden;height:100dvh}
 .s-follicular{background:rgba(95,138,90,.26)}
 .s-fertile{background:rgba(139,114,168,.34)}
 .s-luteal{background:rgba(196,150,70,.28)}
-.phase-cursor{position:absolute;top:-5px;bottom:-5px;width:3px;border-radius:2px;background:var(--primary-dark);transform:translateX(-1.5px);box-shadow:0 0 0 3px rgba(176,72,107,.13)}
+/* 游标只做一个小刻度悬在 bar 上方：整条竖线会压在阶段名上，反而看不清 */
+.phase-cursor{position:absolute;top:-6px;width:3px;height:7px;border-radius:2px;background:var(--primary-dark);transform:translateX(-1.5px);box-shadow:0 0 0 3px rgba(176,72,107,.13)}
 /* 周期主视觉卡：粉色大卡替代原来的「现在处于 X」灰绿胶囊。
    左侧问候 + 当前阶段 + 一句照护提示，右侧环形进度（SVG 描边，不依赖背景色）。 */
 .cycle-hero{position:relative;display:flex;align-items:center;gap:12px;padding:16px 18px;border-radius:18px;background:linear-gradient(135deg,#FFB7C9,#FF9CB8 62%,#FFA6C1);color:#fff;box-shadow:0 10px 24px rgba(232,121,143,.28);overflow:hidden;margin:0 0 14px}
@@ -1033,6 +1035,97 @@ body.cal-full{overflow:hidden;height:100dvh}
 .sym-chips{display:flex;flex-wrap:wrap;gap:8px;margin:-2px 0 2px}
 .sym-chip{padding:7px 14px;border-radius:999px;border:1px solid var(--line);background:var(--surface);font-size:13px;color:var(--muted);cursor:pointer;transition:background var(--speed),color var(--speed),border-color var(--speed)}
 .sym-chip.on{background:var(--primary);border-color:var(--primary);color:var(--on-primary);font-weight:600}
+
+/* ———— 生理期 · 顶部周条 ————
+   美柚第一屏就是这一条：一眼看到这周哪几天在经期、哪几天是预测。
+   实心粉＝真的经期，浅粉虚线＝推算的下一次，紫/黄是排卵期与黄体期。 */
+.period-top-card{padding:14px 14px 12px}
+.period-top{display:flex;align-items:center;gap:8px;margin:0 0 10px}
+.period-top strong{font-size:15px}
+.pw-nav{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:17px;line-height:1;color:var(--muted);background:var(--soft)}
+.pw-nav:hover{color:var(--primary-dark)}
+.pw-today{margin-left:auto;font-size:12px;font-weight:600;color:var(--primary-dark);padding:5px 12px;border-radius:999px;background:var(--soft)}
+.period-week{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}
+.pw-day{display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 2px 5px;border-radius:12px;border:1px solid transparent;transition:background var(--speed),border-color var(--speed)}
+.pw-w{font-size:10.5px;color:var(--muted);line-height:1.2}
+.pw-n{font-size:15px;font-weight:600;line-height:1.3;color:var(--ink)}
+.pw-day em{font-style:normal;font-size:9.5px;line-height:1.2;color:var(--muted)}
+.pw-day.ph-period{background:#FF5C8A;border-color:#FF5C8A}
+.pw-day.ph-period .pw-w,.pw-day.ph-period .pw-n,.pw-day.ph-period em{color:#fff}
+.pw-day.ph-period.ph-pred{background:rgba(255,92,138,.16);border-color:rgba(255,92,138,.42)}
+.pw-day.ph-period.ph-pred .pw-w,.pw-day.ph-period.ph-pred .pw-n,.pw-day.ph-period.ph-pred em{color:var(--primary-dark)}
+.pw-day.ph-fertile{background:rgba(139,114,168,.18)}
+.pw-day.ph-luteal{background:rgba(196,150,70,.16)}
+.pw-day.is-today .pw-n{color:var(--primary-dark)}
+.pw-day.is-picked{border-color:var(--primary);box-shadow:inset 0 0 0 1px var(--primary)}
+.period-top-card .period-legend{margin:12px 0 0}
+
+/* ———— 生理期 · 按天记录卡 ————
+   一行一项，点开底部弹层选。行尾没值时是 ⊕，有值就显示文案。 */
+.period-log{padding:16px 16px 10px}
+.plog-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin:0 0 4px}
+.plog-head strong{display:block;font-size:16px;line-height:1.4}
+.plog-head small{font-size:12px;color:var(--muted)}
+.plog-head .link-btn{font-size:12.5px;flex:none;white-space:nowrap}
+.plog-row{display:flex;align-items:center;gap:10px;width:100%;padding:11px 0;border-top:1px solid var(--line);text-align:left;background:none;cursor:pointer}
+.plog-ico{width:27px;height:27px;flex:none;display:flex;align-items:center;justify-content:center;border-radius:9px;background:var(--soft);font-size:14px;line-height:1}
+.plog-name{font-size:14px;color:var(--ink);flex:none}
+.plog-val{flex:1;min-width:0;text-align:right;font-size:12.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.plog-add{flex:none;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:var(--primary);border:1px solid rgba(176,72,107,.4)}
+/* 已经填过的行：原来那个空圈会变成一个「空按钮」，看着像没填。改成淡灰箭头 */
+.plog-add.ghost{border-color:transparent;color:var(--muted);opacity:.6;font-size:15px;line-height:1}
+.plog-add .icon{width:13px;height:13px}
+.plog-seg{margin-left:auto;display:flex;gap:4px;flex:none}
+.seg-btn{min-width:56px;padding:6px 0;border-radius:9px;font-size:13.5px;font-weight:600;color:var(--muted);background:var(--soft);cursor:pointer}
+.seg-btn.on{background:#FF5C8A;color:#fff}
+
+/* ———— 生理期 · 底部选择弹层 ———— */
+.ps-sheet{display:flex;flex-direction:column;gap:14px}
+.ps-sub{font-size:13px;color:var(--muted);margin:2px 0 0}
+.ps-grid{display:grid;gap:14px 6px}
+.ps-grid.c5{grid-template-columns:repeat(5,1fr)}
+.ps-grid.c4{grid-template-columns:repeat(4,1fr)}
+.ps-opt{display:flex;flex-direction:column;align-items:center;gap:6px;cursor:pointer}
+.ps-dot{width:46px;height:46px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:19px;line-height:1;background:rgba(255,92,138,.12);border:2px solid transparent;transition:border-color var(--speed),background var(--speed)}
+.ps-opt.on .ps-dot{border-color:#FF5C8A;background:rgba(255,92,138,.2);box-shadow:0 0 0 3px rgba(255,92,138,.22)}
+/* 颜色那组圆点自己就是深色或浅色，只靠描边分不出选中，加一圈外发光 */
+.ps-opt.on .ps-dot[style*='background']{box-shadow:0 0 0 3px rgba(255,92,138,.3)}
+.ps-label{font-size:11px;line-height:1.35;color:var(--muted);text-align:center}
+.ps-opt.on .ps-label{color:var(--primary-dark);font-weight:600}
+.blood{display:block;border-radius:50%;background:#FF5C8A;width:var(--sz,12px);height:var(--sz,12px)}
+.ps-list{display:flex;flex-direction:column;gap:10px}
+.ps-item{display:flex;align-items:center;gap:12px;padding:14px;border-radius:16px;background:var(--surface);border:1px solid var(--line);text-align:left;cursor:pointer}
+.ps-item.on{border-color:#FF5C8A;background:rgba(255,92,138,.07)}
+.ps-item-ico{width:40px;height:40px;flex:none;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:18px;background:rgba(255,92,138,.14)}
+.ps-item-copy{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.ps-item-copy strong{font-size:14px}
+.ps-item-copy small{font-size:11.5px;color:var(--muted);line-height:1.45}
+.ps-radio{width:20px;height:20px;flex:none;border-radius:50%;border:2px solid var(--line)}
+.ps-item.on .ps-radio{border-color:#FF5C8A;box-shadow:inset 0 0 0 4px #FF5C8A}
+.num-display{display:flex;align-items:baseline;justify-content:center;gap:6px;padding:16px 0 6px}
+.num-display output{font-size:40px;font-weight:800;color:var(--ink);line-height:1}
+.num-display em{font-style:normal;font-size:14px;color:var(--muted)}
+.num-pad{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.num-key{height:52px;border-radius:12px;background:var(--soft);font-size:20px;font-weight:600;color:var(--ink);cursor:pointer}
+.num-key:active{background:var(--soft-strong)}
+/* 日历：记过细节的那天补一个底部小圆点，跟「这天是经期起点」的右上角点区分开 */
+.cal-day.has-log::after{content:'';position:absolute;bottom:6px;width:5px;height:5px;border-radius:50%;background:var(--primary);opacity:.75}
+.cal-day.ph-period.has-log::after{background:#fff;opacity:.9}
+.cal-day.picked{box-shadow:inset 0 0 0 2px var(--primary)}
+/* 粉底上的选中环和今天圈都用白色系，不然深红压深粉会糊成一团 */
+.cal-day.ph-period.picked{box-shadow:inset 0 0 0 2px rgba(255,255,255,.65)}
+.cal-day.ph-period.is-today span:first-child{background:rgba(255,255,255,.3);color:#fff}
+@media(max-width:640px){
+  .period-top-card{padding:12px 12px 10px}
+  .pw-day{padding:5px 1px 4px;border-radius:11px}
+  .ps-dot{width:42px;height:42px;font-size:17px}
+  .ps-grid{gap:12px 4px}
+  .ps-label{font-size:10.5px}
+  .num-key{height:48px;font-size:19px}
+  .plog-row{padding:10px 0}
+  .plog-name{font-size:13.5px}
+  .seg-btn{min-width:50px}
+}
 
 /* ———— 每日一句 / 共同歌单 ———— */
 .daily-quote{display:flex;align-items:center;gap:10px;margin:0 0 18px;padding:14px 18px;border-radius:var(--radius-s);background:var(--soft);color:var(--primary-dark)}

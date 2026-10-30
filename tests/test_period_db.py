@@ -132,3 +132,45 @@ def test_export_contains_period_records(client_a):
     with zipfile.ZipFile(path) as archive:
         data = json.loads(archive.read('records.json'))
     assert any(item['kind'] == 'period' for item in data['records'])
+
+
+def make_day_log(client, date='2026-10-30', **body):
+    r = client.post('/api/records', headers=HEADERS,
+                    json={'kind': 'period', 'body': {'date': date, **body}})
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+def test_period_day_log_shared_and_editable(client_a, client_b):
+    """按天记的身体细节：同一种 kind，靠「有 date 没 start」区分，双方都能看能改。"""
+    rec = make_day_log(client_a, flow=4, color=3, pain=2, mood=12, sex=[2, 4],
+                       symptoms=['腹痛', '腰酸'], weight=52.4, temp=36.6,
+                       discharge=3, content='今天腰很酸')
+    body = rec['body']
+    assert 'start' not in body
+    assert (body['flow'], body['color'], body['pain'], body['mood']) == (4, 3, 2, 12)
+    assert body['sex'] == [2, 4]
+    assert body['weight'] == 52.4 and body['temp'] == 36.6
+    other = client_b.get('/api/records?kind=period&limit=1000').json()
+    assert any(item['id'] == rec['id'] for item in other)
+    updated = client_b.put(f'/api/records/{rec["id"]}', headers=HEADERS,
+                           json={'kind': 'period', 'body': {**body, 'pain': 5}})
+    assert updated.status_code == 200, updated.text
+    assert updated.json()['body']['pain'] == 5
+
+
+def test_period_day_log_rejects_bad_levels(client_a):
+    """档位越界一律 422：这些字段是给人点的按钮，不该出现 9 档经量这种数据。"""
+    for patch in ({'flow': 9}, {'flow': '很多'}, {'color': 6}, {'pain': 0},
+                  {'mood': 21}, {'discharge': 6}, {'sex': [11]}, {'sex': ['避孕套']},
+                  {'weight': 500}, {'weight': 10}, {'temp': 20}, {'temp': 50}):
+        r = client_a.post('/api/records', headers=HEADERS,
+                          json={'kind': 'period', 'body': {'date': '2026-10-30', **patch}})
+        assert r.status_code == 422, (patch, r.text)
+
+
+def test_period_needs_start_or_date(client_a):
+    """既没有 start 也没有 date 的 period 行没有意义，直接拦掉。"""
+    r = client_a.post('/api/records', headers=HEADERS,
+                      json={'kind': 'period', 'body': {'flow': 3}})
+    assert r.status_code == 422
