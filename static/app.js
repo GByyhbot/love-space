@@ -1032,6 +1032,28 @@ function greetWord(){
 }
 /* 周期主视觉卡：左边问候 + 当前阶段 + 一句照护提示，右边环形进度标「周期第 N 天」。
    自己的大卡和「她的周期」共用这一个组件，口径不会分叉。 */
+/* 受孕概率只按阶段给「低/中/高」三档，不给百分比：
+   日历推算给不出那么细的结论，写死数字反而会被当成避孕依据。
+   （Clue / Flo 也把这类提示写成"推算"，不承诺准确性。） */
+const FERTILITY={period:['低','经期几乎不会受孕'],follicular:['中','越接近排卵日越高'],fertile:['高','排卵期前后，概率最高'],luteal:['低','排卵已过，概率回落']};
+const FERTILITY_NOTE='按日历推算，仅供参考，不能作为避孕依据。';
+/* 周期异常预警：阈值照「姨妈来了（Novawerk）」和「她扶 FloMe」那套——
+   周期 <21 或 >35 天、经期 >7 天、长期没记录。看最近三次而不是只看最后一次，
+   否则一次异常过一个月就被下一次正常值盖掉，等于没提醒。 */
+function periodWarnings(d){
+ const out=[],eps=d.episodes||[];
+ if(eps.length<2)return out;
+ const gaps=[];for(let i=1;i<eps.length;i++)gaps.push(eps[i].start-eps[i-1].start);
+ const recent=gaps.slice(-3);
+ const short=recent.filter(g=>g<21),long=recent.filter(g=>g>35);
+ if(short.length)out.push(`最近三次里有 ${short.length} 次周期只有 ${short.join('、')} 天，偏短——可能是一次点滴出血，也可能记漏了`);
+ if(long.length)out.push(`最近三次里有 ${long.length} 次周期到 ${long.join('、')} 天，偏长`);
+ const len=d.lastEp?d.lastEp.length:0;
+ if(len>7)out.push(`这次经期记了 ${len} 天，超过 7 天建议留意`);
+ if(d.lastEp&&d.todayN-d.lastEp.start>Math.max(45,d.cycle+21))
+  out.push(`距离上一次经期已经 ${d.todayN-d.lastEp.start} 天，可能漏记了`);
+ return out;
+}
 function cycleHero(d,name=''){
  if(!d.items.length)return '';
  const ph=todayPhase(d);
@@ -1046,11 +1068,13 @@ function cycleHero(d,name=''){
  const tip=d.inWindow
   ?`今天是经期第 ${d.dayOfPeriod} 天，${PHASE_CARE.period}`
   :(ph?PHASE_CARE[ph.phase]:(d.untilNext>=0?`预计还有 ${d.untilNext} 天`:'记一次就能重新推算'));
+ const fert=ph?FERTILITY[ph.phase]:null;
  return `<div class="cycle-hero">
   <div class="cycle-hero-copy">
    <span class="cycle-hero-hi">${greetWord()}${name?'，'+esc(name):''}</span>
    <strong class="cycle-hero-phase">${title}</strong>
    <span class="cycle-hero-tip">${tip}</span>
+   ${fert?`<span class="cycle-hero-fert f-${ph.phase}" title="${esc(FERTILITY_NOTE)}">受孕概率 <b>${fert[0]}</b><em>${esc(fert[1])}</em></span>`:''}
   </div>
   <div class="cycle-hero-side">
    <svg class="cycle-ring" viewBox="0 0 72 72" role="img" aria-label="周期第 ${dayIn} 天，共 ${cyc} 天">
@@ -1298,8 +1322,11 @@ function periodPage(){
  /* 右上角不再放「记录经期」：记经期已经由下面记录卡的「月经来了 / 月经走了」接管，
     一个动作两个入口只会让人点错。这里换成进入数据分析页的入口。 */
  const headBar=heading('生理期','记下周期，把照顾提前一点。','');
+ // 踩线才提示：正常的时候这块根本不存在，不占地方
+ const warns=periodWarnings(d);
+ const warnBlock=warns.length?`<section class="card period-warn"><strong>有几点需要留意</strong><ul>${warns.map(w=>`<li>${esc(w)}</li>`).join('')}</ul><small>按记录推算的提示，身体不舒服还是去看医生。</small></section>`:'';
  const entry=`<button type="button" class="card analysis-entry" data-action="period-analysis"><span class="ae-ico">📊</span><span class="ae-copy"><strong>数据分析</strong><small>周期、流量、痛经、体温的变化</small></span><span class="ae-go">${icon('arrow')}</span></button>`;
- return `${headBar}${hero}${entry}${top}${log}${symBlock}${hist}`;
+ return `${headBar}${hero}${warnBlock}${entry}${top}${log}${symBlock}${hist}`;
 }
 /* ───────────── 生理数据分析 ─────────────
    美柚那套「分析」页有十几个板块，这里按我们真正记过的维度落：数据完整度、规律度、
@@ -1462,6 +1489,7 @@ function periodAnalysisPage(){
  if(!a.eps.length)return back+`<section class="card"><p class="meta">还没有经期记录。回到生理期页点一次「月经来了」，这里就会开始长出图表。</p><div class="inline-actions">${button('回到生理期','period-back','primary')}</div></section>`;
  const sec=(h2,body,sub='')=>`<section class="card pa-card"><div class="section-heading"><h2>${h2}</h2>${sub?`<span class="pa-sub">${esc(sub)}</span>`:''}</div>${body}</section>`;
  const legend=items=>`<p class="pa-legend">${items.map(([c,t,empty])=>`<span><i class="pa-lg-dot${empty?' hollow':''}" style="${empty?'':`background:${c}`}"></i>${esc(t)}</span>`).join('')}</p>`;
+ const warns=periodWarnings(d);
 
  /* ① 概览：规律度 + 数据完整度 + 三个基本盘 */
  const grade=a.score==null?'样本还太少':a.score>=85?'很规律':a.score>=70?'比较规律':a.score>=55?'有些波动':'波动明显';
@@ -1479,7 +1507,10 @@ function periodAnalysisPage(){
    <div><span>平均周期</span><strong>${d.cycle}<em>天</em></strong></div>
    <div><span>平均经期</span><strong>${d.length}<em>天</em></strong></div>
    <div><span>记录天数</span><strong>${periodDayRows().length}<em>天</em></strong></div>
-  </div></section>`;
+  </div>
+  ${warns.length?`<div class="pa-warns"><strong>需要留意</strong>${warns.map(w=>`<p>${esc(w)}</p>`).join('')}<small>按记录推算，不能替代医生判断。</small></div>`:''}
+  <p class="pa-mini">受孕概率按日历阶段推算（低 / 中 / 高），仅供参考，不能作为避孕依据。</p>
+  </section>`;
 
  /* ② 经期预测：一周日期条，正中那天是预测日，左右两天算"可能" */
  const pred=(()=>{
@@ -1690,7 +1721,7 @@ function personalPage() {
 }
 function noticesPage(){const sysNotices=state.notices.filter(n=>n.event!=='chat'),readCount=sysNotices.filter(n=>n.seen).length;return `${heading('小小的提醒','每一份回应，都值得被看见。','read-notices','全部已读','check')}${readCount?`<div class="inline-actions" style="justify-content:flex-end;margin:-8px 0 16px">${button('删除已读提醒（'+readCount+'）','delete-read-notices','small secondary','trash')}</div>`:''}<div class="card">${sysNotices.length?sysNotices.map(n=>`<div class="notice ${n.seen?'':'unread'}"><span class="stat-icon">${icon(n.event==='chat'?'chat':'bell')}</span><div><p>${esc(n.title)}</p><small class="meta">${dateLabel(n.created)}</small></div>${n.record_id?`<button class="link-btn" style="margin-left:auto" data-action="notice-detail" data-id="${n.record_id}">查看 ${icon('arrow')}</button>`:''}</div>`).join(''):empty('还没有新的提醒','收到留言、互动和纪念日提醒时，会出现在这里。聊天消息请在私聊中查看。')}</div>`;}
 const channelNames={smtp:'邮件',bark:'Bark',serverchan:'Server酱',pushplus:'PushPlus',wecom:'企业微信机器人',webhook:'自定义 Webhook',telegram:'Telegram',dingtalk:'钉钉机器人',feishu:'飞书机器人',ntfy:'ntfy'};
-const eventNames={chat:'聊天消息',comment:'点赞与评论',note:'留言',activity:'新动态与互动',anniversary:'纪念日',wish:'愿望到期',surprise:'惊喜公开',backup:'备份失败',storage:'空间不足',system:'系统消息'};
+const eventNames={chat:'聊天消息',comment:'点赞与评论',note:'留言',activity:'新动态与互动',anniversary:'纪念日',period:'生理期提醒',wish:'愿望到期',surprise:'惊喜公开',backup:'备份失败',storage:'空间不足',system:'系统消息'};
 function nativePushCard(){
  return '<section class="card"><div class="section-heading"><h2>'+icon('bell')+' 安卓后台提醒</h2><span class="status-pill pending">已停用</span></div><p class="meta">手机端弹窗/锁屏系统通知已停用，提醒改由第三方渠道（如企业微信机器人）或电脑浏览器的系统通知送达。请在上方「添加渠道」配置；聊天消息会合并通知（如「你有 N 条新消息」），在聊天页停留时不再重复推送。</p></section>';
 }

@@ -1025,6 +1025,21 @@ body.cal-full{overflow:hidden;height:100dvh}
 .cycle-hero-phase{font-size:19px;font-weight:800;line-height:1.4;letter-spacing:.01em;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
 .cycle-hero-pred{font-style:normal;font-size:10.5px;font-weight:600;padding:2px 7px;border-radius:999px;background:rgba(255,255,255,.28);letter-spacing:.02em}
 .cycle-hero-tip{font-size:12.5px;line-height:1.6;opacity:.95}
+/* 受孕概率：只给高中低三档，粗体那档稍微提亮，其余压暗——一眼看到结论 */
+.cycle-hero-fert{display:inline-flex;align-items:center;gap:5px;margin-top:3px;font-size:11.5px;color:rgba(255,255,255,.86)}
+.cycle-hero-fert b{font-size:12px;font-weight:800;color:#fff;background:rgba(255,255,255,.24);padding:1px 7px;border-radius:999px}
+.cycle-hero-fert em{font-style:normal;opacity:.82}
+.cycle-hero-fert.f-fertile b{background:#fff;color:#C0396A}
+/* 周期异常提示：踩线才出现，所以用警示色而不是主色，别跟日常卡片混在一起 */
+.period-warn{padding:14px 16px;margin:0 0 14px;background:var(--amber-soft);border:1px solid rgba(160,107,56,.22)}
+.period-warn strong{display:block;font-size:13.5px;color:var(--amber);margin:0 0 6px}
+.period-warn ul{margin:0;padding-left:18px}
+.period-warn li{font-size:12.5px;line-height:1.7;color:var(--ink)}
+.period-warn small{display:block;margin:8px 0 0;font-size:11.5px;color:var(--muted)}
+.pa-warns{margin:14px 0 0;padding:12px 14px;border-radius:12px;background:var(--amber-soft)}
+.pa-warns strong{display:block;font-size:12.5px;color:var(--amber);margin:0 0 4px}
+.pa-warns p{margin:0;font-size:12.5px;line-height:1.65;color:var(--ink)}
+.pa-warns small{display:block;margin:6px 0 0;font-size:11px;color:var(--muted)}
 .cycle-hero-side{position:relative;z-index:1;flex:none;display:flex;flex-direction:column;align-items:center;gap:4px}
 .cycle-ring{width:74px;height:74px;display:block;flex:none}
 .cycle-ring .ring-track{fill:none;stroke:rgba(255,255,255,.34);stroke-width:9}

@@ -235,6 +235,16 @@ def schedule():
             elif row['kind'] == 'wish' and body.get('target') and not body.get('done'):
                 if body['target'] <= today.isoformat():
                     db.notice(c, 'wish', '有一个共同愿望到了约定日期', row['id'], dedupe=f'wish:{row["id"]}:{body["target"]}')
+        # 生理期在独立库（DATA/period.db），不在 records 里，所以这里单独算一遍。
+        # 算不出来（比如还没记过）就当没有提醒，别让一次异常拖垮整个每日任务。
+        try:
+            due = period.reminder(period.cycle_stats(today), today,
+                                  int(os.getenv('PERIOD_REMIND_DAYS', '2')))
+        except Exception:
+            log.warning('生理期提醒计算失败', exc_info=True)
+            due = None
+        if due:
+            db.notice(c, 'period', due[0], dedupe=due[1])
         # 相恋里程碑：100 / 365 / 1000 天这类日子只在当天提醒一次
         space = db.setting(c, 'space', {}) or {}
         days = None

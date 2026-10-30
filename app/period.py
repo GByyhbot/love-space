@@ -271,3 +271,89 @@ def remove_file():
             candidate.unlink()
             removed += 1
     return removed
+
+
+# ── 周期统计与提醒 ───────────────────────────────────────────────────
+# 前端 periodData() 算的是"页面要显示的那一套"；后台提醒只要三个数：
+# 平均周期、下次预计、这次算不算经期。两边口径必须一致，否则提醒日期会和页面打架。
+
+GAP_MIN, GAP_MAX = 15, 60
+
+
+def episodes(rows=None):
+    """把经期行合并成一次次月经，返回 [(开始日, 结束日), ...]。
+
+    合并规则与前端一致：首尾相接（间隔 ≤1 天）算同一段。中途点过「月经走了」、
+    隔天又「月经又来了」会留下相邻碎片，不合并就会把一次月经算成两次，周期腰斩。
+    """
+    if rows is None:
+        with connect() as c:
+            rows = c.execute('SELECT * FROM period WHERE deleted IS NULL ORDER BY created').fetchall()
+    segs = []
+    for row in rows:
+        try:
+            body = db.body_decode(row)
+        except Exception:
+            continue
+        start = str(body.get('start') or '')[:10]
+        if not start:
+            continue
+        try:
+            s = dt.date.fromisoformat(start)
+            length = max(1, min(15, int(body.get('length') or 1)))
+        except (ValueError, TypeError):
+            continue
+        segs.append((s, length))
+    segs.sort()
+    out = []
+    for s, length in segs:
+        end = s + dt.timedelta(days=length - 1)
+        if out and s <= out[-1][1] + dt.timedelta(days=1):
+            out[-1][1] = max(out[-1][1], end)
+        else:
+            out.append([s, end])
+    return [(s, e) for s, e in out]
+
+
+def cycle_stats(today=None):
+    """周期概览；一个经期都没记过时返回 None。"""
+    eps = episodes()
+    if not eps:
+        return None
+    gaps = [(eps[i][0] - eps[i - 1][0]).days for i in range(1, len(eps))]
+    good = [g for g in gaps if GAP_MIN <= g <= GAP_MAX]
+    cycle = round(sum(good) / len(good)) if good else 28
+    lengths = [(end - start).days + 1 for start, end in eps]
+    today = today or dt.date.today()
+    last_start, last_end = eps[-1]
+    return {
+        'episodes': len(eps),
+        'gaps': gaps,
+        'cycle': cycle,
+        'length': max(1, round(sum(lengths) / len(lengths))),
+        'last_start': last_start,
+        'last_length': lengths[-1],
+        'next_start': last_start + dt.timedelta(days=cycle),
+        'days_since': (today - last_start).days,
+        'in_period': last_start <= today <= last_end,
+    }
+
+
+def reminder(stats, today, remind_days=2):
+    """返回 (标题, 去重键)，不需要提醒时返回 None。
+
+    只发两种：① 经期前预告（提前 N 天一次、当天一次）② 推迟超过 3 天。
+    去重键带 next_start，同一次月经内不会重复；记了新的一次，key 自然换了。
+    """
+    if not stats:
+        return None
+    next_start = stats['next_start']
+    due = (next_start - today).days
+    lead = max(1, int(remind_days))
+    if due == lead:
+        return f'预计 {due} 天后经期会来，提前准备一下', f'period-soon:{next_start}'
+    if due == 0:
+        return '预计今天经期会来', f'period-today:{next_start}'
+    if due <= -3:
+        return f'这次经期已经推迟 {-due} 天，记一笔就能重新推算', f'period-late:{next_start}'
+    return None

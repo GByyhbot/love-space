@@ -9,11 +9,24 @@
 import io
 import json
 import zipfile
+from datetime import date
+
 
 import pytest
 
 from conftest import HEADERS, PASSWORD
 from app import db, period
+
+
+def dt_date(value):
+    """测试里日期都写成字符串，转一下，省得数月份。"""
+    return date.fromisoformat(value)
+
+
+def clear_period():
+    """清掉库里已有的经期行：这几个测试要断言完整的统计结果，不能被样例数据干扰。"""
+    with period.connect() as c:
+        c.execute('DELETE FROM period')
 
 
 def make_period(client, start='2026-09-02', **body):
@@ -196,3 +209,58 @@ def test_period_sex_rejects_bad_time(client_a):
         r = client_a.post('/api/records', headers=HEADERS, json={'kind': 'period', 'body': {
             'date': '2026-10-30', 'sex': [{'t': when, 'w': [2]}]}})
         assert r.status_code == 422, (when, r.text)
+
+
+def test_period_episodes_merge_adjacent_fragments(client_a):
+    """一次月经被拆成两行（隔天又「月经又来了」）时，统计上必须合成一段。
+
+    不合并的话：平均经期被腰斩、周期天数直接变成 3 天，后台提醒日期也会跟着错。
+    """
+    clear_period()
+    make_period(client_a, '2026-05-27', length=3)
+    make_period(client_a, '2026-05-30', length=1)
+    make_period(client_a, '2026-06-21', length=4)
+    assert [(s.isoformat(), e.isoformat()) for s, e in period.episodes()] == [
+        ('2026-05-27', '2026-05-30'),
+        ('2026-06-21', '2026-06-24'),
+    ]
+    stats = period.cycle_stats(today=dt_date('2026-06-25'))
+    assert stats['episodes'] == 2
+    assert stats['gaps'] == [25]
+    assert stats['cycle'] == 25
+    assert stats['length'] == 4          # (4 + 4) / 2，不是被碎片拉成 2
+    assert stats['next_start'].isoformat() == '2026-07-16'
+    assert stats['in_period'] is False   # 这一段是 06-21~06-24，06-25 已经结束了
+    assert period.cycle_stats(today=dt_date('2026-06-23'))['in_period'] is True
+    assert stats['last_length'] == 4
+
+
+def test_period_reminder_windows(client_a):
+    """只发三种：提前 N 天、当天、推迟 3 天以上；其他时候静默。"""
+    clear_period()
+    make_period(client_a, '2026-05-01', length=4)
+    make_period(client_a, '2026-05-26', length=4)      # 间隔 25 → 下次 06-20
+    stats = period.cycle_stats(today=dt_date('2026-06-01'))
+    assert stats['next_start'].isoformat() == '2026-06-20'
+
+    assert period.reminder(stats, dt_date('2026-06-10')) is None
+    title, key = period.reminder(stats, dt_date('2026-06-18'))
+    assert '2 天后' in title and key == 'period-soon:2026-06-20'
+    title, key = period.reminder(stats, dt_date('2026-06-20'))
+    assert '今天' in title and key == 'period-today:2026-06-20'
+    # 推迟到第 3 天才开始催，前两天大概率只是算得不准
+    assert period.reminder(stats, dt_date('2026-06-22')) is None
+    title, key = period.reminder(stats, dt_date('2026-06-23'))
+    assert '推迟 3 天' in title and key == 'period-late:2026-06-20'
+
+
+def test_period_reminder_ignores_empty_and_short_samples(client_a):
+    clear_period()
+    assert period.cycle_stats() is None
+    assert period.reminder(None, dt_date('2026-06-01')) is None
+    make_period(client_a, '2026-06-01', length=4)
+    stats = period.cycle_stats(today=dt_date('2026-06-02'))
+    # 只有一段时没有间隔样本，按 28 天估算，别在当天就催
+    assert stats['gaps'] == []
+    assert stats['cycle'] == 28
+    assert period.reminder(stats, dt_date('2026-06-02')) is None

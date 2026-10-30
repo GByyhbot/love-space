@@ -1649,7 +1649,7 @@ def test_webpush(user=Depends(current_user)):
 
 
 CHANNEL_KINDS = {'smtp', 'bark', 'serverchan', 'pushplus', 'wecom', 'webhook', 'telegram', 'dingtalk', 'feishu', 'ntfy'}
-EVENTS = {'chat', 'comment', 'note', 'activity', 'anniversary', 'wish', 'surprise', 'backup', 'storage', 'system'}
+EVENTS = {'chat', 'comment', 'note', 'activity', 'anniversary', 'wish', 'surprise', 'backup', 'storage', 'system', 'period'}
 
 
 class ChannelInput(BaseModel):
