@@ -885,12 +885,13 @@ async function periodSaveDay(date,patch){
    · 经期内：[月经走了]  —— 今天干净了，这次截到昨天（今天是首日就直接撤掉）
              [月经又来了] —— 今天还在，把结束日再往后推一天（幂等，连点不会疯长） */
 async function periodStart(day){
- const d=periodData(),n=dayNum(day),last=d.items[d.items.length-1];
- if(last){
-  const endN=dayNum(last.body.start)+Number(last.body.length||5)-1,gap=n-endN;
+ const d=periodData(),n=dayNum(day),lastEp=d.lastEp;
+ if(lastEp){
+  const gap=n-lastEp.end;
   // 刚结束又回潮：接在上一段后面，否则一个月会碎成两三段经期
   if(gap>=1&&gap<=3){
-   await put('/records/'+last.id,{kind:'period',body:{...last.body,length:n-dayNum(last.body.start)+1}});
+   const r=lastEp.rec;
+   await put('/records/'+r.id,{kind:'period',body:{...r.body,length:n-dayNum(r.body.start)+1}});
    toast('已经把这次经期接到今天');await refresh();return;
   }
  }
@@ -901,19 +902,17 @@ async function periodStart(day){
  toast('已记下这次经期');await refresh();
 }
 async function periodEnd(day){
- const d=periodData(),n=dayNum(day);
- const ep=d.items.find(r=>{const s=dayNum(r.body.start);return n>=s&&n<s+Number(r.body.length||5);});
- if(!ep)return toast('这天本来就不在经期里');
- const s=dayNum(ep.body.start);
+ const d=periodData(),n=dayNum(day),hit=periodEpisodeOf(d,n);
+ if(!hit)return toast('这天本来就不在经期里');
+ const ep=hit.owner,s=dayNum(ep.body.start);
  if(s===n){await del('/records/'+ep.id);toast('已撤掉这次经期');}
  else{await put('/records/'+ep.id,{kind:'period',body:{...ep.body,length:n-s}});toast('这次经期到昨天为止');}
  await refresh();
 }
 async function periodMore(day){
- const d=periodData(),n=dayNum(day);
- const ep=d.items.find(r=>{const s=dayNum(r.body.start);return n>=s&&n<s+Number(r.body.length||5);});
- if(!ep)return toast('这天不在经期里');
- const s=dayNum(ep.body.start),len=Number(ep.body.length||5),want=Math.max(len,n-s+2);
+ const d=periodData(),n=dayNum(day),hit=periodEpisodeOf(d,n);
+ if(!hit)return toast('这天不在经期里');
+ const ep=hit.owner,s=dayNum(ep.body.start),len=Number(ep.body.length||5),want=Math.max(len,n-s+2);
  if(want===len)return toast(`这次经期已经排到第 ${len} 天了`);
  await put('/records/'+ep.id,{kind:'period',body:{...ep.body,length:want}});
  toast('这次经期又多算一天');await refresh();
@@ -921,21 +920,43 @@ async function periodMore(day){
 function periodData(){
  /* 两个人共同维护同一条周期：不按作者区分，谁记的都算进去，界面也就只有一套 */
  const items=recordsOf('period').filter(r=>r.body.start).slice().sort((a,b)=>String(a.body.start).localeCompare(String(b.body.start)));
+ /* 同一次月经常被拆成两三行（中途点了「月经走了」、隔天又「月经又来了」就会另起一行）。
+   统计前先按"首尾相接即同一段"合并，否则平均经期天数会被碎片腰斩——
+   去年补了半年数据后，13 行只对应 8 次月经，平均天数一度显示成 2 天。 */
+ const episodes=[];
+ items.forEach(r=>{
+  const s=dayNum(r.body.start),len=Math.max(1,Number(r.body.length||1)),e=s+len-1;
+  const prev=episodes[episodes.length-1];
+  if(prev&&s<=prev.end+1){
+   prev.end=Math.max(prev.end,e);prev.length=prev.end-prev.start+1;prev.rec=r;prev.frags.push(r);return;
+  }
+  episodes.push({start:s,end:e,length:len,rec:r,frags:[r]});
+ });
  const gaps=[];
- for(let i=1;i<items.length;i++){const g=dayNum(items[i].body.start)-dayNum(items[i-1].body.start);if(g>=15&&g<=60)gaps.push(g);}
- const last=items[items.length-1]||null;
- const avg=gaps.length?Math.round(gaps.reduce((a,b)=>a+b,0)/gaps.length):(last?.body.cycle||28);
- const length=items.length?Math.round(items.reduce((s,r)=>s+Number(r.body.length||5),0)/items.length):5;
+ for(let i=1;i<episodes.length;i++){const g=episodes[i].start-episodes[i-1].start;if(g>=15&&g<=60)gaps.push(g);}
+ const lastEp=episodes[episodes.length-1]||null;
+ const avg=gaps.length?Math.round(gaps.reduce((a,b)=>a+b,0)/gaps.length):(lastEp?.rec.body.cycle||28);
+ const length=episodes.length?Math.round(episodes.reduce((s,e)=>s+e.length,0)/episodes.length):5;
  const todayN=dayNum(today());
- const startN=last?dayNum(last.body.start):null;
+ const startN=lastEp?lastEp.start:null;
  const nextStart=startN!=null?startN+avg:null;
  /* 判断"今天在不在经期里"必须用这次记录的实际天数，不能用平均天数：
-   平均 3 天、这次只记了 1 天的时候，以前会出现"标题写卵泡期、副标题写经期第 2 天"的矛盾。 */
- const lastLen=last?Number(last.body.length||5):5;
+   平均 3 天、这次只记了 1 天的时候，以前会出现"标题写卵泡期、副标题写经期第 2 天"的矛盾。
+   这里同样取合并后的段长，否则最后几天被拆成碎片时"经期第 N 天"会提前结束。 */
+ const lastLen=lastEp?lastEp.length:5;
  const inWindow=startN!=null&&todayN>=startN&&todayN<startN+lastLen;
- return {items,gaps,cycle:avg,length,last,lastLen,nextStart,todayN,inWindow,
+ return {items,episodes,gaps,cycle:avg,length,last:lastEp?lastEp.rec:null,lastEp,lastLen,nextStart,todayN,inWindow,
   dayOfPeriod:inWindow?todayN-startN+1:0,untilNext:nextStart!=null?nextStart-todayN:null,
   estimated:gaps.length===0};
+}
+/* 这一天落在哪一次月经里（合并后的段），以及该动哪一行：
+   取开始日不晚于这天的最后一个碎片，这样即便这天正好落在两个碎片之间的空档
+   （隔一天才又「月经又来了」），改长度也改在正确的那一行上。 */
+function periodEpisodeOf(d,n){
+ const ep=(d.episodes||[]).find(e=>n>=e.start&&n<=e.end);
+ if(!ep)return null;
+ const owner=ep.frags.filter(r=>dayNum(r.body.start)<=n).pop()||ep.frags[0];
+ return {ep,owner};
 }
 /* 美柚式四阶段：月经期 / 卵泡期 / 排卵期 / 黄体期
    锚点是每次月经开始日，排卵日按"下次月经前 14 天"推（黄体期长度相对固定），
@@ -954,7 +975,7 @@ function cyclePhases(d){
  };
  // 先铺预测（远的先写），再用实际记录覆盖 —— 有真实数据时永远以真实为准
  if(d.nextStart!=null)for(let k=2;k>=0;k--)mark(d.nextStart+d.cycle*k,d.length,true);
- d.items.forEach(r=>mark(dayNum(r.body.start),Number(r.body.length||d.length),false));
+ d.episodes.forEach(e=>mark(e.start,e.length,false));
  return map;
 }
 function todayPhase(d){const ph=cyclePhases(d)[today()];return ph||null;}
@@ -1063,15 +1084,15 @@ function periodTopCard(d){
    「月经来了 是/否」不是普通字段——它决定这天算不算经期，所以单独一行的分段按钮。 */
 function periodLogCard(day){
  const d=periodData(),log=periodDayLogs()[day]||{},n=dayNum(day);
- const ep=d.items.find(r=>{const s=dayNum(r.body.start);return n>=s&&n<s+Number(r.body.length||5);});
- const on=!!ep;
+ const hit=periodEpisodeOf(d,n),ep=hit?hit.owner:null;
+ const on=!!hit;
  const head=day===today()?'今天':`${Number(day.slice(5,7))} 月 ${Number(day.slice(8))} 日`;
  const rows=PERIOD_LOG_FIELDS.map(([key,name,ico])=>{
   const text=periodValueText(key,log);
   return `<button type="button" class="plog-row" data-action="period-log" data-field="${key}" data-day="${day}"><span class="plog-ico">${ico}</span><span class="plog-name">${name}</span><span class="plog-val">${esc(text)}</span>${text?'<span class="plog-add ghost">›</span>':`<span class="plog-add">${icon('plus')}</span>`}</button>`;
  }).join('');
  return `<section class="card period-log">
-  <div class="plog-head"><div><strong>${head}</strong><small>${on?`经期第 ${n-dayNum(ep.body.start)+1} 天`:'记下这一天，周期会更准'}</small></div>${ep?`<button type="button" class="link-btn" data-action="edit-record" data-id="${ep.id}">改经期长度</button>`:''}</div>
+  <div class="plog-head"><div><strong>${head}</strong><small>${on?`经期第 ${n-hit.ep.start+1} 天`:'记下这一天，周期会更准'}</small></div>${ep?`<button type="button" class="link-btn" data-action="edit-record" data-id="${ep.id}">改经期长度</button>`:''}</div>
   <div class="plog-row"><span class="plog-ico">🩸</span><span class="plog-name">经期</span>${on
    ?`<span class="plog-seg"><button type="button" class="seg-btn outline" data-action="period-end" data-day="${day}">月经走了</button><button type="button" class="seg-btn" data-action="period-more" data-day="${day}">月经又来了</button></span>`
    :`<span class="plog-seg"><button type="button" class="seg-btn primary" data-action="period-start" data-day="${day}">月经来了</button></span>`}</div>
@@ -1261,12 +1282,18 @@ function periodPage(){
  periodDayRows().forEach(r=>(r.body.symptoms||[]).forEach(s=>{if(s!=='没有症状')symCount[s]=(symCount[s]||0)+1;}));
  d.items.forEach(r=>(r.body.symptoms||[]).forEach(s=>{if(s!=='没有症状')symCount[s]=(symCount[s]||0)+1;}));
  const syms=Object.entries(symCount).sort((a,b)=>b[1]-a[1]).slice(0,6);
- const total=Math.max(1,periodDayRows().length+d.items.length);
+ const total=Math.max(1,periodDayRows().length+d.episodes.length);
  const symBlock=syms.length?`<section class="card"><div class="section-heading"><h2>常出现的症状</h2></div>${syms.map(([s,n])=>`<div class="stat-row"><span>${esc(s)}</span><div class="stat-bar"><i style="width:${Math.round(n/total*100)}%"></i></div><b>${n} 次</b></div>`).join('')}<p class="small-note">${spread>7?`周期波动 ${spread} 天，波动大的时候多留一点休息的时间。`:'周期还算规律，保持记录会更准。'}</p></section>`:'';
- const hist=d.items.slice().reverse().map(r=>{
-  const len=Number(r.body.length||5),end=dayStr(dayNum(r.body.start)+len-1);
-  const logs=periodDayRows().filter(x=>{const n=dayNum(x.body.date),s=dayNum(r.body.start);return n>=s&&n<s+len;}).length;
-  return `<article class="card"><div class="card-header">${avatar(r.author)}<div><strong>${esc(String(r.body.start).slice(5,7))} 月 ${esc(String(r.body.start).slice(8))} 日开始</strong><small>共 ${len} 天 · ${end.slice(5)} 结束${logs?` · 记了 ${logs} 天细节`:''} · ${esc(person(r.author).name)} 记录</small></div><div class="card-menu"><details class="more-menu"><summary aria-label="更多操作" title="更多操作">⋯</summary><div class="menu-pop"><button data-action="edit-record" data-id="${r.id}">${icon('edit')} 编辑</button><button data-action="delete-record" data-id="${r.id}" class="danger">${icon('trash')} 删除</button></div></details></div></div>${(r.body.symptoms||[]).length?`<div class="tabs" style="flex-wrap:wrap;margin:8px 0 0">${r.body.symptoms.map(s=>`<span class="filter-chip">${esc(s)}</span>`).join('')}</div>`:''}${r.body.content?`<p class="card-text">${esc(r.body.content)}</p>`:''}</article>`;
+ /* 一次月经一张卡：碎片行在统计上已经合并，列表里再拆成两三条只会让人以为记错了。
+   「编辑 / 删除」对整次生效——删除会把这次的所有碎片行一起删掉。 */
+ const hist=d.episodes.slice().reverse().map(e=>{
+  const startIso=dayStr(e.start),endIso=dayStr(e.end),len=e.length;
+  const logs=periodDayRows().filter(x=>{const n=dayNum(x.body.date);return n>=e.start&&n<=e.end;}).length;
+  const author=e.frags[0].author;
+  const symsAll=[...new Set(e.frags.flatMap(r=>r.body.symptoms||[]))];
+  const words=e.frags.map(r=>r.body.content).filter(Boolean).join('\n');
+  const ids=e.frags.map(r=>r.id).join(',');
+  return `<article class="card"><div class="card-header">${avatar(author)}<div><strong>${esc(startIso.slice(5,7))} 月 ${esc(startIso.slice(8))} 日开始</strong><small>共 ${len} 天 · ${endIso.slice(5)} 结束${logs?` · 记了 ${logs} 天细节`:''}${e.frags.length>1?` · 分 ${e.frags.length} 段记的`:''} · ${esc(person(author).name)} 记录</small></div><div class="card-menu"><details class="more-menu"><summary aria-label="更多操作" title="更多操作">⋯</summary><div class="menu-pop"><button data-action="edit-record" data-id="${e.frags[0].id}">${icon('edit')} 编辑</button><button data-action="period-del-episode" data-ids="${ids}" class="danger">${icon('trash')} 删除这次</button></div></details></div></div>${symsAll.length?`<div class="tabs" style="flex-wrap:wrap;margin:8px 0 0">${symsAll.map(s=>`<span class="filter-chip">${esc(s)}</span>`).join('')}</div>`:''}${words?`<p class="card-text">${esc(words)}</p>`:''}</article>`;
  }).join('');
  const headBar=heading('生理期','记下周期，把照顾提前一点。','new-period','记录经期','heart');
  return `${headBar}${hero}${top}${log}${symBlock}${hist}`;
@@ -1805,6 +1832,10 @@ async function act(action,id,el) {
  if(action==='period-start')return periodStart(el.dataset.day||today());
  if(action==='period-end')return periodEnd(el.dataset.day||today());
  if(action==='period-more')return periodMore(el.dataset.day||today());
+ if(action==='period-del-episode'){
+  const ids=String(el.dataset.ids||'').split(',').filter(Boolean);
+  return confirmAction('删掉这次经期？',`这次经期被拆成了 ${ids.length} 段记录，会一起进回收站，三十天内可以恢复。`,async()=>{for(const one of ids)await del('/records/'+one);await refresh();});
+ }
  if(action.startsWith('new-')){const kind=action.slice(4);return kind==='channel'?channelForm():kind==='personal-wish'?personalWishForm():recordForm(kind);}
  if(action==='unlock-personal-wish')return unlockPersonalWish(id);
  if(action.startsWith('tool-'))return navigate('together',action.slice(5));
