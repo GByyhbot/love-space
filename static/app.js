@@ -774,6 +774,7 @@ function togetherPage() {
  if(state.tab==='quest')return questPage();
  if(state.tab==='ledger')return ledgerPage();
  if(state.tab==='period')return periodPage();
+ if(state.tab==='period-analysis')return periodAnalysisPage();
  if(state.tab==='music')return musicPage();
  if(state.tab){const meta=toolsList.find(x=>x[0]===state.tab);if(meta)return `${heading(meta[2],meta[3],'new-'+state.tab,'添加'+({anniversary:'纪念日',wish:'愿望',mood:'心情',note:'留言',question:'问题',habit:'目标'}[state.tab]))}${state.tab==='question'?'<p class="hint">可以写下自己的问题，也可以从内置题目里挑一个。双方回答后才揭晓彼此的答案。</p>':''}${recordsOf(state.tab).length?recordsOf(state.tab).map(recordCard).join(''):empty('给我们，多一点小小的仪式感',meta[3],'new-'+state.tab,'现在开始')}`;}
  return `${heading('关于我们，还有好多好多','把喜欢落在实处，把日子过成纪念。')}<div class="tools-grid"><button class="tool-card tool-card-wide" data-action="tool-period"><span class="tool-emoji">🌸</span><span class="tool-wide-copy"><h3>生理期</h3><p>记下周期，把照顾提前一点</p></span><span class="tool-wide-go">${icon('arrow')}</span></button><button class="tool-card" data-nav="dashboard"><span class="tool-emoji">📊</span><h3>数据看板</h3><p>我们的点滴，都在这里</p></button><button class="tool-card" data-nav="weekly"><span class="tool-emoji">✉️</span><h3>回忆周报</h3><p>把这一周，收进一封信</p></button><button class="tool-card" data-nav="figure"><span class="tool-emoji">📸</span><h3>情侣摆拍参考</h3><p>照着姿势参考，拍一张</p></button>${toolsList.map(([id,emoji,title,desc])=>`<button class="tool-card" data-action="tool-${id}"><span class="tool-emoji">${emoji}</span><h3>${title}</h3><p>${desc}</p></button>`).join('')}</div><div class="section-heading settings-section-heading"><h2>${icon('gear')} 设置</h2></div><div class="tools-grid settings-tools"><button class="tool-card" data-action="space"><span class="tool-emoji">🏡</span><h3>空间设置</h3><p>空间名称、封面与相恋日期</p></button>${state.me.users.length<2?`<button class="tool-card" data-action="invite"><span class="tool-emoji">💌</span><h3>邀请另一半入住</h3><p>把你们的专属空间分享给 TA</p></button>`:''}<button class="tool-card" data-nav="channels"><span class="tool-emoji">🔔</span><h3>提醒设置</h3><p>通知渠道与提醒偏好</p></button><button class="tool-card" data-nav="settings"><span class="tool-emoji">⚙️</span><h3>全部设置</h3><p>账号资料、数据导出与备份</p></button></div>`;
@@ -1000,8 +1001,7 @@ function periodMonthGrid(y,m,d){
   const tip=parts.join(' · ');
   cells.push(`<button type="button" class="cal-day${cls}${iso===todayS?' is-today':''}${rec?' has-rec':''}${log?' has-log':''}${iso===picked?' picked':''}" data-action="period-day" data-day="${iso}" title="${tip}" aria-label="${m} 月 ${v} 日，${tip}"><span>${v}</span></button>`);
  }
- return `<div class="calendar-grid">${['日','一','二','三','四','五','六'].map(w=>`<span class="cal-week">${w}</span>`).join('')}${cells.join('')}</div>`;
-}
+ return `<div class="calendar-grid period-cal">${['日','一','二','三','四','五','六'].map(w=>`<span class="cal-week">${w}</span>`).join('')}${cells.join('')}</div>`;}
 /* 翻月：月末日期要夹到目标月的最后一天，否则 1/31 往前翻会跳到 3 月 */
 function shiftMonth(day,delta){
  const y=Number(day.slice(0,4)),m=Number(day.slice(5,7))-1+delta;
@@ -1295,9 +1295,297 @@ function periodPage(){
   const ids=e.frags.map(r=>r.id).join(',');
   return `<article class="card"><div class="card-header">${avatar(author)}<div><strong>${esc(startIso.slice(5,7))} 月 ${esc(startIso.slice(8))} 日开始</strong><small>共 ${len} 天 · ${endIso.slice(5)} 结束${logs?` · 记了 ${logs} 天细节`:''}${e.frags.length>1?` · 分 ${e.frags.length} 段记的`:''} · ${esc(person(author).name)} 记录</small></div><div class="card-menu"><details class="more-menu"><summary aria-label="更多操作" title="更多操作">⋯</summary><div class="menu-pop"><button data-action="edit-record" data-id="${e.frags[0].id}">${icon('edit')} 编辑</button><button data-action="period-del-episode" data-ids="${ids}" class="danger">${icon('trash')} 删除这次</button></div></details></div></div>${symsAll.length?`<div class="tabs" style="flex-wrap:wrap;margin:8px 0 0">${symsAll.map(s=>`<span class="filter-chip">${esc(s)}</span>`).join('')}</div>`:''}${words?`<p class="card-text">${esc(words)}</p>`:''}</article>`;
  }).join('');
- const headBar=heading('生理期','记下周期，把照顾提前一点。','new-period','记录经期','heart');
- return `${headBar}${hero}${top}${log}${symBlock}${hist}`;
+ /* 右上角不再放「记录经期」：记经期已经由下面记录卡的「月经来了 / 月经走了」接管，
+    一个动作两个入口只会让人点错。这里换成进入数据分析页的入口。 */
+ const headBar=heading('生理期','记下周期，把照顾提前一点。','');
+ const entry=`<button type="button" class="card analysis-entry" data-action="period-analysis"><span class="ae-ico">📊</span><span class="ae-copy"><strong>数据分析</strong><small>周期、流量、痛经、体温的变化</small></span><span class="ae-go">${icon('arrow')}</span></button>`;
+ return `${headBar}${hero}${entry}${top}${log}${symBlock}${hist}`;
 }
+/* ───────────── 生理数据分析 ─────────────
+   美柚那套「分析」页有十几个板块，这里按我们真正记过的维度落：数据完整度、规律度、
+   预测、周期/经期变化、流量、痛经、颜色、症状、心情、白带、爱爱、体温、体重。
+   （没有「便便」「开始时间」——我们没这两个字段，硬凑只会是空图。）
+   图表全部手画 SVG/div，不引 Chart.js：离线 PWA 不能把核心页面挂在 CDN 上。 */
+const PA_PURPLE='#A98BD8';
+const paMean=a=>a.length?a.reduce((s,v)=>s+v,0)/a.length:0;
+const paSd=a=>{if(a.length<2)return 0;const m=paMean(a);return Math.sqrt(paMean(a.map(v=>(v-m)**2)));};
+const paRound=(v,n=0)=>{const p=10**n;return Math.round(v*p)/p;};
+const paMD=s=>`${Number(String(s).slice(5,7))} 月 ${Number(String(s).slice(8,10))} 日`;
+
+/* 分组柱：每天一组，左边本周期、右边近半年；没记的那根画虚线空框（照美柚的「未记录」） */
+function paGrouped(rows,opt={}){
+ const W=320,h=opt.h||128,top=10,base=h-22,n=rows.length||1,slot=W/n;
+ const max=opt.max||Math.max(1,...rows.flatMap(r=>[r.cur,r.hist]).filter(v=>typeof v==='number'));
+ const bw=Math.min(12,slot*0.26);
+ const y=v=>base-(base-top)*(v/max);
+ const bar=(x,v,fill)=>typeof v==='number'&&v>0
+  ?`<rect x="${x.toFixed(1)}" y="${y(v).toFixed(1)}" width="${bw.toFixed(1)}" height="${(base-y(v)).toFixed(1)}" rx="3" fill="${fill}"/>`
+  :`<rect x="${x.toFixed(1)}" y="${base-18}" width="${bw.toFixed(1)}" height="18" rx="3" fill="none" stroke="var(--line)" stroke-dasharray="3 3"/>`;
+ return `<svg class="pa-svg" viewBox="0 0 ${W} ${h}" width="100%" height="${h}" role="img" aria-label="${esc(opt.aria||'')}">`
+  +[0,.5,1].map(f=>`<line x1="0" x2="${W}" y1="${(top+(base-top)*f).toFixed(1)}" y2="${(top+(base-top)*f).toFixed(1)}" stroke="var(--line)" stroke-dasharray="2 4"/>`).join('')
+  +rows.map((r,i)=>{const c=slot*i+slot/2;
+    return bar(c-bw-2,r.cur,'var(--primary)')+bar(c+2,r.hist,PA_PURPLE)
+     +`<text x="${c.toFixed(1)}" y="${base+14}" text-anchor="middle" class="pa-tick">${esc(r.label)}</text>`;}).join('')
+  +`</svg>`;
+}
+/* 单系列竖柱：近期经期天数、每月爱爱次数 */
+function paVBars(rows,opt={}){
+ const W=320,h=opt.h||118,top=14,base=h-24,n=rows.length||1,slot=W/n;
+ const max=opt.max||Math.max(1,...rows.map(r=>r.v||0));
+ const bw=Math.min(18,slot*0.44);
+ return `<svg class="pa-svg" viewBox="0 0 ${W} ${h}" width="100%" height="${h}" role="img" aria-label="${esc(opt.aria||'')}">`
+  +`<line x1="0" x2="${W}" y1="${base}" y2="${base}" stroke="var(--line)"/>`
+  +rows.map((r,i)=>{const c=slot*i+slot/2,v=r.v||0,hh=(base-top)*(v/max);
+    // 0 也留一小截底色，否则连续几个空月看起来像图坏了
+    const h1=v>0?hh:3;
+    return `<rect x="${(c-bw/2).toFixed(1)}" y="${(base-h1).toFixed(1)}" width="${bw.toFixed(1)}" height="${h1.toFixed(1)}" rx="4" fill="${v>0?(r.now?'var(--primary)':'var(--soft-strong)'):'var(--line)'}"/>`
+     +(v?`<text x="${c.toFixed(1)}" y="${(base-hh-6).toFixed(1)}" text-anchor="middle" class="pa-val">${v}</text>`:'')
+     +`<text x="${c.toFixed(1)}" y="${base+14}" text-anchor="middle" class="pa-tick">${esc(r.label)}</text>`;}).join('')
+  +`</svg>`;
+}
+/* 折线：体温 / 体重。只在首尾与最高最低处标数值，避免一串数字糊成一片 */
+function paLine(pts,opt={}){
+ const list=(pts||[]).filter(p=>typeof p.v==='number');
+ if(list.length<2)return '';
+ const W=320,h=opt.h||132,top=20,base=h-26;
+ let lo=Math.min(...list.map(p=>p.v)),hi=Math.max(...list.map(p=>p.v));
+ if(hi-lo<.4){hi+=.2;lo-=.2;}
+ const X=p=>18+(W-36)*p.i/(list.length-1);
+ const Y=v=>base-(base-top)*((v-lo)/(hi-lo));
+ const color=opt.color||'#2F9E88';
+ const marked=new Set([0,list.length-1,list.findIndex(p=>p.v===hi),list.findIndex(p=>p.v===lo)]);
+ return `<svg class="pa-svg" viewBox="0 0 ${W} ${h}" width="100%" height="${h}" role="img" aria-label="${esc(opt.aria||'')}">`
+  +`<line x1="0" x2="${W}" y1="${base}" y2="${base}" stroke="var(--line)"/>`
+  +`<path d="${list.map((p,k)=>(k?'L':'M')+X(p).toFixed(1)+' '+Y(p.v).toFixed(1)).join(' ')}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`
+  +list.map(p=>`<circle cx="${X(p).toFixed(1)}" cy="${Y(p.v).toFixed(1)}" r="3.5" fill="var(--surface)" stroke="${color}" stroke-width="2"/>`).join('')
+  +list.map((p,k)=>marked.has(k)?`<text x="${X(p).toFixed(1)}" y="${(Y(p.v)-8).toFixed(1)}" text-anchor="middle" class="pa-val">${esc(opt.fmt?opt.fmt(p.v):p.v)}</text>`:'').join('')
+  +`<text x="2" y="${base+13}" class="pa-tick">${esc(list[0].label)}</text>`
+  +`<text x="${W-2}" y="${base+13}" text-anchor="end" class="pa-tick">${esc(list[list.length-1].label)}</text>`
+  +`</svg>`;
+}
+/* 圆点矩阵：颜色、白带这种「一天一个颜色」的，用两行点比画柱状图直观 */
+function paDotRows(rows){
+ return `<div class="pa-dotmatrix">${rows.map(r=>`<div class="pa-dotrow"><span class="pa-dotlabel">${esc(r.name)}</span><div class="pa-dots">${r.cells.map(c=>c.color
+   ?`<i class="pa-dot" style="background:${c.color}" title="${esc(c.tip||'')}"></i>`
+   :`<i class="pa-dot hollow" title="${esc(c.tip||'')}"></i>`).join('')}</div></div>`).join('')}</div>`;
+}
+
+/* 把「经期段 + 日记录」摊成统计口径。所有 第N天 的序列都以「经期第几天」为横轴，
+   这样不同长度的周期也能横向对齐——这也是美柚那套图能对比的原因。 */
+function periodAnalysis(d){
+ const eps=d.episodes||[],logs=periodDayLogs();
+ const at=n=>logs[dayStr(n)]||null;
+ const last=eps[eps.length-1]||null,prev=eps[eps.length-2]||null;
+ const FIELDS=['flow','color','pain','sex','symptoms','mood','weight','discharge','temp'];
+ // 数据完整度：经期里每一天都算一格，记了至少一项算填上
+ let slots=0,filled=0;
+ eps.forEach(e=>{for(let i=0;i<e.length;i++){slots++;const b=at(e.start+i);
+  if(b&&FIELDS.some(k=>Array.isArray(b[k])?b[k].length:b[k]!=null&&b[k]!==''))filled++;}});
+ const complete=slots?Math.round(filled/slots*100):0;
+ const maxLen=Math.min(7,Math.max(1,...eps.map(e=>e.length)));
+ const nth=key=>{
+  const rows=[];
+  for(let i=0;i<maxLen;i++){
+   const cb=last&&i<last.length?at(last.start+i):null,cur=cb?(typeof cb[key]==='number'?cb[key]:null):null;
+   const hist=eps.filter(e=>e!==last&&i<e.length).map(e=>at(e.start+i)?.[key]).filter(v=>typeof v==='number');
+   if(cur==null&&!hist.length)continue;
+   rows.push({label:`第${i+1}天`,cur,hist:hist.length?paRound(paMean(hist)):null});
+  }
+  return rows;
+ };
+ const nthColor=()=>{
+  const n=Math.min(5,Math.max(1,...eps.map(e=>e.length))),cur=[],his=[];
+  for(let i=0;i<n;i++){
+   cur.push(last&&i<last.length?(at(last.start+i)?.color??null):null);
+   const h=eps.filter(e=>e!==last&&i<e.length).map(e=>at(e.start+i)?.color).filter(v=>typeof v==='number');
+   // 取众数：同一天在不同周期里颜色不一致时，代表值是"最常见的那一种"
+   his.push(h.length?h.slice().sort((a,b)=>h.filter(v=>v===b).length-h.filter(v=>v===a).length)[0]:null);
+  }
+  return {cur,his,n};
+ };
+ const nthDischarge=()=>{
+  const n=Math.min(5,Math.max(1,...eps.map(e=>e.length))),cur=[],his=[];
+  for(let i=0;i<n;i++){
+   cur.push(last&&i<last.length?(at(last.start+i)?.discharge??null):null);
+   const h=eps.filter(e=>e!==last&&i<e.length).map(e=>at(e.start+i)?.discharge).filter(v=>typeof v==='number');
+   his.push(h.length?paRound(paMean(h)):null);
+  }
+  return {cur,his,n};
+ };
+ const keySeries=(key,limit=12)=>{
+  const rows=periodDayRows().filter(r=>typeof r.body[key]==='number')
+   .sort((a,b)=>String(a.body.date).localeCompare(String(b.body.date)));
+  return rows.slice(-limit).map(r=>({label:String(r.body.date).slice(5,10).replace('-','/'),v:r.body[key]}));
+ };
+ // 周期行：从新到旧。长度要记在「这一段开始的日子」上——09-29 那次到 10-26 是 27 天，
+ // 所以 27 天属于 09-29 这一行；最后一段还没结束，只报「当前第 N 天」。
+ const cycleRows=[];
+ for(let i=eps.length-1;i>=0;i--){
+  const e=eps[i],next=eps[i+1];
+  if(next)cycleRows.push({date:e.start,gap:next.start-e.start});
+  else cycleRows.push({cur:true,date:e.start,days:d.todayN-e.start+1});
+ }
+ const cycleMax=Math.max(1,...cycleRows.map(r=>r.cur?r.days:r.gap));
+ // 近 6 个月爱爱
+ const sexRows=periodDayRows().filter(r=>Array.isArray(r.body.sex)&&r.body.sex.length);
+ const sexCount=sexRows.reduce((s,r)=>s+r.body.sex.length,0);
+ const sexThisCycle=last?sexRows.filter(r=>{const n=dayNum(r.body.date);return n>=last.start&&n<=last.end;})
+   .reduce((s,r)=>s+r.body.sex.length,0):0;
+ const monthly=[];
+ const y0=Number(today().slice(0,4)),m0=Number(today().slice(5,7));
+ for(let k=5;k>=0;k--){
+  let mm=m0-k,yy=y0;while(mm<1){mm+=12;yy-=1;}
+  const pre=`${yy}-${String(mm).padStart(2,'0')}`;
+  monthly.push({label:`${mm}月`,v:sexRows.filter(r=>String(r.body.date).slice(0,7)===pre)
+    .reduce((s,r)=>s+r.body.sex.length,0),now:k===0});
+ }
+ const symCount={};
+ periodDayRows().concat(eps.map(e=>e.rec)).forEach(r=>(r.body.symptoms||[]).forEach(s=>{
+  if(s!=='没有症状')symCount[s]=(symCount[s]||0)+1;}));
+ const moodCount={};
+ periodDayRows().forEach(r=>{if(r.body.mood)moodCount[r.body.mood]=(moodCount[r.body.mood]||0)+1;});
+ // 规律度：只看周期波动。样本 <3 个间隔时给参考值，别硬编一个分数骗人
+ const sd=paSd(d.gaps);
+ const score=d.gaps.length>=2?Math.min(99,Math.max(40,Math.round(100-Math.min(45,Math.max(0,(sd-1.5)*6))))):null;
+ return {eps,last,prev,complete,slots,filled,flow:nth('flow'),pain:nth('pain'),
+  color:nthColor(),discharge:nthDischarge(),cycleRows,cycleMax,
+  sexCount,sexThisCycle,monthly,symCount,moodCount,sd,score,
+  temp:keySeries('temp'),weight:keySeries('weight')};
+}
+
+/* 分析页本体：一个板块一块卡，顺序照「先结论后细节」排。 */
+const PA_DIS_COLORS={1:'#CFBBA6',2:'#B9A183',3:'#E0C58F',4:'#A6D5E4',5:'#78C4D8'};
+function periodAnalysisPage(){
+ const d=periodData(),a=periodAnalysis(d);
+ /* 返回走顶栏那个箭头（together 的子页都这样），页面里不再重复放一个 */
+ const back=`<div class="page-heading"><div><h1>生理数据分析</h1><p>把这半年的记录，摊成看得懂的变化。</p></div></div>`;
+ if(!a.eps.length)return back+`<section class="card"><p class="meta">还没有经期记录。回到生理期页点一次「月经来了」，这里就会开始长出图表。</p><div class="inline-actions">${button('回到生理期','period-back','primary')}</div></section>`;
+ const sec=(h2,body,sub='')=>`<section class="card pa-card"><div class="section-heading"><h2>${h2}</h2>${sub?`<span class="pa-sub">${esc(sub)}</span>`:''}</div>${body}</section>`;
+ const legend=items=>`<p class="pa-legend">${items.map(([c,t,empty])=>`<span><i class="pa-lg-dot${empty?' hollow':''}" style="${empty?'':`background:${c}`}"></i>${esc(t)}</span>`).join('')}</p>`;
+
+ /* ① 概览：规律度 + 数据完整度 + 三个基本盘 */
+ const grade=a.score==null?'样本还太少':a.score>=85?'很规律':a.score>=70?'比较规律':a.score>=55?'有些波动':'波动明显';
+ const note=a.score==null?'至少记满 3 个完整周期，规律度才有意义。'
+   :a.score>=85?'继续保持，预测会越来越准。'
+   :`周期波动 ${paRound(a.sd,1)} 天，预测日期按前后 ±${Math.max(2,Math.round(a.sd))} 天准备更稳妥。`;
+ const overview=`<section class="card pa-overview">
+  <div class="pa-hero-row">
+   <div class="pa-ring" style="background:conic-gradient(var(--primary) ${(a.score||0)*3.6}deg, var(--soft) 0)"><span><b>${a.score==null?'--':a.score}</b><small>规律度</small></span></div>
+   <div class="pa-hero-copy"><h3>${grade}</h3><p>${esc(note)}</p>
+    <div class="pa-meter"><i style="width:${a.complete}%"></i></div>
+    <small>完整度 ${a.complete}%　·　已记 ${a.filled}/${a.slots} 天</small></div>
+  </div>
+  <div class="pa-stats">
+   <div><span>平均周期</span><strong>${d.cycle}<em>天</em></strong></div>
+   <div><span>平均经期</span><strong>${d.length}<em>天</em></strong></div>
+   <div><span>记录天数</span><strong>${periodDayRows().length}<em>天</em></strong></div>
+  </div></section>`;
+
+ /* ② 经期预测：一周日期条，正中那天是预测日，左右两天算"可能" */
+ const pred=(()=>{
+  if(d.nextStart==null)return '';
+  const cells=[];
+  for(let i=-3;i<=3;i++){
+   const n=d.nextStart+i,iso=dayStr(n),cls=i===0?' on':Math.abs(i)<=2?' soft':'';
+   const wd='日一二三四五六'[new Date(n*DAY_MS).getUTCDay()];
+   cells.push(`<span class="pa-day${cls}"><b>${Number(iso.slice(8))}</b><small>周${wd}</small></span>`);
+  }
+  const due=d.untilNext;
+  return sec('🔮 经期预测',
+   `<p class="pa-lead">预测下次经期将于 <b>${paMD(dayStr(d.nextStart))}</b> 开始，${due>=0?`距离经期开始还有 <b>${due}</b> 天`:`已经推迟 <b>${-due}</b> 天`}。</p>
+    <div class="pa-week">${cells.join('')}</div>
+    <p class="pa-legend"><span><i class="pa-lg-dot" style="background:var(--primary)"></i>预测开始日</span><span><i class="pa-lg-dot" style="background:var(--soft-strong)"></i>可能的开始日</span></p>`,
+   d.estimated?'参考值':'');
+ })();
+
+ /* ③ 周期变化：最近一个周期 + 历史横向条 */
+ const cycleSec=(()=>{
+  const rows=a.cycleRows.slice(0,8).map(r=>{
+   if(r.cur)return `<div class="pa-row"><span class="pa-date">${paMD(dayStr(r.date))}</span><span class="pa-chip">当前第 ${r.days} 天</span><span class="pa-track"><i style="width:${Math.round(r.days/a.cycleMax*100)}%"></i></span><b>${r.days}天</b></div>`;
+   const diff=r.gap-Math.round(d.cycle);
+   return `<div class="pa-row"><span class="pa-date">${paMD(dayStr(r.date))}</span><span class="pa-diff${diff<0?' early':diff>0?' late':''}">${diff===0?'准时':diff<0?`提前 ${-diff} 天`:`推迟 ${diff} 天`}</span><span class="pa-track"><i style="width:${Math.round(r.gap/a.cycleMax*100)}%"></i></span><b>${r.gap}天</b></div>`;
+  }).join('');
+  const gapNow=a.eps.length>1?a.eps[a.eps.length-1].start-a.eps[a.eps.length-2].start:null;
+  const diffNow=gapNow==null?null:gapNow-Math.round(d.cycle);
+  const range=a.eps.length>1?`${paMD(dayStr(a.eps[a.eps.length-2].start))} – ${paMD(dayStr(a.eps[a.eps.length-1].start-1))}`:'';
+  const kpi=gapNow==null?'':`<div class="pa-kpi"><div><span>最近 1 个周期</span><strong>${gapNow} 天 <em class="pa-tag${gapNow>=21&&gapNow<=35?'':' warn'}">${gapNow>=21&&gapNow<=35?'正常':'需留意'}</em></strong></div>
+   <div><span>比平均周期</span><strong>${diffNow===0?'相同':diffNow<0?`短 ${-diffNow} 天`:`长 ${diffNow} 天`}</strong></div></div>`;
+  return sec('🗓 周期变化',kpi+`<p class="pa-mini">近期周期天数${range?`　·　最近一次 ${range}`:''}</p><div class="pa-list">${rows}</div>`);
+ })();
+
+ /* ④ 经期变化：本次天数 + 近期柱状 */
+ const lenSec=(()=>{
+  const bars=a.eps.slice(-6).map((e,i,arr)=>({label:`${Number(dayStr(e.start).slice(5,7))}/${Number(dayStr(e.start).slice(8))}`,v:e.length,now:i===arr.length-1}));
+  const lastLen=a.last?a.last.length:0,prevLen=a.prev?a.prev.length:null;
+  const diff=prevLen==null?null:lastLen-prevLen;
+  return sec('💧 经期变化',
+   `<div class="pa-kpi"><div><span>本次经期</span><strong>${lastLen} 天 <em class="pa-tag${lastLen>=2&&lastLen<=7?'':' warn'}">${lastLen>=2&&lastLen<=7?'正常':'需留意'}</em></strong></div>
+     <div><span>和上个周期</span><strong>${diff==null?'—':diff===0?'相同':diff>0?`多 ${diff} 天`:`少 ${-diff} 天`}</strong></div></div>
+    <p class="pa-mini">近期经期天数</p>${paVBars(bars,{aria:'近期每次经期的天数'})}`);
+ })();
+
+ /* ⑤ 流量 / ⑥ 痛经：同一套分组柱，两边的档位都是 1–5 */
+ const flowRows=a.flow;
+ const flowText=(()=>{
+  const cur=flowRows.filter(r=>r.cur!=null),his=flowRows.filter(r=>r.hist!=null);
+  if(!cur.length)return '这个周期还没记流量';
+  if(!his.length)return '再多记一次经期，就能和近半年对比';
+  const x=paMean(cur.map(r=>r.cur)),y=paMean(his.map(r=>r.hist)),dd=x-y;
+  return Math.abs(dd)<.4?'和近半年差不多':dd>0?`比近半年偏多一点（约高 ${paRound(dd,1)} 档）`:`比近半年偏少一点（约低 ${paRound(Math.abs(dd),1)} 档）`;
+ })();
+ const flowSec=flowRows.length?sec('🩸 流量变化',
+  `<p class="pa-kpi-line">本周期流量对比近半年：<b>${esc(flowText)}</b></p>${paGrouped(flowRows,{max:5,aria:'按经期第几天对比本周期与近半年的经量档位'})}${legend([['var(--primary)','本周期'],['#A98BD8','近半年'],['','未记录',1]])}`):'';
+
+ const painRows=a.pain;
+ const painText=(()=>{
+  const cur=painRows.filter(r=>r.cur!=null);
+  if(!cur.length)return '这个周期还没记痛经';
+  const peak=cur.slice().sort((x,y)=>(y.cur||0)-(x.cur||0))[0];
+  if(!peak.cur)return '这个周期完全没痛，挺好的';
+  const nm=(PERIOD_PAIN[peak.cur]||[])[0]||'';
+  return `这个周期最痛是「${nm}」，出现在${peak.label}`;
+ })();
+ const painSec=painRows.length?sec('⚡ 痛经情况',
+  `<p class="pa-kpi-line">${esc(painText)}</p><div class="pa-offset">${paGrouped(painRows,{max:5,aria:'按经期第几天对比本周期与近半年的痛经程度'})}</div>${legend([['var(--primary)','本周期'],['#A98BD8','近半年'],['','未记录',1]])}`):'';
+
+ /* ⑦ 颜色变化：一天一个点 */
+ const colBuf=a.color,usedColors=new Set([...colBuf.cur,...colBuf.his].filter(Boolean));
+ const colorSec=usedColors.size?sec('🎨 颜色变化',
+  `${paDotRows([{name:'本周期',cells:colBuf.cur.map((v,i)=>({color:v?PERIOD_COLOR[v][1]:null,tip:v?`第${i+1}天 ${PERIOD_COLOR[v][0]}`:`第${i+1}天未记录`}))},
+    {name:'近半年',cells:colBuf.his.map((v,i)=>({color:v?PERIOD_COLOR[v][1]:null,tip:v?`第${i+1}天 ${PERIOD_COLOR[v][0]}`:`第${i+1}天未记录`}))}])}
+   ${legend([...usedColors].map(v=>[PERIOD_COLOR[v][1],PERIOD_COLOR[v][0]]).concat([['','未记录',1]]))}`):'';
+
+ /* ⑧ 症状排行：沿用工具页的 .stat-row，不另造图表 */
+ const syms=Object.entries(a.symCount).sort((x,y)=>y[1]-x[1]).slice(0,6);
+ const symSec=syms.length?sec('💊 常出现的症状',
+  syms.map(([s,n])=>`<div class="stat-row"><span>${esc(s)}</span><div class="stat-bar"><i style="width:${Math.round(n/syms[0][1]*100)}%"></i></div><b>${n} 次</b></div>`).join('')):'';
+
+ /* ⑨ 心情 */
+ const moods=Object.entries(a.moodCount).sort((x,y)=>y[1]-x[1]).slice(0,8);
+ const moodSec=moods.length?sec('😊 心情',
+  `<div class="pa-chips">${moods.map(([id,n])=>{const m=PERIOD_MOODS[Number(id)-1]||['🙂','心情'];return `<span class="pa-chip-mood"><i>${m[0]}</i>${esc(m[1])}<b>${n}</b></span>`;}).join('')}</div>
+   <p class="pa-mini">共 ${Object.values(a.moodCount).reduce((s,n)=>s+n,0)} 次心情记录</p>`):'';
+
+ /* ⑩ 白带：点阵，颜色按 5 档 */
+ const disBuf=a.discharge;
+ const disSec=(disBuf.cur.some(Boolean)||disBuf.his.some(Boolean))?sec('💧 白带变化',
+  `${paDotRows([{name:'本周期',cells:disBuf.cur.map((v,i)=>({color:v?PA_DIS_COLORS[v]:null,tip:v?`第${i+1}天 ${PERIOD_DISCHARGE[v][0]}`:`第${i+1}天未记录`}))},
+    {name:'近半年',cells:disBuf.his.map((v,i)=>({color:v?PA_DIS_COLORS[v]:null,tip:v?`第${i+1}天 ${PERIOD_DISCHARGE[v][0]}`:`第${i+1}天未记录`}))}])}
+   ${legend(Object.entries(PERIOD_DISCHARGE).map(([v,it])=>[PA_DIS_COLORS[v],it[0]]).concat([['','未记录',1]]))}`):'';
+
+ /* ⑪ 爱爱 */
+ const sexSec=sec('💗 爱爱',
+  `<p class="pa-kpi-line">本周期 <b>${a.sexThisCycle}</b> 次，累计 <b>${a.sexCount}</b> 次</p>
+   <p class="pa-mini">近 6 个月</p>${paVBars(a.monthly,{aria:'近 6 个月每个月的次数'})}`);
+
+ /* ⑫ 体温 / ⑬ 体重：有两次以上记录才画线 */
+ const tempSec=a.temp.length>1?sec('🌡️ 体温',paLine(a.temp.map((p,i)=>({...p,i})),{color:'#2F9E88',fmt:v=>v.toFixed(1)+'℃',aria:'体温记录折线'})):'';
+ const weightSec=a.weight.length>1?sec('⚖️ 体重',paLine(a.weight.map((p,i)=>({...p,i})),{color:'#7A93C4',fmt:v=>v.toFixed(1),aria:'体重记录折线'})):'';
+
+ const tips=`<p class="small-note pa-foot">图表只反映记过的那几天。想让它更准，经期每天顺手点两下就够了。</p>`;
+ return `${back}${overview}${pred}${cycleSec}${lenSec}${flowSec}${painSec}${colorSec}${symSec}${moodSec}${disSec}${sexSec}${tempSec}${weightSec}${tips}`;
+}
+
 function periodForm(record=null, presetDay=null){
  /* 这一层只管「这次经期从哪天到哪天」；每天的身体细节走日记录卡。
     presetDay：从日历格子点进来的那天，直接预填到「这次经期开始于」。 */
@@ -1817,6 +2105,7 @@ async function act(action,id,el) {
  if(action==='upload-album')return composer('post',null,{album:state.album||''});
  // 点日历某一天：切到那天去记录（记录项在记录卡里改，日历只负责选日期）
  if(action==='period-day'||action==='period-pick'){
+  if(Date.now()-periodSwipeAt<450)return; // 刚划过月，别把松手时补的那次点击当成选了这天
   state.periodDay=el.dataset.day||today();
   renderPage();
   $('.period-log')?.scrollIntoView({block:'center',behavior:'smooth'});
@@ -1832,6 +2121,9 @@ async function act(action,id,el) {
  if(action==='period-start')return periodStart(el.dataset.day||today());
  if(action==='period-end')return periodEnd(el.dataset.day||today());
  if(action==='period-more')return periodMore(el.dataset.day||today());
+ // 分析页是 together 下的一个 tab，返回就是回到生理期页
+ if(action==='period-analysis')return navigate('together','period-analysis');
+ if(action==='period-back')return navigate('together','period');
  if(action==='period-del-episode'){
   const ids=String(el.dataset.ids||'').split(',').filter(Boolean);
   return confirmAction('删掉这次经期？',`这次经期被拆成了 ${ids.length} 段记录，会一起进回收站，三十天内可以恢复。`,async()=>{for(const one of ids)await del('/records/'+one);await refresh();});
@@ -1839,7 +2131,8 @@ async function act(action,id,el) {
  if(action.startsWith('new-')){const kind=action.slice(4);return kind==='channel'?channelForm():kind==='personal-wish'?personalWishForm():recordForm(kind);}
  if(action==='unlock-personal-wish')return unlockPersonalWish(id);
  if(action.startsWith('tool-'))return navigate('together',action.slice(5));
- if(action==='tools-back')return navigate('together');
+ // 分析页是从生理期页进去的，顶栏返回就退回生理期，而不是跳回工具宫格
+ if(action==='tools-back')return navigate('together',state.tab==='period-analysis'?'period':'');
  if(action==='mood')return recordForm('mood');
  if(action==='mood-quick')return quickMoodForm();
  if(action==='mood-history')return navigate('together','mood');
@@ -1958,6 +2251,25 @@ async function act(action,id,el) {
  if(action==='delete-import')return confirmAction('删除这份聊天记录？','这是我们两人共用的记录，删除后双方都看不到，无法恢复。',async()=>{await del('/imports/'+id);state.importId='';navigate('imports');return toast('已删除这份聊天记录');});
 }
 
+/* 生理期月历左右滑动换月。「共同年历」用的是同一个 .calendar-grid，所以只认 .period-cal；
+   滑动结束后浏览器还会补一次 click，用 periodSwipeAt 把那次「顺手选中某天」压掉。 */
+const periodSwipe={on:false,x:0,y:0};
+let periodSwipeAt=0;
+document.addEventListener('touchstart',e=>{
+ const g=e.target.closest&&e.target.closest('.period-cal');if(!g)return;
+ const t=e.touches[0];periodSwipe.on=true;periodSwipe.x=t.clientX;periodSwipe.y=t.clientY;
+},{passive:true});
+document.addEventListener('touchend',e=>{
+ if(!periodSwipe.on)return;
+ periodSwipe.on=false;
+ const t=e.changedTouches&&e.changedTouches[0];if(!t)return;
+ const dx=t.clientX-periodSwipe.x,dy=t.clientY-periodSwipe.y;
+ // 横向位移够大、且明显比纵向大，才算翻月；否则是页面上下滚动
+ if(Math.abs(dx)<44||Math.abs(dx)<Math.abs(dy)*1.5)return;
+ periodSwipeAt=Date.now();
+ state.periodDay=shiftMonth(state.periodDay||today(),dx<0?1:-1);
+ renderPage();
+},{passive:true});
 document.addEventListener('click',async e=>{$$('.more-menu[open]').forEach(d=>{if(!d.contains(e.target))d.removeAttribute('open');});const nav=e.target.closest('[data-nav]'),el=e.target.closest('[data-action]');try{if(nav||el)e.target.closest('.account-menu')?.removeAttribute('open');if(nav)return await navigate(nav.dataset.nav);if(el)await act(el.dataset.action,el.dataset.id||'',el);}catch(err){toast(err.message);}});
 document.addEventListener('submit',async e=>{if(e.target.id!=='chat-form')return;e.preventDefault();const input=$('#chat-text'),content=input.value.trim();if(!content)return;const btn=$('button[type=submit]',e.target);btn.disabled=true;try{await sendChat({content,date:today(),media:[]});input.value='';autoGrow(input);localStorage.removeItem('chat-text:'+state.me.user.id);await refresh();}catch(err){toast(err.message);}finally{btn.disabled=false;}});
 document.addEventListener('input',e=>{if(e.target.id==='chat-text'){localStorage.setItem('chat-text:'+state.me.user.id,e.target.value);autoGrow(e.target);}if(e.target.id==='filter-q'){state.filters={...(state.filters||{}),q:e.target.value};clearTimeout(state.filterTimer);state.filterTimer=setTimeout(async()=>{const pos=$('#filter-q')?.selectionStart;try{await loadTimeline(true);renderPage();$('#filter-q')?.focus();$('#filter-q')?.setSelectionRange(pos,pos);}catch(err){toast(err.message);}},250);}});

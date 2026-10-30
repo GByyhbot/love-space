@@ -1080,6 +1080,92 @@ body.cal-full{overflow:hidden;height:100dvh}
 .seg-btn.outline{background:transparent;box-shadow:inset 0 0 0 1px rgba(255,92,138,.5);color:var(--primary-dark)}
 :root.dark .seg-btn.outline{color:#F3C0CE;box-shadow:inset 0 0 0 1px rgba(255,92,138,.55)}
 
+/* ———— 生理期 · 数据分析页 ————
+   一屏一卡；图表全是手画的 SVG/div，没有第三方图表库，离线一样能看。
+   配色只走主题变量（--primary / --soft / --line），换主题时整页跟着变。 */
+.analysis-entry{display:flex;align-items:center;gap:12px;width:100%;margin:0 0 14px;padding:14px 16px;text-align:left;cursor:pointer;background:var(--surface);border:0;border-radius:var(--radius);box-shadow:var(--shadow);transition:transform var(--speed),box-shadow var(--speed)}
+.analysis-entry:hover{transform:translateY(-1px);box-shadow:var(--shadow-lift)}
+.ae-ico{width:36px;height:36px;flex:none;display:flex;align-items:center;justify-content:center;border-radius:12px;background:var(--soft);font-size:18px}
+.ae-copy{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1}
+.ae-copy strong{font-size:14.5px}
+.ae-copy small{font-size:12px;color:var(--muted)}
+.ae-go{flex:none;color:var(--muted);display:flex}
+.ae-go .icon{width:16px;height:16px}
+
+.pa-card{padding:16px}
+.pa-sub{font-size:12px;color:var(--muted)}
+/* 概览：左边分数环、右边结论 */
+.pa-overview{padding:18px 16px 14px}
+.pa-hero-row{display:flex;align-items:center;gap:16px}
+.pa-ring{position:relative;width:104px;height:104px;flex:none;border-radius:50%;display:grid;place-items:center}
+.pa-ring>span{width:82px;height:82px;border-radius:50%;background:var(--surface);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px}
+.pa-ring b{font-size:26px;line-height:1;color:var(--ink)}
+.pa-ring small{font-size:10.5px;color:var(--muted)}
+.pa-hero-copy{min-width:0;flex:1}
+.pa-hero-copy h3{font-size:16px;margin:0 0 4px}
+.pa-hero-copy p{font-size:12.5px;color:var(--muted);margin:0 0 10px;line-height:1.5}
+.pa-hero-copy small{font-size:11.5px;color:var(--muted)}
+.pa-meter{height:6px;border-radius:999px;background:var(--soft);overflow:hidden;margin:0 0 6px}
+.pa-meter i{display:block;height:100%;border-radius:999px;background:var(--primary)}
+.pa-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:16px 0 0;padding:12px 0 0;border-top:1px solid var(--line);text-align:center}
+.pa-stats span{display:block;font-size:11.5px;color:var(--muted);margin-bottom:4px}
+.pa-stats strong{font-size:19px;color:var(--ink)}
+.pa-stats em{font-style:normal;font-size:11.5px;color:var(--muted);margin-left:1px}
+
+.pa-lead{font-size:13.5px;line-height:1.6;margin:0 0 12px}
+.pa-lead b{color:var(--primary-dark)}
+/* 预测那一周：正中实心，左右两天浅底 */
+.pa-week{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+.pa-day{display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 0;border-radius:12px;background:var(--bg);color:var(--muted)}
+.pa-day b{font-size:14px;font-weight:600}
+.pa-day small{font-size:10px;color:var(--muted)}
+.pa-day.soft{background:var(--soft);color:var(--primary-dark)}
+.pa-day.soft small{color:var(--primary-dark);opacity:.75}
+.pa-day.on{background:var(--primary);color:#fff}
+.pa-day.on small{color:rgba(255,255,255,.82)}
+.pa-legend{display:flex;flex-wrap:wrap;gap:12px;margin:12px 0 0;font-size:11.5px;color:var(--muted)}
+.pa-legend span{display:flex;align-items:center;gap:5px}
+.pa-lg-dot{width:9px;height:9px;border-radius:50%;display:inline-block}
+.pa-lg-dot.hollow{border:1px dashed var(--line);background:none}
+
+/* 两个大数字并排（周期/经期变化） */
+.pa-kpi{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:0 0 4px;padding:12px;border-radius:14px;background:var(--bg)}
+.pa-kpi span{display:block;font-size:11.5px;color:var(--muted);margin-bottom:4px}
+.pa-kpi strong{font-size:18px;color:var(--ink)}
+.pa-tag{font-style:normal;font-size:10.5px;font-weight:600;color:var(--green);background:var(--green-soft);padding:2px 6px;border-radius:6px;margin-left:4px;vertical-align:2px}
+.pa-tag.warn{color:var(--amber);background:var(--amber-soft)}
+.pa-mini{font-size:12px;color:var(--muted);margin:14px 0 8px}
+.pa-kpi-line{font-size:13px;line-height:1.55;margin:0 0 10px}
+.pa-kpi-line b{color:var(--primary-dark)}
+/* 周期横向条：日期 / 提前推迟 / 条 / 天数 */
+.pa-list{display:flex;flex-direction:column;gap:9px}
+.pa-row{display:flex;align-items:center;gap:8px;font-size:12px}
+.pa-date{flex:none;width:66px;color:var(--muted)}
+.pa-chip{flex:0 0 84px;text-align:center;font-size:10.5px;font-weight:600;color:#fff;background:var(--primary);padding:3px 7px;border-radius:6px}
+.pa-diff{flex:0 0 84px;text-align:center;color:var(--muted)}
+.pa-diff.early{color:var(--green)}
+.pa-diff.late{color:var(--amber)}
+.pa-track{flex:1;min-width:24px;height:18px;border-radius:6px;background:var(--soft);overflow:hidden}
+.pa-track i{display:block;height:100%;border-radius:6px;background:var(--primary)}
+.pa-row b{flex:none;width:34px;text-align:right;color:var(--ink)}
+
+.pa-svg{display:block;margin:2px 0 0;overflow:visible}
+.pa-tick{font-size:10px;fill:var(--muted);font-family:var(--font)}
+.pa-val{font-size:10px;fill:var(--ink);font-weight:700;font-family:var(--font)}
+/* 颜色 / 白带的点阵 */
+.pa-dotmatrix{display:flex;flex-direction:column;gap:14px;margin:4px 0 0}
+.pa-dotrow{display:flex;align-items:center;gap:10px}
+.pa-dotlabel{flex:none;width:52px;font-size:12px;color:var(--muted)}
+.pa-dots{display:flex;gap:8px;flex-wrap:wrap}
+.pa-dot{width:18px;height:18px;border-radius:50%;display:inline-block}
+.pa-dot.hollow{border:1.5px dashed var(--line);background:none}
+/* 心情 */
+.pa-chips{display:flex;flex-wrap:wrap;gap:8px}
+.pa-chip-mood{display:inline-flex;align-items:center;gap:5px;font-size:12.5px;background:var(--soft);padding:6px 10px;border-radius:10px}
+.pa-chip-mood i{font-style:normal;font-size:14px}
+.pa-chip-mood b{font-size:11px;color:var(--primary-dark)}
+.pa-foot{margin:14px 2px 0;text-align:center}
+
 /* ———— 生理期 · 底部选择弹层 ———— */
 .ps-sheet{display:flex;flex-direction:column;gap:14px}
 .ps-sub{font-size:13px;color:var(--muted);margin:2px 0 0}
