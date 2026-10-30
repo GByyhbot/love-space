@@ -903,8 +903,11 @@ function periodData(){
  const todayN=dayNum(today());
  const startN=last?dayNum(last.body.start):null;
  const nextStart=startN!=null?startN+avg:null;
- const inWindow=startN!=null&&todayN>=startN&&todayN<startN+length;
- return {items,gaps,cycle:avg,length,last,nextStart,todayN,inWindow,
+ /* 判断"今天在不在经期里"必须用这次记录的实际天数，不能用平均天数：
+   平均 3 天、这次只记了 1 天的时候，以前会出现"标题写卵泡期、副标题写经期第 2 天"的矛盾。 */
+ const lastLen=last?Number(last.body.length||5):5;
+ const inWindow=startN!=null&&todayN>=startN&&todayN<startN+lastLen;
+ return {items,gaps,cycle:avg,length,last,lastLen,nextStart,todayN,inWindow,
   dayOfPeriod:inWindow?todayN-startN+1:0,untilNext:nextStart!=null?nextStart-todayN:null,
   estimated:gaps.length===0};
 }
@@ -912,8 +915,6 @@ function periodData(){
    锚点是每次月经开始日，排卵日按"下次月经前 14 天"推（黄体期长度相对固定），
    所以黄体期天数恒定、卵泡期随周期长短伸缩，这也符合真实生理规律。 */
 const PHASE_NAMES={period:'月经期',follicular:'卵泡期',fertile:'排卵期',luteal:'黄体期'};
-/* 日历格子里放不下四个字，用两字短名：只在每段的第一天出现，一眼看到阶段切换 */
-const PHASE_SHORT={period:'经期',follicular:'卵泡',fertile:'排卵',luteal:'黄体'};
 function cyclePhases(d){
  const map={};
  const mark=(s,len,predicted)=>{
@@ -931,30 +932,36 @@ function cyclePhases(d){
  return map;
 }
 function todayPhase(d){const ph=cyclePhases(d)[today()];return ph||null;}
-function periodMonth(y,m,d){
+/* 整月网格：格子样式沿用 .cal-day（经期实心粉、预测虚边、排卵紫、记过细节带点）。
+   只负责画格子，标题和翻页在 periodTopCard 里——原来的「双月日历」删掉了，一个月就够看。 */
+function periodMonthGrid(y,m,d){
  const lead=new Date(Date.UTC(y,m-1,1)).getUTCDay(),days=new Date(Date.UTC(y,m,0)).getUTCDate();
- const phases=cyclePhases(d),todayS=today();
- const cells=[...Array(lead).fill(0)];for(let i=1;i<=days;i++)cells.push(i);
+ const phases=cyclePhases(d),todayS=today(),logs=periodDayLogs(),picked=state.periodDay||todayS;
  // 月初第一格的"上一段"要取上月最后一天，否则每月 1 号都会被误标成阶段第一天
  const firstIso=`${y}-${String(m).padStart(2,'0')}-01`;
  let prevPhase=(phases[dayStr(dayNum(firstIso)-1)]||{}).phase||'';
- // 格子上带 data-day：点哪天就改哪天，没记录的那天直接按那天新建
  const recs=new Map();
  d.items.forEach(r=>recs.set(String(r.body.start).slice(0,10),r));
- const logs=periodDayLogs(),picked=state.periodDay||today();
- return `<div class="period-month"><h3>${y} 年 ${m} 月</h3><div class="calendar-grid">${['日','一','二','三','四','五','六'].map(w=>`<span class="cal-week">${w}</span>`).join('')}${cells.map(v=>{
-  if(!v)return '<span></span>';
+ const cells=[...Array(lead)].map(()=>'<span></span>');
+ for(let v=1;v<=days;v++){
   const iso=`${y}-${String(m).padStart(2,'0')}-${String(v).padStart(2,'0')}`,ph=phases[iso],rec=recs.get(iso),log=logs[iso];
-  // 每段第一天打短名标注；排卵日不再重复写「排卵」，改用圆点（tooltip 说明）
   const isStart=!!ph&&ph.phase!==prevPhase;
   prevPhase=ph?ph.phase:'';
-  // 经期格子本身已经是实心粉，再标「经期」就挤了；只给排卵期起点留两个字
-  const tag=isStart&&ph.phase==='fertile'?PHASE_SHORT[ph.phase]:'';
+  // 格子里不再写短标签：经期是实心粉、排卵期是连续紫底，标签只会把那一行撑高
   const cls=ph?` ph-${ph.phase}${ph.predicted?' ph-pred':''}${ph.ovu?' ph-ovu':''}${isStart?' ph-start':''}`:'';
   const parts=[ph?`${PHASE_NAMES[ph.phase]}${ph.predicted?'（预测）':''}`:'还没有记录',ph&&ph.ovu?'排卵日':'',rec?'这次经期的第一天':'',log?'这天记过身体情况':'点一下记这天'].filter(Boolean);
   const tip=parts.join(' · ');
-  return `<button type="button" class="cal-day${cls}${iso===todayS?' is-today':''}${rec?' has-rec':''}${log?' has-log':''}${iso===picked?' picked':''}" data-action="period-day" data-day="${iso}" title="${tip}" aria-label="${m} 月 ${v} 日，${tip}"><span>${v}</span>${tag?`<em>${tag}</em>`:''}</button>`;
- }).join('')}</div></div>`;
+  cells.push(`<button type="button" class="cal-day${cls}${iso===todayS?' is-today':''}${rec?' has-rec':''}${log?' has-log':''}${iso===picked?' picked':''}" data-action="period-day" data-day="${iso}" title="${tip}" aria-label="${m} 月 ${v} 日，${tip}"><span>${v}</span></button>`);
+ }
+ return `<div class="calendar-grid">${['日','一','二','三','四','五','六'].map(w=>`<span class="cal-week">${w}</span>`).join('')}${cells.join('')}</div>`;
+}
+/* 翻月：月末日期要夹到目标月的最后一天，否则 1/31 往前翻会跳到 3 月 */
+function shiftMonth(day,delta){
+ const y=Number(day.slice(0,4)),m=Number(day.slice(5,7))-1+delta;
+ const dt=new Date(Date.UTC(y,m,1));
+ const last=new Date(Date.UTC(dt.getUTCFullYear(),dt.getUTCMonth()+1,0)).getUTCDate();
+ const date=Math.min(Number(day.slice(8)),last);
+ return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth()+1).padStart(2,'0')}-${String(date).padStart(2,'0')}`;
 }
 /* 阶段短名用两字，日历格子里放得下；主视觉卡上要念全称，单独一份 */
 const PHASE_CARD={period:'经期',follicular:'卵泡期',fertile:'排卵期',luteal:'黄体期'};
@@ -1020,22 +1027,11 @@ function phaseBar(d){
  const ph=todayPhase(d),cur=ph?ph.phase:'';
  return `<div class="phase-wrap"><div class="phase-bar">${segs.map(([k,nm,nd])=>`<span class="phase-seg s-${k}${k===cur?' current':''}" style="flex:${nd}" title="${nm}约 ${nd} 天"><b>${nm}</b><small>${nd}天</small></span>`).join('')}<i class="phase-cursor" style="left:${pos}%" aria-hidden="true"></i></div></div>`;
 }
-/* 顶部周条 + 图例：美柚第一屏就是这一条——一眼看到这周哪几天在经期、哪几天是预测。
-   左右箭头按周翻，只改 state.periodDay，不动任何数据。 */
-function periodWeek(d){
- const day=state.periodDay||today(),n=dayNum(day),dow=new Date(n*DAY_MS).getUTCDay(),first=n-dow;
- const phases=cyclePhases(d),logs=periodDayLogs(),todayS=today();
- const cells=[...Array(7)].map((_,i)=>{
-  const iso=dayStr(first+i),ph=phases[iso],log=logs[iso],cls=['pw-day'];
-  if(ph)cls.push('ph-'+ph.phase);
-  if(ph&&ph.predicted)cls.push('ph-pred');
-  if(log)cls.push('has-log');
-  if(iso===todayS)cls.push('is-today');
-  if(iso===day)cls.push('is-picked');
-  const mark=iso===todayS?'今天':(ph&&ph.phase==='period'&&!ph.predicted?'经期':'');
-  return `<button type="button" class="${cls.join(' ')}" data-action="period-pick" data-day="${iso}" aria-label="${iso}，点一下记录这天"><span class="pw-w">${'日一二三四五六'[i]}</span><span class="pw-n">${Number(iso.slice(8))}</span>${mark?`<em>${mark}</em>`:''}</button>`;
- }).join('');
- return `<div class="period-top"><button type="button" class="pw-nav" data-action="period-week" data-delta="-7" aria-label="上一周">‹</button><strong>${Number(day.slice(5,7))} 月</strong><button type="button" class="pw-nav" data-action="period-week" data-delta="7" aria-label="下一周">›</button><button type="button" class="pw-today" data-action="period-pick" data-day="${todayS}">回今天</button></div><div class="period-week">${cells}</div><p class="period-legend"><span class="lg-pill p-period">月经期</span><span class="lg-pill p-pred">预测经期</span><span class="lg-pill p-fertile">排卵期</span></p>`;
+/* 顶部日历卡：整月网格 + 月份翻页 + 图例。
+   原来这里只显示一周、下面再摆一份双月日历，等于同一件事看两遍；现在合成一张，整月铺开。 */
+function periodTopCard(d){
+ const day=state.periodDay||today(),y=Number(day.slice(0,4)),m=Number(day.slice(5,7));
+ return `<div class="period-top"><button type="button" class="pw-nav" data-action="period-month" data-delta="-1" aria-label="上个月">‹</button><strong>${y} 年 ${m} 月</strong><button type="button" class="pw-nav" data-action="period-month" data-delta="1" aria-label="下个月">›</button><button type="button" class="pw-today" data-action="period-pick" data-day="${today()}">回今天</button></div>${periodMonthGrid(y,m,d)}<p class="period-legend"><span class="lg-pill p-period">月经期</span><span class="lg-pill p-pred">预测经期</span><span class="lg-pill p-fertile">排卵期</span><span class="lg-pill p-ovu"><i></i>排卵日</span></p>`;
 }
 /* 选中那天的记录卡：一行一项，点开底部弹层选，选完立刻存。
    「月经来了 是/否」不是普通字段——它决定这天算不算经期，所以单独一行的分段按钮。 */
@@ -1151,10 +1147,9 @@ function periodPage(){
  const hero=d.items.length
   ?`<section class="card period-hero">${cycleHero(d,state.me.user.name)}<p class="meta">下次预计 ${Number(dayStr(d.nextStart).slice(5,7))} 月 ${Number(dayStr(d.nextStart).slice(8))} 日${d.estimated?'（参考值）':''} · ${d.untilNext>=0?`还有 ${d.untilNext} 天`:`已推迟 ${-d.untilNext} 天`}</p>${phaseBar(d)}<div class="stats-hero" style="grid-template-columns:repeat(3,minmax(0,1fr));margin:14px 0 0"><div class="stat-card"><span>平均周期</span><strong>${d.cycle}<em>天</em></strong></div><div class="stat-card"><span>平均经期</span><strong>${d.length}<em>天</em></strong></div><div class="stat-card"><span>记录天数</span><strong>${periodDayRows().length}<em>天</em></strong></div></div></section>`
   :`<section class="card"><div class="section-heading"><h2>🌸 开始记录</h2></div><p class="meta">点下面「月经来了 · 是」，把这次的第一天记下来；之后每天顺手记一点，周期会越来越准。谁记都行，两个人看到的是同一份。</p></section>`;
- const top=`<section class="card period-top-card">${periodWeek(d)}</section>`;
+ /* 顺序：主视觉卡 → 整月日历 → 当天记录。日历只留这一份，下面不再重复 */
+ const top=`<section class="card period-top-card">${periodTopCard(d)}</section>`;
  const log=periodLogCard(day);
- const months=[0,1].map(k=>{const dt=new Date(Date.UTC(Number(day.slice(0,4)),Number(day.slice(5,7))-1+k,1));return periodMonth(dt.getUTCFullYear(),dt.getUTCMonth()+1,d);}).join('');
- const calBlock=`<section class="card"><div class="section-heading"><h2>日历</h2></div>${months}<p class="small-note">点某一天就切到那天去记录；实线粉＝真的经期，虚线粉＝推算的下一次。</p></section>`;
  const spread=d.gaps.length>1?Math.max(...d.gaps)-Math.min(...d.gaps):0;
  const symCount={};
  periodDayRows().forEach(r=>(r.body.symptoms||[]).forEach(s=>{if(s!=='没有症状')symCount[s]=(symCount[s]||0)+1;}));
@@ -1168,7 +1163,7 @@ function periodPage(){
   return `<article class="card"><div class="card-header">${avatar(r.author)}<div><strong>${esc(String(r.body.start).slice(5,7))} 月 ${esc(String(r.body.start).slice(8))} 日开始</strong><small>共 ${len} 天 · ${end.slice(5)} 结束${logs?` · 记了 ${logs} 天细节`:''} · ${esc(person(r.author).name)} 记录</small></div><div class="card-menu"><details class="more-menu"><summary aria-label="更多操作" title="更多操作">⋯</summary><div class="menu-pop"><button data-action="edit-record" data-id="${r.id}">${icon('edit')} 编辑</button><button data-action="delete-record" data-id="${r.id}" class="danger">${icon('trash')} 删除</button></div></details></div></div>${(r.body.symptoms||[]).length?`<div class="tabs" style="flex-wrap:wrap;margin:8px 0 0">${r.body.symptoms.map(s=>`<span class="filter-chip">${esc(s)}</span>`).join('')}</div>`:''}${r.body.content?`<p class="card-text">${esc(r.body.content)}</p>`:''}</article>`;
  }).join('');
  const headBar=heading('生理期','记下周期，把照顾提前一点。','new-period','记录经期','heart');
- return `${headBar}${top}${hero}${log}${calBlock}${symBlock}${hist}`;
+ return `${headBar}${hero}${top}${log}${symBlock}${hist}`;
 }
 function periodForm(record=null, presetDay=null){
  /* 这一层只管「这次经期从哪天到哪天」；每天的身体细节走日记录卡。
@@ -1695,8 +1690,9 @@ async function act(action,id,el) {
   return;
  }
  // 周条左右翻一周，只挪选中日期
- if(action==='period-week'){
-  state.periodDay=dayStr(dayNum(state.periodDay||today())+Number(el.dataset.delta||0));
+ // 顶部日历按整月翻；选中日期跟着挪到下月同一天（月末自动夹到该月最后一天）
+ if(action==='period-month'){
+  state.periodDay=shiftMonth(state.periodDay||today(),Number(el.dataset.delta||0));
   return renderPage();
  }
  if(action==='period-log')return periodLogSheet(el.dataset.field||'',el.dataset.day||today());

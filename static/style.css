@@ -975,11 +975,10 @@ body.cal-full{overflow:hidden;height:100dvh}
 .period-month h3{font-size:13px;font-weight:600;color:var(--muted);margin:0 0 8px}
 .cal-day.ph-period{background:#FF5C8A;box-shadow:none}
 .cal-day.ph-period span:first-child{color:#fff;font-weight:700}
-.cal-day.ph-period em{background:rgba(255,255,255,.22);color:#fff}
-/* 卵泡期 / 黄体期不铺底色：整月涂色会变成一块调色板，只在 tooltip 里说清楚就够了 */
+/* 卵泡期 / 黄体期不铺底色：整月涂色会变成一块调色板，只在 tooltip 里说清楚就够了。
+   排卵期要留底色——那是"这几天"的连续区间，靠底色才看得出来。 */
 .cal-day.ph-follicular,.cal-day.ph-luteal{background:transparent}
-/* 阶段短名：只出现在每段第一天，让"阶段切换"这件事看得见 */
-.cal-day em{font-style:normal;font-size:9.5px;font-weight:700;letter-spacing:.02em;line-height:1;padding:0;background:transparent;color:var(--muted);margin-top:-1px}
+.cal-day.ph-fertile{background:rgba(139,114,168,.26)}
 /* 已经有记录的那一天：右上角一个小圆点，暗示"这天点进去是改，不是新建" */
 .cal-day.has-rec::before{content:'';position:absolute;top:6px;right:6px;width:5px;height:5px;border-radius:50%;background:var(--primary);opacity:.7}
 .cal-day.ph-period.has-rec::before{display:none}
@@ -993,6 +992,8 @@ body.cal-full{overflow:hidden;height:100dvh}
 .lg-pill.p-follicular{background:rgba(95,138,90,.26)}
 .lg-pill.p-fertile{background:rgba(139,114,168,.34)}
 .lg-pill.p-luteal{background:rgba(196,150,70,.28)}
+.lg-pill.p-ovu{background:rgba(139,114,168,.18);color:#5D4A78;display:inline-flex;align-items:center;gap:5px}
+.lg-pill.p-ovu i{width:6px;height:6px;border-radius:50%;background:#8B72A8}
 .lg-pill.p-pred{border:1px dashed var(--primary);color:var(--primary-dark);font-weight:500;background:rgba(255,92,138,.06)}
 
 /* 阶段进度条：一条 bar 摊开整个周期，游标就是今天，当前段描边高亮 */
@@ -1045,19 +1046,11 @@ body.cal-full{overflow:hidden;height:100dvh}
 .pw-nav{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:17px;line-height:1;color:var(--muted);background:var(--soft)}
 .pw-nav:hover{color:var(--primary-dark)}
 .pw-today{margin-left:auto;font-size:12px;font-weight:600;color:var(--primary-dark);padding:5px 12px;border-radius:999px;background:var(--soft)}
-.period-week{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}
-.pw-day{display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 2px 5px;border-radius:12px;border:1px solid transparent;transition:background var(--speed),border-color var(--speed)}
-.pw-w{font-size:10.5px;color:var(--muted);line-height:1.2}
-.pw-n{font-size:15px;font-weight:600;line-height:1.3;color:var(--ink)}
-.pw-day em{font-style:normal;font-size:9.5px;line-height:1.2;color:var(--muted)}
-.pw-day.ph-period{background:#FF5C8A;border-color:#FF5C8A}
-.pw-day.ph-period .pw-w,.pw-day.ph-period .pw-n,.pw-day.ph-period em{color:#fff}
-.pw-day.ph-period.ph-pred{background:rgba(255,92,138,.16);border-color:rgba(255,92,138,.42)}
-.pw-day.ph-period.ph-pred .pw-w,.pw-day.ph-period.ph-pred .pw-n,.pw-day.ph-period.ph-pred em{color:var(--primary-dark)}
-.pw-day.ph-fertile{background:rgba(139,114,168,.18)}
-.pw-day.ph-luteal{background:rgba(196,150,70,.16)}
-.pw-day.is-today .pw-n{color:var(--primary-dark)}
-.pw-day.is-picked{border-color:var(--primary);box-shadow:inset 0 0 0 1px var(--primary)}
+/* 整月网格就用 .cal-day，不再另写一套周条格子；这里只收拾卡片内的留白 */
+.period-top-card .calendar-grid{margin:10px 0 0;gap:4px}
+.period-top-card .cal-day{min-height:47px}
+/* 宽屏下格子会被拉成扁长方形，抬高一点让它接近方形，不然一屏日历像表格 */
+@media(min-width:641px){.period-top-card .cal-day{min-height:64px}}
 .period-top-card .period-legend{margin:12px 0 0}
 
 /* ———— 生理期 · 按天记录卡 ————
@@ -1078,6 +1071,8 @@ body.cal-full{overflow:hidden;height:100dvh}
 .plog-seg{margin-left:auto;display:flex;gap:4px;flex:none}
 .seg-btn{min-width:56px;padding:6px 0;border-radius:9px;font-size:13.5px;font-weight:600;color:var(--muted);background:var(--soft);cursor:pointer}
 .seg-btn.on{background:#FF5C8A;color:#fff}
+/* 「否」选中是"确认不在经期"，用浅底就行——跟着主色高亮会像危险操作 */
+.seg-btn.on[data-on="0"]{background:var(--soft);color:var(--ink);box-shadow:inset 0 0 0 1px var(--line)}
 
 /* ———— 生理期 · 底部选择弹层 ———— */
 .ps-sheet{display:flex;flex-direction:column;gap:14px}
@@ -1117,7 +1112,7 @@ body.cal-full{overflow:hidden;height:100dvh}
 .cal-day.ph-period.is-today span:first-child{background:rgba(255,255,255,.3);color:#fff}
 @media(max-width:640px){
   .period-top-card{padding:12px 12px 10px}
-  .pw-day{padding:5px 1px 4px;border-radius:11px}
+  .period-top-card .cal-day{min-height:43px;font-size:14px}
   .ps-dot{width:42px;height:42px;font-size:17px}
   .ps-grid{gap:12px 4px}
   .ps-label{font-size:10.5px}
