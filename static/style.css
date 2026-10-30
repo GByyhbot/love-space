@@ -1074,10 +1074,11 @@ body.cal-full{overflow:hidden;height:100dvh}
 .plog-add.ghost{border-color:transparent;color:var(--muted);opacity:.6;font-size:15px;line-height:1}
 .plog-add .icon{width:13px;height:13px}
 .plog-seg{margin-left:auto;display:flex;gap:4px;flex:none}
-.seg-btn{min-width:56px;padding:6px 0;border-radius:9px;font-size:13.5px;font-weight:600;color:var(--muted);background:var(--soft);cursor:pointer}
-.seg-btn.on{background:#FF5C8A;color:#fff}
-/* 「否」选中是"确认不在经期"，用浅底就行——跟着主色高亮会像危险操作 */
-.seg-btn.on[data-on="0"]{background:var(--soft);color:var(--ink);box-shadow:inset 0 0 0 1px var(--line)}
+.seg-btn{min-width:0;padding:6px 11px;border-radius:9px;font-size:13px;font-weight:600;color:var(--muted);background:var(--soft);cursor:pointer;white-space:nowrap}
+.seg-btn.primary{background:#FF5C8A;color:#fff}
+/* 经期内两个动作分主次：「月经走了」描边、「月经又来了」浅底，别让两个实心块抢视线 */
+.seg-btn.outline{background:transparent;box-shadow:inset 0 0 0 1px rgba(255,92,138,.5);color:var(--primary-dark)}
+:root.dark .seg-btn.outline{color:#F3C0CE;box-shadow:inset 0 0 0 1px rgba(255,92,138,.55)}
 
 /* ———— 生理期 · 底部选择弹层 ———— */
 .ps-sheet{display:flex;flex-direction:column;gap:14px}
@@ -1102,6 +1103,20 @@ body.cal-full{overflow:hidden;height:100dvh}
 .ps-item-copy small{font-size:11.5px;color:var(--muted);line-height:1.45}
 .ps-radio{width:20px;height:20px;flex:none;border-radius:50%;border:2px solid var(--line)}
 .ps-item.on .ps-radio{border-color:#FF5C8A;box-shadow:inset 0 0 0 4px #FF5C8A}
+/* 爱爱可以记好几次：上面一排「第 N 次」，下面措施网格 + 时/分滚轮 */
+.sex-tabs{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding:2px 0}
+.sex-tabs::-webkit-scrollbar{display:none}
+.sex-tab{flex:none;padding:6px 14px;border-radius:999px;font-size:12.5px;font-weight:600;color:var(--muted);background:var(--soft);cursor:pointer}
+.sex-tab.on{background:#FF5C8A;color:#fff}
+.sex-tab.add{width:34px;padding:0;display:flex;align-items:center;justify-content:center;font-size:15px;color:var(--primary-dark)}
+.wheel-wrap{position:relative;display:flex;align-items:center;justify-content:center;gap:4px;background:var(--soft);border-radius:14px;overflow:hidden}
+/* 可视 3 格、上下各留 1 格 padding：scrollTop = 索引×44 时，选中项正好落在容器中心 */
+.wheel{position:relative;z-index:1;height:132px;width:74px;overflow-y:auto;scroll-snap-type:y mandatory;padding:44px 0;box-sizing:border-box;scrollbar-width:none;text-align:center}
+.wheel::-webkit-scrollbar{display:none}
+.wheel-item{display:block;height:44px;line-height:44px;scroll-snap-align:center;font-size:19px;color:var(--muted);transition:color .15s,font-size .15s}
+.wheel-item.on{color:var(--ink);font-weight:700;font-size:21px}
+.wheel-colon{position:relative;z-index:1;font-size:19px;font-weight:700;color:var(--ink)}
+.wheel-band{position:absolute;left:8px;right:8px;top:44px;height:44px;border-radius:10px;background:var(--surface);pointer-events:none}
 .num-display{display:flex;align-items:baseline;justify-content:center;gap:6px;padding:16px 0 6px}
 .num-display output{font-size:40px;font-weight:800;color:var(--ink);line-height:1}
 .num-display em{font-style:normal;font-size:14px;color:var(--muted)}

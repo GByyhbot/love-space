@@ -600,10 +600,31 @@ def clean_body(c, kind, data, user_id, previous=None):
                 raise HTTPException(422, f'{name}的档位不正确')
         sex = body.get('sex')
         if sex is not None:
-            if not isinstance(sex, list) or len(sex) > 4 \
-                    or any(type(item) is not int or not 1 <= item <= 10 for item in sex):
-                raise HTTPException(422, '避孕方式的选项不正确')
-            body['sex'] = list(dict.fromkeys(sex))
+            # 一天可以有好几次，每次单独记措施（w）和时间（t）。两种形状都收：
+            #   [2, 4]                      —— 早期版本只记了措施编号
+            #   [{'t': '16:14', 'w': [2]}]  —— 现在的一次记录
+            # 落库前统一成后者，前端只处理一种形状。
+            if not isinstance(sex, list) or len(sex) > 8:
+                raise HTTPException(422, '最多记八次')
+            entries = []
+            for item in sex:
+                if type(item) is int:
+                    if not 1 <= item <= 10:
+                        raise HTTPException(422, '避孕方式的选项不正确')
+                    entries.append({'t': '', 'w': [item]})
+                    continue
+                if not isinstance(item, dict):
+                    raise HTTPException(422, '避孕方式的选项不正确')
+                ways = item.get('w') or []
+                if not isinstance(ways, list) or len(ways) > 10 \
+                        or any(type(w) is not int or not 1 <= w <= 10 for w in ways):
+                    raise HTTPException(422, '避孕方式的选项不正确')
+                when = item.get('t') or ''
+                if when:
+                    if not isinstance(when, str) or not re.fullmatch(r'([01]\d|2[0-3]):[0-5]\d', when):
+                        raise HTTPException(422, '时间格式不正确')
+                entries.append({'t': when, 'w': list(dict.fromkeys(ways))})
+            body['sex'] = entries
         for key, low, high, name in (('weight', 20.0, 300.0, '体重'), ('temp', 30.0, 45.0, '体温')):
             if key not in body:
                 continue

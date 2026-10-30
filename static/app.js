@@ -852,7 +852,13 @@ function periodValueText(key,b){
   case 'pain':return b.pain?(PERIOD_PAIN[b.pain]||[''])[0]:'';
   case 'discharge':return b.discharge?(PERIOD_DISCHARGE[b.discharge]||[''])[0]:'';
   case 'mood':{const m=b.mood?PERIOD_MOODS[b.mood-1]:null;return m?`${m[0]} ${m[1]}`:'';}
-  case 'sex':return (b.sex||[]).map(i=>(PERIOD_SEX[i-1]||[])[0]).filter(Boolean).join(' · ');
+  case 'sex':{
+   const list=periodSexEntries(b);
+   if(!list.length)return '';
+   const first=list[0];
+   const ways=first.w.map(i=>(PERIOD_SEX[i-1]||[])[0]).filter(Boolean).join('、');
+   return [list.length>1?`${list.length} 次`:'',first.t||'',ways].filter(Boolean).join(' · ');
+  }
   case 'symptoms':return (b.symptoms||[]).join(' · ');
   case 'weight':return b.weight?`${b.weight} 公斤`:'';
   case 'temp':return b.temp?`${b.temp} ℃`:'';
@@ -874,23 +880,43 @@ async function periodSaveDay(date,patch){
 }
 /* 「月经来了 是/否」：是＝这天补一次经期起点（已在窗口内则不动）；
    否＝这天是首日就撤掉这条，是中途某天就把这次经期截到昨天为止。 */
-async function periodToggleDay(day,on){
+/* 这一天算不算经期，用两个动作表达，跟美柚一致：
+   · 经期外：[月经来了]  —— 从这天开始一次；离上次结束 3 天内自动接上那一段，不拆成两次
+   · 经期内：[月经走了]  —— 今天干净了，这次截到昨天（今天是首日就直接撤掉）
+             [月经又来了] —— 今天还在，把结束日再往后推一天（幂等，连点不会疯长） */
+async function periodStart(day){
+ const d=periodData(),n=dayNum(day),last=d.items[d.items.length-1];
+ if(last){
+  const endN=dayNum(last.body.start)+Number(last.body.length||5)-1,gap=n-endN;
+  // 刚结束又回潮：接在上一段后面，否则一个月会碎成两三段经期
+  if(gap>=1&&gap<=3){
+   await put('/records/'+last.id,{kind:'period',body:{...last.body,length:n-dayNum(last.body.start)+1}});
+   toast('已经把这次经期接到今天');await refresh();return;
+  }
+ }
+ // 经期长度的默认值取历史平均，但不低于 3 天：中途截短过一次之后，
+ // 平均值会被拉到 1–2 天，下次新建就会变成一个荒唐的"两天经期"。
+ const body={start:day,length:Math.max(3,d.length),cycle:d.cycle};
+ await post('/records',{kind:'period',body,client_id:uuid()});
+ toast('已记下这次经期');await refresh();
+}
+async function periodEnd(day){
  const d=periodData(),n=dayNum(day);
  const ep=d.items.find(r=>{const s=dayNum(r.body.start);return n>=s&&n<s+Number(r.body.length||5);});
- if(on){
-  if(ep)return toast('这天已经在经期里了');
-  // 经期长度的默认值取历史平均，但不低于 3 天：中途截短过一次之后，
-  // 平均值会被拉到 1–2 天，下次新建就会变成一个荒唐的"两天经期"。
-  const body={start:day,length:Math.max(3,d.length),cycle:d.cycle};
-  await post('/records',{kind:'period',body,client_id:uuid()});
-  toast('已记下这次经期');
- }else{
-  if(!ep)return toast('这天本来就不在经期里');
-  const s=dayNum(ep.body.start);
-  if(s===n){await del('/records/'+ep.id);toast('已撤掉这次经期');}
-  else{await put('/records/'+ep.id,{kind:'period',body:{...ep.body,length:n-s}});toast('这次经期到昨天为止');}
- }
+ if(!ep)return toast('这天本来就不在经期里');
+ const s=dayNum(ep.body.start);
+ if(s===n){await del('/records/'+ep.id);toast('已撤掉这次经期');}
+ else{await put('/records/'+ep.id,{kind:'period',body:{...ep.body,length:n-s}});toast('这次经期到昨天为止');}
  await refresh();
+}
+async function periodMore(day){
+ const d=periodData(),n=dayNum(day);
+ const ep=d.items.find(r=>{const s=dayNum(r.body.start);return n>=s&&n<s+Number(r.body.length||5);});
+ if(!ep)return toast('这天不在经期里');
+ const s=dayNum(ep.body.start),len=Number(ep.body.length||5),want=Math.max(len,n-s+2);
+ if(want===len)return toast(`这次经期已经排到第 ${len} 天了`);
+ await put('/records/'+ep.id,{kind:'period',body:{...ep.body,length:want}});
+ toast('这次经期又多算一天');await refresh();
 }
 function periodData(){
  /* 两个人共同维护同一条周期：不按作者区分，谁记的都算进去，界面也就只有一套 */
@@ -1046,10 +1072,91 @@ function periodLogCard(day){
  }).join('');
  return `<section class="card period-log">
   <div class="plog-head"><div><strong>${head}</strong><small>${on?`经期第 ${n-dayNum(ep.body.start)+1} 天`:'记下这一天，周期会更准'}</small></div>${ep?`<button type="button" class="link-btn" data-action="edit-record" data-id="${ep.id}">改经期长度</button>`:''}</div>
-  <div class="plog-row"><span class="plog-ico">🩸</span><span class="plog-name">月经来了</span><span class="plog-seg"><button type="button" class="seg-btn${on?' on':''}" data-action="period-toggle" data-day="${day}" data-on="1" aria-pressed="${on}">是</button><button type="button" class="seg-btn${on?'':' on'}" data-action="period-toggle" data-day="${day}" data-on="0" aria-pressed="${!on}">否</button></span></div>
+  <div class="plog-row"><span class="plog-ico">🩸</span><span class="plog-name">经期</span>${on
+   ?`<span class="plog-seg"><button type="button" class="seg-btn outline" data-action="period-end" data-day="${day}">月经走了</button><button type="button" class="seg-btn" data-action="period-more" data-day="${day}">月经又来了</button></span>`
+   :`<span class="plog-seg"><button type="button" class="seg-btn primary" data-action="period-start" data-day="${day}">月经来了</button></span>`}</div>
   ${rows}
   <button type="button" class="plog-row" data-action="period-log" data-field="content" data-day="${day}"><span class="plog-ico">📝</span><span class="plog-name">日记</span><span class="plog-val">${esc((log.content||'').slice(0,16))}</span><span class="plog-add">${log.content?'':icon('edit')}</span></button>
  </section>`;
+}
+/* 爱爱一天可能好几次，每次单独记措施和时间。
+   老数据是 [2,4] 这种纯编号，统一读成 [{t:'',w:[2]},…]，界面只处理一种形状。 */
+function periodSexEntries(b){
+ return (b.sex||[]).map(item=>item&&typeof item==='object'
+  ?{t:String(item.t||''),w:(item.w||[]).filter(x=>typeof x==='number')}
+  :{t:'',w:typeof item==='number'?[item]:[]});
+}
+const CLOCK_H=[...Array(24)].map((_,i)=>String(i).padStart(2,'0'));
+const CLOCK_M=[...Array(60)].map((_,i)=>String(i).padStart(2,'0'));
+const WHEEL_H=44;   // 每格 44px，滚轮靠 scrollTop 换算选中项，改了要同步 CSS
+function nowTime(){const d=new Date();return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;}
+function wheelMarkup(t){
+ const [h,m]=(t||'00:00').split(':');
+ const col=(id,vals,cur)=>`<div class="wheel" data-wheel="${id}">${vals.map(v=>`<span class="wheel-item${v===cur?' on':''}">${v}</span>`).join('')}</div>`;
+ return `<div class="wheel-wrap"><i class="wheel-band" aria-hidden="true"></i>${col('h',CLOCK_H,h||'00')}<span class="wheel-colon">:</span>${col('m',CLOCK_M,m||'00')}</div>`;
+}
+function bindWheel(root){
+ $$('.wheel',root).forEach(w=>{
+  const items=$$('.wheel-item',w);
+  const idx=Math.max(0,items.findIndex(x=>x.classList.contains('on')));
+  w.scrollTop=idx*WHEEL_H;
+  w.onscroll=()=>{
+   const i=Math.round(w.scrollTop/WHEEL_H);
+   items.forEach((it,k)=>it.classList.toggle('on',k===i));
+  };
+ });
+}
+function periodSexSheet(day){
+ const b=(periodDayRow(day)||{}).body||{};
+ let entries=periodSexEntries(b);
+ if(!entries.length)entries=[{t:nowTime(),w:[]}];
+ let cur=0;
+ openModal('爱爱',`<div class="ps-sheet" id="sex-sheet"></div>`,{sheet:true});
+ const root=$('#sex-sheet');
+ /* 切 tab / 重绘前先把屏幕上的选择读回 entries，否则会丢 */
+ const read=()=>{
+  const ways=$$('.ps-opt.on',root).map(o=>Number(o.dataset.pick));
+  const wh=$('.wheel[data-wheel="h"]',root),wm=$('.wheel[data-wheel="m"]',root);
+  const h=wh?CLOCK_H[Math.round(wh.scrollTop/WHEEL_H)]:null;
+  const m=wm?CLOCK_M[Math.round(wm.scrollTop/WHEEL_H)]:null;
+  entries[cur]={t:`${h||'00'}:${m||'00'}`,w:ways};
+ };
+ const draw=()=>{
+  const e=entries[cur];
+  root.innerHTML=`
+   <div class="sex-tabs">${entries.map((x,i)=>`<button type="button" class="sex-tab${i===cur?' on':''}" data-tab="${i}">第 ${i+1} 次</button>`).join('')}<button type="button" class="sex-tab add" data-add="1" aria-label="再记一次">＋</button></div>
+   <h3 class="ps-sub">爱爱</h3>
+   <div class="ps-grid c5">${PERIOD_SEX.map(([name,emoji],i)=>psOption(i+1,name,emoji,e.w.includes(i+1))).join('')}</div>
+   <h3 class="ps-sub">时间</h3>
+   ${wheelMarkup(e.t)}
+   <div class="form-actions"><button type="button" class="button" data-action="close-modal">取消</button>${entries.length>1?`<button type="button" class="button danger" id="sex-del">删除这次</button>`:''}<button type="button" class="button primary" id="sex-ok">确定</button></div>`;
+  bindWheel(root);
+  $('#sex-ok').onclick=async ev=>{
+   read();
+   ev.currentTarget.disabled=true;
+   try{await periodSaveDay(day,{sex:entries.filter(x=>x.w.length).map(x=>({t:x.t,w:x.w}))});closeModal();}
+   catch(err){toast(err.message);ev.currentTarget.disabled=false;}
+  };
+  const del=$('#sex-del');
+  if(del)del.onclick=()=>{
+   entries.splice(cur,1);
+   if(!entries.length)entries=[{t:nowTime(),w:[]}];
+   cur=Math.min(cur,entries.length-1);
+   draw();
+  };
+ };
+ root.onclick=e=>{
+  const tab=e.target.closest('.sex-tab');
+  if(tab&&tab.dataset.add){
+   read();
+   if(entries.length>=8)return toast('最多记八次');
+   entries.push({t:nowTime(),w:[]});cur=entries.length-1;draw();return;
+  }
+  if(tab){read();cur=Number(tab.dataset.tab);draw();return;}
+  const opt=e.target.closest('.ps-opt');
+  if(opt){opt.classList.toggle('on');opt.setAttribute('aria-pressed',String(opt.classList.contains('on')));}
+ };
+ draw();
 }
 /* ———— 底部选择弹层 ————
    单选＝点一下就存并关掉；多选＝勾完点确定。全部走 periodSaveDay 落库。 */
@@ -1126,8 +1233,7 @@ function periodLogSheet(field,day){
   return periodChoiceSheet(day,'pain','痛经',Object.entries(PERIOD_PAIN).map(([v,[name,emoji]])=>[v,name,emoji]));
  if(field==='mood')
   return periodChoiceSheet(day,'mood','心情',PERIOD_MOODS.map(([emoji,name],i)=>[i+1,name,emoji]));
- if(field==='sex')
-  return periodMultiSheet(day,'sex','爱爱',[['',PERIOD_SEX.map(([name,emoji],i)=>[i+1,name,emoji])]],5);
+ if(field==='sex')return periodSexSheet(day);
  if(field==='symptoms')
   // PERIOD_BODY_SYMPTOMS 是 [名称, 图标]，而 psOption 要 (值, 文案, 图标)，这里补一层
   return periodMultiSheet(day,'symptoms','症状',[['身体症状',PERIOD_BODY_SYMPTOMS.map(([name,emoji])=>[name,name,emoji])],['阴道分泌物',PERIOD_SECRETION.map(([name,emoji])=>[name,name,emoji])]],4);
@@ -1696,7 +1802,9 @@ async function act(action,id,el) {
   return renderPage();
  }
  if(action==='period-log')return periodLogSheet(el.dataset.field||'',el.dataset.day||today());
- if(action==='period-toggle')return periodToggleDay(el.dataset.day||today(),el.dataset.on==='1');
+ if(action==='period-start')return periodStart(el.dataset.day||today());
+ if(action==='period-end')return periodEnd(el.dataset.day||today());
+ if(action==='period-more')return periodMore(el.dataset.day||today());
  if(action.startsWith('new-')){const kind=action.slice(4);return kind==='channel'?channelForm():kind==='personal-wish'?personalWishForm():recordForm(kind);}
  if(action==='unlock-personal-wish')return unlockPersonalWish(id);
  if(action.startsWith('tool-'))return navigate('together',action.slice(5));

@@ -149,7 +149,8 @@ def test_period_day_log_shared_and_editable(client_a, client_b):
     body = rec['body']
     assert 'start' not in body
     assert (body['flow'], body['color'], body['pain'], body['mood']) == (4, 3, 2, 12)
-    assert body['sex'] == [2, 4]
+    # 老的纯编号写法会被归一成"一次记录"的形状，前端只处理一种
+    assert body['sex'] == [{'t': '', 'w': [2]}, {'t': '', 'w': [4]}]
     assert body['weight'] == 52.4 and body['temp'] == 36.6
     other = client_b.get('/api/records?kind=period&limit=1000').json()
     assert any(item['id'] == rec['id'] for item in other)
@@ -174,3 +175,24 @@ def test_period_needs_start_or_date(client_a):
     r = client_a.post('/api/records', headers=HEADERS,
                       json={'kind': 'period', 'body': {'flow': 3}})
     assert r.status_code == 422
+
+
+def test_period_sex_entries_keep_time_and_count(client_a):
+    """爱爱一天可以好几次：每次带自己的措施和时间，落库后原样能读回来。"""
+    r = client_a.post('/api/records', headers=HEADERS, json={'kind': 'period', 'body': {
+        'date': '2026-10-30',
+        'sex': [{'t': '16:14', 'w': [2]}, {'t': '23:05', 'w': [1, 10]}, {'t': '', 'w': []}]}})
+    assert r.status_code == 200, r.text
+    assert r.json()['body']['sex'] == [
+        {'t': '16:14', 'w': [2]},
+        {'t': '23:05', 'w': [1, 10]},
+        {'t': '', 'w': []},
+    ]
+
+
+def test_period_sex_rejects_bad_time(client_a):
+    """时间必须是 HH:MM，乱写不许落库。"""
+    for when in ('25:00', '12:60', '9:5', 'abc', 1614):
+        r = client_a.post('/api/records', headers=HEADERS, json={'kind': 'period', 'body': {
+            'date': '2026-10-30', 'sex': [{'t': when, 'w': [2]}]}})
+        assert r.status_code == 422, (when, r.text)
