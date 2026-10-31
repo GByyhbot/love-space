@@ -21,6 +21,7 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Stre
 from fastapi.staticfiles import StaticFiles
 from PIL import Image
 from pydantic import BaseModel, Field
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.gzip import GZipMiddleware
 
 from . import db
@@ -2284,8 +2285,35 @@ app.mount('/static', StaticFiles(directory=db.ROOT / 'static'), name='static')
 # 情侣摆拍参考图库：同源托管在 /srv/pose-gallery，由 NAS 以 :ro 卷挂载进容器。
 # 仅在目录存在时挂载——本地/CI 没有这个目录时不应因此启动失败（线上容器始终挂载）。
 _POSE_GALLERY_DIR = '/srv/pose-gallery'
+
+
+class _SpaStaticFiles(StaticFiles):
+    """静态站 + 前端路由兜底。
+
+    上游 ai-pose-gallery-zh 2.x 是 TanStack Router 的 history 模式（不是 hash），
+    /pose-gallery/poses 这种深链在纯 StaticFiles 下会 404。这里把"看起来像路由、
+    又没有扩展名"的 404 兜回 index.html，前端路由自己解析。
+    """
+
+    async def get_response(self, path, scope):
+        try:
+            return await super().get_response(path, scope)
+        except StarletteHTTPException as exc:
+            leaf = path.rsplit('/', 1)[-1]
+            if exc.status_code == 404 and '.' not in leaf and path != 'index.html':
+                return await super().get_response('index.html', scope)
+            raise
+
+
 if os.path.isdir(_POSE_GALLERY_DIR):
-    app.mount('/pose-gallery', StaticFiles(directory=_POSE_GALLERY_DIR, html=True), name='pose-gallery')
+    app.mount('/pose-gallery', _SpaStaticFiles(directory=_POSE_GALLERY_DIR, html=True), name='pose-gallery')
+    # 上游 2.x 前端把资源写成绝对路径（fetch('/data/pose-zh.json')、src={`/${原图}`}、
+    # Vite 产物在 /assets/），放在子路径下必然 404。与其改它的源码（每次升级都要重打补丁），
+    # 不如把这四个根路径让给它——本应用自己只用 /static /media /api /apk，不冲突。
+    for _prefix in ('assets', 'data', 'img', 'thumbs'):
+        app.mount(f'/{_prefix}',
+                  StaticFiles(directory=f'{_POSE_GALLERY_DIR}/{_prefix}', check_dir=False),
+                  name=f'pose-{_prefix}')
 
 
 @app.get('/')

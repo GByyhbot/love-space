@@ -245,10 +245,10 @@ function figurePage() {
   return `<div class="figure-page">
     <div class="page-heading">
       <div><h1>情侣摆拍参考</h1><p>照着下面的姿势参考，拍一张属于你们的照片。</p></div>
-      <a class="link-btn figure-open" href="/pose-gallery/" target="_blank" rel="noopener">新标签打开 ${icon('arrow')}</a>
+      <a class="link-btn figure-open" href="/pose-gallery/poses" target="_blank" rel="noopener">新标签打开 ${icon('arrow')}</a>
     </div>
     <div class="figure-frame">
-      <iframe class="figure-iframe" src="/pose-gallery/" title="情侣姿势参考" loading="lazy" referrerpolicy="no-referrer"></iframe>
+      <iframe class="figure-iframe" src="/pose-gallery/poses" title="情侣姿势参考" loading="lazy" referrerpolicy="no-referrer"></iframe>
     </div>
   </div>`;
 }
