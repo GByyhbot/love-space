@@ -22,7 +22,8 @@ const paths = {
  star:'m12 3 3 6 7 1-5 5 1 7-6-3-6 3 1-7-5-5 7-1 3-6', gear:'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8ZM9 3h6l1 3 3 1 2 5-2 5-3 1-1 3H9l-1-3-3-1-2-5 2-5 3-1 1-3', download:'M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5', clock:'M12 8v5l3 2M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z', check:'m5 12 4 4L19 6',
  moon:'M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z', sun:'M12 4V2M12 22v-2M4 12H2M22 12h-2M5 5 4 4M20 20l-1-1M19 5l1-1M4 20l1-1M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z', info:'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20Zm0-6v-4m0-4h.01',
  play:'m8 5 12 7-12 7V5Z', pause:'M8 5h3v14H8V5Zm5 0h3v14h-3V5Z', music:'M9 18V6l10-2v12M9 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm10-2a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z', image:'M4 4h16v16H4V4Zm2 12 4-4 3 3 2-2 3 3',
- chat:'M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.4 8.4 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5Z'
+ chat:'M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.4 8.4 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5Z',
+ search:'M21 21l-4.35-4.35M10 18a8 8 0 1 1 0-16 8 8 0 0 1 0 16Z'
 };
 const icon = name => `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="${paths[name] || paths.heart}"/></svg>`;
 const state = {page:'home', tab:'', me:null, records:[], photos:[], notices:[], channels:[], deliveries:[], webpush:null, nativePush:null, dashboard:null, weekly:null, weekOffset:0, periodDay:'', timelinePosts:[],timelineCursor:null,timelineHasMore:false,stream:null, online:navigator.onLine};
@@ -217,7 +218,7 @@ function renderShell() {
  if(!state.me.space.motion)root.classList.add('reduced-motion');
  document.body.className=state.page==='messages'?('chat-full'+(chatBgIsPhoto()?' chat-immersive':'')):(state.page==='together'&&state.tab==='calendar'?'cal-full':(state.page==='figure'?'figure-full':''));
  applyCustomColor(state.me.space.theme,state.me.space.custom_color);
- $('#app').innerHTML=`<div class="shell${state.page==='messages'?' chat-full':''}${state.page==='figure'?' figure-full':''}"><aside class="sidebar"><div class="brand"><img src="/static/icon.svg" alt=""><div><strong>恋爱空间</strong><small>LOVE, EVERY DAY</small></div></div><nav class="nav" aria-label="主要导航">${navHtml.join('')}</nav><div class="sidebar-bottom"><div class="little-note"><span>❀</span><br>把喜欢，写进每一天。<br>little things, lasting love</div><button class="profile-btn" data-nav="personal">${avatar(state.me.user.id)}<div><strong>${esc(state.me.user.name)}</strong><small>我的小角落 ${icon('arrow')}</small></div></button></div></aside><main class="main"><header class="topbar${toolsSub?' has-back':''}">${toolsSub?`<button class="nav-back topbar-back" data-action="tools-back" aria-label="回到我们">${icon('back')}</button>`:''}<span class="desktop-date">${new Date().toLocaleDateString('zh-CN',{timeZone:state.me.space.timezone,month:'long',day:'numeric',weekday:'long'})} · 今天也要好好相爱</span><div class="topbar-right"><span class="pill">${icon('lock')} 双人私密空间</span><button class="icon-btn" id="dark-toggle" data-action="toggle-dark" aria-label="切换深浅色">${icon(document.documentElement.classList.contains('dark')?'sun':'moon')}</button><button class="icon-btn" data-nav="messages" aria-label="私聊">${icon('chat')}${state.me.chat_unread&&state.page!=='messages'?`<span class="badge">${state.me.chat_unread>99?'99+':state.me.chat_unread}</span>`:''}</button><button class="icon-btn" data-nav="notices" aria-label="通知">${icon('bell')}${state.me.unread?`<span class="badge">${state.me.unread>99?'99+':state.me.unread}</span>`:''}</button><details class="more-menu account-menu"><summary class="mobile-profile" aria-label="打开账号菜单" title="账号菜单">${avatar(state.me.user.id)}</summary><div class="menu-pop account-popover"><div class="account-menu-heading"><strong>${esc(state.me.user.name)}</strong><small>我的账号</small></div><button data-action="profile">${icon('edit')} 账号资料</button><button data-nav="personal">${icon('lock')} 个人小角落</button><button data-nav="settings">${icon('gear')} 设置</button><button data-action="logout" class="danger account-logout">${icon('arrow')} 退出登录</button></div></details></div></header>${!state.online?'<div class="offline-banner">网络暂时断开，正在等待重连。未发送的文字会为你保留。</div>':''}<div id="page"></div><p class="footer-note">♡ 有你在，平凡的日子也闪闪发光。</p></main></div>`;
+ $('#app').innerHTML=`<div class="shell${state.page==='messages'?' chat-full':''}${state.page==='figure'?' figure-full':''}"><aside class="sidebar"><div class="brand"><img src="/static/icon.svg" alt=""><div><strong>恋爱空间</strong><small>LOVE, EVERY DAY</small></div></div><nav class="nav" aria-label="主要导航">${navHtml.join('')}</nav><div class="sidebar-bottom"><div class="little-note"><span>❀</span><br>把喜欢，写进每一天。<br>little things, lasting love</div><button class="profile-btn" data-nav="personal">${avatar(state.me.user.id)}<div><strong>${esc(state.me.user.name)}</strong><small>我的小角落 ${icon('arrow')}</small></div></button></div></aside><main class="main"><header class="topbar${toolsSub?' has-back':''}">${toolsSub?`<button class="nav-back topbar-back" data-action="tools-back" aria-label="回到我们">${icon('back')}</button>`:''}<span class="desktop-date">${new Date().toLocaleDateString('zh-CN',{timeZone:state.me.space.timezone,month:'long',day:'numeric',weekday:'long'})} · 今天也要好好相爱</span><div class="topbar-right"><span class="pill">${icon('lock')} 双人私密空间</span><button class="icon-btn" id="dark-toggle" data-action="toggle-dark" aria-label="切换深浅色">${icon(document.documentElement.classList.contains('dark')?'sun':'moon')}</button><button class="icon-btn" data-action="open-search" aria-label="搜索">${icon('search')}</button><button class="icon-btn" data-nav="messages" aria-label="私聊">${icon('chat')}${state.me.chat_unread&&state.page!=='messages'?`<span class="badge">${state.me.chat_unread>99?'99+':state.me.chat_unread}</span>`:''}</button><button class="icon-btn" data-nav="notices" aria-label="通知">${icon('bell')}${state.me.unread?`<span class="badge">${state.me.unread>99?'99+':state.me.unread}</span>`:''}</button><details class="more-menu account-menu"><summary class="mobile-profile" aria-label="打开账号菜单" title="账号菜单">${avatar(state.me.user.id)}</summary><div class="menu-pop account-popover"><div class="account-menu-heading"><strong>${esc(state.me.user.name)}</strong><small>我的账号</small></div><button data-action="profile">${icon('edit')} 账号资料</button><button data-nav="personal">${icon('lock')} 个人小角落</button><button data-nav="settings">${icon('gear')} 设置</button><button data-action="logout" class="danger account-logout">${icon('arrow')} 退出登录</button></div></details></div></header>${!state.online?'<div class="offline-banner">网络暂时断开，正在等待重连。未发送的文字会为你保留。</div>':''}<div id="page"></div><p class="footer-note">♡ 有你在，平凡的日子也闪闪发光。</p></main></div>`;
  renderPage();
  if(keepScroll>0)window.scrollTo({top:keepScroll});
 }
@@ -229,8 +230,10 @@ function renderPage() {
  if(state.page==='messages') {$('#chat-text').value=localStorage.getItem('chat-text:'+state.me.user.id)||'';autoGrow($('#chat-text'));scrollChat();$('#chat-text')?.addEventListener('focus',()=>{const d=$('#sticker-dock');if(d)d.hidden=true;});applyWallpaper();}
  if(state.page==='importdetail') initImportLog();
  syncStatusBarOverlay();
- if(state.page==='home'){loadOnThisDay();loadYearbook();}
+  if(state.page==='home'){loadOnThisDay();loadYearbook();}
   if(state.page==='together'&&state.tab==='calendar') loadCalendar();
+  /* 自定义清单表单：questPage 渲染后单独绑定 submit（不走 data-action 代理） */
+  if(state.page==='together'&&state.tab==='quest'){const qf=$('#quest-custom-form');if(qf&&!qf.dataset.bound){qf.dataset.bound='1';qf.onsubmit=async e=>{e.preventDefault();const input=$('#quest-custom-input');const title=input.value.trim();if(!title)return;try{await post('/records',{kind:'quest',body:{title,category:'自定义',done:false},client_id:uuid()});input.value='';await refresh();toast('已加入清单');}catch(err){toast(err.message);}};}}
 }
 /* state.me 还没到时不要渲染：boot() 是异步的，用户在首屏加载完之前点导航（或 hashchange 抢跑）
    会让 renderShell 读到 null.space 抛 TypeError，被 catch 成一条吓人的报错提示。
@@ -796,16 +799,26 @@ const QUEST_IDEAS=[
  ['生活','一起做一次体检'],['生活','一起存一笔旅行基金'],['生活','一起布置一次房间'],['生活','一起过完一个没有手机的晚上'],
  ['生活','一起吵一架然后和好'],['生活','一起制定一次年度计划'],['生活','互相写一份「喜欢你的十件事」'],['生活','一起看完一部很长的剧'],
 ];
+
+/* 情侣问答题库：40+ 条，分回忆/默契/未来/趣味四组。
+   问题表单里用 optgroup 分组展示，比平铺 select 好扫。 */
+const QUESTION_BANK=[
+  ['回忆',['第一次心动，是哪个瞬间？','如果可以重温一天，你会选哪天？','你记得我说过最温柔的话是哪句？','我们第一次见面，你心里在想什么？','你最想封存的一个我们共同的瞬间是？','我做过最让你感动的事是什么？','你记得我们第一次吵架是为什么吗？','有没有一个瞬间，你觉得"就是TA了"？','我们之间最默契的一次不用说话的经历是？','你最想回到我们关系的哪个阶段？']],
+  ['默契',['什么样的陪伴让你最有安全感？','你觉得我们最像的地方是什么？','如果用一个词形容我们的关系，会是什么？','你觉得我最懂你的时候是什么时候？','我们之间最不需要解释就能懂的事是什么？','你觉得我们在一起后，彼此最大的变化是？','你最欣赏我性格里的哪一点？','你觉得我们最互补的地方在哪？','如果我们的默契值满分是100，现在你打几分？','你觉得我们最不像情侣的地方是什么？']],
+  ['未来',['今年最想和我一起完成什么事？','如果明年我们可以去任何地方，你最想去哪？','你觉得十年后的我们会是什么样子？','你最想和我一起学的新技能是什么？','如果我们有一个只属于我们的传统，你希望是什么？','你最想和我一起完成的三个愿望是？','你觉得我们未来最需要一起面对的挑战是什么？','如果时间可以倒流但只能改一件事，你会改什么？','你最想和我一起过的一个节日是？','你觉得我们在一起最应该坚持的习惯是？']],
+  ['趣味',['如果我是一种动物，你觉得我是什么？','你觉得我喝醉之后最可爱的地方是？','如果我们要一起拍一部电影，你最想演什么角色？','你觉得我最像哪种食物？','如果我们要一起开一家店，你最想开什么？','你觉得我最应该改掉的一个坏习惯是？','如果我们要一起学一门乐器，你最想学什么？','你觉得我最应该在公众场合少做的事是？','如果我们要一起做一个短视频，你最想拍什么？','你觉得我最应该尝试的一件新事物是？']],
+];
 const money=n=>'¥'+Number(n||0).toFixed(2);
 
-function questPage(){
+ function questPage(){
  const items=recordsOf('quest').slice().sort((a,b)=>(a.body.done?1:0)-(b.body.done?1:0));
  const done=items.filter(r=>r.body.done).length,total=items.length,pct=total?Math.round(done/total*100):0;
  const back='';
  const progress=total?`<section class="card"><div class="section-heading"><h2>💫 一起完成 ${done} / ${total}</h2></div><div class="stat-bar big"><i style="width:${pct}%"></i></div><p class="meta">${pct}% · ${pct>=100?'全部做完了，可以写新的清单了':pct>=50?'已经过半，继续':'慢慢来，一件一件做'}</p></section>`:'';
  const ideas=QUEST_IDEAS.filter(([,t])=>!items.some(r=>r.body.title===t));
  const ideaBlock=`<details class="card"><summary style="cursor:pointer;font-weight:600">没灵感？从精选清单里挑（剩余 ${ideas.length} 条）</summary><div class="tabs" style="flex-wrap:wrap;margin-top:12px">${ideas.length?ideas.map(([c,t])=>`<button data-action="add-quest" data-title="${esc(t)}" data-cat="${esc(c)}">＋ ${esc(t)}</button>`).join(''):'<p class="meta">精选清单已经全部添加过了。</p>'}</div></details>`;
- return `${heading('恋爱清单','一件小事，也是一个故事。','new-quest','添加小事','heart')}${back}${progress}${items.length?items.map(recordCard).join(''):empty('清单还空着','从下面挑几件，或者写下你们自己的。','new-quest','添加第一件小事')}${ideaBlock}`;
+ const customBlock=`<section class="card"><div class="section-heading"><h2>写下你们自己的</h2></div><form id="quest-custom-form" class="quest-custom-form"><div class="quest-input-row"><input id="quest-custom-input" placeholder="想一起做的一件小事…" maxlength="80" required><button type="submit" class="button primary small">${icon('plus')} 加入</button></div><p class="small-note">自定义的小事会标记「自定义」，和精选清单分开展示。</p></form></section>`;
+ return `${heading('恋爱清单','一件小事，也是一个故事。','new-quest','添加小事','heart')}${back}${progress}${items.length?items.map(recordCard).join(''):empty('清单还空着','从下面挑几件，或者写下你们自己的。','new-quest','添加第一件小事')}${customBlock}${ideaBlock}`;
 }
 
 function ledgerPage(){
@@ -1741,6 +1754,86 @@ function openModal(title,content,{wide=false,sheet=false,cleanup=null}={}) {
  modalCleanup=cleanup;document.body.style.overflow='hidden';setTimeout(()=>$('.modal input:not([type=checkbox]),.modal textarea,.modal button')?.focus(),50);
 }
 function closeModal(){if(modalCleanup){modalCleanup();modalCleanup=null;}$('#modal-root').innerHTML='';document.body.style.overflow='';focusReturn?.focus?.();}
+/* 全局搜索：在顶栏搜索图标打开，对已加载的记录做标题+正文本地模糊匹配。
+   不新拉后端接口——state.records 里已有非聊天记录（含私信），够覆盖大部分搜索场景。 */
+function openSearchPanel(){
+ const overlay=document.createElement('div');
+ overlay.className='search-overlay';
+ overlay.innerHTML=`<div class="search-panel" role="dialog" aria-modal="true" aria-label="搜索">
+  <div class="search-input-row">
+   <span style="color:var(--muted)">${icon('search')}</span>
+   <input id="search-input" placeholder="搜索留言、愿望、清单、账本、动态…" autocomplete="off">
+   <button class="icon-btn" data-action="close-search" aria-label="关闭搜索">${icon('close')}</button>
+  </div>
+  <div id="search-results"></div>
+ </div>`;
+ document.body.appendChild(overlay);
+ document.body.style.overflow='hidden';
+ focusReturn=document.activeElement;
+ const input=$('#search-input',overlay);
+ input.focus();
+ const results=$('#search-results',overlay);
+ const render=()=>{
+  const q=input.value.trim().toLowerCase();
+  if(!q){results.innerHTML=`<div class="search-empty">${icon('search')} 输入关键词，找找我们的小回忆</div>`;return;}
+  const q2=q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+  const re=new RegExp(q2,'i');
+  const emoji=m=>m||'';
+  const group=kind=>{
+   const items=state.records.filter(r=>{
+    if(r.kind==='chat'||r.kind==='album')return false;
+    const b=r.body||{};
+    return re.test(b.title||'')||re.test(b.content||'');
+   }).map(r=>{
+    const b=r.body||{};
+    const title=b.title||'';
+    const content=(b.content||'').slice(0,80);
+    const srTitle=re.test(title)?title.replace(re,'<mark>$&</mark>'):'';
+    const srSub=re.test(content)?content.replace(re,'<mark>$&</mark>'):'';
+    return `<button class="search-result-item" data-action="search-jump" data-id="${r.id}">
+     <span class="sr-type">${emoji(kindLabel[r.kind]?kindLabel[r.kind][0]:'📄')}</span>
+     <span class="sr-text"><span class="sr-title">${srTitle||esc(title)||'（无标题）'}</span><span class="sr-sub">${srSub||esc(content||'')}</span></span>
+    </button>`;
+   }).join('');
+   return items?`<div class="search-group-heading">${kindLabel[kind]||kind}</div><div class="search-results">${items}</div>`:'';
+  };
+  const types=['post','diary','note','wish','quest','ledger','question','habit','mood','anniversary','music','period','surprise','draft'];
+  const html=types.map(group).filter(Boolean).join('')||`<div class="search-empty">没有找到「${esc(q)}」相关的记录</div>`;
+  results.innerHTML=html;
+ };
+ input.addEventListener('input',render);
+ input.addEventListener('keydown',e=>{
+  if(e.key==='Escape')closeSearchPanel(overlay);
+  if(e.key==='Enter'){
+   const first=$('#search-results .search-result-item',overlay);
+   if(first)jumpToRecord(first.dataset.id,overlay);
+  }
+ });
+ overlay.addEventListener('click',e=>{
+  if(e.target===overlay)closeSearchPanel(overlay);
+  const item=e.target.closest('[data-action="search-jump"]');
+  if(item)jumpToRecord(item.dataset.id,overlay);
+  if(e.target.closest('[data-action="close-search"]'))closeSearchPanel(overlay);
+ });
+ render();
+}
+function closeSearchPanel(overlay){
+ overlay?.remove();
+ document.body.style.overflow='';
+ focusReturn?.focus?.();
+}
+function jumpToRecord(id,overlay){
+ closeSearchPanel(overlay);
+ const r=state.records.find(x=>x.id===id);
+ if(!r)return;
+ /* 根据记录类型跳到对应页面 */
+ const pageMap={post:'timeline',diary:'personal',note:'together',wish:'together',quest:'together',ledger:'together',question:'together',habit:'together',mood:'together',anniversary:'together',music:'together',period:'together',surprise:'personal',draft:'personal'};
+ const tabMap={note:'note',wish:'wish',quest:'quest',ledger:'ledger',question:'question',habit:'habit',mood:'mood',anniversary:'anniversary',music:'music',period:'period'};
+ const page=pageMap[r.kind]||'timeline';
+ const tab=tabMap[r.kind]||'';
+ navigate(page,tab);
+ toast('已跳转到记录');
+}
 function field(label,name,value='',type='text',extra=''){return `<label>${label}<input name="${name}" type="${type}" value="${esc(value)}" ${extra}></label>`;}
 function selectField(label,name,options,value){return `<label>${label}<select name="${name}">${options.map(([v,l])=>`<option value="${esc(v)}" ${String(value)===String(v)?'selected':''}>${esc(l)}</option>`).join('')}</select></label>`;}
 function simpleForm(title,fields,onSubmit,label='保存') {
@@ -1783,7 +1876,7 @@ function recordForm(kind,record=null) {
  const b=record?.body||{};let fields='';
  if(kind==='mood')fields=selectField('今天的心情','emoji',MOOD_OPTIONS,b.emoji||'☀️')+field('心情日期','date',b.date||today(),'date','required');
  else if(kind!=='note'&&kind!=='ledger')fields+=field(kind==='question'?'想问 TA 的问题':'标题','title',b.title||'','text','required maxlength="200"');
- if(kind==='question')fields+='<label>或挑选一个内置问题<select id="preset-question"><option value="">选择一个问题…</option><option>第一次心动，是哪个瞬间？</option><option>今年最想和我一起完成什么事？</option><option>什么样的陪伴让你最有安全感？</option><option>如果可以重温一天，你会选哪天？</option></select></label>';
+ if(kind==='question')fields+='<label>或挑选一个内置问题<select id="preset-question"><option value="">选择一个问题…</option>'+QUESTION_BANK.map(([g,items])=>`<optgroup label="${esc(g)}">${items.map(q=>`<option>${esc(q)}</option>`).join('')}</optgroup>`).join('')+'</select></label>';
  if(kind==='anniversary')fields+=`<div class="form-row">${field('日期','date',b.date||today(),'date','required')}${field('提前几天提醒','remind_days',b.remind_days??1,'number','min="0" max="365"')}</div><label class="switch-row">重复方式<select name="annual"><option value="true" ${b.annual===true||b.annual===undefined?'selected':''}>每年公历日期</option><option value="lunar" ${b.annual==='lunar'?'selected':''}>每年农历日期</option><option value="false" ${b.annual===false?'selected':''}>只纪念一次</option></select></label>`;
  if(kind==='wish')fields+=`<div class="form-row">${selectField('分类','category',[['日常','日常'],['旅行','旅行'],['美食','美食'],['约会','约会'],['其他','其他']],b.category||'日常')}${field('约定日期（可选）','target',b.target||'','date')}</div>`;
  if(kind==='quest')fields+=`<div class="form-row">${selectField('分类','category',[['日常','日常'],['旅行','旅行'],['美食','美食'],['约会','约会'],['生活','生活'],['其他','其他']],b.category||'日常')}${field('计划日期（可选）','date',b.date||'','date')}</div>`;
@@ -2130,6 +2223,7 @@ async function act(action,id,el) {
  if(action==='week-prev'||action==='week-next'){const next=(state.weekOffset||0)+(action==='week-prev'?-1:1);if(next>0)return;state.weekOffset=next;state.weekly=null;renderPage();await loadSpecial();return renderPage();}
  if(action==='week-copy'){const w=state.weekly;if(!w)return;const text=[`${w.label}的回忆周报（${w.start} 至 ${w.end}）`,w.message,`记录 ${w.total} 条 · 照片 ${w.photos} 张 · 有记录 ${w.days_active} 天`,`喜欢 ${w.likes} 次 · 留言与评论 ${w.comments} 条`].join('\n');try{await navigator.clipboard.writeText(text);toast('周报文字已复制');}catch{toast('复制失败，请手动选择文字');}return;}
  if(action==='toggle-dark'){const pref=localStorage.getItem(DARK_KEY)||'auto';const isDark=document.documentElement.classList.contains('dark');localStorage.setItem(DARK_KEY,isDark?'off':'on');applyDarkMode();const btn=el||$('#dark-toggle');if(btn)btn.innerHTML=icon(document.documentElement.classList.contains('dark')?'sun':'moon');return;}
+ if(action==='open-search'){openSearchPanel();return;}
  if(action==='close-modal')return closeModal();
  if(action==='record-audio')return;
  if(action==='compose')return composer();

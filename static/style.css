@@ -1435,3 +1435,30 @@ html.is-native-app .shell.figure-full .topbar{margin-top:0}
    body.chat-immersive 由 app.js 的 renderShell 按 chatBgIsPhoto() 打上，不用 :has()（旧 WebView 不支持）。 */
 html.is-native-app body.chat-immersive .shell.chat-full .main{padding-top:0}
 html.is-native-app body.chat-immersive .shell.chat-full .chat-panel.immersive .chat-header{padding-top:calc(var(--safe-top,0px) + 6px)}
+
+/* —— 自定义清单表单（questPage 里的「写下你们自己的」） —— */
+.quest-custom-form{display:grid;gap:10px}
+.quest-input-row{display:flex;gap:10px}
+.quest-input-row input{flex:1;min-width:0}
+
+/* —— 全局搜索面板（顶栏放大镜打开） —— */
+.search-overlay{position:fixed;inset:0;z-index:120;background:rgba(69,56,63,.5);backdrop-filter:blur(6px);display:flex;align-items:flex-start;justify-content:center;padding:22px}
+.search-panel{background:var(--surface);border:1px solid var(--line);border-radius:22px;width:min(600px,100%);max-height:88dvh;overflow:auto;box-shadow:var(--shadow-lift);padding:18px;animation:pop-in var(--speed)}
+.search-panel .search-input-row{display:flex;gap:10px;align-items:center;margin-bottom:16px}
+.search-panel .search-input-row input{flex:1;min-width:0;font-size:16px}
+.search-results{display:grid;gap:10px}
+.search-result-item{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:14px;border:1px solid transparent;cursor:pointer;text-align:left;width:100%;font:inherit;color:inherit;background:transparent}
+.search-result-item:hover{background:var(--soft);border-color:var(--line)}
+.search-result-item .sr-type{flex-shrink:0;width:36px;height:36px;border-radius:11px;background:var(--soft);display:flex;align-items:center;justify-content:center;font-size:18px}
+.search-result-item .sr-text{flex:1;min-width:0;overflow:hidden}
+.search-result-item .sr-title{font-weight:600;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.search-result-item .sr-sub{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
+.search-result-item mark{background:rgba(255,213,128,.45);border-radius:3px;padding:0 2px}
+.search-empty{text-align:center;padding:32px 18px;color:var(--muted)}
+.search-group-heading{font-size:12px;font-weight:600;color:var(--muted);margin:14px 0 6px;padding:0 4px}
+.search-group-heading:first-child{margin-top:0}
+
+@media(max-width:480px){
+  .search-overlay{padding:0;align-items:flex-end}
+  .search-panel{width:100%;max-width:none;border-radius:22px 22px 0 0;max-height:92dvh;padding:20px 18px calc(20px + env(safe-area-inset-bottom))}
+}
