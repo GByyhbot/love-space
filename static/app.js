@@ -149,7 +149,7 @@ async function boot() {
  try {
   applyDarkMode();
   const status = await api('/status');
-  state.localVersion=status.version||'1.1.0';state.localBuild=status.build||'';state.appVersion={version:status.version||'1.1.0',build:status.build||''};state.apkLatest=String(status.apk_version||'').trim();state.apkUrl=status.apk_url||'';state.apkUrlDirect=status.apk_url_direct||'';state.apkNotes=status.apk_notes||'';
+  state.localVersion=status.version||'1.1.0';state.localBuild=status.build||'';state.appVersion={version:status.version||'1.1.0',build:status.build||''};state.apkLatest=String(status.apk_version||'').trim();state.apkUrl=status.apk_url||'';state.apkMirror=status.apk_mirror||'';state.apkUrlDirect=status.apk_url_direct||'';state.apkNotes=status.apk_notes||'';
   /* 原生 APK 版本（供关于页展示 + 应用内更新对比） */
   if(isNativeApp()){const nv=await detectAppVersion();if(nv!=='unknown')state.apkVersion=nv;}
   const invite = new URLSearchParams(location.search).get('invite');
@@ -2514,15 +2514,16 @@ function startKeepAlive(){
 }
 /* 语义化版本比较：a > b 返回 true（如 1.2.0 > 1.1.9） */
 function newerVer(a,b){const x=a.split('.').map(Number),y=b.split('.').map(Number);for(let i=0;i<Math.max(x.length,y.length);i++){const d=(x[i]||0)-(y[i]||0);if(d>0)return true;if(d<0)return false;}return false;}
-/* 更新弹窗：下载（同源 /apk/download → 服务端 302 到 GitHub 加速代理）、复制直连、忽略此版本、更新说明。 */
+/* 更新弹窗：下载（同源 /apk/download → 服务端 302 到站内 static 副本）、复制地址、忽略此版本、更新说明。 */
 function showUpdateModal(latest,cur,s){
  const notes=String(s&&s.apk_notes||'').trim();
  const installed=cur?`当前已装 v${cur}`:'当前版本未知';
- const body=`<div style="text-align:center;padding:6px 0 2px"><div style="font-size:44px;margin-bottom:8px">⬇️</div><p style="margin:0 0 4px">发现新版本 <strong>v${latest}</strong></p><p class="meta" style="margin:0">${installed}</p></div>`+(notes?`<details style="margin:10px 0"><summary style="cursor:pointer">更新说明</summary><pre style="white-space:pre-wrap;font-family:inherit;font-size:12px;margin:8px 0 0">${esc(notes)}</pre></details>`:'')+`<div class="form-actions" style="flex-direction:column;gap:8px;margin-top:12px"><button class="button primary" id="apk-dl">下载新版本 v${latest}</button><button class="button secondary" id="apk-copy">复制直连地址</button><div style="display:flex;gap:8px"><button class="button soft" data-action="close-modal" style="flex:1">稍后</button><button class="button soft" id="apk-ignore" style="flex:1">忽略此版本</button></div></div>`;
+ const body=`<div style="text-align:center;padding:6px 0 2px"><div style="font-size:44px;margin-bottom:8px">⬇️</div><p style="margin:0 0 4px">发现新版本 <strong>v${latest}</strong></p><p class="meta" style="margin:0">${installed}</p></div>`+(notes?`<details style="margin:10px 0"><summary style="cursor:pointer">更新说明</summary><pre style="white-space:pre-wrap;font-family:inherit;font-size:12px;margin:8px 0 0">${esc(notes)}</pre></details>`:'')+`<div class="form-actions" style="flex-direction:column;gap:8px;margin-top:12px"><button class="button primary" id="apk-dl">下载新版本 v${latest}</button><button class="button secondary" id="apk-copy">复制下载地址</button><div style="display:flex;gap:8px"><button class="button soft" data-action="close-modal" style="flex:1">稍后</button><button class="button soft" id="apk-ignore" style="flex:1">忽略此版本</button></div></div>`;
  openModal('发现新版本',body,{cleanup:null});
  setTimeout(()=>{
-  const dl=$('#apk-dl');if(dl)dl.onclick=()=>{closeModal();toast('正在唤起下载…');try{location.href=new URL(s&&s.apk_url||'/apk/download',location.origin).href;}catch{location.href=s&&s.apk_url;}};
-  const cp=$('#apk-copy');if(cp)cp.onclick=async()=>{const u=(s&&s.apk_url_direct)||new URL('/apk/download?direct=1',location.origin).href;try{await navigator.clipboard.writeText(u);toast('已复制直连地址，可粘贴到浏览器打开');}catch{toast('复制失败，请直接点「下载新版本」');}};
+  const dl=$('#apk-dl');if(dl)dl.onclick=()=>{closeModal();toast('正在唤起下载…');try{location.href=new URL((s&&s.apk_url)||'/apk/download',location.origin).href;}catch{location.href=s&&s.apk_url;}};
+  /* 复制的是站内副本直链（apk_mirror）：仓库私有，GitHub 直连要登录才能下，不如给同源地址 */
+  const cp=$('#apk-copy');if(cp)cp.onclick=async()=>{const u=(s&&s.apk_mirror)?new URL(s.apk_mirror,location.origin).href:new URL('/apk/download',location.origin).href;try{await navigator.clipboard.writeText(u);toast('已复制下载地址，可粘贴到手机浏览器');}catch{toast('复制失败，请直接点「下载新版本」');}};
   const ig=$('#apk-ignore');if(ig)ig.onclick=()=>{localStorage.setItem('love_ignore_apk',latest);closeModal();toast('已忽略 v'+latest+'；有新版本再提醒');};
  },50);
 }

@@ -299,18 +299,25 @@ def public_user(row):
     return {k: row[k] for k in ('id', 'username', 'name', 'admin', 'avatar')}
 
 
-# ---- APK 分发：GitHub Release + 国内加速代理 ---------------------------------
-# 优先从 GitHub Release 下最新 APK（服务器 static 里那份往往滞后于发版）。
-# 用同源 /apk/download 做 302 跳转，绕开 WebView/Capacitor 对外链导航的拦截：
-# WebView 只看到同源的 /apk/download，服务端再 302 到 GitHub 或加速代理。
-# 代理失效时前端可退回 ?direct=1（GitHub 直连）或 apk_url_direct。
+# ---- APK 分发：站内静态副本优先，GitHub Release 兜底 -------------------------
+# 本仓是私有的 → Release 资产对匿名请求一律 404，免认证的加速代理
+# （ghfast.top / ghproxy 系、含 GitHub 原始地址）同样取不到，实测全挂。
+# 所以默认改为下发站内副本 static/lovespace.apk：它随镜像发布、本来就在
+# Cloudflare 隧道后面，手机点开即下，不依赖任何第三方代理。
+# ?direct=1 仍指回 GitHub 原始地址，给自己留一个走 Release 页的口子。
 APK_REPO = (os.getenv('APK_GITHUB_REPO') or 'GByyhbot/love-space').strip()
-APK_PROXY = (os.getenv('APK_PROXY_PREFIX') or 'https://ghfast.top/').strip()
+APK_PROXY = (os.getenv('APK_PROXY_PREFIX') or '').strip()  # 仓库公开后填代理前缀才有意义
+_APK_STATIC_FILE = Path(__file__).resolve().parent.parent / 'static' / 'lovespace.apk'
 
 
 def _apk_github_url(ver=None):
     ver = ver or APK_VERSION
     return f'https://github.com/{APK_REPO}/releases/download/v{ver}/app-release.apk'
+
+
+def _apk_local_url():
+    """站内副本地址。带 ?v= 版本号，规避 WebView / 浏览器对同名文件的旧缓存。"""
+    return f'/static/lovespace.apk?v={APK_VERSION}'
 
 
 _APK_NOTES_FILE = Path(__file__).resolve().parent.parent / 'static' / 'apk-notes.txt'
@@ -326,6 +333,9 @@ def _apk_notes():
 
 @app.get('/apk/download')
 def apk_download(direct: int = 0):
+    # 同源 302：WebView/Capacitor 只看到 /apk/download，不会拦外链导航
+    if not direct and _APK_STATIC_FILE.exists():
+        return RedirectResponse(_apk_local_url(), status_code=302)
     url = _apk_github_url()
     if not direct and APK_PROXY:
         url = APK_PROXY.rstrip('/') + '/' + url
@@ -340,6 +350,8 @@ def status():
             'version': WEB_VERSION, 'build': BUILD_ID,
             'apk_version': APK_VERSION,
             'apk_url': '/apk/download',
+            'apk_mirror': _apk_local_url(),
+            'apk_has_local': _APK_STATIC_FILE.exists(),
             'apk_url_direct': _apk_github_url(),
             'apk_proxy': APK_PROXY,
             'apk_notes': _apk_notes()}
