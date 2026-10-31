@@ -6,13 +6,16 @@ ARG PIP_INDEX_URL=""
 # CI 打 tag 时传 git tag 进来，网页版本号就不再需要人手改代码。
 ARG LOVE_VERSION="dev"
 ARG LOVE_BUILD="local"
+# APK 版本：CI 打 tag 时传入与网页同号，/api/status 的 apk_version 才不会停在旧值
+ARG LOVE_APK_VERSION=""
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     TZ=Asia/Shanghai \
     DATA_DIR=/data \
     LOVE_VERSION=${LOVE_VERSION} \
-    LOVE_BUILD=${LOVE_BUILD}
+    LOVE_BUILD=${LOVE_BUILD} \
+    LOVE_APK_VERSION=${LOVE_APK_VERSION}
 
 RUN if [ -n "$APT_MIRROR" ]; then \
         sed -i "s|deb.debian.org|${APT_MIRROR}|g" /etc/apt/sources.list.d/debian.sources; \

@@ -45,7 +45,7 @@ def clean_version(raw, default='dev'):
 # tests/test_version_config.py 会拿这里的值和 android-app 的 build.gradle 对账。
 WEB_VERSION = clean_version(_env('LOVE_VERSION', 'dev'), 'dev')
 BUILD_ID = _env('LOVE_BUILD', 'local')
-APK_VERSION = clean_version(_env('LOVE_APK_VERSION', '1.3.1'), '1.3.1')
+APK_VERSION = clean_version(_env('LOVE_APK_VERSION', '1.5.4'), '1.5.4')
 
 
 def public_origin():

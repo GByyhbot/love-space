@@ -149,7 +149,7 @@ async function boot() {
  try {
   applyDarkMode();
   const status = await api('/status');
-  state.localVersion=status.version||'1.1.0';state.localBuild=status.build||'';state.appVersion={version:status.version||'1.1.0',build:status.build||''};
+  state.localVersion=status.version||'1.1.0';state.localBuild=status.build||'';state.appVersion={version:status.version||'1.1.0',build:status.build||''};state.apkLatest=String(status.apk_version||'').trim();state.apkUrl=status.apk_url||'';state.apkUrlDirect=status.apk_url_direct||'';state.apkNotes=status.apk_notes||'';
   /* 原生 APK 版本（供关于页展示 + 应用内更新对比） */
   if(isNativeApp()){const nv=await detectAppVersion();if(nv!=='unknown')state.apkVersion=nv;}
   const invite = new URLSearchParams(location.search).get('invite');
@@ -1745,7 +1745,7 @@ function settingsPage() {
  const fmtSize=b=>b>=1073741824?(b/1073741824).toFixed(2)+' GB':(b/1048576).toFixed(1)+' MB';
  const isAdmin=!!state.me.user.admin;
  const storageStrip=isAdmin&&st?`<button class="storage-strip" data-nav="backups"><span class="storage-strip-icon">${icon('gear')}</span><span class="storage-strip-body"><strong>已用 ${fmtSize(st.total||0)}</strong><small>可用 ${fmtSize(st.disk_free||0)} · ${st.record_count||0} 条记录 · ${st.media_count||0} 个媒体文件</small></span><span class="storage-strip-more">存储占用与备份 ${icon('arrow')}</span></button>`:'';
- return `${heading('设置','管理空间、账号和数据。')}<div class="settings-grid"><section class="card"><h2>${icon('home')} 空间设置</h2><div class="setting-list"><button data-action="space">名称、封面与主题 ${icon('arrow')}</button>${state.me.users.length<2?`<button data-action="invite">邀请另一半 ${icon('arrow')}</button>`:''}<button data-nav="channels">通知渠道与提醒偏好 ${icon('arrow')}</button></div></section><section class="card"><h2>${icon('gear')} 我的账号</h2><div class="setting-list"><button data-action="profile">头像、昵称与密码 ${icon('arrow')}</button><button data-action="logout">退出登录 ${icon('arrow')}</button></div></section><section class="card"><h2>${icon('download')} 数据管理</h2>${storageStrip}<div class="setting-list"><a href="/api/export" download>导出我有权查看的记录与原文件 ${icon('download')}</a><a href="/api/export/markdown" download>导出 Markdown 知识库（第二大脑） ${icon('download')}</a>${state.me.user.admin?`<button data-nav="backups">完整备份与存储占用 ${icon('arrow')}</button>`:''}</div><p class="small-note">第二大脑是纯 Markdown 文件夹，可拖进 Obsidian / Logseq，也可直接给 AI 当长期记忆；只含你自己可见的内容，个人心愿只导出标题。私密日记按账号隔离，完整备份由服务器管理员管理。</p></section><section class="card"><h2>${icon('info')} 关于</h2><div class="setting-list"><div style="display:flex;align-items:center;gap:10px;padding:12px 0"><span class="stat-icon" style="font-size:28px">💕</span><div><h3 style="margin:0;font-size:15px">恋爱空间</h3><p class="meta" style="margin:2px 0 0">${v.version?(state.apkVersion?'APK v'+state.apkVersion+' · 网页 v'+v.version:'网页 v'+v.version):'加载中…'}</p></div></div><button data-action="check-update">检查更新 ${icon('arrow')}</button></div><p class="small-note">网页功能自动更新；原生功能（如后台通知）需下载新版 APK，可在检查更新中获取。</p></section></div>`;
+ return `${heading('设置','管理空间、账号和数据。')}<div class="settings-grid"><section class="card"><h2>${icon('home')} 空间设置</h2><div class="setting-list"><button data-action="space">名称、封面与主题 ${icon('arrow')}</button>${state.me.users.length<2?`<button data-action="invite">邀请另一半 ${icon('arrow')}</button>`:''}<button data-nav="channels">通知渠道与提醒偏好 ${icon('arrow')}</button></div></section><section class="card"><h2>${icon('gear')} 我的账号</h2><div class="setting-list"><button data-action="profile">头像、昵称与密码 ${icon('arrow')}</button><button data-action="logout">退出登录 ${icon('arrow')}</button></div></section><section class="card"><h2>${icon('download')} 数据管理</h2>${storageStrip}<div class="setting-list"><a href="/api/export" download>导出我有权查看的记录与原文件 ${icon('download')}</a><a href="/api/export/markdown" download>导出 Markdown 知识库（第二大脑） ${icon('download')}</a>${state.me.user.admin?`<button data-nav="backups">完整备份与存储占用 ${icon('arrow')}</button>`:''}</div><p class="small-note">第二大脑是纯 Markdown 文件夹，可拖进 Obsidian / Logseq，也可直接给 AI 当长期记忆；只含你自己可见的内容，个人心愿只导出标题。私密日记按账号隔离，完整备份由服务器管理员管理。</p></section><section class="card"><h2>${icon('info')} 关于</h2><div class="setting-list"><div style="display:flex;align-items:center;gap:10px;padding:12px 0"><span class="stat-icon" style="font-size:28px">💕</span><div><h3 style="margin:0;font-size:15px">恋爱空间</h3><p class="meta" style="margin:2px 0 0">${v.version?((state.apkVersion?'APK v'+state.apkVersion+' · ':'')+'网页 v'+v.version+(state.apkLatest&&state.apkVersion&&newerVer(state.apkLatest,state.apkVersion)?' · <span style="color:#c0392b">可更新到 v'+state.apkLatest+'</span>':'')):'加载中…'}</p></div></div><button data-action="check-update">检查更新 ${icon('arrow')}</button></div><p class="small-note">网页功能自动更新；原生功能（如后台通知）需下载新版 APK，可在检查更新中获取。</p></section></div>`;
 }
 function personalPage() {
  const tab=state.tab||'diary',tabs=[['diary','私密日记'],['draft','草稿箱'],['surprise','定时惊喜'],['trash','回收站']];
@@ -2315,19 +2315,16 @@ async function act(action,id,el) {
  if(action==='delete-read-notices'){const count=state.notices.filter(n=>n.event!=='chat'&&n.seen).length;if(!count)return toast('没有可删除的已读提醒');return confirmAction('删除已读提醒？',`将删除 ${count} 条已读提醒，不会影响未读提醒、动态或聊天记录。`,async()=>{const result=await api('/notices/read',{method:'DELETE'});toast(`已删除 ${result.deleted||0} 条已读提醒`);});}
  if(action==='check-update'){try{const s=await api('/status');state.appVersion={version:s.version,build:s.build};renderShell();
   if(isNativeApp()){
-   /* App 内只比 App 版本：网页是随服务器一起更新的，与这里的判断无关。
-      以前把网页版本混进提示里，装 1.2.9 的用户会看到「已是最新版本 v1.2.7-…」
-      这种串味结果，其实服务器上的 APK 早就比本机新了。 */
+   /* App 内只比 App 版本：网页是随服务器一起更新的，与本机判断无关。 */
    let nv=await detectAppVersion();
    state.apkVersion=nv;
    const latest=String(s.apk_version||'').trim();
-   try{
-    if(!latest)toast('服务器暂未提供 APK 版本信息，请稍后再试');
-    else if(nv==='unknown')toast('读不到当前 App 版本（这个安装包太旧），请用手机浏览器打开本站下载 v'+latest+' 覆盖安装');
-    else if(!s.apk_url)toast('服务器暂未提供 APK 下载地址，请稍后再试');
-    else if(newerVer(latest,nv)){const installed=`当前 v${nv}`;openModal('发现新版本',`<div style="text-align:center;padding:10px 0"><div style="font-size:48px;margin-bottom:12px">⬇️</div><p>新版本 <strong>v${latest}</strong> 已发布（${installed}）</p><p class="meta">下载完成后点击通知安装；如果 App 内下载没有反应，请复制下载地址后用手机浏览器打开。</p><div class="form-actions"><button class="button" data-action="close-modal">稍后再说</button><button class="button primary" id="apk-dl">下载新版本</button></div></div>`);setTimeout(()=>{const b=$('#apk-dl');if(b)b.onclick=()=>{closeModal();toast('正在打开 APK 下载地址');location.href=new URL(s.apk_url,location.origin).href;};},50);}
-    else toast('已是最新版本 v'+nv);
-   }catch{toast('检查更新失败，请稍后再试');}
+   const ignored=localStorage.getItem('love_ignore_apk')||'';
+   if(!latest)toast('服务器暂未提供 APK 版本信息，请稍后再试');
+   else if(nv==='unknown')showUpdateModal(latest,'',s);
+   else if(!newerVer(latest,nv))toast('已是最新版本 v'+nv);
+   else if(ignored===latest)toast('已是最新（v'+latest+'，你已忽略过此更新）');
+   else showUpdateModal(latest,nv,s);
   } else {
    /* 浏览器：页面靠 Service Worker 自动更新，用构建号（sha-日期）判断本页是否最新，
       版本号相同也能发现新构建，不必再靠字母后缀区分。 */
@@ -2335,7 +2332,7 @@ async function act(action,id,el) {
    if(latestBuild&&mine&&latestBuild!==mine)toast('网页已更新到 v'+s.version+'，刷新页面即可加载新版');
    else toast('已是最新版本 v'+s.version);
   }
- }catch{toast('检查更新失败，请稍后再试');}return;}
+ }catch{openModal('检查更新失败','<p class="meta" style="margin:0">网络好像不太顺畅，点下方重试。</p><div class="form-actions" style="margin-top:12px"><button class="button primary" data-action="check-update">重试</button><button class="button soft" data-action="close-modal">取消</button></div>',{cleanup:null});}return;}
  if(action==='notice-detail'){closeModal();const detail=await api('/records/'+id);const unread=state.notices.filter(n=>n.record_id===id&&!n.seen);if(unread.length){try{await post('/notices/read?record_id='+encodeURIComponent(id));await refresh();}catch{}}if(detail.kind==='chat')return navigate('messages');openModal('这一刻的故事',recordCard(detail),{wide:true});return;}
  if(action==='chat-attachment')return composer('chat');
  if(action==='chat-bg')return chatBgForm();
@@ -2517,6 +2514,18 @@ function startKeepAlive(){
 }
 /* 语义化版本比较：a > b 返回 true（如 1.2.0 > 1.1.9） */
 function newerVer(a,b){const x=a.split('.').map(Number),y=b.split('.').map(Number);for(let i=0;i<Math.max(x.length,y.length);i++){const d=(x[i]||0)-(y[i]||0);if(d>0)return true;if(d<0)return false;}return false;}
+/* 更新弹窗：下载（同源 /apk/download → 服务端 302 到 GitHub 加速代理）、复制直连、忽略此版本、更新说明。 */
+function showUpdateModal(latest,cur,s){
+ const notes=String(s&&s.apk_notes||'').trim();
+ const installed=cur?`当前已装 v${cur}`:'当前版本未知';
+ const body=`<div style="text-align:center;padding:6px 0 2px"><div style="font-size:44px;margin-bottom:8px">⬇️</div><p style="margin:0 0 4px">发现新版本 <strong>v${latest}</strong></p><p class="meta" style="margin:0">${installed}</p></div>`+(notes?`<details style="margin:10px 0"><summary style="cursor:pointer">更新说明</summary><pre style="white-space:pre-wrap;font-family:inherit;font-size:12px;margin:8px 0 0">${esc(notes)}</pre></details>`:'')+`<div class="form-actions" style="flex-direction:column;gap:8px;margin-top:12px"><button class="button primary" id="apk-dl">下载新版本 v${latest}</button><button class="button secondary" id="apk-copy">复制直连地址</button><div style="display:flex;gap:8px"><button class="button soft" data-action="close-modal" style="flex:1">稍后</button><button class="button soft" id="apk-ignore" style="flex:1">忽略此版本</button></div></div>`;
+ openModal('发现新版本',body,{cleanup:null});
+ setTimeout(()=>{
+  const dl=$('#apk-dl');if(dl)dl.onclick=()=>{closeModal();toast('正在唤起下载…');try{location.href=new URL(s&&s.apk_url||'/apk/download',location.origin).href;}catch{location.href=s&&s.apk_url;}};
+  const cp=$('#apk-copy');if(cp)cp.onclick=async()=>{const u=(s&&s.apk_url_direct)||new URL('/apk/download?direct=1',location.origin).href;try{await navigator.clipboard.writeText(u);toast('已复制直连地址，可粘贴到浏览器打开');}catch{toast('复制失败，请直接点「下载新版本」');}};
+  const ig=$('#apk-ignore');if(ig)ig.onclick=()=>{localStorage.setItem('love_ignore_apk',latest);closeModal();toast('已忽略 v'+latest+'；有新版本再提醒');};
+ },50);
+}
 let ntfyWs=null,ntfyRetry=0;
 function connectNtfy(){const topic=state.me?.ntfy_topic;
  /* 服务端已停用内置 ntfy（NTFY_ENABLED=0）时不再下发 topic：关掉残留连接，避免空转的 wss */

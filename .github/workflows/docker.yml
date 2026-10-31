@@ -61,6 +61,7 @@ jobs:
         run: |
           docker build --platform linux/amd64 -t love-space:ci \
             --build-arg LOVE_VERSION="${{ steps.ver.outputs.version }}" \
+            --build-arg LOVE_APK_VERSION="${{ steps.ver.outputs.version }}" \
             --build-arg LOVE_BUILD="${{ steps.ver.outputs.build }}" .
 
       - name: 计算镜像标签

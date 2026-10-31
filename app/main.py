@@ -299,13 +299,50 @@ def public_user(row):
     return {k: row[k] for k in ('id', 'username', 'name', 'admin', 'avatar')}
 
 
+# ---- APK 分发：GitHub Release + 国内加速代理 ---------------------------------
+# 优先从 GitHub Release 下最新 APK（服务器 static 里那份往往滞后于发版）。
+# 用同源 /apk/download 做 302 跳转，绕开 WebView/Capacitor 对外链导航的拦截：
+# WebView 只看到同源的 /apk/download，服务端再 302 到 GitHub 或加速代理。
+# 代理失效时前端可退回 ?direct=1（GitHub 直连）或 apk_url_direct。
+APK_REPO = (os.getenv('APK_GITHUB_REPO') or 'GByyhbot/love-space').strip()
+APK_PROXY = (os.getenv('APK_PROXY_PREFIX') or 'https://ghfast.top/').strip()
+
+
+def _apk_github_url(ver=None):
+    ver = ver or APK_VERSION
+    return f'https://github.com/{APK_REPO}/releases/download/v{ver}/app-release.apk'
+
+
+_APK_NOTES_FILE = Path(__file__).resolve().parent.parent / 'static' / 'apk-notes.txt'
+
+
+def _apk_notes():
+    """本次更新的说明文字（维护在 static/apk-notes.txt，随发版手改即可）。"""
+    try:
+        return _APK_NOTES_FILE.read_text(encoding='utf-8').strip()[:800]
+    except Exception:
+        return ''
+
+
+@app.get('/apk/download')
+def apk_download(direct: int = 0):
+    url = _apk_github_url()
+    if not direct and APK_PROXY:
+        url = APK_PROXY.rstrip('/') + '/' + url
+    return RedirectResponse(url, status_code=302)
+
+
 @app.get('/api/status')
 def status():
     with connect() as c:
         count = c.execute('SELECT count(*) FROM users').fetchone()[0]
     return {'initialized': count > 0, 'paired': count == 2, 'setup_token_required': bool(os.getenv('SETUP_TOKEN')),
             'version': WEB_VERSION, 'build': BUILD_ID,
-            'apk_version': APK_VERSION, 'apk_url': f'/static/lovespace.apk?v={APK_VERSION}'}
+            'apk_version': APK_VERSION,
+            'apk_url': '/apk/download',
+            'apk_url_direct': _apk_github_url(),
+            'apk_proxy': APK_PROXY,
+            'apk_notes': _apk_notes()}
 
 
 @app.get('/health')

@@ -92,6 +92,11 @@ jobs:
           echo "版本 $VERSION，versionCode $CODE"
           sed -i -E "s/versionCode [0-9]+/versionCode $CODE/" android/app/build.gradle
           sed -i -E "s/versionName \"[^\"]*\"/versionName \"$VERSION\"/" android/app/build.gradle
+          # UA 版本标记必须与 versionName 同号：远程加载模式下 Capacitor 桥常不注入，
+          # 前端只能靠 UA 里的 LoveSpaceApp/<版本> 认版本，不同号会让「检查更新」永远报旧版。
+          # cap sync 已把源配置拷进 assets，这里两份一起改，确保 APK 实际带的是新版本号。
+          sed -i -E "s#LoveSpaceApp/[0-9.]+#LoveSpaceApp/$VERSION#" capacitor.config.json android/app/src/main/assets/capacitor.config.json
+          grep -n "appendUserAgent" capacitor.config.json android/app/src/main/assets/capacitor.config.json
           grep -nE "versionCode|versionName" android/app/build.gradle | head -3
 
       - name: 构建 release APK
