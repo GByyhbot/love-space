@@ -1442,6 +1442,31 @@ def weekly(offset: int = 0, user=Depends(current_user)):
         picked = sorted(sorted(rows, key=weight, reverse=True)[:4], key=lambda row: row['created'])
         highlights = serialize_many(c, picked, user['id'])
 
+    # streak：从今天往前数连续有记录的天数（上限 365 天，够用即可）
+    streak = 0
+    last_record_days_ago = None
+    cutoff = stamp(today)
+    with connect() as c:
+        # 取最近一年所有可见记录的日期（去重），按天倒序
+        day_rows = c.execute(
+            f'SELECT DISTINCT created FROM records WHERE {vis} AND created>=? ORDER BY created DESC',
+            (user['id'], cutoff - 365 * 86400)).fetchall()
+    active_days = set()
+    for r in day_rows:
+        active_days.add(dt.datetime.fromtimestamp(r['created'], tz).date())
+    d = today
+    while d in active_days and streak < 365:
+        streak += 1
+        d -= dt.timedelta(days=1)
+    # 若今天没记录，则从昨天开始往回找"最近一次记录是几天前"
+    if streak == 0:
+        for r in day_rows:
+            day = dt.datetime.fromtimestamp(r['created'], tz).date()
+            diff = (today - day).days
+            if diff >= 0:
+                last_record_days_ago = diff
+                break
+
     total = len(rows)
     label = '这一周' if offset == 0 else ('上一周' if offset == -1 else f'{-offset} 周前')
     if total:
@@ -1460,6 +1485,7 @@ def weekly(offset: int = 0, user=Depends(current_user)):
             'days_active': len(days), 'photos': photos,
             'by_kind': by_kind, 'moods': moods, 'top_mood': top_mood,
             'likes': sum(likes.values()), 'comments': sum(comments.values()),
+            'streak': streak, 'last_record_days_ago': last_record_days_ago,
             'highlights': highlights, 'message': message}
 
 
