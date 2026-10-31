@@ -2,7 +2,7 @@
 /* 版本号必须与 index.html 里 style.css / app.js 的 ?v= 一致：URL 带版本参数可强制绕过一切旧缓存。
    写成常量再拼进 URL，是为了让 CORE 不可能再和 CACHE 脱钩——以前两处手写版本号，
    CACHE 已经到 v67 而 CORE 还停在 v55，预热进缓存的旧 CSS 会一直被命中。 */
-const VERSION = 155;
+const VERSION = 156;
 const CACHE = `love-space-v${VERSION}`;
 const CORE = [`/static/style.css?v=${VERSION}`, `/static/app.js?v=${VERSION}`, '/static/icon.svg', '/static/icon-192.png', '/static/icon-512.png', '/static/apple-touch-icon.png', '/static/garden.svg', '/manifest.webmanifest', '/'];
 
