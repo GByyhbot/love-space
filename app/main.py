@@ -13,7 +13,7 @@ import threading
 import zipfile
 from contextlib import asynccontextmanager
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 from zoneinfo import ZoneInfo
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, Response, UploadFile
@@ -592,7 +592,8 @@ def clean_body(c, kind, data, user_id, previous=None):
     permitted = {'title', 'content', 'date', 'media', 'album', 'publish_at', 'annual', 'remind_days',
                  'category', 'done', 'emoji', 'target', 'completion_post', 'sticker', 'amount',
                  'start', 'cycle', 'length', 'flow', 'symptoms',
-                 'color', 'pain', 'sex', 'mood', 'weight', 'discharge', 'temp'}
+                 'color', 'pain', 'sex', 'mood', 'weight', 'discharge', 'temp',
+                 'reply_to', 'pinned'}
     body = {k: v for k, v in data.items() if k in permitted}
     if 'sticker' in body and (not isinstance(body['sticker'], str)
                               or not re.fullmatch(r'/static/stickers/[a-z0-9]+/\d+\.(webm|webp)', body['sticker'])):
@@ -697,6 +698,25 @@ def clean_body(c, kind, data, user_id, previous=None):
                 dt.date.fromisoformat(body[key])
             except ValueError:
                 raise HTTPException(422, '日期格式不正确')
+    if kind != 'chat':
+        # 引用/置顶只对聊天消息有意义，别的类型带进来一律丢掉，不留脏字段
+        body.pop('reply_to', None)
+        body.pop('pinned', None)
+    if 'reply_to' in body:
+        # 只存「引用了哪条 + 当时那句话的摘要」：原消息之后被撤回或改掉，引用条也还看得懂
+        quote = body['reply_to']
+        if quote in (None, '', {}):
+            body.pop('reply_to')
+        elif not isinstance(quote, dict):
+            raise HTTPException(422, '引用的消息格式不正确')
+        else:
+            rid = str(quote.get('id') or '').strip()
+            if not rid or len(rid) > 64:
+                raise HTTPException(422, '引用的消息格式不正确')
+            text = quote.get('text') or ''
+            body['reply_to'] = {'id': rid, 'text': str(text)[:80]}
+    if 'pinned' in body and not isinstance(body['pinned'], bool):
+        raise HTTPException(422, '置顶状态不正确')
     if kind == 'anniversary' and not body.get('date'):
         raise HTTPException(422, '请选择纪念日日期')
     if kind == 'period' and not (body.get('start') or body.get('date')):
@@ -1097,6 +1117,27 @@ def recall_record(rid: str, user=Depends(current_user)):
             if not still_used:
                 c.execute('UPDATE media SET attached=0 WHERE id=?', (mid,))
     return {'ok': True}
+
+
+@app.post('/api/records/{rid}/pin')
+def pin_record(rid: str, user=Depends(current_user)):
+    """置顶 / 取消置顶一条聊天消息。
+
+    单独开一个端点而不是走整体 PUT：PUT 会经过 clean_body 的白名单，
+    `recalled` 这类只由服务端写入的字段会被洗掉——等于顺手把撤回的消息又翻出来了。
+    置顶不区分作者：两个人谁都能置顶哪条，这是"我们俩都该看到"的事。
+    """
+    with connect() as c:
+        c.execute('BEGIN IMMEDIATE')
+        row = get_record(c, rid, user, True)
+        if row['kind'] != 'chat':
+            raise HTTPException(400, '只有聊天消息可以置顶')
+        data = db.body_decode(row)
+        pinned = not data.get('pinned')
+        data['pinned'] = pinned
+        c.execute('UPDATE records SET body=?,updated=? WHERE id=?',
+                  (db.body_encode(row['kind'], rid, data), now(), rid))
+    return {'ok': True, 'pinned': pinned}
 
 
 @app.post('/api/records/{rid}/like')
@@ -1538,29 +1579,107 @@ def weekly(offset: int = 0, user=Depends(current_user)):
             'highlights': highlights, 'message': message}
 
 
+_WORD_STOP = set('''我们 你们 他们 她们 它们 自己 这个 那个 什么 怎么 就是 还是 因为 所以 但是 然后 如果
+这样 那样 可以 已经 没有 真的 其实 不是 这就 是那 都很 也很 不会 觉得 时候 现在 今天 昨天 明天
+一下 一点 一些 有点 好多 一直 知道 看到 感觉 心里 开心 喜欢 一个 两个 咱们 大家 东西 事情
+还是 就会 就是 可是 而且 或者 虽然 不过 只是 有点 一样 也是 都是'''.split())
+
+
+def _year_words(texts, limit=8):
+    """年度关键词：中文按 2-gram 切词统计，配停用表过滤。
+
+    不引第三方分词库——两个人一年的记录量级上，2-gram + 停用表已经够看出
+    "这一年反复在写什么"，而多一个依赖就多一份装不上/升不动的风险。
+    """
+    counter = {}
+    for text in texts:
+        for seg in re.findall(r'[\u4e00-\u9fa5]{2,}', str(text or '')[:2000]):
+            for i in range(len(seg) - 1):
+                word = seg[i:i + 2]
+                if word in _WORD_STOP or word[0] == word[1]:
+                    continue
+                counter[word] = counter.get(word, 0) + 1
+    ranked = sorted(counter.items(), key=lambda kv: (-kv[1], kv[0]))
+    return [{'w': w, 'n': n} for w, n in ranked[:limit] if n >= 2]
+
+
 @app.get('/api/yearbook')
 def yearbook(year: int = 0, user=Depends(current_user)):
-    """小年报：指定年份的统计聚合，默认取当前年。"""
+    """小年报：指定年份的统计聚合，默认取当前年。
+
+    除了基础计数，还给几项"留得住人"的：连续记录天数、最活跃的月份与星期、
+    最常记的类型、心情 Top、年度关键词、这一年收到的赞与评论。
+    """
     with connect() as c:
         space = db.setting(c, 'space')
-    tz_name = (space or {}).get('timezone', 'Asia/Shanghai')
-    current_year = dt.datetime.now(ZoneInfo(tz_name)).year
+    tz = ZoneInfo((space or {}).get('timezone', 'Asia/Shanghai'))
+    current_year = dt.datetime.now(tz).year
     y = year or current_year
     with connect() as c:
         rows = [serialize(c, r, user['id']) for r in c.execute('SELECT * FROM records ORDER BY created')
                 if db.visible(r, user['id']) and r['kind'] not in {'chat', 'album'}]
-    in_year = [r for r in rows if (r['body'].get('date') or '')[:4] == str(y)]
-    by_kind = {}
+        like_count = dict(c.execute('SELECT record_id, count(*) FROM likes GROUP BY record_id').fetchall())
+        comment_count = dict(c.execute('SELECT record_id, count(*) FROM comments GROUP BY record_id').fetchall())
+
+    # 按"这条记录属于哪天"归年：优先 body.date（用户填的事发日），没有就用创建时间
+    in_year = []
+    for r in rows:
+        day = (r['body'].get('date') or '')[:10]
+        if not day:
+            try:
+                day = dt.datetime.fromtimestamp(r['created'], tz).strftime('%Y-%m-%d')
+            except (TypeError, ValueError, OSError):
+                day = ''
+        if day[:4] == str(y):
+            r['_day'] = day
+            in_year.append(r)
+
+    by_kind, by_month, by_weekday, moods = {}, {}, {}, {}
     photos = 0
     for r in in_year:
         by_kind[r['kind']] = by_kind.get(r['kind'], 0) + 1
-        photos += len([m for m in r.get('media', []) if m['mime'].startswith('image/')])
-    # 最常互动、最长连续打卡等高级统计暂不做，先给基础数据
+        by_month[r['_day'][5:7]] = by_month.get(r['_day'][5:7], 0) + 1
+        try:
+            weekday = dt.date.fromisoformat(r['_day']).weekday()
+        except ValueError:
+            weekday = None
+        if weekday is not None:
+            by_weekday[weekday] = by_weekday.get(weekday, 0) + 1
+        if r['kind'] == 'mood':
+            emoji = r['body'].get('emoji') or '☀️'
+            moods[emoji] = moods.get(emoji, 0) + 1
+        photos += len([m for m in r.get('media', []) if (m.get('mime') or '').startswith('image/')])
+
+    days = sorted({r['_day'] for r in in_year if r['_day']})
+    streak = run = 0
+    prev = None
+    for day in days:
+        try:
+            run = run + 1 if prev and (dt.date.fromisoformat(day) - dt.date.fromisoformat(prev)).days == 1 else 1
+        except ValueError:
+            run = 1
+        streak = max(streak, run)
+        prev = day
+
+    def top(counter, limit=1):
+        return sorted(counter.items(), key=lambda kv: (-kv[1], kv[0]))[:limit]
+
+    best_month = top(by_month)
+    best_weekday = top(by_weekday)
+    top_kind = top(by_kind)
     return {'year': y, 'is_current': y == current_year,
             'total': len(in_year), 'by_kind': by_kind, 'photos': photos,
             'moods': sum(1 for r in in_year if r['kind'] == 'mood'),
             'wishes_done': sum(1 for r in in_year if r['kind'] == 'wish' and r['body'].get('done')),
-            'anniversaries': sum(1 for r in in_year if r['kind'] == 'anniversary')}
+            'anniversaries': sum(1 for r in in_year if r['kind'] == 'anniversary'),
+            'active_days': len(days), 'streak': streak,
+            'best_month': {'month': int(best_month[0][0]), 'count': best_month[0][1]} if best_month else None,
+            'best_weekday': {'weekday': best_weekday[0][0], 'count': best_weekday[0][1]} if best_weekday else None,
+            'top_kind': {'kind': top_kind[0][0], 'count': top_kind[0][1]} if top_kind else None,
+            'mood_top': [{'emoji': e, 'n': n} for e, n in top(moods, 3)],
+            'words': _year_words([(r['body'].get('title') or '') + ' ' + (r['body'].get('content') or '')
+                                  for r in in_year]),
+            'interactions': sum(like_count.get(r['id'], 0) + comment_count.get(r['id'], 0) for r in in_year)}
 
 
 @app.get('/api/calendar')
@@ -1822,6 +1941,78 @@ def export_markdown(request: Request, user=Depends(current_user)):
     stamp = __import__('datetime').datetime.now().strftime('%Y%m%d')
     return FileResponse(path, filename=f'恋爱空间-第二大脑-{stamp}.zip',
                         media_type='application/zip', background=BackgroundTask(path.unlink, missing_ok=True))
+
+
+@app.get('/api/export/ics')
+def export_ics(user=Depends(current_user)):
+    """导出日历（.ics）：纪念日按年循环、愿望与清单带上计划日。
+
+    放进手机自带日历是这类记录最自然的下游——纪念日不再靠 App 提醒，
+    提醒也能用系统自带的（比站内推送可靠）。农历纪念日没法用 RRULE 表达，
+    这里只写今年这一次的那天，明年再看一次导出。
+    """
+    with connect() as c:
+        space = db.setting(c, 'space')
+        rows = [serialize(c, r, user['id']) for r in c.execute('SELECT * FROM records ORDER BY created')
+                if db.visible(r, user['id'])]
+    tz = ZoneInfo((space or {}).get('timezone', 'Asia/Shanghai'))
+    this_year = dt.datetime.now(tz).year
+
+    def esc(value):
+        return (str(value or '').replace('\\', '\\\\').replace(';', '\\;')
+                .replace(',', '\\,').replace('\n', '\\n'))
+
+    def lunar_due(day, year):
+        try:
+            from lunardate import LunarDate
+            base = dt.date.fromisoformat(day)
+            lunar = LunarDate.fromSolarDate(base.year, base.month, base.day)
+            return LunarDate(year, lunar.month, lunar.day, False).toSolarDate()
+        except Exception:
+            return None
+
+    lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Love Space//CN', 'CALSCALE:GREGORIAN',
+             'METHOD:PUBLISH', 'X-WR-CALNAME:我们的纪念日']
+    stamp = dt.datetime.now(dt.timezone.utc).strftime('%Y%m%dT%H%M%SZ')
+    made = 0
+    for r in rows:
+        body, kind = r['body'], r['kind']
+        day, title, yearly, note = '', '', False, ''
+        if kind == 'anniversary' and body.get('date'):
+            day, title, note = body['date'][:10], body.get('title') or '纪念日', body.get('content') or ''
+            yearly = body.get('annual') in (True, 'lunar')
+            if body.get('annual') == 'lunar':
+                due = lunar_due(day, this_year) or lunar_due(day, this_year + 1)
+                if not due:
+                    continue
+                day, yearly = due.isoformat(), False
+        elif kind in {'wish', 'quest'} and body.get('date') and body.get('done') is not True:
+            day, title = body['date'][:10], body.get('title') or ('想做的事' if kind == 'wish' else '清单')
+            note = body.get('content') or ''
+        if not day or not title:
+            continue
+        try:
+            dt.date.fromisoformat(day)
+        except ValueError:
+            continue
+        made += 1
+        lines += ['BEGIN:VEVENT', f'UID:{r["id"]}@love-space', f'DTSTAMP:{stamp}',
+                  f'DTSTART;VALUE=DATE:{day.replace("-", "")}']
+        if yearly:
+            lines.append('RRULE:FREQ=YEARLY')
+        lines.append(f'SUMMARY:{esc(title)}')
+        if note:
+            lines.append(f'DESCRIPTION:{esc(note[:400])}')
+        lines.append('TRANSP:TRANSPARENT')
+        lines.append('END:VEVENT')
+    lines.append('END:VCALENDAR')
+    if not made:
+        raise HTTPException(404, '还没有可导出的纪念日或计划')
+    stamp_name = dt.datetime.now(tz).strftime('%Y%m%d')
+    return Response('\r\n'.join(lines) + '\r\n', media_type='text/calendar; charset=utf-8',
+                    headers={'Content-Disposition':
+                             f"attachment; filename=love-space-{stamp_name}.ics; "
+                             f"filename*=UTF-8''{quote(f'我们的纪念日-{stamp_name}.ics')}"})
 
 
 @app.post('/api/backups')

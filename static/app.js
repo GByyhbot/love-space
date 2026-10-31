@@ -413,9 +413,32 @@ function timelinePage() {
  const chips=[f.q?`<span class="filter-chip">“${esc(f.q)}”</span>`:'',f.author?`<span class="filter-chip">${esc(person(f.author).name)}</span>`:'',f.date?`<span class="filter-chip">${esc(f.date)}</span>`:'',f.media?`<span class="filter-chip">${{image:'照片',video:'视频',audio:'语音'}[f.media]}</span>`:''].join('');
  return `${heading('时光慢慢，爱意满满','那些一起走过的日子，都在这里。','compose','记录此刻','edit')}<div class="filters"><input id="filter-q" placeholder="搜索我们的故事…" value="${esc(f.q||'')}" aria-label="搜索动态"><details class="filter-box" ${(['author','date','media'].some(k=>f[k]))?'open':''}><summary>${icon('calendar')} 筛选${active?`<span class="filter-chip">${active}</span>`:''}</summary><div class="filter-body">${chips}<select id="filter-author" aria-label="按作者筛选"><option value="">两个人的时光</option>${state.me.users.map(u=>`<option value="${u.id}" ${f.author===u.id?'selected':''}>${esc(u.name)}</option>`).join('')}</select><input id="filter-date" type="date" value="${esc(f.date||'')}" aria-label="按日期筛选"><select id="filter-media" aria-label="按类型筛选"><option value="">所有记录</option>${[['image','照片'],['video','视频'],['audio','语音']].map(([id,label])=>`<option value="${id}" ${f.media===id?'selected':''}>${label}</option>`).join('')}</select>${active?button('清除筛选','clear-filters','small secondary'):''}</div></details></div><div id="timeline-list">${posts.length?posts.map(recordCard).join(''):empty(f.q||active?'没有符合条件的记录':'这一页，留给新的故事',f.q||active?'换个条件，或清除筛选再试试。':'可以发照片、文字、视频，或者留下一段声音。','compose')}</div>`;
 }
+/* 照片格子：相册页的「按相册」和「按时间」共用一份，避免两套 markup 走偏 */
+function photoGrid(list){
+ return `<div class="photo-grid">${list.map(p=>`<button class="photo-item" data-action="photo" data-id="${p.id}"><img loading="lazy" src="/media/${p.id}?preview=true" alt="${esc(p.caption||p.name)}"><span>${esc(p.date||'属于我们的瞬间')}</span></button>`).join('')}</div>`;
+}
+/* 相册两种看法：按手工分类（原来的方式），或按月份自动归组。
+   照片上传时没存 EXIF 拍摄地，「按地点」做不了真地图，所以按时间这条线做扎实：
+   月份分组不依赖任何手工维护，翻老照片时最直觉。 */
 function albumsPage() {
- const selected=state.album||'',photos=state.photos.filter(p=>!selected||state.records.find(r=>r.id===p.record_id)?.body.album===selected),albums=recordsOf('album');
- return `${heading('把喜欢的瞬间，装进口袋','照片留住的不只是风景，还有身边的你。','upload-album','上传照片','photo')}<div class="tabs"><button data-action="album-filter" data-id="" class="${selected?'':'active'}">全部照片 · ${state.photos.length}</button>${albums.map(a=>`<button data-action="album-filter" data-id="${a.id}" class="${selected===a.id?'active':''}">${esc(a.body.title)}</button>`).join('')}<button data-action="new-album">＋ 新建相册</button></div>${selected?`<div class="inline-actions" style="margin:0 0 18px">${button('编辑相册','edit-record','small secondary','edit',`data-id="${selected}"`)}${button('删除相册分类','delete-record','small secondary','trash',`data-id="${selected}"`)}</div>`:''}${photos.length?`<div class="photo-grid">${photos.map(p=>`<button class="photo-item" data-action="photo" data-id="${p.id}"><img loading="lazy" src="/media/${p.id}?preview=true" alt="${esc(p.caption||p.name)}"><span>${esc(p.date||'属于我们的瞬间')}</span></button>`).join('')}</div>`:empty('每一张，都是喜欢你的证据','直接上传，或在发布动态时添加照片，都会收藏在这里。','upload-album','上传第一张照片')}`;
+ const selected=state.album||'',view=state.albumView||'album';
+ const photos=state.photos.filter(p=>!selected||state.records.find(r=>r.id===p.record_id)?.body.album===selected);
+ const albums=recordsOf('album');
+ const views=`<div class="tabs album-views"><button data-action="album-view" data-view="album" class="${view==='album'?'active':''}">按相册分类</button><button data-action="album-view" data-view="date" class="${view==='date'?'active':''}">按时间</button></div>`;
+ const chips=view==='album'?`<div class="tabs"><button data-action="album-filter" data-id="" class="${selected?'':'active'}">全部照片 · ${state.photos.length}</button>${albums.map(a=>`<button data-action="album-filter" data-id="${a.id}" class="${selected===a.id?'active':''}">${esc(a.body.title)}</button>`).join('')}<button data-action="new-album">＋ 新建相册</button></div>`:'';
+ const editRow=selected?`<div class="inline-actions" style="margin:0 0 18px">${button('编辑相册','edit-record','small secondary','edit',`data-id="${selected}"`)}${button('删除相册分类','delete-record','small secondary','trash',`data-id="${selected}"`)}</div>`:'';
+ let body='';
+ if(!photos.length)body=empty('每一张，都是喜欢你的证据','直接上传，或在发布动态时添加照片，都会收藏在这里。','upload-album','上传第一张照片');
+ else if(view==='date'){
+  const groups={};
+  photos.forEach(p=>{const key=String(p.date||'').slice(0,7);groups[key]=groups[key]||[];groups[key].push(p);});
+  body=Object.keys(groups).sort().reverse().map(key=>{
+   const list=groups[key].slice().sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
+   const title=key?`${key.slice(0,4)} 年 ${Number(key.slice(5))} 月`:'还没有填日期';
+   return `<section class="album-group"><h3 class="album-group-head">${title}<small>${list.length} 张</small></h3>${photoGrid(list)}</section>`;
+  }).join('');
+ } else body=photoGrid(photos);
+ return `${heading('把喜欢的瞬间，装进口袋','照片留住的不只是风景，还有身边的你。','upload-album','上传照片','photo')}${views}${chips}${editRow}${body}`;
 }
 
 function pendingChats() {try{return JSON.parse(localStorage.getItem('pending-chat:'+state.me.user.id)||'[]');}catch{return [];}}
@@ -429,18 +452,29 @@ function chatTimeLabel(ts,last){
  return (d.getFullYear()===n.getFullYear()?'':d.getFullYear()+'年')+(d.getMonth()+1)+'月'+d.getDate()+'日 '+hm;
 }
 function chatRows() {
- const chats=recordsOf('chat').sort((a,b)=>a.created-b.created),pending=pendingChats().filter(p=>!chats.some(c=>c.client_id===p.client_id));
+ /* 页内搜索只筛已加载的最近 200 条：聊天会无限增长，全量搜索得走后端，
+    这里的定位是"刚聊过的东西翻不到了"，够用又不加接口。 */
+ const q=(state.chatSearch||'').trim().toLowerCase();
+ const all=recordsOf('chat').sort((a,b)=>a.created-b.created);
+ const chats=q?all.filter(r=>!r.body.recalled&&(((r.body.content||'').toLowerCase().includes(q))||(((r.body.reply_to||{}).text||'').toLowerCase().includes(q)))):all;
+ const pending=pendingChats().filter(p=>!all.some(c=>c.client_id===p.client_id));
  let lastTs=null;
  const rows=chats.map(r=>{
   const tl=chatTimeLabel(r.created,lastTs);lastTs=r.created;
-  if(r.body.recalled)return `${tl?`<div class="chat-day">${tl}</div>`:''}<div class="chat-recall">${r.author===state.me.user.id?'你':'对方'}撤回了一条消息</div>`;
+  if(r.body.recalled)return `${tl?`<div class="chat-day">${tl}</div>`:''}<div class="chat-recall" id="msg-${r.id}">${r.author===state.me.user.id?'你':'对方'}撤回了一条消息</div>`;
   const mine=r.author===state.me.user.id,hasText=!!(r.body.content||'').trim(),voiceOnly=(r.media||[]).some(m=>m.mime.startsWith('audio/'))&&!hasText;
   const sticker=r.body.sticker;
-  const ops=(mine&&Date.now()/1000-r.created<120?`<button data-action="recall-chat" data-id="${r.id}">撤回</button>`:'')+`<button data-action="chat-to-draft" data-id="${r.id}">记入时光</button>`;
-  const inner=sticker?`<div class="chat-sticker${sticker.endsWith('.webm')?' video':''}">${sticker.endsWith('.webm')?`<video src="${esc(sticker)}" autoplay loop muted playsinline></video>`:`<img src="${esc(sticker)}" alt="贴纸" loading="lazy">`}</div>`:`<div class="chat-bubble${voiceOnly?' voice':''}"><span style="white-space:pre-wrap">${esc(r.body.content)}</span>${mediaMarkup(r.media)}</div>`;
-  return `${tl?`<div class="chat-day">${tl}</div>`:''}<div class="chat-line ${mine?'mine':''}">${avatar(r.author)}<div>${inner}${ops?`<div class="chat-time">${ops}</div>`:''}</div></div>`;
+  /* 引用块只存"那条的 id + 当时那句话"，点一下跳回原消息；原消息被撤回也还看得懂上下文 */
+  const quote=r.body.reply_to?`<button type="button" class="chat-quote" data-action="chat-jump" data-id="${esc(r.body.reply_to.id)}"><span>${esc((r.body.reply_to.text||'原消息').slice(0,60))}</span></button>`:'';
+  const ops=(mine&&Date.now()/1000-r.created<120?`<button data-action="recall-chat" data-id="${r.id}">撤回</button>`:'')
+   +`<button data-action="chat-reply" data-id="${r.id}">引用</button>`
+   +`<button data-action="chat-pin" data-id="${r.id}">${r.body.pinned?'取消置顶':'置顶'}</button>`
+   +`<button data-action="chat-to-draft" data-id="${r.id}">记入时光</button>`;
+  const inner=sticker?`<div class="chat-sticker${sticker.endsWith('.webm')?' video':''}">${sticker.endsWith('.webm')?`<video src="${esc(sticker)}" autoplay loop muted playsinline></video>`:`<img src="${esc(sticker)}" alt="贴纸" loading="lazy">`}</div>`:`<div class="chat-bubble${voiceOnly?' voice':''}${r.body.pinned?' pinned':''}">${quote}<span style="white-space:pre-wrap">${esc(r.body.content)}</span>${mediaMarkup(r.media)}</div>`;
+  return `${tl?`<div class="chat-day">${tl}</div>`:''}<div class="chat-line ${mine?'mine':''}" id="msg-${r.id}">${avatar(r.author)}<div>${inner}${ops?`<div class="chat-time">${ops}</div>`:''}</div></div>`;
  }).join('');
  const pend=pending.map(p=>`<div class="chat-line mine pending">${avatar(state.me.user.id)}<div><div class="chat-bubble">${esc(p.body.content||'一个附件')}</div><div class="chat-time">尚未发送 <button data-action="retry-chat" data-id="${p.client_id}">点击重试</button></div></div></div>`).join('');
+ if(q&&!chats.length)return `<div class="chat-no-match">最近 200 条里没有「${esc(state.chatSearch)}」，试试清掉筛选。</div>`;
  return rows+pend||empty('今天，有什么想对 TA 说？','说说日常，也说说想念。');
 }
 /* 聊天壁纸：预设用 CSS 渐变/纹理，'photo' 用自己上传的照片。
@@ -539,7 +573,12 @@ async function applyWallpaper(){
 function messagesPage() {
  const partner=state.me.users.find(u=>u.id!==state.me.user.id);
  const immersive=chatBgIsPhoto(),bgOn=!!myChatBg().bg;
- return `<section class="chat-panel${bgOn?' has-wallpaper':''}${immersive?' immersive':''}">${chatWallpaper()}<header class="chat-header"><button class="icon-btn" data-action="chat-back" aria-label="返回">${icon('back')}</button>${partner?avatar(partner.id):'<span class="avatar">♡</span>'}<div><h3>${partner?esc(partner.name):'等待另一半加入'}</h3><small>我们的悄悄话 · 仅彼此可见</small></div><button class="icon-btn" data-action="chat-bg" aria-label="聊天背景" title="聊天背景" style="margin-left:auto">${icon('photo')}</button><button class="icon-btn" data-nav="imports" aria-label="聊天记录">${icon('book')}</button></header><div class="chat-body"><div id="chat-log" class="chat-log" aria-live="polite">${chatRows()}</div></div><div id="sticker-dock" class="sticker-dock" hidden></div><form id="chat-form" class="chat-compose"><button type="button" class="icon-btn" data-action="sticker-panel" aria-label="表情">😊</button><button type="button" class="icon-btn" data-action="chat-attachment" aria-label="添加图片、视频或语音">${icon('plus')}</button><textarea id="chat-text" name="content" placeholder="想说的话，想分享的日常…" rows="1" maxlength="20000" aria-label="聊天内容"></textarea><button class="button primary" type="submit" aria-label="发送消息">${icon('send')}</button></form></section>`;
+ /* 置顶条只显示最新的一条，点开跳过去；多条时给个总数，不挤占聊天区 */
+ const pinned=recordsOf('chat').filter(r=>r.body.pinned&&!r.body.recalled).sort((a,b)=>b.created-a.created);
+ const pinnedBar=pinned.length?`<button type="button" class="chat-pinned" data-action="chat-jump" data-id="${pinned[0].id}"><span class="cp-tag">📌 置顶</span><span class="cp-text">${esc((pinned[0].body.content||'一条附件').slice(0,42))}</span>${pinned.length>1?`<i>共 ${pinned.length} 条</i>`:''}</button>`:'';
+ const searchBar=state.chatSearch?`<div class="chat-search-bar"><span>筛选「${esc(state.chatSearch)}」</span><button type="button" data-action="chat-search-clear">清除</button></div>`:'';
+ const replyBar=state.chatReply?`<div class="chat-reply-bar"><span>引用：${esc(state.chatReply.text)}</span><button type="button" class="icon-btn" data-action="chat-reply-cancel" aria-label="取消引用">${icon('close')}</button></div>`:'';
+ return `<section class="chat-panel${bgOn?' has-wallpaper':''}${immersive?' immersive':''}">${chatWallpaper()}<header class="chat-header"><button class="icon-btn" data-action="chat-back" aria-label="返回">${icon('back')}</button>${partner?avatar(partner.id):'<span class="avatar">♡</span>'}<div><h3>${partner?esc(partner.name):'等待另一半加入'}</h3><small>我们的悄悄话 · 仅彼此可见</small></div><button class="icon-btn" data-action="chat-search" aria-label="搜索消息" title="搜索消息" style="margin-left:auto">${icon('search')}</button><button class="icon-btn" data-action="chat-bg" aria-label="聊天背景" title="聊天背景">${icon('photo')}</button><button class="icon-btn" data-nav="imports" aria-label="聊天记录">${icon('book')}</button></header><div class="chat-body">${pinnedBar}${searchBar}<div id="chat-log" class="chat-log" aria-live="polite">${chatRows()}</div></div><div id="sticker-dock" class="sticker-dock" hidden></div>${replyBar}<form id="chat-form" class="chat-compose"><button type="button" class="icon-btn" data-action="sticker-panel" aria-label="表情">😊</button><button type="button" class="icon-btn" data-action="chat-attachment" aria-label="添加图片、视频或语音">${icon('plus')}</button><textarea id="chat-text" name="content" placeholder="想说的话，想分享的日常…" rows="1" maxlength="20000" aria-label="聊天内容"></textarea><button class="button primary" type="submit" aria-label="发送消息">${icon('send')}</button></form></section>`;
 }
 function scrollChat(){const log=$('#chat-log');if(log)log.scrollTop=log.scrollHeight;}
 
@@ -675,16 +714,39 @@ function postForm(path,formData,onProgress){
   xhr.ontimeout=()=>reject(new Error('上传超时，文件可能过大或网络不稳定'));
   xhr.send(formData);});
 }
+/* 记录类型的图标：年报、看板这些"按类型聚合"的地方共用一份，别各写一张表 */
+const KIND_EMOJI={post:'📝',diary:'📔',draft:'📄',surprise:'🎁',anniversary:'📅',wish:'✨',personal_wish:'💝',mood:'🌤',note:'💌',question:'💭',habit:'🌱',quest:'💫',ledger:'💰',period:'🌸',music:'🎵',album:'📷',chat:'💬'};
+const WEEKDAY_LABEL=['周一','周二','周三','周四','周五','周六','周日'];
+/* 小年报：基础计数之外，给"这一年是怎么过的"——记录了几天、最长连续多少天、
+   最勤的月份与星期、记得最多的类型、收到的回应、常写的字、最常出现的心情。
+   关键词由后端做 2-gram 词频，这里只按词频缩放字号，不再二次排序。 */
 function yearbookBody(data){
- const highlights=[['📝','时光动态',data.by_kind?.post||0],['📷','收藏照片',data.photos],['☀','心情记录',data.moods],['✨','完成心愿',data.wishes_done],['📅','纪念日',data.anniversaries]].filter(x=>x[2]>0);
- return `<div class="yearbook-grid"><div class="yearbook-stat"><strong>${data.total}</strong><small>条记录</small></div><div class="yearbook-stat"><strong>${data.photos}</strong><small>张照片</small></div><div class="yearbook-stat"><strong>${data.moods}</strong><small>次心情</small></div><div class="yearbook-stat"><strong>${data.wishes_done}</strong><small>个心愿</small></div></div>${highlights.length?`<div class="yearbook-highlights">${highlights.map(([e,l,n])=>`<div class="yearbook-highlight"><span class="hl-emoji">${e}</span><span class="hl-text">${l}</span><span class="hl-num">${n}</span></div>`).join('')}</div>`:'<p class="meta">这一年，还在慢慢写下我们的故事…</p>'}`;
+ const k=data.by_kind||{};
+ const highlights=[['📝','时光动态',k.post||0],['📷','收藏照片',data.photos],['☀','心情记录',data.moods],['✨','完成心愿',data.wishes_done],['📅','纪念日',data.anniversaries]].filter(x=>x[2]>0);
+ const facts=[];
+ if(data.active_days)facts.push(['🗓️','记录下来的日子',`${data.active_days} 天`]);
+ if(data.streak>1)facts.push(['🔥','最长连续记录',`${data.streak} 天`]);
+ if(data.best_month)facts.push(['📅','最勤快的一个月',`${data.best_month.month} 月 · ${data.best_month.count} 条`]);
+ if(data.best_weekday)facts.push(['📆','最活跃的一天',`${WEEKDAY_LABEL[data.best_weekday.weekday]||''} · ${data.best_weekday.count} 条`]);
+ if(data.top_kind&&kindLabel[data.top_kind.kind])facts.push([KIND_EMOJI[data.top_kind.kind]||'📝','记得最多',`${kindLabel[data.top_kind.kind]} ${data.top_kind.count} 条`]);
+ if(data.interactions)facts.push(['💬','收到的回应',`${data.interactions} 次赞与评论`]);
+ const words=(data.words||[]).slice(0,8);
+ const maxWord=Math.max(1,...words.map(w=>w.n));
+ const moods=(data.mood_top||[]).filter(m=>m.n>0);
+ const grid=`<div class="yearbook-grid"><div class="yearbook-stat"><strong>${data.total}</strong><small>条记录</small></div><div class="yearbook-stat"><strong>${data.photos}</strong><small>张照片</small></div><div class="yearbook-stat"><strong>${data.moods}</strong><small>次心情</small></div><div class="yearbook-stat"><strong>${data.wishes_done}</strong><small>个心愿</small></div></div>`;
+ if(!data.total)return grid+'<p class="meta">这一年，还在慢慢写下我们的故事…</p>';
+ return grid
+  +(facts.length?`<div class="yearbook-facts">${facts.map(([e,l,v])=>`<div class="yearbook-fact"><span class="yf-emoji">${e}</span><span class="yf-label">${l}</span><span class="yf-value">${v}</span></div>`).join('')}</div>`:'')
+  +(words.length?`<div class="yearbook-section"><h3>这一年常写的字</h3><div class="yearbook-words">${words.map(w=>`<span class="yearbook-word" style="font-size:${12+Math.round(w.n/maxWord*8)}px">${esc(w.w)}<i>${w.n}</i></span>`).join('')}</div></div>`:'')
+  +(moods.length?`<div class="yearbook-section"><h3>最常出现的心情</h3><div class="yearbook-moods">${moods.map(m=>`<span class="yearbook-mood">${m.emoji}<i>${m.n}</i></span>`).join('')}</div></div>`:'')
+  +(highlights.length?`<div class="yearbook-highlights">${highlights.map(([e,l,n])=>`<div class="yearbook-highlight"><span class="hl-emoji">${e}</span><span class="hl-text">${l}</span><span class="hl-num">${n}</span></div>`).join('')}</div>`:'');
 }
 async function loadYearbook(){
  const box=$('#yearbook');if(!box)return;
  try{
   const data=await api('/yearbook');
   state.yearbookData=data;
-  box.innerHTML=`<h2>📖 ${data.is_current?'今年':' '+data.year+' 年'}的我们</h2><div class="yearbook-summary"><p>${data.total} 条记录 · ${data.photos} 张照片 · ${data.moods} 次心情</p><span class="yearbook-toggle-row">${button('展开小年报','expand-yearbook','soft small','arrow')}</span></div>`;
+  box.innerHTML=`<h2>📖 ${data.is_current?'今年':' '+data.year+' 年'}的我们</h2><div class="yearbook-summary"><p>${data.total} 条记录 · ${data.photos} 张照片 · ${data.moods} 次心情${data.streak>1?` · 连续 ${data.streak} 天`:''}</p><span class="yearbook-toggle-row">${button('展开小年报','expand-yearbook','soft small','arrow')}</span></div>`;
  }catch(e){box.innerHTML='<p class="meta">年报暂时打不开，请稍后再试。</p>';}
 }
 async function loadCalendar(force){
@@ -842,17 +904,32 @@ const money=n=>'¥'+Number(n||0).toFixed(2);
 
 function ledgerPage(){
  const items=recordsOf('ledger').slice().sort((a,b)=>String(b.body.date||'').localeCompare(String(a.body.date||'')));
- const month=today().slice(0,7);
+ const nowMonth=today().slice(0,7);
+ const month=state.ledgerMonth||nowMonth;
  const inMonth=items.filter(r=>String(r.body.date||'').slice(0,7)===month);
  const sum=rows=>rows.reduce((s,r)=>s+Number(r.body.amount||0),0);
  const monthTotal=sum(inMonth),allTotal=sum(items);
+ /* 人均对比给两层：这个月谁花得多（当下最关心），和开账以来谁花得多（总量层面）。
+    付款人就是记录作者，所以直接按 author 聚合，不用额外字段。 */
  const byUser=state.me.users.map(u=>({u,v:sum(inMonth.filter(r=>r.author===u.id))}));
+ const allByUser=state.me.users.map(u=>({u,v:sum(items.filter(r=>r.author===u.id))}));
  const byCat={};inMonth.forEach(r=>{const k=r.body.category||'其他';byCat[k]=(byCat[k]||0)+Number(r.body.amount||0);});
  const cats=Object.entries(byCat).sort((a,b)=>b[1]-a[1]);
- const peak=Math.max(1,...cats.map(c=>c[1]));
- const back='';
- const summary=items.length?`<section class="card"><div class="section-heading"><h2>💰 ${month} 账本</h2></div><div class="stats-hero" style="grid-template-columns:repeat(2,minmax(0,1fr));margin:0 0 6px"><div class="stat-card"><span>本月一起花了</span><strong>${money(monthTotal)}</strong></div><div class="stat-card"><span>累计记录</span><strong>${money(allTotal)}</strong></div></div>${byUser.map(x=>`<div class="stat-row"><span>${esc(x.u.name)}</span><div class="stat-bar"><i style="width:${monthTotal?Math.round(x.v/monthTotal*100):0}%"></i></div><b>${money(x.v)}</b></div>`).join('')}${cats.length?`<div class="section-heading" style="margin-top:14px"><h2>花在哪</h2></div>${cats.map(([k,v])=>`<div class="stat-row"><span>${esc(k)}</span><div class="stat-bar"><i style="width:${Math.round(v/peak*100)}%"></i></div><b>${money(v)}</b></div>`).join('')}`:''}<p class="small-note">付款人就是记录作者；金额只在你们两个人之间可见。</p></section>`:'';
- return `${heading('共同账本','一起花的钱，也是共同生活的一部分。','new-ledger','记一笔','book')}${back}${summary}${items.length?items.map(recordCard).join(''):empty('账本还是空的','一起吃的那顿饭、一起买的那张票，都值得记下来。','new-ledger','记第一笔')}`;
+ const catPeak=Math.max(1,...cats.map(c=>c[1]));
+ /* 近六个月趋势：一根柱子一个月，高度按最大值归一。空月份也要占位，
+    否则"这个月没花钱"会从图上消失，看不出断档。 */
+ const trend=[];
+ for(let i=5;i>=0;i--){
+  const d=new Date(month+'-01T00:00:00');d.setMonth(d.getMonth()-i);
+  const key=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+  trend.push({key,label:(d.getMonth()+1)+'月',total:sum(items.filter(r=>String(r.body.date||'').slice(0,7)===key))});
+ }
+ const trendPeak=Math.max(1,...trend.map(t=>t.total));
+ const [yy,mm]=month.split('-');
+ const monthLabel=`${yy} 年 ${Number(mm)} 月`;
+ const switcher=`<div class="ledger-month-switch"><button class="icon-btn" data-action="ledger-month" data-delta="-1" aria-label="上个月">${icon('back')}</button><strong>${monthLabel}${month===nowMonth?' · 本月':''}</strong><button class="icon-btn" data-action="ledger-month" data-delta="1" aria-label="下个月"${month>=nowMonth?' disabled':''}>${icon('arrow')}</button></div>`;
+ const summary=items.length?`<section class="card"><div class="section-heading"><h2>💰 共同账本</h2>${switcher}</div><div class="stats-hero" style="grid-template-columns:repeat(2,minmax(0,1fr));margin:0 0 6px"><div class="stat-card"><span>${month===nowMonth?'本月':Number(mm)+' 月'}一起花了</span><strong>${money(monthTotal)}</strong></div><div class="stat-card"><span>累计记录</span><strong>${money(allTotal)}</strong></div></div><div class="ledger-meta">这个月 ${inMonth.length} 笔${inMonth.length?'':'，还没记过'}</div>${byUser.map(x=>`<div class="stat-row"><span>${esc(x.u.name)}</span><div class="stat-bar"><i style="width:${monthTotal?Math.round(x.v/monthTotal*100):0}%"></i></div><b>${money(x.v)}</b></div>`).join('')}<p class="small-note">这个月谁付的；合计 ${monthTotal?money(monthTotal):money(0)}。</p><div class="section-heading" style="margin-top:14px"><h2>最近六个月</h2></div><div class="ledger-trend">${trend.map(t=>`<div class="ledger-trend-col${t.key===month?' active':''}"><span class="lt-amount">${t.total?'¥'+Math.round(t.total):''}</span><div class="lt-bar"><i style="height:${Math.max(t.total?6:2,Math.round(t.total/trendPeak*100))}%"></i></div><span class="lt-label">${t.label}</span></div>`).join('')}</div><div class="section-heading" style="margin-top:14px"><h2>累计谁花得多</h2></div>${allByUser.map(x=>`<div class="stat-row"><span>${esc(x.u.name)}</span><div class="stat-bar"><i style="width:${allTotal?Math.round(x.v/allTotal*100):0}%"></i></div><b>${money(x.v)}</b></div>`).join('')}${cats.length?`<div class="section-heading" style="margin-top:14px"><h2>花在哪</h2></div>${cats.map(([k,v])=>`<div class="stat-row"><span>${esc(k)}</span><div class="stat-bar"><i style="width:${Math.round(v/catPeak*100)}%"></i></div><b>${money(v)}</b></div>`).join('')}`:''}<p class="small-note">付款人就是记录作者；金额只在你们两个人之间可见。</p></section>`:'';
+ return `${heading('共同账本','一起花的钱，也是共同生活的一部分。','new-ledger','记一笔','book')}${summary}${items.length?items.map(recordCard).join(''):empty('账本还是空的','一起吃的那顿饭、一起买的那张票，都值得记下来。','new-ledger','记第一笔')}`;
 }
 
 /* ———— 生理期 ————
@@ -1745,7 +1822,7 @@ function settingsPage() {
  const fmtSize=b=>b>=1073741824?(b/1073741824).toFixed(2)+' GB':(b/1048576).toFixed(1)+' MB';
  const isAdmin=!!state.me.user.admin;
  const storageStrip=isAdmin&&st?`<button class="storage-strip" data-nav="backups"><span class="storage-strip-icon">${icon('gear')}</span><span class="storage-strip-body"><strong>已用 ${fmtSize(st.total||0)}</strong><small>可用 ${fmtSize(st.disk_free||0)} · ${st.record_count||0} 条记录 · ${st.media_count||0} 个媒体文件</small></span><span class="storage-strip-more">存储占用与备份 ${icon('arrow')}</span></button>`:'';
- return `${heading('设置','管理空间、账号和数据。')}<div class="settings-grid"><section class="card"><h2>${icon('home')} 空间设置</h2><div class="setting-list"><button data-action="space">名称、封面与主题 ${icon('arrow')}</button>${state.me.users.length<2?`<button data-action="invite">邀请另一半 ${icon('arrow')}</button>`:''}<button data-nav="channels">通知渠道与提醒偏好 ${icon('arrow')}</button></div></section><section class="card"><h2>${icon('gear')} 我的账号</h2><div class="setting-list"><button data-action="profile">头像、昵称与密码 ${icon('arrow')}</button><button data-action="logout">退出登录 ${icon('arrow')}</button></div></section><section class="card"><h2>${icon('download')} 数据管理</h2>${storageStrip}<div class="setting-list"><a href="/api/export" download>导出我有权查看的记录与原文件 ${icon('download')}</a><a href="/api/export/markdown" download>导出 Markdown 知识库（第二大脑） ${icon('download')}</a>${state.me.user.admin?`<button data-nav="backups">完整备份与存储占用 ${icon('arrow')}</button>`:''}</div><p class="small-note">第二大脑是纯 Markdown 文件夹，可拖进 Obsidian / Logseq，也可直接给 AI 当长期记忆；只含你自己可见的内容，个人心愿只导出标题。私密日记按账号隔离，完整备份由服务器管理员管理。</p></section><section class="card"><h2>${icon('info')} 关于</h2><div class="setting-list"><div style="display:flex;align-items:center;gap:10px;padding:12px 0"><span class="stat-icon" style="font-size:28px">💕</span><div><h3 style="margin:0;font-size:15px">恋爱空间</h3><p class="meta" style="margin:2px 0 0">${v.version?((state.apkVersion?'APK v'+state.apkVersion+' · ':'')+'网页 v'+v.version+(state.apkLatest&&state.apkVersion&&newerVer(state.apkLatest,state.apkVersion)?' · <span style="color:#c0392b">可更新到 v'+state.apkLatest+'</span>':'')):'加载中…'}</p></div></div><button data-action="check-update">检查更新 ${icon('arrow')}</button><button data-action="copy-apk-link">复制 App 下载链接 ${icon('arrow')}</button></div><p class="small-note">网页功能自动更新；原生功能（如后台通知）需下载新版 APK，可在检查更新中获取，也可复制下载链接发给对方在手机浏览器打开。</p></section></div>`;
+ return `${heading('设置','管理空间、账号和数据。')}<div class="settings-grid"><section class="card"><h2>${icon('home')} 空间设置</h2><div class="setting-list"><button data-action="space">名称、封面与主题 ${icon('arrow')}</button>${state.me.users.length<2?`<button data-action="invite">邀请另一半 ${icon('arrow')}</button>`:''}<button data-nav="channels">通知渠道与提醒偏好 ${icon('arrow')}</button></div></section><section class="card"><h2>${icon('gear')} 我的账号</h2><div class="setting-list"><button data-action="profile">头像、昵称与密码 ${icon('arrow')}</button><button data-action="logout">退出登录 ${icon('arrow')}</button></div></section><section class="card"><h2>${icon('download')} 数据管理</h2>${storageStrip}<div class="setting-list"><a href="/api/export" download>导出我有权查看的记录与原文件 ${icon('download')}</a><a href="/api/export/markdown" download>导出 Markdown 知识库（第二大脑） ${icon('download')}</a><a href="/api/export/ics" download>导出日历 .ics（纪念日与计划） ${icon('download')}</a>${state.me.user.admin?`<button data-nav="backups">完整备份与存储占用 ${icon('arrow')}</button>`:''}</div><p class="small-note">第二大脑是纯 Markdown 文件夹，可拖进 Obsidian / Logseq，也可直接给 AI 当长期记忆；只含你自己可见的内容，个人心愿只导出标题。私密日记按账号隔离，完整备份由服务器管理员管理。日历文件导进手机自带日历后，纪念日就能用系统提醒，比站内推送更稳。</p></section><section class="card"><h2>${icon('info')} 关于</h2><div class="setting-list"><div style="display:flex;align-items:center;gap:10px;padding:12px 0"><span class="stat-icon" style="font-size:28px">💕</span><div><h3 style="margin:0;font-size:15px">恋爱空间</h3><p class="meta" style="margin:2px 0 0">${v.version?((state.apkVersion?'APK v'+state.apkVersion+' · ':'')+'网页 v'+v.version+(state.apkLatest&&state.apkVersion&&newerVer(state.apkLatest,state.apkVersion)?' · <span style="color:#c0392b">可更新到 v'+state.apkLatest+'</span>':'')):'加载中…'}</p></div></div><button data-action="check-update">检查更新 ${icon('arrow')}</button><button data-action="copy-apk-link">复制 App 下载链接 ${icon('arrow')}</button></div><p class="small-note">网页功能自动更新；原生功能（如后台通知）需下载新版 APK，可在检查更新中获取，也可复制下载链接发给对方在手机浏览器打开。</p></section></div>`;
 }
 function personalPage() {
  const tab=state.tab||'diary',tabs=[['diary','私密日记'],['draft','草稿箱'],['surprise','定时惊喜'],['trash','回收站']];
@@ -1774,15 +1851,17 @@ function openModal(title,content,{wide=false,sheet=false,cleanup=null}={}) {
  modalCleanup=cleanup;document.body.style.overflow='hidden';setTimeout(()=>$('.modal input:not([type=checkbox]),.modal textarea,.modal button')?.focus(),50);
 }
 function closeModal(){if(modalCleanup){modalCleanup();modalCleanup=null;}$('#modal-root').innerHTML='';document.body.style.overflow='';focusReturn?.focus?.();}
-/* 全局搜索：在顶栏搜索图标打开，对已加载的记录做标题+正文本地模糊匹配。
-   不新拉后端接口——state.records 里已有非聊天记录（含私信），够覆盖大部分搜索场景。 */
-function openSearchPanel(){
+/* 全局搜索：在顶栏搜索图标或聊天页放大镜打开，对已加载的记录做标题+正文本地模糊匹配。
+   不新拉后端接口——state.records 里已有非聊天记录（含私信）与最近 200 条聊天，够覆盖常见场景。
+   scope='chat' 时只搜聊天，供聊天页内搜索用。 */
+function openSearchPanel(scope){
+ const chatOnly=scope==='chat';
  const overlay=document.createElement('div');
  overlay.className='search-overlay';
  overlay.innerHTML=`<div class="search-panel" role="dialog" aria-modal="true" aria-label="搜索">
   <div class="search-input-row">
    <span style="color:var(--muted)">${icon('search')}</span>
-   <input id="search-input" placeholder="搜索留言、愿望、清单、账本、动态…" autocomplete="off">
+   <input id="search-input" placeholder="${chatOnly?'搜索最近的消息…':'搜索留言、愿望、清单、账本、动态、聊天…'}" autocomplete="off">
    <button class="icon-btn" data-action="close-search" aria-label="关闭搜索">${icon('close')}</button>
   </div>
   <div id="search-results"></div>
@@ -1801,23 +1880,25 @@ function openSearchPanel(){
   const emoji=m=>m||'';
   const group=kind=>{
    const items=state.records.filter(r=>{
-    if(r.kind==='chat'||r.kind==='album')return false;
+    if(r.kind==='album')return false;
+    if(chatOnly&&r.kind!=='chat')return false;
+    if(r.kind==='chat'&&r.body?.recalled)return false;
     const b=r.body||{};
-    return re.test(b.title||'')||re.test(b.content||'');
+    return re.test(b.title||'')||re.test(b.content||'')||re.test((b.reply_to||{}).text||'');
    }).map(r=>{
     const b=r.body||{};
-    const title=b.title||'';
+    const title=b.title||(r.kind==='chat'?chatTimeLabel(r.created,null)||'聊天消息':'');
     const content=(b.content||'').slice(0,80);
     const srTitle=re.test(title)?title.replace(re,'<mark>$&</mark>'):'';
     const srSub=re.test(content)?content.replace(re,'<mark>$&</mark>'):'';
     return `<button class="search-result-item" data-action="search-jump" data-id="${r.id}">
-     <span class="sr-type">${emoji(kindLabel[r.kind]?kindLabel[r.kind][0]:'📄')}</span>
+     <span class="sr-type">${KIND_EMOJI[r.kind]||'📄'}</span>
      <span class="sr-text"><span class="sr-title">${srTitle||esc(title)||'（无标题）'}</span><span class="sr-sub">${srSub||esc(content||'')}</span></span>
     </button>`;
    }).join('');
    return items?`<div class="search-group-heading">${kindLabel[kind]||kind}</div><div class="search-results">${items}</div>`:'';
   };
-  const types=['post','diary','note','wish','quest','ledger','question','habit','mood','anniversary','music','period','surprise','draft'];
+  const types=chatOnly?['chat']:['chat','post','diary','note','wish','quest','ledger','question','habit','mood','anniversary','music','period','surprise','draft'];
   const html=types.map(group).filter(Boolean).join('')||`<div class="search-empty">没有找到「${esc(q)}」相关的记录</div>`;
   results.innerHTML=html;
  };
@@ -1846,6 +1927,18 @@ function jumpToRecord(id,overlay){
  closeSearchPanel(overlay);
  const r=state.records.find(x=>x.id===id);
  if(!r)return;
+ /* 聊天消息跳到聊天页并把那条滚到中间高亮：聊天区不在 tab 体系里，单独处理 */
+ if(r.kind==='chat'){
+  navigate('messages');
+  setTimeout(()=>{
+   const node=$('#msg-'+id);
+   if(!node)return toast('这条消息在更早的记录里，往上翻翻看');
+   node.scrollIntoView({block:'center'});
+   node.classList.add('flash');
+   setTimeout(()=>node.classList.remove('flash'),1400);
+  },120);
+  return;
+ }
  /* 根据记录类型跳到对应页面 */
  const pageMap={post:'timeline',diary:'personal',note:'together',wish:'together',quest:'together',ledger:'together',question:'together',habit:'together',mood:'together',anniversary:'together',music:'together',period:'together',surprise:'personal',draft:'personal'};
  const tabMap={note:'note',wish:'wish',quest:'quest',ledger:'ledger',question:'question',habit:'habit',mood:'mood',anniversary:'anniversary',music:'music',period:'period'};
@@ -2283,6 +2376,7 @@ async function act(action,id,el) {
  if(action==='mood-history')return navigate('together','mood');
  if(action==='personal-tab')return id==='settings'?navigate('settings'):navigate('personal',id);
  if(action==='album-filter'){state.album=id;return renderPage();}
+ if(action==='album-view'){state.albumView=el.dataset.view==='date'?'date':'album';return renderPage();}
  if(action==='edit-record')return recordForm(r.kind,r);
  if(action==='delete-record')return confirmAction('暂时收起这份回忆？',r.kind==='album'?'只删除相册分类，里面的照片仍会保留在全部照片中。':'记录会进入作者的回收站，三十天内可以恢复。',async()=>{await del('/records/'+id);if(state.album===id)state.album='';});
  if(action==='restore'){await post('/records/'+id+'/restore');await refresh();return toast('回忆已恢复');}
@@ -2315,6 +2409,15 @@ async function act(action,id,el) {
  if(action==='logout'){const userId=state.me?.user.id;if(browserPushSupported()&&!isNativeApp()){try{await disableBrowserPush({silent:true});}catch{}}if(isNativeApp()){try{const push=nativePushBridge();if(push?.clearTopic)await push.clearTopic();nativePushTopic=null;}catch{}}await post('/logout');state.me=null;await clearPrivateSession(userId);closeModal();return boot();}
  if(action==='read-notices'){await post('/notices/read');return refresh();}
  if(action==='delete-read-notices'){const count=state.notices.filter(n=>n.event!=='chat'&&n.seen).length;if(!count)return toast('没有可删除的已读提醒');return confirmAction('删除已读提醒？',`将删除 ${count} 条已读提醒，不会影响未读提醒、动态或聊天记录。`,async()=>{const result=await api('/notices/read',{method:'DELETE'});toast(`已删除 ${result.deleted||0} 条已读提醒`);});}
+ /* 账本往前/往后翻月：往后不允许超过当前月（未来没有账可看） */
+ if(action==='ledger-month'){
+  const cur=state.ledgerMonth||today().slice(0,7);
+  const d=new Date(cur+'-01T00:00:00');
+  d.setMonth(d.getMonth()+Number(el.dataset.delta||0));
+  const next=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+  state.ledgerMonth=next>today().slice(0,7)?today().slice(0,7):next;
+  return renderPage();
+ }
  if(action==='check-update'){try{const s=await api('/status');state.appVersion={version:s.version,build:s.build};renderShell();
   if(isNativeApp()){
    /* App 内只比 App 版本：网页是随服务器一起更新的，与本机判断无关。 */
@@ -2341,6 +2444,14 @@ async function act(action,id,el) {
  if(action==='chat-to-draft')return composer('post',null,{...r.body,mediaObjects:r.media});
  if(action==='retry-chat'){const p=pendingChats().find(p=>p.client_id===id);if(p){await sendChat(p.body,p.client_id);await refresh();}return;}
  if(action==='recall-chat')return confirmAction('撤回这条悄悄话？','撤回后双方都不会再看到这条消息。',async()=>{await post('/records/'+id+'/recall');await refresh();return toast('已撤回');});
+ /* 引用：只记 id + 摘要，落在 body.reply_to 里；取消或发送后清空 */
+ if(action==='chat-reply'){const rec=recordsOf('chat').find(x=>x.id===id);if(!rec)return;state.chatReply={id:rec.id,text:(rec.body.content||'一条附件').slice(0,60)};renderPage();setTimeout(()=>{$('#chat-text')?.focus();scrollChat();},30);return;}
+ if(action==='chat-reply-cancel'){state.chatReply=null;return renderPage();}
+ /* 置顶走独立端点：整体 PUT 会经过 clean_body 白名单，把 recalled 这类字段洗掉（等于偷偷取消撤回） */
+ if(action==='chat-pin'){try{const r=await post('/records/'+id+'/pin');await refresh();toast(r.pinned?'已置顶这条消息':'已取消置顶');}catch(err){toast(err.message);}return;}
+ if(action==='chat-jump'){const node=$('#msg-'+id);if(!node)return toast('这条消息不在最近加载的范围里');node.scrollIntoView({block:'center'});node.classList.add('flash');setTimeout(()=>node.classList.remove('flash'),1400);return;}
+ if(action==='chat-search')return openSearchPanel('chat');
+ if(action==='chat-search-clear'){state.chatSearch='';renderPage();setTimeout(scrollChat,20);return;}
  if(action==='sticker-panel')return stickerPanel();
  if(action==='sticker-tab'){state.stickerTab=id;return renderStickerTabs();}
  if(action==='sticker-emoji')return insertStickerText(id);
@@ -2415,7 +2526,7 @@ document.addEventListener('touchend',e=>{
  renderPage();
 },{passive:true});
 document.addEventListener('click',async e=>{$$('.more-menu[open]').forEach(d=>{if(!d.contains(e.target))d.removeAttribute('open');});const nav=e.target.closest('[data-nav]'),el=e.target.closest('[data-action]');try{if(nav||el)e.target.closest('.account-menu')?.removeAttribute('open');if(nav)return await navigate(nav.dataset.nav);if(el)await act(el.dataset.action,el.dataset.id||'',el);}catch(err){toast(err.message);}});
-document.addEventListener('submit',async e=>{if(e.target.id!=='chat-form')return;e.preventDefault();const input=$('#chat-text'),content=input.value.trim();if(!content)return;const btn=$('button[type=submit]',e.target);btn.disabled=true;try{await sendChat({content,date:today(),media:[]});input.value='';autoGrow(input);localStorage.removeItem('chat-text:'+state.me.user.id);await refresh();}catch(err){toast(err.message);}finally{btn.disabled=false;}});
+document.addEventListener('submit',async e=>{if(e.target.id!=='chat-form')return;e.preventDefault();const input=$('#chat-text'),content=input.value.trim();if(!content)return;const btn=$('button[type=submit]',e.target);btn.disabled=true;try{const body={content,date:today(),media:[]};if(state.chatReply)body.reply_to=state.chatReply;await sendChat(body);state.chatReply=null;input.value='';autoGrow(input);localStorage.removeItem('chat-text:'+state.me.user.id);await refresh();}catch(err){toast(err.message);}finally{btn.disabled=false;}});
 document.addEventListener('input',e=>{if(e.target.id==='chat-text'){localStorage.setItem('chat-text:'+state.me.user.id,e.target.value);autoGrow(e.target);}if(e.target.id==='filter-q'){state.filters={...(state.filters||{}),q:e.target.value};clearTimeout(state.filterTimer);state.filterTimer=setTimeout(async()=>{const pos=$('#filter-q')?.selectionStart;try{await loadTimeline(true);renderPage();$('#filter-q')?.focus();$('#filter-q')?.setSelectionRange(pos,pos);}catch(err){toast(err.message);}},250);}});
 document.addEventListener('change',e=>{const map={'filter-author':'author','filter-date':'date','filter-media':'media'};if(map[e.target.id]){state.filters={...(state.filters||{}),[map[e.target.id]]:e.target.value};state.timelineCursor=null;loadTimeline(true).then(renderPage).catch(err=>toast(err.message));}});
 document.addEventListener('keydown',e=>{if(e.key==='Escape'){const menu=$('.more-menu[open]');if(menu){menu.removeAttribute('open');$('summary',menu)?.focus();}}if(e.key==='Escape'&&$('.modal'))closeModal();if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing&&e.target?.id==='chat-text'){e.preventDefault();const form=$('#chat-form'),btn=form&&$('button[type=submit]',form);if(form&&btn&&!btn.disabled)form.requestSubmit();}if(e.key==='Tab'&&$('.modal')){const els=$$('button,input,textarea,select,a[href]',$('.modal')).filter(el=>!el.disabled),first=els[0],last=els.at(-1);if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}}});

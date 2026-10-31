@@ -344,6 +344,21 @@ button.mood-row.no-mood .mood-bubble.empty{color:var(--primary-dark)}
 .yearbook-highlight .hl-text{font-size:13px;color:var(--ink);flex:1;line-height:1.6;min-width:0}
 .yearbook-highlight .hl-num{font:17px var(--serif);color:var(--primary);flex:none}
 .yearbook-toggle-row{margin-top:4px}
+/* 年报深度统计：左侧小图标 + 中间说明 + 右侧数值，一条一行，扫一眼就能读完 */
+.yearbook-facts{display:grid;gap:2px;margin:14px 0 4px}
+.yearbook-fact{display:flex;align-items:center;gap:10px;padding:9px 2px;border-bottom:1px dashed var(--line)}
+.yearbook-fact:last-child{border-bottom:none}
+.yearbook-fact .yf-emoji{font-size:15px;flex:none;width:20px;text-align:center}
+.yearbook-fact .yf-label{font-size:13px;color:var(--muted);flex:1;min-width:0}
+.yearbook-fact .yf-value{font-size:13px;color:var(--ink);font-weight:600;flex:none;text-align:right}
+.yearbook-section{margin-top:14px}
+.yearbook-section h3{font-size:13px;color:var(--muted);font-weight:500;margin-bottom:8px}
+.yearbook-words{display:flex;flex-wrap:wrap;gap:8px;align-items:baseline}
+.yearbook-word{display:inline-flex;align-items:baseline;gap:3px;padding:4px 10px;border-radius:10px;background:var(--soft);border:1px solid var(--line);color:var(--primary-dark);line-height:1.4}
+.yearbook-word i{font-style:normal;font-size:10px;color:var(--muted)}
+.yearbook-moods{display:flex;flex-wrap:wrap;gap:8px}
+.yearbook-mood{display:inline-flex;align-items:center;gap:4px;padding:6px 12px;border-radius:12px;background:var(--soft);border:1px solid var(--line);font-size:16px}
+.yearbook-mood i{font-style:normal;font-size:11px;color:var(--muted)}
 
 /* ── 5b. 时光（动态流）──────────────────────── */
 .filters{display:flex;gap:10px;margin-bottom:18px;flex-wrap:wrap;align-items:center}
@@ -376,6 +391,11 @@ button.mood-row.no-mood .mood-bubble.empty{color:var(--primary-dark)}
 .photo-item:hover{transform:translateY(-2px);box-shadow:var(--shadow-lift)}
 .photo-item img{width:100%;aspect-ratio:1;object-fit:cover;display:block}
 .photo-item span{display:block;padding:9px 12px;font-size:12px;color:var(--muted);white-space:nowrap;text-overflow:ellipsis;overflow:hidden}
+/* 相册「按时间」视图：一月一组，组标题带张数，左上角一条竖线当书签 */
+.album-views{margin-bottom:12px}
+.album-group{margin:0 0 22px}
+.album-group-head{display:flex;align-items:baseline;gap:8px;font-size:14px;color:var(--primary-dark);margin:0 0 10px;padding-left:10px;border-left:3px solid var(--primary);line-height:1.4}
+.album-group-head small{font-size:12px;color:var(--muted);font-weight:400}
 
 /* ── 5d. 消息与聊天 ─────────────────────────── */
 .chat-panel{display:flex;flex-direction:column;height:calc(100vh - 200px);min-height:420px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow)}
@@ -396,6 +416,26 @@ button.mood-row.no-mood .mood-bubble.empty{color:var(--primary-dark)}
 .mine .chat-bubble{background:var(--soft);border-color:var(--soft-strong);border-radius:16px 4px 16px 16px}
 /* 纯语音消息：微信式短气泡，点击整条播放 */
 .chat-bubble.voice{padding:8px 12px;min-width:0}
+/* 引用：气泡顶部一小条，左边一条竖线，点它跳回原消息。置顶的气泡在右上角挂个 📌 */
+.chat-quote{display:block;width:100%;text-align:left;border:none;border-left:2px solid var(--soft-strong);background:rgba(0,0,0,.04);border-radius:0 8px 8px 0;padding:5px 8px;margin:-2px 0 7px;font-size:12px;color:var(--muted);line-height:1.5;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chat-quote span{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chat-bubble.pinned{border-color:var(--soft-strong);box-shadow:inset 0 0 0 1px var(--soft-strong)}
+.chat-bubble.pinned::after{content:'📌';position:absolute;top:-9px;right:6px;font-size:10px;background:var(--surface);border:1px solid var(--soft-strong);border-radius:999px;padding:0 4px;line-height:14px}
+.chat-bubble{position:relative}
+/* 置顶条：贴在消息区顶部，不进消息流，滚多远都看得见 */
+.chat-pinned{display:flex;align-items:center;gap:8px;width:100%;padding:8px 12px;background:var(--soft);border:none;border-bottom:1px solid var(--line);font-size:12px;color:var(--ink);text-align:left}
+.chat-pinned .cp-tag{color:var(--primary-dark);font-weight:600;flex:none}
+.chat-pinned .cp-text{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted)}
+.chat-pinned i{font-style:normal;font-size:11px;color:var(--muted);flex:none}
+.chat-reply-bar{display:flex;align-items:center;gap:8px;padding:7px 14px;background:var(--soft);border-top:1px solid var(--line);font-size:12px;color:var(--muted)}
+.chat-reply-bar span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chat-search-bar{display:flex;align-items:center;gap:10px;padding:7px 12px;background:var(--soft);border-bottom:1px solid var(--line);font-size:12px;color:var(--muted)}
+.chat-search-bar span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chat-search-bar button{border:none;background:none;color:var(--primary);font-size:12px}
+.chat-no-match{text-align:center;color:var(--muted);font-size:13px;padding:28px 16px;line-height:1.8}
+/* 跳转定位时闪一下，眼睛能跟上 */
+.chat-line.flash,.chat-recall.flash{animation:chatFlash 1.4s ease}
+@keyframes chatFlash{0%,100%{background:transparent}20%,60%{background:var(--soft)}}
 .chat-bubble.voice .media-grid{margin-top:0}
 /* 贴纸消息：无气泡框，直接显示图片/循环视频 */
 .chat-sticker{max-width:150px}
@@ -415,7 +455,9 @@ button.mood-row.no-mood .mood-bubble.empty{color:var(--primary-dark)}
    底图不随消息滚动，标题栏/输入栏改成半透明玻璃让图透出来，文字对比度靠气泡自身背景兜底。 */
 .chat-panel{position:relative}
 .chat-panel>.chat-header,.chat-panel>.chat-body,.chat-panel>.sticker-dock,.chat-panel>.chat-compose{position:relative;z-index:1}
-.chat-body{position:relative;flex:1;min-height:0;display:flex;overflow:hidden}
+.chat-body{position:relative;flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden}
+/* 置顶条/筛选条是固定在消息区顶部的横条，别让它们被 flex 拉伸或滚走 */
+.chat-body>.chat-pinned,.chat-body>.chat-search-bar{flex:none}
 .chat-wallpaper{position:absolute;inset:0;z-index:0;background-size:cover;background-position:center;background-repeat:no-repeat;pointer-events:none}
 .chat-wallpaper::after{content:'';position:absolute;inset:0;background:var(--veil,var(--bg));opacity:var(--chat-bg-dim,.35)}
 /* 照片壁纸用深色遮罩（浅色遮罩会把照片冲成灰白，白字也读不清），但只叠很薄一层：
@@ -423,7 +465,7 @@ button.mood-row.no-mood .mood-bubble.empty{color:var(--primary-dark)}
 .chat-wallpaper.photo{--veil:#0F0D14}
 .chat-wallpaper.photo::after{opacity:calc(var(--chat-bg-dim,.35) * .5)}
 :root.dark .chat-wallpaper.photo::after{opacity:calc(var(--chat-bg-dim,.35) * .62)}
-.chat-body .chat-log{position:relative;z-index:1;background:transparent;width:100%}
+.chat-body .chat-log{position:relative;z-index:1;background:transparent;width:100%;min-height:0}
 /* 有壁纸时标题栏/输入栏变半透明玻璃，让底图真正"全屏" */
 .chat-panel.has-wallpaper{background:transparent;border-color:transparent;box-shadow:none}
 .chat-panel.has-wallpaper .chat-header,.chat-panel.has-wallpaper .chat-compose{background:rgba(255,255,255,.62);backdrop-filter:blur(16px) saturate(1.25);-webkit-backdrop-filter:blur(16px) saturate(1.25);border-color:rgba(255,255,255,.45)}
@@ -962,6 +1004,20 @@ body.cal-full{overflow:hidden;height:100dvh}
 .stat-bar i{display:block;height:100%;background:linear-gradient(90deg,var(--soft-strong),var(--primary));border-radius:999px}
 .stat-bar.big{height:16px;margin:12px 0}
 .stat-row b,.mood-stat b{min-width:36px;text-align:right;font-size:13px;color:var(--muted)}
+/* 账本：月份切换 + 近六月柱状趋势。柱子用 flex 底部对齐，高度按当月最大值归一 */
+.ledger-month-switch{display:flex;align-items:center;gap:6px}
+.ledger-month-switch strong{font-size:13px;color:var(--ink);font-weight:600;white-space:nowrap}
+.ledger-month-switch .icon-btn{width:30px;height:30px;border:1px solid var(--line);border-radius:9px;background:var(--surface)}
+.ledger-month-switch .icon-btn[disabled]{opacity:.35}
+.ledger-meta{font-size:12px;color:var(--muted);margin:2px 0 10px}
+.ledger-trend{display:flex;align-items:flex-end;gap:8px;height:112px;padding:4px 2px 0}
+.ledger-trend-col{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;height:100%}
+.ledger-trend-col .lt-amount{font-size:10px;color:var(--muted);height:14px;line-height:14px;white-space:nowrap}
+.ledger-trend-col .lt-bar{flex:1;width:100%;display:flex;align-items:flex-end;justify-content:center}
+.ledger-trend-col .lt-bar i{display:block;width:min(100%,26px);border-radius:6px 6px 3px 3px;background:linear-gradient(180deg,var(--primary),var(--soft-strong));transition:height .25s ease}
+.ledger-trend-col.active .lt-bar i{background:linear-gradient(180deg,var(--primary-dark),var(--primary))}
+.ledger-trend-col .lt-label{font-size:11px;color:var(--muted);margin-top:6px}
+.ledger-trend-col.active .lt-label{color:var(--primary-dark);font-weight:600}
 @media(max-width:640px){.stats-hero{grid-template-columns:repeat(2,minmax(0,1fr))}.grid-2{grid-template-columns:1fr}}
 
 /* 回忆周报 */
