@@ -450,6 +450,31 @@ function coverCropModal(mid){
  };
  apply();
 }
+/* 首页右上角那颗图片图标：点一下直接选一张照片换背景。
+   原来它只弹构图弹窗，想换图得绕去空间设置里翻半天——现在一步到位；
+   图存好之后顺手把构图弹窗打开（换图十有八九要摆一下位置），不想调直接关掉就行，图已经生效了。 */
+function pickCover(){
+ const input=document.createElement('input');
+ input.type='file';input.accept='image/jpeg,image/png,image/webp';input.style.display='none';
+ document.body.appendChild(input);
+ input.addEventListener('change',async()=>{
+  const file=input.files&&input.files[0];
+  input.remove();
+  if(!file)return;
+  const s=state.me.space||{};
+  toast('正在上传封面照片…');
+  try{
+   const media=await uploadFile(file);
+   /* 只传空间级必填字段：聊天壁纸那几项留空，后端会沿用原值（见 PUT /api/space） */
+   await put('/space',{name:s.name,since:s.since||'',cover:media.id,theme:s.theme||'rose',
+    custom_color:s.theme==='custom'?(s.custom_color||''):'',motion:s.motion!==false,
+    timezone:s.timezone||'Asia/Shanghai',cover_pos:{x:50,y:50,z:1}});
+   await refresh();
+   coverCropModal(media.id);
+  }catch(err){toast(err.message||'封面照片没设置成功，再试一次');}
+ });
+ input.click();
+}
 function homePage() {
  const {space,user,users}=state.me,partner=users.find(u=>u.id!==user.id),days=space.since?Math.max(0,daysBetween(space.since,today())+1):null,anniversary=nextAnniversary(),posts=recordsOf('post').slice(0,3),wishes=recordsOf('wish');
  /* 今天的心情：每一行都是一颗按钮——自己的没记就去记，已记就点开改（改的仍是心情手记里那条），
@@ -473,7 +498,7 @@ function homePage() {
     这里再用两个圆把画面的左上角占掉，既挡住照片又抢戏；名字之间那颗小心形
     已经把「两个人」说清楚了。 */
  const heroNames=partner?`${esc(user.name)}<span class="hero-amp" aria-hidden="true">♥</span>${esc(partner.name)}`:'等你，把另一半邀请进来';
- const heroCopy=`<section class="hero">${space.cover?coverImg(space.cover,space.cover_pos):'<img class="hero-art" src="/static/garden.svg" alt="两只小兔子守着共同的小家">'}<div class="hero-mask"></div>${space.cover?`<button type="button" class="hero-crop" data-action="cover-crop" aria-label="调整封面背景的显示位置" title="调整背景">${icon('image')}<span>调整背景</span></button>`:''}<div class="hero-copy"><div class="hero-main"><span class="hero-tag">${icon('heart')} ${esc(space.name)}</span><span class="hero-names-text">${heroNames}</span>${partner?'':`<button class="link-btn" data-action="invite">发送邀请，让 TA 住进来 →</button>`}<div class="hero-days"><small>我们相恋</small><strong>${days??'—'}<em>天</em></strong></div><div class="hero-foot">${days===null?`<button class="link-btn" data-action="space">设置相恋日期 →</button>`:`<span class="hero-since">${esc(space.since)} 起 · 今天也要好好相爱</span><button class="link-btn" data-action="love-card">存一张天数卡片 →</button>`}</div></div></div></section>`;
+ const heroCopy=`<section class="hero">${space.cover?coverImg(space.cover,space.cover_pos):'<img class="hero-art" src="/static/garden.svg" alt="两只小兔子守着共同的小家">'}<div class="hero-mask"></div><button type="button" class="hero-crop" data-action="cover-pick" aria-label="${space.cover?'更换封面照片':'设置一张照片当封面'}" title="${space.cover?'更换背景':'设置背景'}">${icon('image')}<span>${space.cover?'更换背景':'设置背景'}</span></button><div class="hero-copy"><div class="hero-main"><span class="hero-names-text">${heroNames}</span>${partner?'':`<button class="link-btn" data-action="invite">发送邀请，让 TA 住进来 →</button>`}<div class="hero-days"><small>我们相恋</small><strong>${days??'—'}<em>天</em></strong></div><div class="hero-foot">${days===null?`<button class="link-btn" data-action="space">设置相恋日期 →</button>`:`<span class="hero-since">${esc(space.since)} 起 · 今天也要好好相爱</span><button class="link-btn" data-action="love-card">存一张天数卡片 →</button>`}</div></div></div></section>`;
  const composeCta=`<button class="compose-cta" data-action="compose">${icon('edit')} 记录此刻</button>`;
  const homeHeading=heading('我们的每一天','一半是生活，一半是你。','compose','记录此刻','edit').replace('page-heading','page-heading home-heading');
  return `${homeHeading}${heroCopy}${todayCard}${composeCta}${dailyQuoteBlock()}
@@ -2180,7 +2205,7 @@ function spaceForm() {
    :(key?`<span class="chat-wallpaper" data-bg="${key}" aria-hidden="true"></span>`:'');
   return `<button type="button" class="wallpaper-swatch${on?' selected':''}${key==='photo'&&!wm?' photo-empty':''}" data-bg="${key}" aria-pressed="${on}">${art}<b>${label}</b></button>`;
  }).join('');
- simpleForm('空间设置',field('空间名称','name',s.name,'text','required maxlength="60"')+field('从哪一天开始相爱','since',s.since,'date')+`<div class="form-row">${selectField('主题色','theme',[['rose','草莓牛奶'],['peach','蜜桃奶油'],['lavender','香芋云朵'],['custom','自定义']],s.theme)}${selectField('夜间模式','dark',[['auto','跟随系统'],['on','始终开启'],['off','始终关闭']],darkPref)}</div><label>自定义颜色（主题选「自定义」时生效）<input type="color" name="custom_color" value="${s.custom_color||'#c6748a'}"></label><div class="file-picker"><span class="file-picker-title">更换封面照片</span><label class="upload-tile file-picker-tile"><span class="upload-ico">🖼️</span><b>选择封面照片</b><small id="cover-file-name">${s.cover?'已设置封面，可重新选择':'选择一张照片作为我们的空间封面'}</small><input type="file" id="cover-file" accept="image/jpeg,image/png,image/webp"></label><p class="small-note">换好照片保存后会直接弹出构图调整：按住图拖动摆位置，缩放挑画面大小。之后想再调，回首页点封面右上角的「调整背景」即可。</p></div><div class="wallpaper-picker"><span class="file-picker-title">聊天壁纸</span><div class="wallpaper-swatches" id="wallpaper-swatches">${swatches}</div><label class="wallpaper-dim-row">背景遮罩 <input type="range" name="chat_bg_dim" id="wallpaper-dim" min="0" max="80" step="5" value="${dim}"><span id="wallpaper-dim-val">${dim}%</span></label><label class="upload-tile file-picker-tile"><span class="upload-ico">🖼️</span><b>用你们的照片</b><small id="wallpaper-file-name">${wm?'已设置背景照片，可重新选择':'选一张照片铺在聊天背景上'}</small><input type="file" id="wallpaper-file" accept="image/jpeg,image/png,image/webp"></label><input type="hidden" name="chat_bg" value="${esc(bg)}"><input type="hidden" name="chat_bg_media" value="${esc(wm)}"><p class="small-note">遮罩越强，背景越淡、文字越清楚。这里是**共同背景**——只是两个人各自没单独设置时的默认值。想设自己的、或替对方换一张，去聊天页点右上角的背景按钮。</p></div><label class="switch-row">启用轻柔动效<input name="motion" type="checkbox" ${s.motion?'checked':''}></label>`,async(data,form)=>{let cover=s.cover;const file=$('#cover-file').files[0];if(file)cover=(await uploadFile(file)).id;let wallpaper=data.chat_bg_media||'';const wfile=$('#wallpaper-file').files[0];if(wfile){wallpaper=(await uploadFile(wfile)).id;data.chat_bg='photo';}localStorage.setItem(DARK_KEY,data.dark);applyDarkMode();delete data.dark;if(data.theme!=='custom')data.custom_color='';if(data.theme==='custom'&&!data.custom_color)data.custom_color=s.custom_color||'#c6748a';data.chat_bg_dim=Math.min(80,Math.max(0,Number(data.chat_bg_dim)||0));await put('/space',{...data,cover,chat_bg_media:wallpaper,cover_pos:file?{x:50,y:50,z:1}:(s.cover_pos||{x:50,y:50,z:1}),motion:$('[name=motion]',form).checked});applyCustomColor(data.theme,data.custom_color);/* 换了新封面就顺势把构图弹出来：选图 → 拖动摆位 → 保存，一口气做完 */if(file)setTimeout(()=>{if(!$('.modal'))coverCropModal(cover);},450);});
+ simpleForm('空间设置',field('空间名称','name',s.name,'text','required maxlength="60"')+field('从哪一天开始相爱','since',s.since,'date')+`<div class="form-row">${selectField('主题色','theme',[['rose','草莓牛奶'],['peach','蜜桃奶油'],['lavender','香芋云朵'],['custom','自定义']],s.theme)}${selectField('夜间模式','dark',[['auto','跟随系统'],['on','始终开启'],['off','始终关闭']],darkPref)}</div><label>自定义颜色（主题选「自定义」时生效）<input type="color" name="custom_color" value="${s.custom_color||'#c6748a'}"></label><div class="file-picker"><span class="file-picker-title">更换封面照片</span><label class="upload-tile file-picker-tile"><span class="upload-ico">🖼️</span><b>选择封面照片</b><small id="cover-file-name">${s.cover?'已设置封面，可重新选择':'选择一张照片作为我们的空间封面'}</small><input type="file" id="cover-file" accept="image/jpeg,image/png,image/webp"></label><p class="small-note">换好照片保存后会直接弹出构图调整：按住图拖动摆位置，缩放挑画面大小。之后想换封面，回首页点封面右上角那颗图片按钮就行。</p></div><div class="wallpaper-picker"><span class="file-picker-title">聊天壁纸</span><div class="wallpaper-swatches" id="wallpaper-swatches">${swatches}</div><label class="wallpaper-dim-row">背景遮罩 <input type="range" name="chat_bg_dim" id="wallpaper-dim" min="0" max="80" step="5" value="${dim}"><span id="wallpaper-dim-val">${dim}%</span></label><label class="upload-tile file-picker-tile"><span class="upload-ico">🖼️</span><b>用你们的照片</b><small id="wallpaper-file-name">${wm?'已设置背景照片，可重新选择':'选一张照片铺在聊天背景上'}</small><input type="file" id="wallpaper-file" accept="image/jpeg,image/png,image/webp"></label><input type="hidden" name="chat_bg" value="${esc(bg)}"><input type="hidden" name="chat_bg_media" value="${esc(wm)}"><p class="small-note">遮罩越强，背景越淡、文字越清楚。这里是**共同背景**——只是两个人各自没单独设置时的默认值。想设自己的、或替对方换一张，去聊天页点右上角的背景按钮。</p></div><label class="switch-row">启用轻柔动效<input name="motion" type="checkbox" ${s.motion?'checked':''}></label>`,async(data,form)=>{let cover=s.cover;const file=$('#cover-file').files[0];if(file)cover=(await uploadFile(file)).id;let wallpaper=data.chat_bg_media||'';const wfile=$('#wallpaper-file').files[0];if(wfile){wallpaper=(await uploadFile(wfile)).id;data.chat_bg='photo';}localStorage.setItem(DARK_KEY,data.dark);applyDarkMode();delete data.dark;if(data.theme!=='custom')data.custom_color='';if(data.theme==='custom'&&!data.custom_color)data.custom_color=s.custom_color||'#c6748a';data.chat_bg_dim=Math.min(80,Math.max(0,Number(data.chat_bg_dim)||0));await put('/space',{...data,cover,chat_bg_media:wallpaper,cover_pos:file?{x:50,y:50,z:1}:(s.cover_pos||{x:50,y:50,z:1}),motion:$('[name=motion]',form).checked});applyCustomColor(data.theme,data.custom_color);/* 换了新封面就顺势把构图弹出来：选图 → 拖动摆位 → 保存，一口气做完 */if(file)setTimeout(()=>{if(!$('.modal'))coverCropModal(cover);},450);});
  $('#cover-file').onchange=e=>{$('#cover-file-name').textContent=e.target.files[0]?.name||'选择一张照片作为我们的空间封面';};
  /* 色卡点选：「用照片」在还没有照片时先弹文件框，避免存下一个没有图的 photo 壁纸 */
  $('#wallpaper-swatches').onclick=e=>{
@@ -2560,6 +2585,7 @@ async function act(action,id,el) {
  if(action==='lb-out')return lbStep(1/1.6);
  if(action==='lb-fit')return lbReset();
  if(action==='space')return spaceForm();
+ if(action==='cover-pick')return pickCover();
  if(action==='cover-crop')return coverCropModal();
  if(action==='profile')return profileForm();
  if(action==='invite')return inviteModal();

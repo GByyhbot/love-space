@@ -258,8 +258,6 @@ label{display:grid;gap:6px;font-size:13px;color:var(--muted)}
 .hero:not(:has(.hero-cover)) .hero-mask{display:none}
 .hero-copy{position:relative;z-index:2;display:flex;align-items:flex-end;justify-content:flex-start;gap:16px;width:100%}
 .hero-main{display:flex;flex-direction:column;align-items:flex-start;gap:14px;width:min(58%,520px);min-width:0}
-.hero-tag{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--ink);background:rgba(255,255,255,.85);backdrop-filter:blur(4px);padding:6px 14px;border-radius:18px;width:fit-content}
-.hero:has(.hero-cover) .hero-tag{color:#fff;background:rgba(69,56,63,.4)}
 .hero:has(.hero-cover) .hero-names-text{color:#fff;text-shadow:0 1px 8px rgba(0,0,0,.35)}
 .hero:has(.hero-cover) .hero-days{color:#fff;text-shadow:0 1px 8px rgba(0,0,0,.4)}
 .hero:has(.hero-cover) .hero-days .link-btn{color:#fff}
@@ -1069,7 +1067,6 @@ body.cal-full{overflow:hidden;height:100dvh}
    更要紧的是它们写在文件末尾、特异性又和 .chat-panel.immersive .chat-bubble 相同，
    会把照片壁纸下的亮玻璃气泡整个盖掉（表现为深底压深字、什么都看不清）。 */
 :root.dark .hero{background:linear-gradient(120deg,var(--soft),var(--surface) 55%,var(--green-soft))}
-:root.dark .hero-tag{background:rgba(58,43,51,.8);color:var(--ink);border:1px solid var(--line)}
 :root.dark .hero-days .meta{color:var(--muted)}
 :root.dark .hero-mask{background:linear-gradient(180deg,rgba(0,0,0,0) 25%,rgba(0,0,0,.55) 100%)}
 :root.dark .modal-overlay{background:rgba(0,0,0,.55)}
