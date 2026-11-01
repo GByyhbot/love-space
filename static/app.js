@@ -241,7 +241,7 @@ function renderPage() {
  if(state.page==='messages') {$('#chat-text').value=localStorage.getItem('chat-text:'+state.me.user.id)||'';autoGrow($('#chat-text'));scrollChat();$('#chat-text')?.addEventListener('focus',()=>{const d=$('#sticker-dock');if(d)d.hidden=true;});applyWallpaper();}
  if(state.page==='importdetail') initImportLog();
  syncStatusBarOverlay();
-  if(state.page==='home'){loadOnThisDay();loadYearbook();}
+  if(state.page==='home'){measureHero();loadOnThisDay();loadYearbook();}
   if(state.page==='together'&&state.tab==='calendar') loadCalendar();
   /* 自定义清单表单：questPage 渲染后单独绑定 submit（不走 data-action 代理） */
   if(state.page==='together'&&state.tab==='quest'){const qf=$('#quest-custom-form');if(qf&&!qf.dataset.bound){qf.dataset.bound='1';qf.onsubmit=async e=>{e.preventDefault();const input=$('#quest-custom-input');const title=input.value.trim();if(!title)return;try{await post('/records',{kind:'quest',body:{title,category:'自定义',done:false},client_id:uuid()});input.value='';await refresh();toast('已加入清单');}catch(err){toast(err.message);}};}}
@@ -328,6 +328,126 @@ function loveCardImage(){
   setTimeout(()=>URL.revokeObjectURL(url),5000);toast('卡片已保存到下载');
  },'image/png');
 }
+/* ── 首页封面构图 ──────────────────────────────
+   三个数就够描述「这张照片在 hero 卡里怎么摆」：x/y 是 object-position 的百分比，z 是放大倍数。
+   不预先把图裁死再存，好处是原图一点不损失、随时可以反悔，换成大屏手机也不会糊。
+   ⚠️ hero 和裁剪弹窗共用 coverStyle()，两边算法一旦分叉，预览就会和首页对不上。 */
+function coverPos(raw){
+ const src=(raw&&typeof raw==='object')?raw:{};
+ const num=(v,d)=>{const n=Number(v);return isFinite(n)?n:d;};
+ return {x:Math.min(100,Math.max(0,num(src.x,50))),
+         y:Math.min(100,Math.max(0,num(src.y,50))),
+         z:Math.min(3,Math.max(1,num(src.z,1)))};
+}
+function coverStyle(raw){
+ const p=coverPos(raw);
+ let css=`object-position:${p.x}% ${p.y}%`;
+ /* z=1 时不写 transform：多一层变换在部分安卓 WebView 上会让照片发虚。
+    缩放中心必须钉在正中（默认值）——如果跟着 x/y 走，改一次 x 会同时挪位置和挪缩放原点，
+    位移按 (1-z) 倍额外放大，手指和画面就对不上了。 */
+ if(p.z>1.001)css+=`;transform:scale(${p.z})`;
+ return css;
+}
+function coverImg(mid,pos){
+ return `<img class="hero-art hero-cover" src="/media/${esc(mid)}?preview=true" alt="我们的合照封面" style="${coverStyle(pos)}" draggable="false">`;
+}
+/* 首页那张 hero 卡的宽高比：裁剪弹窗要按同一个比例画预览框，否则「所见」对不上「所得」 */
+function measureHero(){
+ const h=$('.hero');
+ if(h&&h.clientWidth>8&&h.clientHeight>8)state.heroRatio=h.clientWidth/h.clientHeight;
+}
+/* 封面构图弹窗：拖动平移 + 滑块/滚轮/双指缩放，所见即所得（预览框的宽高比取自首页那张 hero）。
+   只改三个数，不动原图；「复位」永远能回到正中的样子。 */
+function coverCropModal(mid){
+ const space=state.me.space||{};
+ const coverId=mid||space.cover;
+ if(!coverId)return toast('先给空间选一张封面照片');
+ const same=coverId===space.cover;
+ let pos=coverPos(same?space.cover_pos:null);
+ const hero=$('.hero');
+ const hw=hero?hero.clientWidth:0,hh=hero?hero.clientHeight:0;
+ /* 优先用 renderPage 里量好的比例：弹窗打开时 body 会被设成 overflow:hidden，
+    滚动条一消失页面就变宽，现量出来的比例会比真实首页差几个百分点。 */
+ const ratio=state.heroRatio||((hw>8&&hh>8)?(hw/hh):1.9);
+ openModal('调整封面背景',`<div class="crop-wrap">
+  <div class="crop-frame" id="crop-frame" style="padding-top:${(100/ratio).toFixed(2)}%">
+   <img id="crop-img" src="/media/${esc(coverId)}?preview=true" alt="封面预览" draggable="false">
+   <i class="crop-shade" aria-hidden="true"></i>
+   <i class="crop-grid" aria-hidden="true"></i>
+  </div>
+  <div class="crop-tools">
+   <div class="crop-zoom-row"><span class="crop-zoom-end">缩小</span><input type="range" id="crop-zoom" min="100" max="300" step="1" value="${Math.round(pos.z*100)}" aria-label="缩放图片"><span class="crop-zoom-end">放大</span><b id="crop-zoom-val">${Math.round(pos.z*100)}%</b></div>
+   <div class="crop-acts"><button type="button" class="button soft" id="crop-reset">复位</button><button type="button" class="button primary" id="crop-save">保存构图</button></div>
+  </div>
+  <p class="small-note">按住图片拖动来摆位置，放大后能挪得更细。只记住构图，原图不会被裁掉，随时能重新调。</p>
+ </div>`);
+ const frame=$('#crop-frame'),img=$('#crop-img'),zoom=$('#crop-zoom'),zoomVal=$('#crop-zoom-val');
+ if(!frame||!img)return;
+ let natW=0,natH=0;
+ const readNat=()=>{natW=img.naturalWidth||0;natH=img.naturalHeight||0;};
+ img.addEventListener('load',readNat);readNat();
+ const apply=()=>{
+  img.style.cssText=coverStyle(pos);
+  if(zoom)zoom.value=String(Math.round(pos.z*100));
+  if(zoomVal)zoomVal.textContent=Math.round(pos.z*100)+'%';
+  frame.classList.toggle('zoomed',pos.z>1.001);
+ };
+ /* 拖动换算要算清「图片按 cover 铺满预览框后到底溢出多少像素」，否则手指和画面不同步。
+     注意缩放是 CSS transform，位移到画面上会被放大约 z 倍，所以除数里必须带上 z。 */
+ const box=()=>{
+  const w=frame.clientWidth,h=frame.clientHeight;
+  if(!w||!h||!natW||!natH)return null;
+  const base=Math.max(w/natW,h/natH);
+  return {ox:Math.max(0,natW*base-w),oy:Math.max(0,natH*base-h)};
+ };
+ const pan=(dx,dy)=>{
+  const b=box();if(!b)return;
+  if(b.ox>1)pos.x=Math.min(100,Math.max(0,pos.x-dx*100/(pos.z*b.ox)));
+  if(b.oy>1)pos.y=Math.min(100,Math.max(0,pos.y-dy*100/(pos.z*b.oy)));
+  apply();
+ };
+ const setZoom=z=>{pos.z=Math.min(3,Math.max(1,z));apply();};
+ const pointers=new Map();
+ let drag=null,pinch=null;
+ frame.addEventListener('pointerdown',e=>{
+  if(frame.setPointerCapture)try{frame.setPointerCapture(e.pointerId);}catch{}
+  pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(pointers.size===1){drag={id:e.pointerId,x:e.clientX,y:e.clientY};frame.classList.add('dragging');}
+  else if(pointers.size===2){drag=null;const p=[...pointers.values()];pinch={d:Math.hypot(p[0].x-p[1].x,p[0].y-p[1].y)||1,z:pos.z};}
+ });
+ frame.addEventListener('pointermove',e=>{
+  if(!pointers.has(e.pointerId))return;
+  pointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  if(pinch&&pointers.size>=2){
+   const p=[...pointers.values()],d=Math.hypot(p[0].x-p[1].x,p[0].y-p[1].y)||1;
+   setZoom(pinch.z*d/pinch.d);return;
+  }
+  if(drag&&drag.id===e.pointerId){pan(e.clientX-drag.x,e.clientY-drag.y);drag.x=e.clientX;drag.y=e.clientY;}
+ });
+ const release=e=>{
+  pointers.delete(e.pointerId);
+  if(pointers.size<2)pinch=null;
+  if(drag&&drag.id===e.pointerId)drag=null;
+  if(!pointers.size)frame.classList.remove('dragging');
+ };
+ frame.addEventListener('pointerup',release);
+ frame.addEventListener('pointercancel',release);
+ frame.addEventListener('wheel',e=>{e.preventDefault();setZoom(pos.z*(e.deltaY<0?1.08:1/1.08));},{passive:false});
+ if(zoom)zoom.oninput=()=>setZoom(Number(zoom.value)/100);
+ $('#crop-reset').onclick=()=>{pos={x:50,y:50,z:1};apply();};
+ $('#crop-save').onclick=async e=>{
+  const b=e.currentTarget;b.disabled=true;b.textContent='保存中…';
+  try{
+   const s=state.me.space||{};
+   /* 只传空间级必填字段 + 构图；聊天壁纸那几项留空后端会沿用原值 */
+   await put('/space',{name:s.name,since:s.since||'',cover:coverId,theme:s.theme||'rose',
+    custom_color:s.theme==='custom'?(s.custom_color||''):'',motion:s.motion!==false,
+    timezone:s.timezone||'Asia/Shanghai',cover_pos:{x:pos.x,y:pos.y,z:pos.z}});
+   closeModal();await refresh();toast('首页封面已按这个构图显示');
+  }catch(err){b.disabled=false;b.textContent='保存构图';toast(err.message);}
+ };
+ apply();
+}
 function homePage() {
  const {space,user,users}=state.me,partner=users.find(u=>u.id!==user.id),days=space.since?Math.max(0,daysBetween(space.since,today())+1):null,anniversary=nextAnniversary(),posts=recordsOf('post').slice(0,3),wishes=recordsOf('wish');
  /* 今天的心情：每一行都是一颗按钮——自己的没记就去记，已记就点开改（改的仍是心情手记里那条），
@@ -346,7 +466,7 @@ function homePage() {
   ?`<button type="button" class="today-cell today-cell-link" data-action="tool-anniversary" aria-label="最近纪念日：${esc(anniversary.body.title)}，${anniversary.days} 天后"><span class="tiny">${icon('calendar')} 最近纪念日<span class="tiny-go">${icon('arrow')}</span></span><div class="countdown-mini"><strong>${anniversary.days}</strong><span>天后 · ${esc(anniversary.body.title)}</span></div><p class="meta">${anniversary.due} · 别忘了给彼此一个拥抱</p></button>`
   :`<div class="today-cell"><span class="tiny">${icon('calendar')} 最近纪念日</span><div class="countdown-mini"><strong>♡</strong><span>留一个日子，给仪式感</span></div>${button('添加纪念日','new-anniversary','small secondary')}</div>`;
  const todayCard=`<section class="today-card" aria-label="今天的陪伴">${moodCell}${annCell}</section>`;
- const heroCopy=`<section class="hero">${space.cover?`<img class="hero-art hero-cover" src="/media/${esc(space.cover)}?preview=true" alt="我们的合照封面">`:'<img class="hero-art" src="/static/garden.svg" alt="两只小兔子守着共同的小家">'}<div class="hero-mask"></div><div class="hero-copy"><div class="hero-main"><span class="hero-tag">${icon('heart')} ${esc(space.name)}</span><div class="couple-line"><div class="couple-avatars">${avatar(user.id)}<span class="heart-symbol">♥</span>${partner?avatar(partner.id,'partner'):'<span class="avatar partner">?</span>'}</div><span class="hero-names-text">${partner?`${esc(user.name)} & ${esc(partner.name)}`:'等你，把另一半邀请进来'}</span></div>${partner?'':`<button class="link-btn" data-action="invite">发送邀请，让 TA 住进来 →</button>`}<div class="hero-days"><small>我们相恋</small><strong>${days??'—'}<em>天</em></strong>${days===null?`<button class="link-btn" data-action="space">设置相恋日期 →</button>`:`<span class="meta">${esc(space.since)} · 今天也要好好相爱</span><button class="link-btn" data-action="love-card">存一张天数卡片 →</button>`}</div></div></div></section>`;
+ const heroCopy=`<section class="hero">${space.cover?coverImg(space.cover,space.cover_pos):'<img class="hero-art" src="/static/garden.svg" alt="两只小兔子守着共同的小家">'}<div class="hero-mask"></div>${space.cover?`<button type="button" class="hero-crop" data-action="cover-crop" aria-label="调整封面背景的显示位置" title="调整背景">${icon('image')}<span>调整背景</span></button>`:''}<div class="hero-copy"><div class="hero-main"><span class="hero-tag">${icon('heart')} ${esc(space.name)}</span><div class="couple-line"><div class="couple-avatars">${avatar(user.id)}<span class="heart-symbol">♥</span>${partner?avatar(partner.id,'partner'):'<span class="avatar partner">?</span>'}</div><span class="hero-names-text">${partner?`${esc(user.name)} & ${esc(partner.name)}`:'等你，把另一半邀请进来'}</span></div>${partner?'':`<button class="link-btn" data-action="invite">发送邀请，让 TA 住进来 →</button>`}<div class="hero-days"><small>我们相恋</small><strong>${days??'—'}<em>天</em></strong>${days===null?`<button class="link-btn" data-action="space">设置相恋日期 →</button>`:`<span class="meta">${esc(space.since)} · 今天也要好好相爱</span><button class="link-btn" data-action="love-card">存一张天数卡片 →</button>`}</div></div></div></section>`;
  const composeCta=`<button class="compose-cta" data-action="compose">${icon('edit')} 记录此刻</button>`;
  const homeHeading=heading('我们的每一天','一半是生活，一半是你。','compose','记录此刻','edit').replace('page-heading','page-heading home-heading');
  return `${homeHeading}${heroCopy}${todayCard}${composeCta}${dailyQuoteBlock()}
@@ -850,9 +970,16 @@ function calDetailHTML(){
  const [y,m]=state.calMonth.split('-').map(Number);
  const days=state.calDays||{},person=id=>state.me.users.find(u=>u.id===id);
  const selected=state.calSelected;
- if(!selected)return '';
+ if(!selected)return `<div class="card cal-detail-card cal-detail-empty">${icon('calendar')}<p>点日历上的某一天，看看那天我们一起记下了什么。</p></div>`;
  const sel=days[selected]||null;
- return `<div class="card"><h3>${y}-${m}-${selected} 这一天</h3>${sel?(sel.anniversaries||[]).map(a=>`<div class="otd-item"><span class="otd-year">纪念</span><button class="link-btn" data-action="otd-detail" data-id="${a.id}">${esc(a.title)}</button></div>`).join('')+(sel.moods||[]).map(md=>`<div class="otd-item"><span class="otd-year">心情</span><span class="meta">${esc(person(md.author)?.name||'')}: ${esc(md.emoji)}</span></div>`).join('')+(sel.posts||[]).map(p=>`<div class="otd-item"><span class="otd-year">动态</span><button class="link-btn" data-action="otd-detail" data-id="${p.id}">${esc(p.title||'一份回忆')}</button></div>`).join('')+(sel.checks?.length?`<div class="otd-item"><span class="otd-year">打卡</span><span class="meta">${sel.checks.length} 人完成</span></div>`:''):'<p class="meta">这一天还没有记录。</p>'}</div>`;
+ const wd='日一二三四五六'[new Date(y,m-1,Number(selected)).getDay()];
+ const rows=[
+  ...((sel&&sel.anniversaries)||[]).map(a=>`<div class="otd-item"><span class="otd-year">纪念</span><button class="link-btn" data-action="otd-detail" data-id="${a.id}">${esc(a.title)}</button></div>`),
+  ...((sel&&sel.moods)||[]).map(md=>`<div class="otd-item"><span class="otd-year">心情</span><span class="meta">${esc(person(md.author)?.name||'')}: ${esc(md.emoji)}</span></div>`),
+  ...((sel&&sel.posts)||[]).map(p=>`<div class="otd-item"><span class="otd-year">动态</span><button class="link-btn" data-action="otd-detail" data-id="${p.id}">${esc(p.title||'一份回忆')}</button></div>`),
+  ...((sel&&sel.checks&&sel.checks.length)?[`<div class="otd-item"><span class="otd-year">打卡</span><span class="meta">${sel.checks.length} 人完成</span></div>`]:[])
+ ].join('');
+ return `<div class="card cal-detail-card"><div class="cal-detail-head"><strong>${m} 月 ${Number(selected)} 日</strong><span>${y} 年 · 周${wd}</span></div>${rows||'<p class="meta">这一天还空着，留一段空白也挺好。</p>'}</div>`;
 }
 function calendarPage(){
  if(!state.calMonth){const d=new Date();state.calMonth=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');}
@@ -863,7 +990,21 @@ function calendarPage(){
  const days=state.calDays||{};
  const selected=state.calSelected;
  const t=today(),todayDay=t.startsWith(`${y}-${String(m).padStart(2,'0')}`)?String(Number(t.slice(8))):'';
- return `<div class="calendar-page">${heading('共同年历','重要的日子，一眼看清。','')}<div class="calendar-head"><button class="icon-btn" data-action="cal-prev" aria-label="上个月"><svg class="icon" viewBox="0 0 24 24" style="transform:scaleX(-1)"><path d="${'M9 6 15 12 9 18'}"/></svg></button><strong>${y} 年 ${m} 月</strong><button class="icon-btn" data-action="cal-next" aria-label="下个月">${icon('arrow')}</button></div><div class="calendar-grid">${['日','一','二','三','四','五','六'].map(w=>`<span class="cal-week">${w}</span>`).join('')}${cells.map(d=>{if(!d)return '<span></span>';const info=days[d],dots=info?[['anniversaries','var(--primary)','纪念日'],['moods','var(--green)','心情'],['posts','var(--primary-dark)','动态'],['checks','var(--primary)','打卡']].filter(([k])=>info[k]?.length).map(([k,c,t])=>`<i class="cal-dot" style="background:${c}" title="${t}"></i>`).join(''):'';return `<button class="cal-day ${selected===d?'selected':''} ${info?'has-events':''} ${String(Number(d))===todayDay?'is-today':''}" data-action="cal-day" data-id="${d}" aria-label="${m} 月 ${Number(d)} 日${info?'，有记录':''}"><span>${Number(d)}</span><span class="cal-dots">${dots}</span></button>`;}).join('')}</div><div id="cal-detail">${calDetailHTML()}</div></div>`;
+ /* 四种标记四种颜色，图例和格子里的小圆点共用这一份，改色只改这里 */
+ const DOT_KINDS=[['anniversaries','var(--primary)','纪念日'],['posts','var(--primary-dark)','动态'],['moods','var(--green)','心情'],['checks','var(--amber)','打卡']];
+ const activeDays=Object.keys(days).filter(k=>{const info=days[k];return info&&DOT_KINDS.some(([key])=>info[key]&&info[key].length);}).length;
+ const weekHtml=ws=>ws.map((w,i)=>`<span class="cal-week${i===0||i===6?' is-end':''}">${w}</span>`).join('');
+ const cellsHtml=cells.map(d=>{
+  if(!d)return '<span class="cal-blank"></span>';
+  const info=days[d],wd=(start+Number(d)-1)%7;
+  const dots=info?DOT_KINDS.filter(([k])=>info[k]?.length).map(([k,c,label])=>`<i class="cal-dot" style="background:${c}" title="${label}"></i>`).join(''):'';
+  return `<button type="button" class="cal-day${selected===d?' selected':''}${info?' has-events':''}${String(Number(d))===todayDay?' is-today':''}${wd===0||wd===6?' is-end':''}" data-action="cal-day" data-id="${d}" aria-label="${m} 月 ${Number(d)} 日${info?'，有记录':''}"><span class="cal-num">${Number(d)}</span><span class="cal-dots">${dots}</span></button>`;
+ }).join('');
+ return `<div class="calendar-page">${heading('共同年历','重要的日子，一眼看清。','')}
+ <div class="cal-bar"><div class="cal-bar-title"><strong>${m} 月</strong><span>${y} 年 · ${activeDays?`记了 ${activeDays} 天`:'还空着'}</span></div><div class="cal-bar-nav"><button type="button" class="cal-nav" data-action="cal-prev" aria-label="上个月">‹</button><button type="button" class="cal-today" data-action="cal-today">今天</button><button type="button" class="cal-nav" data-action="cal-next" aria-label="下个月">›</button></div></div>
+ <div class="cal-board"><div class="cal-weekrow">${weekHtml(['日','一','二','三','四','五','六'])}</div><div class="calendar-grid">${cellsHtml}</div></div>
+ <p class="cal-legend">${DOT_KINDS.map(([,c,label])=>`<span class="cal-legend-item"><i style="background:${c}"></i>${label}</span>`).join('')}<span class="cal-legend-hint">点一格看看那天</span></p>
+ <div id="cal-detail">${calDetailHTML()}</div></div>`;
 }
 const toolsList=[['calendar','🗓️','共同年历','重要的日子，一眼看清'],['anniversary','📅','纪念日','每个重要的日子，都认真对待'],['quest','💫','恋爱清单','一起做完这些小事，就是我们的故事'],['wish','✨','共同愿望','把一起想做的事，一件件实现'],['ledger','💰','共同账本','为了彼此花过的钱，也是一段回忆'],['personal-wish','💝','个人心愿','对方看得到心愿名称，输入一次密码后就能读到内容'],['mood','🌤','心情手记','晴天雨天，都想陪着你'],['note','💌','悄悄留言','有些喜欢，值得慢慢读'],['question','💭','情侣问答','每天再多了解彼此一点'],['music','🎵','共同歌单','把属于我们的歌，放在一起'],['habit','🌱','共同打卡','和你一起，成为更好的我们']];
 function togetherPage() {
@@ -1122,9 +1263,9 @@ function periodMonthGrid(y,m,d){
   const cls=ph?` ph-${ph.phase}${ph.predicted?' ph-pred':''}${ph.ovu?' ph-ovu':''}${isStart?' ph-start':''}`:'';
   const parts=[ph?`${PHASE_NAMES[ph.phase]}${ph.predicted?'（预测）':''}`:'还没有记录',ph&&ph.ovu?'排卵日':'',rec?'这次经期的第一天':'',log?'这天记过身体情况':'点一下记这天'].filter(Boolean);
   const tip=parts.join(' · ');
-  cells.push(`<button type="button" class="cal-day${cls}${iso===todayS?' is-today':''}${rec?' has-rec':''}${log?' has-log':''}${iso===picked?' picked':''}" data-action="period-day" data-day="${iso}" title="${tip}" aria-label="${m} 月 ${v} 日，${tip}"><span>${v}</span></button>`);
+  cells.push(`<button type="button" class="cal-day${cls}${iso===todayS?' is-today':''}${rec?' has-rec':''}${log?' has-log':''}${iso===picked?' picked':''}" data-action="period-day" data-day="${iso}" title="${tip}" aria-label="${m} 月 ${v} 日，${tip}"><span class="cal-num">${v}</span><span class="cal-dots"></span></button>`);
  }
- return `<div class="calendar-grid period-cal">${['日','一','二','三','四','五','六'].map(w=>`<span class="cal-week">${w}</span>`).join('')}${cells.join('')}</div>`;}
+ return `<div class="cal-weekrow">${['日','一','二','三','四','五','六'].map((w,i)=>`<span class="cal-week${i===0||i===6?' is-end':''}">${w}</span>`).join('')}</div><div class="calendar-grid period-cal">${cells.join('')}</div>`;}
 /* 翻月：月末日期要夹到目标月的最后一天，否则 1/31 往前翻会跳到 3 月 */
 function shiftMonth(day,delta){
  const y=Number(day.slice(0,4)),m=Number(day.slice(5,7))-1+delta;
@@ -1225,7 +1366,7 @@ function phaseBar(d){
    原来这里只显示一周、下面再摆一份双月日历，等于同一件事看两遍；现在合成一张，整月铺开。 */
 function periodTopCard(d){
  const day=state.periodDay||today(),y=Number(day.slice(0,4)),m=Number(day.slice(5,7));
- return `<div class="period-top"><button type="button" class="pw-nav" data-action="period-month" data-delta="-1" aria-label="上个月">‹</button><strong>${y} 年 ${m} 月</strong><button type="button" class="pw-nav" data-action="period-month" data-delta="1" aria-label="下个月">›</button><button type="button" class="pw-today" data-action="period-pick" data-day="${today()}">回今天</button></div>${periodMonthGrid(y,m,d)}<p class="period-legend"><span class="lg-pill p-period">月经期</span><span class="lg-pill p-pred">预测经期</span><span class="lg-pill p-fertile">排卵期</span><span class="lg-pill p-ovu"><i></i>排卵日</span></p>`;
+ return `<div class="cal-bar"><div class="cal-bar-title"><strong>${m} 月</strong><span>${y} 年</span></div><div class="cal-bar-nav"><button type="button" class="cal-nav" data-action="period-month" data-delta="-1" aria-label="上个月">‹</button><button type="button" class="cal-today" data-action="period-pick" data-day="${today()}">今天</button><button type="button" class="cal-nav" data-action="period-month" data-delta="1" aria-label="下个月">›</button></div></div>${periodMonthGrid(y,m,d)}<p class="period-legend"><span class="lg-pill p-period">月经期</span><span class="lg-pill p-pred">预测经期</span><span class="lg-pill p-fertile">排卵期</span><span class="lg-pill p-ovu"><i></i>排卵日</span></p>`;
 }
 /* 选中那天的记录卡：一行一项，点开底部弹层选，选完立刻存。
    「月经来了 是/否」不是普通字段——它决定这天算不算经期，所以单独一行的分段按钮。 */
@@ -2032,7 +2173,7 @@ function spaceForm() {
    :(key?`<span class="chat-wallpaper" data-bg="${key}" aria-hidden="true"></span>`:'');
   return `<button type="button" class="wallpaper-swatch${on?' selected':''}${key==='photo'&&!wm?' photo-empty':''}" data-bg="${key}" aria-pressed="${on}">${art}<b>${label}</b></button>`;
  }).join('');
- simpleForm('空间设置',field('空间名称','name',s.name,'text','required maxlength="60"')+field('从哪一天开始相爱','since',s.since,'date')+`<div class="form-row">${selectField('主题色','theme',[['rose','草莓牛奶'],['peach','蜜桃奶油'],['lavender','香芋云朵'],['custom','自定义']],s.theme)}${selectField('夜间模式','dark',[['auto','跟随系统'],['on','始终开启'],['off','始终关闭']],darkPref)}</div><label>自定义颜色（主题选「自定义」时生效）<input type="color" name="custom_color" value="${s.custom_color||'#c6748a'}"></label><div class="file-picker"><span class="file-picker-title">更换封面照片</span><label class="upload-tile file-picker-tile"><span class="upload-ico">🖼️</span><b>选择封面照片</b><small id="cover-file-name">${s.cover?'已设置封面，可重新选择':'选择一张照片作为我们的空间封面'}</small><input type="file" id="cover-file" accept="image/jpeg,image/png,image/webp"></label></div><div class="wallpaper-picker"><span class="file-picker-title">聊天壁纸</span><div class="wallpaper-swatches" id="wallpaper-swatches">${swatches}</div><label class="wallpaper-dim-row">背景遮罩 <input type="range" name="chat_bg_dim" id="wallpaper-dim" min="0" max="80" step="5" value="${dim}"><span id="wallpaper-dim-val">${dim}%</span></label><label class="upload-tile file-picker-tile"><span class="upload-ico">🖼️</span><b>用你们的照片</b><small id="wallpaper-file-name">${wm?'已设置背景照片，可重新选择':'选一张照片铺在聊天背景上'}</small><input type="file" id="wallpaper-file" accept="image/jpeg,image/png,image/webp"></label><input type="hidden" name="chat_bg" value="${esc(bg)}"><input type="hidden" name="chat_bg_media" value="${esc(wm)}"><p class="small-note">遮罩越强，背景越淡、文字越清楚。这里是**共同背景**——只是两个人各自没单独设置时的默认值。想设自己的、或替对方换一张，去聊天页点右上角的背景按钮。</p></div><label class="switch-row">启用轻柔动效<input name="motion" type="checkbox" ${s.motion?'checked':''}></label>`,async(data,form)=>{let cover=s.cover;const file=$('#cover-file').files[0];if(file)cover=(await uploadFile(file)).id;let wallpaper=data.chat_bg_media||'';const wfile=$('#wallpaper-file').files[0];if(wfile){wallpaper=(await uploadFile(wfile)).id;data.chat_bg='photo';}localStorage.setItem(DARK_KEY,data.dark);applyDarkMode();delete data.dark;if(data.theme!=='custom')data.custom_color='';if(data.theme==='custom'&&!data.custom_color)data.custom_color=s.custom_color||'#c6748a';data.chat_bg_dim=Math.min(80,Math.max(0,Number(data.chat_bg_dim)||0));await put('/space',{...data,cover,chat_bg_media:wallpaper,motion:$('[name=motion]',form).checked});applyCustomColor(data.theme,data.custom_color);});
+ simpleForm('空间设置',field('空间名称','name',s.name,'text','required maxlength="60"')+field('从哪一天开始相爱','since',s.since,'date')+`<div class="form-row">${selectField('主题色','theme',[['rose','草莓牛奶'],['peach','蜜桃奶油'],['lavender','香芋云朵'],['custom','自定义']],s.theme)}${selectField('夜间模式','dark',[['auto','跟随系统'],['on','始终开启'],['off','始终关闭']],darkPref)}</div><label>自定义颜色（主题选「自定义」时生效）<input type="color" name="custom_color" value="${s.custom_color||'#c6748a'}"></label><div class="file-picker"><span class="file-picker-title">更换封面照片</span><label class="upload-tile file-picker-tile"><span class="upload-ico">🖼️</span><b>选择封面照片</b><small id="cover-file-name">${s.cover?'已设置封面，可重新选择':'选择一张照片作为我们的空间封面'}</small><input type="file" id="cover-file" accept="image/jpeg,image/png,image/webp"></label><p class="small-note">换好照片保存后会直接弹出构图调整：按住图拖动摆位置，缩放挑画面大小。之后想再调，回首页点封面右上角的「调整背景」即可。</p></div><div class="wallpaper-picker"><span class="file-picker-title">聊天壁纸</span><div class="wallpaper-swatches" id="wallpaper-swatches">${swatches}</div><label class="wallpaper-dim-row">背景遮罩 <input type="range" name="chat_bg_dim" id="wallpaper-dim" min="0" max="80" step="5" value="${dim}"><span id="wallpaper-dim-val">${dim}%</span></label><label class="upload-tile file-picker-tile"><span class="upload-ico">🖼️</span><b>用你们的照片</b><small id="wallpaper-file-name">${wm?'已设置背景照片，可重新选择':'选一张照片铺在聊天背景上'}</small><input type="file" id="wallpaper-file" accept="image/jpeg,image/png,image/webp"></label><input type="hidden" name="chat_bg" value="${esc(bg)}"><input type="hidden" name="chat_bg_media" value="${esc(wm)}"><p class="small-note">遮罩越强，背景越淡、文字越清楚。这里是**共同背景**——只是两个人各自没单独设置时的默认值。想设自己的、或替对方换一张，去聊天页点右上角的背景按钮。</p></div><label class="switch-row">启用轻柔动效<input name="motion" type="checkbox" ${s.motion?'checked':''}></label>`,async(data,form)=>{let cover=s.cover;const file=$('#cover-file').files[0];if(file)cover=(await uploadFile(file)).id;let wallpaper=data.chat_bg_media||'';const wfile=$('#wallpaper-file').files[0];if(wfile){wallpaper=(await uploadFile(wfile)).id;data.chat_bg='photo';}localStorage.setItem(DARK_KEY,data.dark);applyDarkMode();delete data.dark;if(data.theme!=='custom')data.custom_color='';if(data.theme==='custom'&&!data.custom_color)data.custom_color=s.custom_color||'#c6748a';data.chat_bg_dim=Math.min(80,Math.max(0,Number(data.chat_bg_dim)||0));await put('/space',{...data,cover,chat_bg_media:wallpaper,cover_pos:file?{x:50,y:50,z:1}:(s.cover_pos||{x:50,y:50,z:1}),motion:$('[name=motion]',form).checked});applyCustomColor(data.theme,data.custom_color);/* 换了新封面就顺势把构图弹出来：选图 → 拖动摆位 → 保存，一口气做完 */if(file)setTimeout(()=>{if(!$('.modal'))coverCropModal(cover);},450);});
  $('#cover-file').onchange=e=>{$('#cover-file-name').textContent=e.target.files[0]?.name||'选择一张照片作为我们的空间封面';};
  /* 色卡点选：「用照片」在还没有照片时先弹文件框，避免存下一个没有图的 photo 壁纸 */
  $('#wallpaper-swatches').onclick=e=>{
@@ -2412,6 +2553,7 @@ async function act(action,id,el) {
  if(action==='lb-out')return lbStep(1/1.6);
  if(action==='lb-fit')return lbReset();
  if(action==='space')return spaceForm();
+ if(action==='cover-crop')return coverCropModal();
  if(action==='profile')return profileForm();
  if(action==='invite')return inviteModal();
  if(action==='copy-invite'){const input=$('#invite-url');input.select();try{await navigator.clipboard.writeText(input.value);toast('邀请链接已复制');}catch{toast('请长按或按 Ctrl+C 复制链接');}return;}
@@ -2509,6 +2651,7 @@ async function act(action,id,el) {
   $$('.cal-day',$('#page')).forEach(b=>b.classList.toggle('selected',b.dataset.id===state.calSelected));
   const detail=$('#cal-detail');if(detail)detail.innerHTML=calDetailHTML();
   return;}
+ if(action==='cal-today'){state.calMonth=today().slice(0,7);state.calSelected='';return loadCalendar(true);}
  if(action==='cal-prev'||action==='cal-next'){if(!state.calMonth){const d=new Date();state.calMonth=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');}const [y,m]=state.calMonth.split('-').map(Number);const d=new Date(y,m-1+(action==='cal-next'?1:-1),1);state.calMonth=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');state.calSelected='';return loadCalendar(true);}
  if(action==='import-to-draft')return composer('post',null,{content:el.dataset.content,date:el.dataset.day||today()});
  if(action==='import-chat')return importChatModal();

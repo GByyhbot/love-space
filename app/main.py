@@ -610,10 +610,34 @@ def validate_owned_image(c, mid, user_id):
         db.mark_attached(c, [mid])
 
 
+# 首页封面（hero 卡）的显示区域：x/y 是 object-position 的百分比，z 是放大倍数。
+# 存在 space 里而不是把图裁好再存：原图不损失、随时可反悔，两个人在不同尺寸的屏幕上看到的是同一套构图。
+COVER_POS_DEFAULT = {'x': 50.0, 'y': 50.0, 'z': 1.0}
+
+
+def clean_cover_pos(raw):
+    """把裁剪参数规范成 {x, y, z}。非法值一律回落到默认值——
+    一个坏字段不该把首页打成空白，所以这里只夹紧不报错。"""
+    if not isinstance(raw, dict):
+        return dict(COVER_POS_DEFAULT)
+    out = {}
+    for key, lo, hi, dflt in (('x', 0.0, 100.0, 50.0), ('y', 0.0, 100.0, 50.0), ('z', 1.0, 3.0, 1.0)):
+        try:
+            val = float(raw.get(key, dflt))
+        except (TypeError, ValueError):
+            val = dflt
+        if val != val or val in (float('inf'), float('-inf')):   # NaN / inf
+            val = dflt
+        out[key] = round(min(hi, max(lo, val)), 2)
+    return out
+
+
 class Space(BaseModel):
     name: str = Field(min_length=1, max_length=60)
     since: str = ''
     cover: str = ''
+    # 封面在 hero 卡里的构图。None = 客户端没带这个字段（旧前端/旧 APK），沿用库里的原值
+    cover_pos: dict | None = None
     theme: str = 'rose'
     custom_color: str = Field(default='', max_length=7)
     motion: bool = True
@@ -696,6 +720,9 @@ def space(body: Space, user=Depends(current_user)):
                 validate_owned_image(c, data['chat_bg_media'], user['id'])
         if data.get('chat_bg_users') is None:
             data['chat_bg_users'] = old.get('chat_bg_users') or {}
+        # 旧客户端保存空间设置时不会带 cover_pos，此时保留主人已经调好的构图
+        data['cover_pos'] = clean_cover_pos(
+            body.cover_pos if body.cover_pos is not None else old.get('cover_pos'))
         if body.cover != old.get('cover'):
             validate_owned_image(c, body.cover, user['id'])
         db.set_setting(c, 'space', data)

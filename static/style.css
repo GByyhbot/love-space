@@ -1617,3 +1617,104 @@ html.is-native-app body.chat-immersive .shell.chat-full .chat-panel.immersive .c
   .search-overlay{padding:0;align-items:flex-end}
   .search-panel{width:100%;max-width:none;border-radius:22px 22px 0 0;max-height:92dvh;padding:20px 18px calc(20px + env(safe-area-inset-bottom))}
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   增强层：首页封面构图 + 日历视觉重做
+   ⚠️ 这一段放在文件末尾，靠「后段同名优先」覆盖前面第 5 层的 .hero / .cal-*。
+      改样式前先 grep 同名选择器，别在前段改了却看不到效果。
+   ═══════════════════════════════════════════════════════════════ */
+
+/* —— 首页封面：右上角「调整背景」 ——
+   放在 hero 内部绝对定位，不占布局；有合照时才有这个按钮（garden.svg 默认图没什么可调的）。 */
+.hero-crop{position:absolute;top:12px;right:12px;z-index:3;display:inline-flex;align-items:center;gap:6px;height:var(--ctrl-h-sm);padding:0 13px;border-radius:999px;font-size:12.5px;font-weight:600;letter-spacing:.3px;color:#fff;background:rgba(37,28,34,.42);border:1px solid rgba(255,255,255,.26);backdrop-filter:blur(6px);opacity:.88;transition:opacity var(--speed),background var(--speed),transform var(--speed)}
+.hero-crop:hover{background:rgba(37,28,34,.62);opacity:1}
+.hero-crop:active{transform:scale(.96)}
+.hero-crop .icon{width:15px;height:15px;stroke-width:1.8}
+@media(max-width:640px){.hero-crop{opacity:.8}.hero-crop span{display:none}.hero-crop{width:var(--ctrl-h-sm);padding:0;justify-content:center}}
+
+/* —— 封面构图弹窗 ——
+   预览框的宽高比由 JS 按首页那张 hero 现量（padding-top 撑高，不用 aspect-ratio，老 WebView 没有）。 */
+.crop-wrap{display:grid;gap:14px}
+.crop-frame{position:relative;width:100%;height:0;overflow:hidden;border-radius:16px;background:var(--soft);box-shadow:inset 0 0 0 1px var(--line-strong);cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none}
+.crop-frame.dragging{cursor:grabbing}
+.crop-frame img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;pointer-events:none}
+/* 文字遮罩预览：和 .hero:has(.hero-cover) .hero-mask 同一套渐变，
+   让人在拖动时就看见「天数那行字会压在这里」，而不是保存后回首页才后悔。 */
+.crop-shade{position:absolute;inset:0;pointer-events:none;opacity:.8;background:linear-gradient(90deg,rgba(37,28,34,.76),rgba(37,28,34,.43) 62%,rgba(37,28,34,.12))}
+/* 三分线：只是给「摆位」一个参照，别做得像水印 */
+.crop-grid{position:absolute;inset:0;pointer-events:none;opacity:.4;background-image:linear-gradient(to right,rgba(255,255,255,.75) 1px,transparent 1px),linear-gradient(to bottom,rgba(255,255,255,.75) 1px,transparent 1px);background-size:33.334% 33.334%;background-position:-1px -1px}
+.crop-frame.zoomed .crop-grid{opacity:.26}
+.crop-tools{display:grid;gap:12px}
+.crop-zoom-row{display:flex;align-items:center;gap:10px}
+.crop-zoom-row input[type=range]{flex:1;min-width:0;accent-color:var(--primary)}
+.crop-zoom-end{flex:none;font-size:11.5px;color:var(--muted)}
+.crop-zoom-row b{flex:none;min-width:46px;text-align:right;font-size:12.5px;font-weight:600;color:var(--primary-dark);font-variant-numeric:tabular-nums}
+.crop-acts{display:flex;gap:10px}
+.crop-acts .button{flex:1;justify-content:center}
+
+/* —— 日历：头部条（共同年历与生理期共用） —— */
+.cal-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;padding:9px 12px 9px 16px;border-radius:16px;background:var(--surface);border:1px solid var(--line);box-shadow:var(--shadow)}
+.cal-bar-title{display:flex;align-items:baseline;gap:9px;min-width:0}
+.cal-bar-title strong{font-family:var(--serif);font-size:24px;font-weight:500;line-height:1.15;color:var(--ink);white-space:nowrap}
+.cal-bar-title span{font-size:12.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cal-bar-nav{display:flex;align-items:center;gap:6px;flex:none}
+.cal-nav{width:34px;height:34px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:19px;line-height:1;color:var(--ink-2);background:var(--soft);transition:background var(--speed),color var(--speed)}
+.cal-nav:hover{background:var(--soft-strong);color:var(--primary-dark)}
+.cal-today{height:34px;padding:0 13px;border-radius:12px;font-size:12.5px;font-weight:600;color:var(--primary-dark);background:var(--soft);transition:background var(--speed)}
+.cal-today:hover{background:var(--soft-strong)}
+
+/* —— 日历：棋盘 —— */
+.cal-board{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:10px;box-shadow:var(--shadow)}
+.cal-weekrow{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-bottom:6px}
+.cal-week{text-align:center;font-size:11.5px;font-weight:600;letter-spacing:1px;color:var(--muted);padding:5px 0;border-radius:9px;background:var(--bg)}
+.cal-week.is-end{color:var(--primary-dark);background:var(--soft)}
+.calendar-page .calendar-grid{gap:6px;margin-bottom:0}
+.cal-blank{min-height:56px}
+.cal-day{min-height:56px;border-radius:13px;border:1px solid transparent;background:transparent;gap:3px}
+.cal-day:hover{background:var(--soft);border-color:var(--line)}
+.cal-day .cal-num{font-size:14.5px;line-height:1;font-variant-numeric:tabular-nums}
+.cal-day.is-end:not(.is-today):not(.has-events) .cal-num{color:var(--muted)}
+.cal-day.has-events{background:var(--soft);border-color:var(--soft-strong)}
+.cal-day.has-events .cal-num{font-weight:600;color:var(--primary-dark)}
+/* 选中：浅底 + 主色描边；今天：外圈一道环，里面那颗实心圆沿用前段规则 */
+.cal-day.selected{background:var(--soft-strong);border-color:var(--primary)}
+.cal-day.selected .cal-num{font-weight:700;color:var(--primary-dark)}
+.cal-day.is-today{box-shadow:inset 0 0 0 2px var(--primary)}
+.cal-day .cal-dots{min-height:6px;gap:3px}
+.cal-day .cal-dot{width:6px;height:6px}
+
+.cal-legend{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:10px 2px 14px;font-size:12px;color:var(--muted)}
+.cal-legend-item{display:inline-flex;align-items:center;gap:5px}
+.cal-legend-item i{display:block;width:7px;height:7px;border-radius:50%}
+.cal-legend-hint{margin-left:auto;opacity:.75}
+.cal-detail-card{padding:16px 18px}
+.cal-detail-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:10px;padding-bottom:10px;box-shadow:inset 0 -1px 0 var(--line)}
+.cal-detail-head strong{font-size:15.5px;font-weight:600}
+.cal-detail-head span{font-size:12px;color:var(--muted)}
+.cal-detail-empty{display:flex;flex-direction:column;align-items:center;gap:8px;padding:26px 18px;text-align:center;color:var(--muted)}
+.cal-detail-empty .icon{width:24px;height:24px;opacity:.55}
+.cal-detail-empty p{font-size:13px}
+
+/* 生理期那张月历卡片：格子比年历密一档，一屏装得下，所以单独压回去 */
+.period-top-card .cal-day,.period-top-card .cal-blank{min-height:47px}
+.period-top-card .cal-weekrow{margin:10px 0 6px;gap:4px}
+.period-top-card .cal-week{font-size:11px;padding:4px 0}
+.period-top-card .calendar-grid{margin:0;gap:4px}
+.period-legend{margin:12px 0 0}
+@media(min-width:641px){.period-top-card .cal-day,.period-top-card .cal-blank{min-height:64px}}
+
+@media(max-width:640px){
+  .cal-bar{padding:7px 10px 7px 13px;margin-bottom:8px;border-radius:14px}
+  .cal-bar-title strong{font-size:21px}
+  .cal-board{padding:6px;border-radius:16px}
+  .cal-weekrow,.calendar-page .calendar-grid{gap:3px}
+  .cal-weekrow{margin-bottom:4px}
+  .cal-day,.cal-blank{min-height:44px;border-radius:11px}
+  .cal-day .cal-num{font-size:13.5px}
+  .cal-day.is-today span:first-child{width:26px;height:26px}
+  .cal-week{font-size:11px;padding:4px 0}
+  .cal-legend{gap:10px;font-size:11.5px;margin:8px 2px 8px}
+  .cal-legend-hint{display:none}
+  /* 共同年历是「固定一屏」布局，详情区要留出能滚的高度，格子只能压扁一点 */
+  .calendar-page .page-heading{margin-bottom:10px}
+}
