@@ -1819,8 +1819,9 @@ html.is-native-app body.chat-immersive .shell.chat-full .chat-panel.immersive .c
 .chip-group{font-style:normal;font-size:11.5px;color:var(--muted);padding:8px 12px 3px}
 .mc-time{display:flex;align-items:center;gap:8px;margin-top:8px;padding-top:8px;border-top:1px solid var(--line);font-size:12.5px;color:var(--ink-2)}
 .mc-time input{flex:1;min-height:34px;padding:0 10px;border:1px solid var(--line-strong);border-radius:9px;background:var(--surface);color:var(--ink);font-size:13.5px}
-/* 窄屏上面板两侧各留 20px 边距：不超屏，也尽量铺开不显窄 */
-@media (max-width:560px){.fake-panel{max-width:calc(100vw - 40px)}}
+/* 窄屏上面板铺满可用宽度（两侧各留 20px 边距）：日历等面板铺开到屏幕右缘，
+   芯片列表也更舒展；右列面板经 right:0 对齐后同样落在边距内 */
+@media (max-width:560px){.fake-panel{width:calc(100vw - 40px);max-width:calc(100vw - 40px)}}
 /* ── 首页共同打卡卡 ── */
 .habit-card{display:flex;flex-direction:column;gap:8px;margin:14px 0;padding:16px 18px;background:var(--card);border:1px solid var(--line);border-radius:18px}
 .habit-row{display:flex;align-items:center;gap:12px}
