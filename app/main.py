@@ -1603,6 +1603,28 @@ def photos(album: str = '', user=Depends(current_user)):
     return result
 
 
+@app.get('/api/media/images')
+def media_images(limit: int = 200, user=Depends(current_user)):
+    """选图面板用：我能看见的图片，最近上传的排在前面。
+
+    首页封面和聊天背景都想「从相册里挑一张」，但相册页只列记录引用过的图——聊天里
+    发过、当过头像、合成台出的图都不在里面。这里直接扫 media 表，再用 media_visible
+    兜可见性（另一半私密日记里的图不会漏出来）。
+    """
+    limit = max(1, min(400, limit))
+    with connect() as c:
+        rows = c.execute(
+            "SELECT id,name,owner,created FROM media WHERE mime LIKE 'image/%' "
+            "ORDER BY created DESC LIMIT ?", (limit * 4,)).fetchall()
+        out = []
+        for row in rows:
+            if row['owner'] == user['id'] or db.media_visible(c, row['id'], user['id']):
+                out.append({'id': row['id'], 'name': row['name'], 'created': row['created']})
+                if len(out) >= limit:
+                    break
+    return out
+
+
 @app.get('/api/notices')
 def notices(user=Depends(current_user)):
     with connect() as c:

@@ -1756,3 +1756,28 @@ html.is-native-app body.chat-immersive .shell.chat-full .chat-panel.immersive .c
   .hero-days strong{font-size:42px}
   .hero-foot{font-size:12px;gap:4px 16px}
 }
+
+/* ── 引用条：以前只在浅底上看着正常。聊天背景换成照片（has-wallpaper）或深色主题下，
+   --soft 几乎是透明的，整条就只剩一个 ✕ 浮在照片上，引用的内容看着像"没显示"。
+   这里给它一层玻璃底 + 更实的字色，并且保证内容区不会被 flex 压成 0 宽。 ── */
+.chat-reply-bar{background:var(--soft);border-top:1px solid var(--line);color:var(--ink-2);font-size:12.5px}
+.chat-reply-bar span{flex:1 1 auto;min-width:0;color:var(--ink-2);line-height:1.5}
+:root.dark .chat-reply-bar{background:rgba(255,255,255,.08);border-top-color:var(--line)}
+.chat-panel.has-wallpaper .chat-reply-bar{background:rgba(22,17,24,.58);border-top:1px solid rgba(255,255,255,.16);color:rgba(255,255,255,.94);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px)}
+.chat-panel.has-wallpaper .chat-reply-bar span{color:rgba(255,255,255,.94);text-shadow:0 1px 3px rgba(0,0,0,.35)}
+.chat-panel.has-wallpaper .chat-reply-bar .icon-btn{color:#fff;background:rgba(255,255,255,.14);border-color:transparent}
+.chat-panel.has-wallpaper .chat-reply-bar .icon-btn:hover{background:rgba(255,255,255,.24);color:#fff}
+
+/* ── 相册选图（首页封面 / 聊天背景共用） ── */
+.album-pick-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;font-size:12.5px;color:var(--ink-2)}
+.album-pick{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:6px;max-height:54vh;overflow:auto;padding:2px}
+.album-inline{display:grid;grid-template-columns:repeat(auto-fill,minmax(62px,1fr));gap:5px;max-height:210px;overflow:auto;margin:8px 0}
+.album-inline[hidden]{display:none}
+.album-thumb{position:relative;display:block;width:100%;padding:0;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--soft);cursor:pointer;transition:border-color var(--speed),transform var(--speed)}
+.album-inline .album-thumb{border-radius:9px}
+.album-thumb::before{content:'';display:block;padding-top:100%}
+.album-thumb img{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;transition:transform var(--speed)}
+.album-thumb:hover{border-color:var(--primary)}
+.album-thumb:hover img{transform:scale(1.05)}
+.crb-mark{flex:none;font-style:normal;font-size:14px;line-height:1;opacity:.72}
+.chat-panel.has-wallpaper .crb-mark{opacity:.9}
