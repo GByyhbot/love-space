@@ -1,7 +1,13 @@
 'use strict';
 
+// SW 脚本地址带上本文件自己的 ?v=：Cloudflare 会把无参数的 /static/sw.js 缓存 4 小时，
+// 不带版本时浏览器拿到的还是旧 worker，修复要等缓存过期才落地（2026-11-01 踩过——
+// 旧 worker 把子页面导航写进了 '/' 缓存键，主站弱网回退时整页变成了图库）。
+const SW_SRC = (document.currentScript && document.currentScript.src) || '';
+const SW_VER = (SW_SRC.match(/[?&]v=(\d+)/) || [])[1] || '';
+
 if ('serviceWorker' in navigator) {
- window.addEventListener('load', () => navigator.serviceWorker.register('/static/sw.js',{scope:'/'}).then(async rootReg=>{
+ window.addEventListener('load', () => navigator.serviceWorker.register('/static/sw.js' + (SW_VER ? `?v=${SW_VER}` : ''),{scope:'/'}).then(async rootReg=>{
   const regs=await navigator.serviceWorker.getRegistrations();
   await Promise.all(regs.filter(reg=>reg!==rootReg&&reg.scope===new URL('/static/',location.origin).href).map(reg=>reg.unregister()));
  }).catch(() => {}));
