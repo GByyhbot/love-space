@@ -262,6 +262,33 @@ def schedule():
         c.execute('DELETE FROM auth_attempts WHERE start<?', (now() - 86400,))
 
 
+def habit_reminders(now_dt=None):
+    """共同打卡的晚间提醒：本地时间 20 点后，谁还没打卡就单独提醒谁。
+
+    每次只做几个轻查询，dedupe 键带「记录 + 日期 + 人」：同一天同一条打卡对
+    同一个人只入一条通知，补完打卡后也不会再发。两张卡都齐了就彻底安静。
+    """
+    with connect() as c:
+        zone = ZoneInfo(db.setting(c, 'space')['timezone'])
+        now_local = now_dt or dt.datetime.now(zone)
+        if now_local.hour < 20:
+            return
+        today = now_local.date().isoformat()
+        for row in c.execute("SELECT * FROM records WHERE kind='habit' AND deleted IS NULL").fetchall():
+            # 打卡在独立的 checks 表里（record_id, author, day），不在 body
+            done = {r['author'] for r in c.execute(
+                'SELECT author FROM checks WHERE record_id=? AND day=?', (row['id'], today))}
+            if len(done) >= 2:
+                continue
+            title = db.body_decode(row).get('title') or '共同打卡'
+            for user in c.execute('SELECT id FROM users').fetchall():
+                if user['id'] in done:
+                    continue
+                db.notice(c, 'habit', f'「{title}」今天还没打卡，一起坚持一下',
+                          row['id'], recipient=user['id'],
+                          dedupe=f"habit:{row['id']}:{today}:{user['id']}")
+
+
 def quiet(hour, start, end):
     return False if start == end else (start <= hour < end if start < end else hour >= start or hour < end)
 
@@ -523,6 +550,10 @@ def run(stop):
             try:
                 if counter % 12 == 0:
                     maintenance()
+                # 共同打卡提醒：30s 查一次就够（20 点整后最迟半分钟送达），
+                # dedupe 保证同一天同一个人只提醒一次，重复跑没有副作用
+                if counter % 6 == 1:
+                    habit_reminders()
                 deliver()
                 deliver_pushes()
                 deliver_webpushes()

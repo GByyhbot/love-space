@@ -519,6 +519,13 @@ function homePage() {
   ?`<button type="button" class="today-cell today-cell-link" data-action="tool-anniversary" aria-label="最近纪念日：${esc(anniversary.body.title)}，${anniversary.days} 天后"><span class="tiny">${icon('calendar')} 最近纪念日<span class="tiny-go">${icon('arrow')}</span></span><div class="countdown-mini"><strong>${anniversary.days}</strong><span>天后 · ${esc(anniversary.body.title)}</span></div><p class="meta">${anniversary.due} · 别忘了给彼此一个拥抱</p></button>`
   :`<div class="today-cell"><span class="tiny">${icon('calendar')} 最近纪念日</span><div class="countdown-mini"><strong>♡</strong><span>留一个日子，给仪式感</span></div>${button('添加纪念日','new-anniversary','small secondary')}</div>`;
  const todayCard=`<section class="today-card" aria-label="今天的陪伴">${moodCell}${annCell}</section>`;
+ /* 共同打卡：提到首页最显眼的位置。今天谁打卡了一目了然，点一下就打卡，
+    不用再翻「在一起」页；两张卡都齐了就安静地收成一行「圆满」。 */
+ const habits=recordsOf('habit');
+ const habitCard=habits.length?`<section class="habit-card" aria-label="共同打卡">${habits.map(r=>{
+  const done=new Set((r.checks||[]).filter(c=>c.day===today()).map(c=>c.author)),mine=done.has(state.me.user.id),all=done.size>=2;
+  return `<div class="habit-row${all?' all-done':''}"><div class="habit-info"><b>${esc(r.body.title)}</b><span class="tiny">今天 ${done.size}/2 人${all?' · 圆满完成':''}</span></div>${all?'<span class="habit-done" aria-label="已完成">✓</span>':button(mine?'今天已打卡':'打卡','check','small soft','check',`data-id="${r.id}"`)}</div>`;
+ }).join('')}<p class="meta">晚上八点前还没打卡的话，会互相提个醒。</p></section>`:'';
  /* 主视觉：照片 + 两个人的名字 + 相恋天数。
     去掉了原来那一对 44px 头像——侧栏、顶栏、每条记录里到处都是头像，
     这里再用两个圆把画面的左上角占掉，既挡住照片又抢戏；名字之间那颗小心形
@@ -527,7 +534,7 @@ function homePage() {
  const heroCopy=`<section class="hero">${space.cover?coverImg(space.cover,space.cover_pos):'<img class="hero-art" src="/static/garden.svg" alt="两只小兔子守着共同的小家">'}<div class="hero-mask"></div><button type="button" class="hero-crop" data-action="cover-pick" aria-label="${space.cover?'更换封面照片':'设置一张照片当封面'}" title="${space.cover?'更换背景':'设置背景'}">${icon('image')}<span>${space.cover?'更换背景':'设置背景'}</span></button><div class="hero-copy"><div class="hero-main"><span class="hero-names-text">${heroNames}</span>${partner?'':`<button class="link-btn" data-action="invite">发送邀请，让 TA 住进来 →</button>`}<div class="hero-days"><small>我们相恋</small><strong>${days??'—'}<em>天</em></strong></div><div class="hero-foot">${days===null?`<button class="link-btn" data-action="space">设置相恋日期 →</button>`:`<span class="hero-since">${esc(space.since)} 起 · 今天也要好好相爱</span><button class="link-btn" data-action="love-card">存一张天数卡片 →</button>`}</div></div></div></section>`;
  const composeCta=`<button class="compose-cta" data-action="compose">${icon('edit')} 记录此刻</button>`;
  const homeHeading=heading('我们的每一天','一半是生活，一半是你。','compose','记录此刻','edit').replace('page-heading','page-heading home-heading');
- return `${homeHeading}${heroCopy}${todayCard}${composeCta}${dailyQuoteBlock()}
+ return `${homeHeading}${heroCopy}${todayCard}${habitCard}${composeCta}${dailyQuoteBlock()}
  <div class="home-grid"><div class="home-main"><section><div class="section-heading"><h2>${icon('book')} 最近的小美好</h2><button class="link-btn" data-nav="timeline">所有时光 ${icon('arrow')}</button></div>${posts.length?posts.map(recordCard).join(''):`<div class="card">${empty('故事，从这一刻开始','一张照片、一句想说的话，都是值得收藏的小美好。','compose')}</div>`}</section>
  <section class="on-this-day" id="on-this-day"><div class="loading-heart" style="font-size:24px">♡</div><p class="meta meta-center">正在翻看这一天的回忆…</p></section>
  <section class="yearbook" id="yearbook"><h2>📖 今年的我们</h2><div class="yearbook-summary"><p>点开看看，这一年我们一起写下了什么。</p><span class="yearbook-toggle-row">${button('展开小年报','expand-yearbook','soft small','arrow')}</span></div></section></div>
@@ -2044,7 +2051,7 @@ function personalPage() {
 }
 function noticesPage(){const sysNotices=state.notices.filter(n=>n.event!=='chat'),readCount=sysNotices.filter(n=>n.seen).length;return `${heading('小小的提醒','每一份回应，都值得被看见。','read-notices','全部已读','check')}${readCount?`<div class="inline-actions" style="justify-content:flex-end;margin:-8px 0 16px">${button('删除已读提醒（'+readCount+'）','delete-read-notices','small secondary','trash')}</div>`:''}<div class="card">${sysNotices.length?sysNotices.map(n=>`<div class="notice ${n.seen?'':'unread'}"><span class="stat-icon">${icon(n.event==='chat'?'chat':'bell')}</span><div><p>${esc(n.title)}</p><small class="meta">${dateLabel(n.created)}</small></div>${n.record_id?`<button class="link-btn" style="margin-left:auto" data-action="notice-detail" data-id="${n.record_id}">查看 ${icon('arrow')}</button>`:''}</div>`).join(''):empty('还没有新的提醒','收到留言、互动和纪念日提醒时，会出现在这里。聊天消息请在私聊中查看。')}</div>`;}
 const channelNames={smtp:'邮件',bark:'Bark',serverchan:'Server酱',pushplus:'PushPlus',wecom:'企业微信机器人',webhook:'自定义 Webhook',telegram:'Telegram',dingtalk:'钉钉机器人',feishu:'飞书机器人',ntfy:'ntfy'};
-const eventNames={chat:'聊天消息',comment:'点赞与评论',note:'留言',activity:'新动态与互动',anniversary:'纪念日',period:'生理期提醒',wish:'愿望到期',surprise:'惊喜公开',backup:'备份失败',storage:'空间不足',system:'系统消息'};
+const eventNames={chat:'聊天消息',comment:'点赞与评论',note:'留言',activity:'新动态与互动',anniversary:'纪念日',period:'生理期提醒',wish:'愿望到期',surprise:'惊喜公开',habit:'共同打卡',backup:'备份失败',storage:'空间不足',system:'系统消息'};
 function channelsPage(){
  const native=isNativeApp(),supported=browserPushSupported();
  const webpushCard=native?'':`<section class="card webpush-card"><div class="section-heading"><h2>${icon('bell')} 浏览器系统通知</h2><span class="status-pill ${state.webpush?.local?'sent':'pending'}">${state.webpush?.local?'本设备已开启':(state.webpush?.devices?`已绑定 ${state.webpush.devices} 台设备`:'尚未开启')}</span></div><p class="meta">网页关闭或切到后台时，也可由系统送达提醒。锁屏通知只显示通用提示，不包含聊天或心愿内容。${/iphone|ipad|ipod/i.test(navigator.userAgent)?' iPhone/iPad 请先将恋爱空间添加到主屏幕，再开启通知。':''}</p>${!supported?'<p class="small-note">当前浏览器不支持网页系统通知，请使用支持通知的浏览器或配置其他通知渠道。</p>':state.webpush?.local?`<div class="inline-actions">${button('发送测试通知','test-webpush','small soft','bell')}${button('关闭本设备通知','disable-webpush','small secondary')}</div>`:button('开启本设备通知','enable-webpush','small primary','bell')}</section>`;
@@ -2058,6 +2065,7 @@ function openModal(title,content,{wide=false,sheet=false,cleanup=null}={}) {
  closeModal(); focusReturn=document.activeElement;
  const viewer = wide && /class="lightbox-body"/.test(content);
  $('#modal-root').innerHTML=`<div class="modal-overlay${sheet?' sheet':''}"><section class="modal ${wide?'wide':''}${sheet?' sheet':''}${viewer?' viewer':''}" role="dialog" aria-modal="true" aria-labelledby="modal-title"><header class="modal-header"><h2 id="modal-title">${esc(title)}</h2><button class="icon-btn" data-action="close-modal" aria-label="关闭">${icon('close')}</button></header>${content}</section></div>`;
+ enhanceNativeControls($('.modal'));
  modalCleanup=cleanup;document.body.style.overflow='hidden';setTimeout(()=>$('.modal input:not([type=checkbox]),.modal textarea,.modal button')?.focus(),50);
 }
 function closeModal(){if(modalCleanup){modalCleanup();modalCleanup=null;}$('#modal-root').innerHTML='';document.body.style.overflow='';focusReturn?.focus?.();}
@@ -2202,6 +2210,60 @@ function wireChipsPick(form,btn,input,box){
  box.onclick=e=>{const chip=e.target.closest('[data-value]');if(!chip)return;
   box.querySelectorAll('.chip').forEach(c=>c.classList.toggle('on',c===chip));
   input.value=chip.dataset.value;sync();box.hidden=true;btn.classList.remove('open');};
+}
+/* 弹窗里剩余的原生控件统一升级：simpleForm 拼出来的 date / datetime-local / select
+   不必逐个改模板，openModal 写入 DOM 后扫一遍，就地换成自绘控件。
+   原控件只做视觉隐藏（保留 name、required、既有的 onchange 绑定），面板把值写回它，
+   FormData 与提交逻辑零改动。datetime-local 的「时间」暂留原生 time 行——
+   分钟级时间用芯片铺不满，原生 time 在行内显示 hh:mm，观感尚可。 */
+function enhanceNativeControls(root){
+ if(!root)return;
+ root.querySelectorAll('input[type=date],input[type=datetime-local],select').forEach(el=>{
+  if(el.closest('.pick-field'))return;
+  const label=el.closest('label');
+  const text=label?((label.childNodes[0]?.textContent)||'').trim():'';
+  const wrap=document.createElement('div');wrap.className='pick-field';
+  const lab=document.createElement('span');lab.className='pick-label';lab.textContent=text;
+  const btn=document.createElement('button');btn.type='button';btn.className='fake-field';
+  const panel=document.createElement('div');panel.className='fake-panel';panel.hidden=true;
+  if(label){label.innerHTML='';label.appendChild(wrap);}else{el.parentNode.insertBefore(wrap,el);}
+  el.classList.add('src-input');
+  wrap.append(lab,btn,panel,el);
+  if(el.tagName==='SELECT'){
+   let html='';
+   const chip=o=>`<button type="button" class="chip${o.selected?' on':''}" data-value="${esc(o.value)}">${esc(o.textContent)}</button>`;
+   for(const node of el.children){
+    if(node.tagName==='OPTGROUP')html+=`<i class="chip-group">${esc(node.label)}</i>`+[...node.children].map(chip).join('');
+    else html+=chip(node);
+   }
+   panel.classList.add('chip-list');panel.innerHTML=html;
+   const sync=()=>{const o=el.selectedOptions[0];btn.textContent=o?o.textContent:'请选择';};
+   sync();
+   btn.onclick=()=>{panel.hidden=!panel.hidden;btn.classList.toggle('open',!panel.hidden);};
+   panel.onclick=e=>{const c=e.target.closest('[data-value]');if(!c)return;
+    panel.querySelectorAll('.chip').forEach(x=>x.classList.toggle('on',x===c));
+    el.value=c.dataset.value;el.dispatchEvent(new Event('change',{bubbles:true}));sync();panel.hidden=true;btn.classList.remove('open');};
+  }else{
+   const dtLocal=el.type==='datetime-local';
+   panel.classList.add('mini-cal');
+   let month=(el.value||today()).slice(0,7);
+   const timeRow=dtLocal?`<div class="mc-time"><span>时间</span><input type="time" step="300" value="${esc((el.value||'').slice(11,16)||'20:00')}"></div>`:'';
+   const paint=()=>{panel.innerHTML=miniCalHtml(month,(el.value||'').slice(0,10))+timeRow;};
+   const sync=()=>{const v=el.value;btn.textContent=dtLocal?(v?`${formatDateCn(v.slice(0,10))} ${v.slice(11,16)}`:'选个时间'):(v?formatDateCn(v):'选个日子');};
+   paint();sync();
+   btn.onclick=()=>{if(panel.hidden){month=(el.value||today()).slice(0,7);paint();}panel.hidden=!panel.hidden;btn.classList.toggle('open',!panel.hidden);};
+   panel.onclick=e=>{
+    const nav=e.target.closest('[data-mc-nav]');
+    if(nav){let [y,m]=month.split('-').map(Number);m+=Number(nav.dataset.mcNav);if(m<1){m=12;y--;}if(m>12){m=1;y++;}month=`${y}-${String(m).padStart(2,'0')}`;paint();return;}
+    const day=e.target.closest('[data-day]');
+    if(day){
+     if(dtLocal){const t=panel.querySelector('.mc-time input')?.value||'20:00';el.value=`${day.dataset.day}T${t}`;}
+     else el.value=day.dataset.day;
+     el.dispatchEvent(new Event('change',{bubbles:true}));sync();panel.hidden=true;btn.classList.remove('open');}
+   };
+   if(dtLocal){const t=panel.querySelector('.mc-time input');if(t)t.onchange=e=>{if(el.value)el.value=`${el.value.slice(0,10)}T${e.target.value||'20:00'}`;};}
+  }
+ });
 }
 function simpleForm(title,fields,onSubmit,label='保存') {
  openModal(title,`<form class="modal-form" id="simple-form">${fields}<div class="form-error" role="alert"></div><div class="form-actions">${button('取消','close-modal')}<button class="button primary" type="submit">${label}</button></div></form>`);

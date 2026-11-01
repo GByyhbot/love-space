@@ -1770,12 +1770,11 @@ html.is-native-app body.chat-immersive .shell.chat-full .chat-panel.immersive .c
 
 /* ── 相册选图（首页封面 / 聊天背景共用） ── */
 .album-pick-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;font-size:12.5px;color:var(--ink-2)}
-.album-pick{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:6px;max-height:54vh;overflow:auto;padding:2px}
-.album-inline{display:grid;grid-template-columns:repeat(auto-fill,minmax(62px,1fr));gap:5px;max-height:210px;overflow:auto;margin:8px 0}
+.album-pick{display:grid;grid-template-columns:repeat(auto-fill,88px);gap:6px;max-height:54vh;overflow:auto;padding:2px;justify-content:start}
+.album-inline{display:grid;grid-template-columns:repeat(auto-fill,80px);gap:5px;max-height:210px;overflow:auto;margin:8px 0;justify-content:start}
 .album-inline[hidden]{display:none}
-.album-thumb{position:relative;display:block;width:100%;padding:0;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--soft);cursor:pointer;transition:border-color var(--speed),transform var(--speed)}
-.album-inline .album-thumb{border-radius:9px}
-.album-thumb::before{content:'';display:block;padding-top:100%}
+.album-thumb{position:relative;display:block;width:100%;height:88px;padding:0;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--soft);cursor:pointer;transition:border-color var(--speed),transform var(--speed)}
+.album-inline .album-thumb{border-radius:9px;height:80px}
 .album-thumb img{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;transition:transform var(--speed)}
 .album-thumb:hover{border-color:var(--primary)}
 .album-thumb:hover img{transform:scale(1.05)}
@@ -1807,3 +1806,20 @@ html.is-native-app body.chat-immersive .shell.chat-full .chat-panel.immersive .c
 .chip:hover{background:var(--soft)}
 .chip.on{background:var(--soft);color:var(--primary);font-weight:700}
 .chip.on::after{content:'✓';font-size:12px;font-weight:700}
+/* 自动增强的原生控件：视觉隐藏但留在表单里（保留 name/required/onchange，
+   约束校验照常，别用 display:none——那会跳过 required 校验） */
+.src-input{position:absolute!important;width:1px!important;height:1px!important;min-width:0!important;opacity:0!important;pointer-events:none!important}
+.chip-group{font-style:normal;font-size:11.5px;color:var(--muted);padding:8px 12px 3px}
+.mc-time{display:flex;align-items:center;gap:8px;margin-top:8px;padding-top:8px;border-top:1px solid var(--line);font-size:12.5px;color:var(--ink-2)}
+.mc-time input{flex:1;min-height:34px;padding:0 10px;border:1px solid var(--line-strong);border-radius:9px;background:var(--surface);color:var(--ink);font-size:13.5px}
+/* 窄屏上选择面板别撑出屏幕：跟随列宽，列表内部滚动 */
+@media (max-width:560px){.fake-panel{max-width:min(76vw,320px)}}
+/* ── 首页共同打卡卡 ── */
+.habit-card{display:flex;flex-direction:column;gap:8px;margin:14px 0 0;padding:16px 18px;background:var(--card);border:1px solid var(--line);border-radius:18px}
+.habit-row{display:flex;align-items:center;gap:12px}
+.habit-row.all-done{opacity:.82}
+.habit-info{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1}
+.habit-info b{font-size:14.5px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.habit-info .tiny{color:var(--ink-2)}
+.habit-done{flex:none;width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--soft);color:var(--primary);font-size:15px;font-weight:700}
+.habit-card .meta{margin:2px 0 0}
