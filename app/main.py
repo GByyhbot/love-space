@@ -9,12 +9,15 @@ import os
 import re
 import secrets
 import shutil
+import socket
 import threading
 import zipfile
 from contextlib import asynccontextmanager
 from pathlib import Path
 from urllib.parse import quote, urlparse
 from zoneinfo import ZoneInfo
+
+import httpx
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, Response, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, StreamingResponse
@@ -238,7 +241,10 @@ async def protection(request, call_next):
                 return RedirectResponse(public_url + request.url.path + (('?' + request.url.query) if request.url.query else ''), status_code=308)
             return JSONResponse({'detail': '请通过 HTTPS 域名访问恋爱空间'}, status_code=403)
     if request.method in {'POST', 'PUT', 'PATCH', 'DELETE'}:
-        if request.headers.get('X-Love-Space') != '1':
+        # /api/proxy 由内置图库的「AI 合成台」调用，那份第三方前端不认识我们自加的
+        # X-Love-Space 头；该端点自身要求登录 + 公网目标校验（跨站 JSON POST 会先被
+        # CORS 预检拦下，拿不到响应），所以这里不靠这个头给它做防护。
+        if request.headers.get('X-Love-Space') != '1' and request.url.path != '/api/proxy':
             return JSONResponse({'detail': '请求校验失败，请刷新页面'}, status_code=403)
         origin = request.headers.get('origin')
         if origin and not origin_allowed(origin, request):
@@ -271,8 +277,10 @@ async def protection(request, call_next):
     # 它是我们自己静态目录里的开源静态站，允许其内联脚本/样式运行（原生 JS 画廊常含内联脚本，
     # 严格 CSP 会把它整页拦成空白）；该路径与主体接口隔离，放宽不波及其余请求。
     if request.url.path.startswith('/pose-gallery/'):
+        # img-src 放开 https：AI 合成台在 response_format=url 时直接引用各家 CDN 的
+        # 出图地址（*.byteimg.com / *.volces.com 等，域名不固定，无法逐个列出）。
         result.headers['Content-Security-Policy'] = (
-            "default-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; "
+            "default-src 'self'; img-src 'self' data: blob: https:; media-src 'self' blob: https:; "
             "style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; "
             "frame-src 'self'; connect-src 'self'; base-uri 'self'; form-action 'self'"
         )
@@ -363,6 +371,67 @@ def health():
     with connect() as c:
         c.execute('SELECT 1')
     return {'status': 'ok'}
+
+
+# ---- AI 合成台同源转发（/pose-gallery 里「AI 合成台」的出图通道） --------------
+# 内置图库前端默认 useProxy=true：它把出图请求 POST 到**同源** /api/proxy，真实目标
+# 地址放在 x-target-url 头里。本服务没有这个端点时，前端拿到的是
+# {"detail":"Not Found"}（HTTP 404），界面上就表现为「配好豆包/千问却生成失败」。
+# 这里补上转发：API Key 仍由浏览器随请求带来（只存在各自浏览器里），但由服务端
+# 代为出网——既绕开浏览器 CORS，也不必为了各家 API 放开 CSP 的 connect-src。
+# 出网代理用 AI_PROXY（可选，例：http://192.168.31.95:7890）；不设则直连，
+# 豆包/千问等国内端点直连即可，gemini/openai 需要境外出口时才配。
+_AI_PROXY_MAX_BODY = 24 * 1024 * 1024
+_AI_PROXY_PASS_HEADERS = ('content-type', 'authorization', 'x-goog-api-key', 'accept')
+
+
+def _ai_proxy_target(raw: str) -> str:
+    """校验并返回可转发的目标 URL。只放行 http/https 公网地址（挡 SSRF）。"""
+    raw = (raw or '').strip()
+    if not raw:
+        raise HTTPException(400, '缺少 x-target-url')
+    try:
+        parts = urlparse(raw)
+        port = parts.port  # 非法端口在这里抛 ValueError
+    except ValueError:
+        raise HTTPException(400, '目标地址无效')
+    if parts.scheme not in ('http', 'https') or not parts.hostname:
+        raise HTTPException(400, '目标地址无效')
+    allow = [h.strip().lower() for h in os.getenv('AI_PROXY_ALLOW_HOSTS', '').split(',') if h.strip()]
+    if allow and parts.hostname.lower() not in allow:
+        raise HTTPException(403, '目标地址不在允许列表内')
+    try:
+        infos = socket.getaddrinfo(parts.hostname, port or (443 if parts.scheme == 'https' else 80),
+                                   proto=socket.IPPROTO_TCP)
+    except OSError:
+        raise HTTPException(400, '目标地址无法解析')
+    for info in infos:
+        ip = ipaddress.ip_address(info[4][0])
+        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast:
+            raise HTTPException(403, '目标地址指向内网，已拒绝')
+    return raw
+
+
+@app.post('/api/proxy')
+async def ai_proxy(request: Request, user=Depends(current_user)):
+    target = _ai_proxy_target(request.headers.get('x-target-url', ''))
+    body = await request.body()
+    if len(body) > _AI_PROXY_MAX_BODY:
+        raise HTTPException(413, '参考图过大，请减少张数或压缩后再试')
+    headers = {k: request.headers[k] for k in _AI_PROXY_PASS_HEADERS if request.headers.get(k)}
+    proxy = os.getenv('AI_PROXY', '').strip() or None
+    try:
+        async with httpx.AsyncClient(
+                timeout=httpx.Timeout(300.0, connect=15.0), follow_redirects=False,
+                trust_env=False, proxy=proxy) as client:
+            upstream = await client.post(target, content=body, headers=headers)
+    except httpx.HTTPError as exc:
+        logging.getLogger('love.space').warning('ai proxy failed: %s %s', target, exc.__class__.__name__)
+        return JSONResponse(
+            {'error': {'message': f'上游不可达（{exc.__class__.__name__}），请检查网络或 AI_PROXY 设置'}},
+            status_code=502)
+    media = (upstream.headers.get('content-type') or 'application/json').split(';')[0].strip()
+    return Response(content=upstream.content, status_code=upstream.status_code, media_type=media)
 
 
 @app.post('/api/setup')
