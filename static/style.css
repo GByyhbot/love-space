@@ -449,10 +449,16 @@ button.mood-row.no-mood .mood-bubble.empty{color:var(--primary-dark)}
 .chat-line{display:flex;gap:10px;align-items:flex-start;max-width:85%}
 .chat-line.mine{align-self:flex-end;flex-direction:row-reverse}
 .chat-line .avatar{width:32px;height:32px;font-size:12px}
+/* 气泡宽度自适应：原来中间那层是个普通块级 div，宽度取"最宽的子元素"——
+   而「引用 / 置顶 / 记入时光」那一行通常比短消息还宽，于是气泡（块级会填满父容器）
+   被撑成和操作行一样宽，「嗯」「好」这种短句右边空一大块。
+   改成 flex 列 + align-items，气泡就按自己的文字宽度收缩，不再被兄弟元素带着走。 */
+.chat-line>div{display:flex;flex-direction:column;align-items:flex-start;min-width:0}
+.chat-line.mine>div{align-items:flex-end}
 /* 气泡：原来底是 --bg（和页面背景同一个色），只有一条最淡的 --line 描边，
    在白卡上等于"没有气泡"，看着像一团浮着的字。改成实心跳色 + 深一档描边 + 极淡投影，
    圆角也从 4px 提到 7px，小尖角还在（指向说话人），但不再像早年的方角对话框。 */
-.chat-bubble{background:var(--surface);border:1px solid var(--line-strong);border-radius:7px 18px 18px 18px;padding:11px 15px;font-size:15px;line-height:1.7;overflow-wrap:anywhere;min-width:70px;box-shadow:0 1px 2px rgba(69,56,63,.05)}
+.chat-bubble{background:var(--surface);border:1px solid var(--line-strong);border-radius:7px 18px 18px 18px;padding:11px 15px;font-size:15px;line-height:1.7;overflow-wrap:anywhere;min-width:44px;max-width:100%;box-shadow:0 1px 2px rgba(69,56,63,.05)}
 .mine .chat-bubble{background:var(--soft);border-color:var(--soft-strong);border-radius:18px 7px 18px 18px}
 /* 纯语音消息：微信式短气泡，点击整条播放 */
 .chat-bubble.voice{padding:8px 12px;min-width:0}
