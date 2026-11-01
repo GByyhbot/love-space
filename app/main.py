@@ -11,6 +11,7 @@ import secrets
 import shutil
 import socket
 import threading
+import time
 import zipfile
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -20,7 +21,7 @@ from zoneinfo import ZoneInfo
 import httpx
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, Response, UploadFile
-from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from PIL import Image
 from pydantic import BaseModel, Field
@@ -34,7 +35,7 @@ from .config import APK_VERSION, BUILD_ID, WEB_VERSION
 from .serializers import serialize, serialize_many
 from . import webpush as webpush_service
 from .db import connect, dumps, now, uid
-from .security import PURPOSE_CHANNEL_CONFIG, cipher, current_user, digest_token, login_session, open_sealed, password_hash, password_ok, personal_wish_decrypt, personal_wish_encrypt, rate_limit, seal_for_owner
+from .security import PURPOSE_CHANNEL_CONFIG, PURPOSE_POSE_AI, cipher, current_user, digest_token, login_session, open_sealed, password_hash, password_ok, personal_wish_decrypt, personal_wish_encrypt, rate_limit, seal_for_owner
 
 
 @asynccontextmanager
@@ -420,6 +421,7 @@ async def ai_proxy(request: Request, user=Depends(current_user)):
         raise HTTPException(413, '参考图过大，请减少张数或压缩后再试')
     headers = {k: request.headers[k] for k in _AI_PROXY_PASS_HEADERS if request.headers.get(k)}
     proxy = os.getenv('AI_PROXY', '').strip() or None
+    started = time.monotonic()
     try:
         async with httpx.AsyncClient(
                 timeout=httpx.Timeout(300.0, connect=15.0), follow_redirects=False,
@@ -430,8 +432,61 @@ async def ai_proxy(request: Request, user=Depends(current_user)):
         return JSONResponse(
             {'error': {'message': f'上游不可达（{exc.__class__.__name__}），请检查网络或 AI_PROXY 设置'}},
             status_code=502)
+    # 出图是长请求，503/504 到底是「账号没开通」还是「中间层超时」只能靠这条日志区分：
+    # 成功与失败都用 warning 级别打，是因为 uvicorn 只把 WARNING 以上送到容器 stdout。
+    elapsed = time.monotonic() - started
+    host = urlparse(target).hostname or ''
+    log = logging.getLogger('love.space')
+    if upstream.status_code >= 400:
+        try:
+            detail = ((upstream.json() or {}).get('error') or {}).get('message', '')
+        except Exception:
+            detail = upstream.text[:240]
+        log.warning('ai proxy 失败 %s %s %.1fs %s', upstream.status_code, host, elapsed, (detail or '')[:240])
+    else:
+        log.warning('ai proxy 成功 %s %s %.1fs %dB', upstream.status_code, host, elapsed, len(upstream.content))
     media = (upstream.headers.get('content-type') or 'application/json').split(';')[0].strip()
     return Response(content=upstream.content, status_code=upstream.status_code, media_type=media)
+
+
+# ---- AI 合成台配置落库（图库前端只在 localStorage 存一份，换设备就得重填 Key）----
+# 上游把整份 provider 配置（含各家 API Key）放在 localStorage 的
+# pose_atlas_api_config_v3 里，清缓存/换手机就没了。这里存一份到 settings 表，
+# 按用途单独加密；图库外壳页会注入脚本做双向同步（见 _POSE_AI_BOOT）。
+# Key 明文只出现在「浏览器 ↔ 本服务」这一段，落盘是密文，不进日志。
+_POSE_AI_KEY = 'pose_ai_config'
+_POSE_AI_MAX = 16 * 1024
+
+
+class PoseAiConfig(BaseModel):
+    config: dict
+
+
+@app.get('/api/pose-ai/config')
+def pose_ai_config_get(user=Depends(current_user)):
+    with connect() as c:
+        row = c.execute('SELECT value FROM settings WHERE key=?', (_POSE_AI_KEY,)).fetchone()
+    if not row:
+        return {'config': None, 'saved': 0}
+    try:
+        stored = json.loads(cipher(PURPOSE_POSE_AI).decrypt(row['value'].encode()).decode())
+    except Exception:
+        logging.getLogger('love.space').warning('pose-ai 配置解不开，按空处理')
+        return {'config': None, 'saved': 0}
+    return {'config': stored.get('config'), 'saved': stored.get('saved', 0)}
+
+
+@app.put('/api/pose-ai/config')
+def pose_ai_config_put(body: PoseAiConfig, user=Depends(current_user)):
+    stored = {'config': body.config, 'saved': int(now() * 1000)}
+    payload = json.dumps(stored, ensure_ascii=False)
+    if len(payload.encode()) > _POSE_AI_MAX:
+        raise HTTPException(413, '配置过大，请检查是否选错了字段')
+    sealed = cipher(PURPOSE_POSE_AI).encrypt(payload.encode()).decode()
+    with connect() as c:
+        c.execute('INSERT INTO settings(key,value) VALUES(?,?) '
+                  'ON CONFLICT(key) DO UPDATE SET value=excluded.value', (_POSE_AI_KEY, sealed))
+    return {'ok': True, 'saved': stored['saved']}
 
 
 @app.post('/api/setup')
@@ -2353,11 +2408,70 @@ app.mount('/static', StaticFiles(directory=db.ROOT / 'static'), name='static')
 
 # 情侣摆拍参考图库：同源托管在 /srv/pose-gallery，由 NAS 以 :ro 卷挂载进容器。
 # 仅在目录存在时挂载——本地/CI 没有这个目录时不应因此启动失败（线上容器始终挂载）。
-_POSE_GALLERY_DIR = '/srv/pose-gallery'
+_POSE_GALLERY_DIR = os.getenv('POSE_GALLERY_DIR', '/srv/pose-gallery')
+
+
+# 图库外壳页注入的「AI 合成台配置同步」脚本。上游把 provider 配置（含 API Key）只存
+# localStorage，换设备/清缓存就得重填；这里在页面任何 bundle 之前跑一段：本地为空就用
+# NAS 上那份灌回去，本地有改动就回写，两边按「最后写入者为准」收敛。
+# 用同步 XHR 是刻意的——localStorage 是同步 API，异步拿回来时上游已经按空配置渲染了。
+_POSE_AI_BOOT = """<script>
+(function () {
+  var KEY = 'pose_atlas_api_config_v3', API = '/api/pose-ai/config', STAMP = KEY + '_nas_saved';
+  var HEADERS = { 'Content-Type': 'application/json', 'X-Love-Space': '1' };
+  function stamp() {
+    try { return Number(localStorage.getItem(STAMP)) || 0; } catch (e) { return 0; }
+  }
+  function mark(at) {
+    try { localStorage.setItem(STAMP, String(at)); } catch (e) {}
+  }
+  function push(cfg) {
+    var at = Date.now();
+    try {
+      fetch(API, { method: 'PUT', headers: HEADERS, body: JSON.stringify({ config: cfg }) })
+        .then(function (r) { if (r && r.ok) mark(at); })
+        .catch(function () {});
+    } catch (e) {}
+  }
+  var remote = null, remoteSaved = 0;
+  try {
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', API, false);
+    xhr.send(null);
+    if (xhr.status === 200) {
+      var data = JSON.parse(xhr.responseText || '{}');
+      remote = data.config || null;
+      remoteSaved = Number(data.saved) || 0;
+    }
+  } catch (e) {}
+  var local = null;
+  try { local = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) {}
+  if (remote && (!local || remoteSaved > stamp())) {
+    try { localStorage.setItem(KEY, JSON.stringify(remote)); } catch (e) {}
+    mark(remoteSaved);
+  } else if (local) {
+    push(local);
+  }
+  var rawSet = Storage.prototype.setItem;
+  Storage.prototype.setItem = function (k, v) {
+    var out = rawSet.apply(this, arguments);
+    if (this === localStorage && k === KEY) {
+      try { push(JSON.parse(v)); } catch (e) {}
+    }
+    return out;
+  };
+})();
+</script>"""
+
+
+def _inject_pose_ai_boot(html: str) -> str:
+    if '</head>' in html:
+        return html.replace('</head>', _POSE_AI_BOOT + '</head>', 1)
+    return _POSE_AI_BOOT + html
 
 
 class _SpaStaticFiles(StaticFiles):
-    """静态站 + 前端路由兜底。
+    """静态站 + 前端路由兜底 + 外壳页注入。
 
     上游 ai-pose-gallery-zh 2.x 是 TanStack Router 的 history 模式（不是 hash），
     /pose-gallery/poses 这种深链在纯 StaticFiles 下会 404。这里把"看起来像路由、
@@ -2366,12 +2480,20 @@ class _SpaStaticFiles(StaticFiles):
 
     async def get_response(self, path, scope):
         try:
-            return await super().get_response(path, scope)
+            response = await super().get_response(path, scope)
         except StarletteHTTPException as exc:
             leaf = path.rsplit('/', 1)[-1]
             if exc.status_code == 404 and '.' not in leaf and path != 'index.html':
-                return await super().get_response('index.html', scope)
+                return self._shell()
             raise
+        if str(getattr(response, 'path', '')).endswith('index.html'):
+            return self._shell()
+        return response
+
+    def _shell(self):
+        """外壳页每次都要回源（注入脚本会变，且不能让浏览器缓存旧外壳）。"""
+        html = (Path(self.directory) / 'index.html').read_text('utf-8')
+        return HTMLResponse(_inject_pose_ai_boot(html), headers={'Cache-Control': 'no-store'})
 
 
 if os.path.isdir(_POSE_GALLERY_DIR):

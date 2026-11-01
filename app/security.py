@@ -34,6 +34,9 @@ def secret_key():
 PURPOSE_OWNER_SEALED = b'love-space:owner-sealed:v1'
 PURPOSE_WEBPUSH_SUB = b'love-space:webpush-subscription:v1'
 PURPOSE_CHANNEL_CONFIG = b'love-space:channel-config:v1'
+# 图库「AI 合成台」的 provider 配置（含各家的 API Key）：本来是纯 localStorage，
+# 换设备/清缓存就得重填，用户要求存到 NAS 上，所以落 settings 表并按用途加密。
+PURPOSE_POSE_AI = b'love-space:pose-ai-config:v1'
 
 
 def cipher(purpose=None):

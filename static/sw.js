@@ -2,7 +2,7 @@
 /* 版本号必须与 index.html 里 style.css / app.js 的 ?v= 一致：URL 带版本参数可强制绕过一切旧缓存。
    写成常量再拼进 URL，是为了让 CORE 不可能再和 CACHE 脱钩——以前两处手写版本号，
    CACHE 已经到 v67 而 CORE 还停在 v55，预热进缓存的旧 CSS 会一直被命中。 */
-const VERSION = 168;
+const VERSION = 169;
 const CACHE = `love-space-v${VERSION}`;
 const CORE = [`/static/style.css?v=${VERSION}`, `/static/app.js?v=${VERSION}`, '/static/icon.svg', '/static/icon-192.png', '/static/icon-512.png', '/static/apple-touch-icon.png', '/static/garden.svg', '/manifest.webmanifest', '/'];
 
@@ -83,9 +83,17 @@ self.addEventListener('fetch', (event) => {
   // The shell and main bundle must check the server first. A newly installed
   // worker can otherwise copy an older response from the previous worker's cache.
   if (url.origin === self.location.origin && (req.mode === 'navigate' || url.pathname === '/static/app.js')) {
+    const isShell = url.pathname === '/' || url.pathname === '/index.html';
+    // 子页面导航（iframe 里的 /pose-gallery/poses 等）不走缓存、也不写缓存：
+    // 以前这里对**所有**导航都用 '/' 当 cache key，于是进过一次图库，首页的缓存条目
+    // 就被图库 HTML 顶替了——弱网/离线打开主站会直接变成图库页，正在跑的出图任务全断。
+    if (req.mode === 'navigate' && !isShell) {
+      event.respondWith(fetch(req, { cache: 'no-store' }));
+      return;
+    }
     event.respondWith(fetch(req, { cache: 'no-store' }).then((response) => {
       if (response.ok) {
-        const key = req.mode === 'navigate' ? new Request(new URL('/', self.location.origin)) : req;
+        const key = isShell ? new Request(new URL('/', self.location.origin)) : req;
         caches.open(CACHE).then((cache) => cache.put(key, response.clone())).catch(() => {});
       }
       return response;
