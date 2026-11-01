@@ -290,7 +290,16 @@ async def protection(request, call_next):
         result.headers['Content-Security-Policy'] = f"default-src 'self'; img-src 'self' blob: data:; media-src 'self' blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; frame-src 'self'; {connect_src}; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
     if public_url.startswith('https://') and not local_access:
         result.headers['Strict-Transport-Security'] = 'max-age=31536000'
-    if request.url.path.startswith(('/api/', '/media/')):
+    if request.url.path.startswith('/media/') and request.query_params.get('role') == 'cover':
+        # 首页封面单独放行缓存。三个约束缺一不可：
+        #   ① 不能是 no-store —— Cache API 的 put() 会直接拒绝带 no-store 的响应，
+        #      Service Worker 那条 cache-first 就永远存不进去；
+        #   ② 必须 private —— 这是两个人的照片，绝不能进 Cloudflare 之类的共享缓存；
+        #   ③ max-age=0 + must-revalidate —— SW 没接管时（首次访问/旧 WebView）退化成 304，
+        #      靠 ETag 校验，不会重传整张图。
+        # 只有封面走这条路，相册/聊天里的图仍然 no-store：它们量太大，也不该长期躺在设备上。
+        result.headers['Cache-Control'] = 'private, max-age=0, must-revalidate'
+    elif request.url.path.startswith(('/api/', '/media/')):
         result.headers['Cache-Control'] = 'no-store'
     elif request.url.path.startswith('/static/stickers/'):
         # 贴纸文件内容不变，按内容寻址永久缓存，二次加载走本地缓存

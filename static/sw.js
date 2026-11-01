@@ -2,8 +2,11 @@
 /* 版本号必须与 index.html 里 style.css / app.js 的 ?v= 一致：URL 带版本参数可强制绕过一切旧缓存。
    写成常量再拼进 URL，是为了让 CORE 不可能再和 CACHE 脱钩——以前两处手写版本号，
    CACHE 已经到 v67 而 CORE 还停在 v55，预热进缓存的旧 CSS 会一直被命中。 */
-const VERSION = 175;
+const VERSION = 177;
 const CACHE = `love-space-v${VERSION}`;
+/* 首页封面单独一个命名空间：跨版本保留（内容由 URL 里的媒体 id 唯一决定），
+   换封面时由下面 fetch 分支整桶顶替，所以永远不会攒下多张。 */
+const COVER_CACHE = 'love-space-cover-v1';
 const CORE = [`/static/style.css?v=${VERSION}`, `/static/app.js?v=${VERSION}`, '/static/icon.svg', '/static/icon-192.png', '/static/icon-512.png', '/static/apple-touch-icon.png', '/static/garden.svg', '/manifest.webmanifest', '/'];
 
 self.addEventListener('install', (event) => {
@@ -13,7 +16,7 @@ self.addEventListener('install', (event) => {
 });
 
 self.addEventListener('activate', (event) => {
-  event.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== CACHE && k !== 'love-space-stickers').map((k) => caches.delete(k)))));
+  event.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== CACHE && k !== 'love-space-stickers' && k !== COVER_CACHE).map((k) => caches.delete(k)))));
   self.clients.claim();
 });
 
@@ -98,6 +101,27 @@ self.addEventListener('fetch', (event) => {
       }
       return response;
     }).catch(async () => (await caches.match(req)) || (await caches.match('/'))));
+    return;
+  }
+
+  // 首页封面：cache-first，命中就完全不碰网络。
+  // 换了封面 → URL 里的媒体 id 变了 → 必然未命中 → 拉一次并把旧条目顶掉；
+  // 没换 → 一直吃本地这份，刷新一百次也不下载（原图常有几 MB，apk 里这条最省流量）。
+  // 服务端为此单独返回 private, max-age=0, must-revalidate —— Cache API 会拒绝 no-store 的响应。
+  // 登出时 CLEAR_PRIVATE_CACHE 按 /media/ 前缀清理，会一并删掉这里。
+  if (url.origin === self.location.origin && url.pathname.startsWith('/media/') && url.searchParams.get('role') === 'cover') {
+    event.respondWith((async () => {
+      const cache = await caches.open(COVER_CACHE);
+      const hit = await cache.match(req);
+      if (hit) return hit;
+      const resp = await fetch(req);
+      if (resp && resp.ok) {
+        const olds = await cache.keys();
+        await Promise.all(olds.map((k) => cache.delete(k)));
+        await cache.put(req, resp.clone()).catch(() => {});
+      }
+      return resp;
+    })());
     return;
   }
 

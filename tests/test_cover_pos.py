@@ -53,3 +53,34 @@ def test_legacy_client_without_field_keeps_crop(client_a):
     assert r.status_code == 200, r.text
     assert space_of(client_a)['cover_pos'] == {'x': 30.0, 'y': 70.0, 'z': 1.8}
     assert save_space(client_a, cover_pos={'x': 50, 'y': 50, 'z': 1}).status_code == 200
+
+
+def png_bytes(color=(180, 120, 200)):
+    import io
+    from PIL import Image
+    buf = io.BytesIO()
+    Image.new('RGB', (48, 48), color).save(buf, 'PNG')
+    return buf.getvalue()
+
+
+def test_cover_media_is_cacheable_but_other_media_is_not(client_a):
+    """封面图要能被 Service Worker 的 Cache Storage 存下来，其它媒体不能。
+
+    Cache API 的 put() 会直接拒绝 Cache-Control: no-store 的响应——首页封面那条
+    cache-first 之所以能生效，全靠服务端对这一种请求放行成 private。
+    相册 / 聊天里的图不走这条路：它们量大，也不该长期躺在设备磁盘上。
+    """
+    r = client_a.post('/api/media', headers=HEADERS,
+                      files={'file': ('cover.png', png_bytes(), 'image/png')})
+    mid = r.json()['id']
+    assert save_space(client_a, cover=mid).status_code == 200
+
+    cover = client_a.get(f'/media/{mid}?preview=true&role=cover', headers=HEADERS)
+    assert cover.status_code == 200, cover.text
+    cc = cover.headers.get('cache-control', '')
+    assert 'no-store' not in cc, f'封面一旦 no-store，SW 就永远存不进缓存：{cc}'
+    assert 'private' in cc, f'封面是私密照片，绝不能进共享缓存：{cc}'
+
+    plain = client_a.get(f'/media/{mid}?preview=true', headers=HEADERS)
+    assert plain.status_code == 200
+    assert 'no-store' in plain.headers.get('cache-control', ''), '普通媒体仍必须 no-store'

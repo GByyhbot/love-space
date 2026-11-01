@@ -1718,3 +1718,44 @@ html.is-native-app body.chat-immersive .shell.chat-full .chat-panel.immersive .c
   /* 共同年历是「固定一屏」布局，详情区要留出能滚的高度，格子只能压扁一点 */
   .calendar-page .page-heading{margin-bottom:10px}
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   首页主视觉重排（去掉头像）+ 封面图本地缓存配套
+   ═══════════════════════════════════════════════════════════════ */
+
+/* 遮罩抽成变量：首页 hero 和裁剪弹窗的预览必须一模一样，
+   不然「预览里看着清楚、保存后回首页发现有字糊了」。这一版加了自下而上的那一层，
+   因为文字块现在占得更宽也更靠底。 */
+:root{--hero-shade:linear-gradient(90deg,rgba(37,28,34,.74),rgba(37,28,34,.4) 58%,rgba(37,28,34,.1)),linear-gradient(0deg,rgba(37,28,34,.52),rgba(37,28,34,0) 52%)}
+.hero:has(.hero-cover) .hero-mask{background:var(--hero-shade)}
+.crop-shade{background:var(--hero-shade);opacity:1}
+
+/* 版式：原来内容挤在左侧 58%（最宽 520px）里，右边大片空，中间还夹着两个头像。
+   现在头像去掉、宽度放到 74%，名字一行、天数一行、日期与存卡片并成一行，纵向从 5 层压到 3 层。 */
+.hero-main{width:min(74%,620px);gap:11px}
+.hero-names-text{display:inline-flex;align-items:center;flex-wrap:wrap;gap:9px;font-family:var(--serif);font-size:27px;font-weight:600;line-height:1.3;letter-spacing:.5px}
+/* 名字之间那颗心，不用 & ——「A ♥ B」比「A & B」更像这个 App 会说的话 */
+.hero-amp{font-size:15px;font-weight:400;font-style:normal;line-height:1;color:var(--primary);opacity:.92}
+.hero:has(.hero-cover) .hero-amp{color:#fff;opacity:.72}
+.hero-days{margin-top:0}
+.hero-days strong{font-size:52px}
+/* 日期 + 存卡片并成一行；窄屏会自然换行，不再各占一整行 */
+.hero-foot{display:flex;align-items:center;flex-wrap:wrap;gap:5px 18px;font-size:12.5px;line-height:1.6;margin-top:1px}
+.hero-since{opacity:.82}
+.hero:has(.hero-cover) .hero-foot{color:rgba(255,255,255,.94);text-shadow:0 1px 8px rgba(0,0,0,.45)}
+.hero:has(.hero-cover) .hero-foot .link-btn{color:#fff}
+.hero:has(.hero-cover) .hero-since{text-shadow:0 1px 8px rgba(0,0,0,.45)}
+
+@media(max-width:1150px){
+  .hero-main{width:78%;gap:9px}
+  .hero-names-text{font-size:22px}
+  .hero-days strong{font-size:44px}
+}
+@media(max-width:720px){
+  /* 手机上照片本来就窄，文字再缩在左半边只会更挤，索性占满整幅 */
+  .hero-main{width:100%;gap:8px}
+  .hero-names-text{font-size:22px;gap:8px}
+  .hero-amp{font-size:14px}
+  .hero-days strong{font-size:42px}
+  .hero-foot{font-size:12px;gap:4px 16px}
+}

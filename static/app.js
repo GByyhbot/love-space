@@ -349,7 +349,9 @@ function coverStyle(raw){
  return css;
 }
 function coverImg(mid,pos){
- return `<img class="hero-art hero-cover" src="/media/${esc(mid)}?preview=true" alt="我们的合照封面" style="${coverStyle(pos)}" draggable="false">`;
+ /* role=cover 是给 Service Worker 看的暗号：带它的请求走 cache-first，
+    服务端也只对这一个参数放行缓存头。换封面时 id 会变，缓存自然失效重拉一次。 */
+ return `<img class="hero-art hero-cover" src="/media/${esc(mid)}?preview=true&role=cover" alt="我们的合照封面" style="${coverStyle(pos)}" draggable="false" decoding="async">`;
 }
 /* 首页那张 hero 卡的宽高比：裁剪弹窗要按同一个比例画预览框，否则「所见」对不上「所得」 */
 function measureHero(){
@@ -371,7 +373,7 @@ function coverCropModal(mid){
  const ratio=state.heroRatio||((hw>8&&hh>8)?(hw/hh):1.9);
  openModal('调整封面背景',`<div class="crop-wrap">
   <div class="crop-frame" id="crop-frame" style="padding-top:${(100/ratio).toFixed(2)}%">
-   <img id="crop-img" src="/media/${esc(coverId)}?preview=true" alt="封面预览" draggable="false">
+   <img id="crop-img" src="/media/${esc(coverId)}?preview=true&role=cover" alt="封面预览" draggable="false">
    <i class="crop-shade" aria-hidden="true"></i>
    <i class="crop-grid" aria-hidden="true"></i>
   </div>
@@ -466,7 +468,12 @@ function homePage() {
   ?`<button type="button" class="today-cell today-cell-link" data-action="tool-anniversary" aria-label="最近纪念日：${esc(anniversary.body.title)}，${anniversary.days} 天后"><span class="tiny">${icon('calendar')} 最近纪念日<span class="tiny-go">${icon('arrow')}</span></span><div class="countdown-mini"><strong>${anniversary.days}</strong><span>天后 · ${esc(anniversary.body.title)}</span></div><p class="meta">${anniversary.due} · 别忘了给彼此一个拥抱</p></button>`
   :`<div class="today-cell"><span class="tiny">${icon('calendar')} 最近纪念日</span><div class="countdown-mini"><strong>♡</strong><span>留一个日子，给仪式感</span></div>${button('添加纪念日','new-anniversary','small secondary')}</div>`;
  const todayCard=`<section class="today-card" aria-label="今天的陪伴">${moodCell}${annCell}</section>`;
- const heroCopy=`<section class="hero">${space.cover?coverImg(space.cover,space.cover_pos):'<img class="hero-art" src="/static/garden.svg" alt="两只小兔子守着共同的小家">'}<div class="hero-mask"></div>${space.cover?`<button type="button" class="hero-crop" data-action="cover-crop" aria-label="调整封面背景的显示位置" title="调整背景">${icon('image')}<span>调整背景</span></button>`:''}<div class="hero-copy"><div class="hero-main"><span class="hero-tag">${icon('heart')} ${esc(space.name)}</span><div class="couple-line"><div class="couple-avatars">${avatar(user.id)}<span class="heart-symbol">♥</span>${partner?avatar(partner.id,'partner'):'<span class="avatar partner">?</span>'}</div><span class="hero-names-text">${partner?`${esc(user.name)} & ${esc(partner.name)}`:'等你，把另一半邀请进来'}</span></div>${partner?'':`<button class="link-btn" data-action="invite">发送邀请，让 TA 住进来 →</button>`}<div class="hero-days"><small>我们相恋</small><strong>${days??'—'}<em>天</em></strong>${days===null?`<button class="link-btn" data-action="space">设置相恋日期 →</button>`:`<span class="meta">${esc(space.since)} · 今天也要好好相爱</span><button class="link-btn" data-action="love-card">存一张天数卡片 →</button>`}</div></div></div></section>`;
+ /* 主视觉：照片 + 两个人的名字 + 相恋天数。
+    去掉了原来那一对 44px 头像——侧栏、顶栏、每条记录里到处都是头像，
+    这里再用两个圆把画面的左上角占掉，既挡住照片又抢戏；名字之间那颗小心形
+    已经把「两个人」说清楚了。 */
+ const heroNames=partner?`${esc(user.name)}<span class="hero-amp" aria-hidden="true">♥</span>${esc(partner.name)}`:'等你，把另一半邀请进来';
+ const heroCopy=`<section class="hero">${space.cover?coverImg(space.cover,space.cover_pos):'<img class="hero-art" src="/static/garden.svg" alt="两只小兔子守着共同的小家">'}<div class="hero-mask"></div>${space.cover?`<button type="button" class="hero-crop" data-action="cover-crop" aria-label="调整封面背景的显示位置" title="调整背景">${icon('image')}<span>调整背景</span></button>`:''}<div class="hero-copy"><div class="hero-main"><span class="hero-tag">${icon('heart')} ${esc(space.name)}</span><span class="hero-names-text">${heroNames}</span>${partner?'':`<button class="link-btn" data-action="invite">发送邀请，让 TA 住进来 →</button>`}<div class="hero-days"><small>我们相恋</small><strong>${days??'—'}<em>天</em></strong></div><div class="hero-foot">${days===null?`<button class="link-btn" data-action="space">设置相恋日期 →</button>`:`<span class="hero-since">${esc(space.since)} 起 · 今天也要好好相爱</span><button class="link-btn" data-action="love-card">存一张天数卡片 →</button>`}</div></div></div></section>`;
  const composeCta=`<button class="compose-cta" data-action="compose">${icon('edit')} 记录此刻</button>`;
  const homeHeading=heading('我们的每一天','一半是生活，一半是你。','compose','记录此刻','edit').replace('page-heading','page-heading home-heading');
  return `${homeHeading}${heroCopy}${todayCard}${composeCta}${dailyQuoteBlock()}
