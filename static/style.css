@@ -9,6 +9,7 @@
   --bg:#FAF6F7;              /* 页面背景：暖白 */
   --surface:#FFFFFF;         /* 卡片：纯白 */
   --ink:#3B2E35;             /* 主要文字 */
+  --ink-2:#5C4A53;           /* 次级文字：比 ink 浅、比 muted 深，供按钮/行内操作 */
   --muted:#7C6B74;           /* 次要文字 */
   --primary:#B0486B;         /* 莓果粉：主按钮与强调 */
   --primary-dark:#8C3652;    /* 强调色深阶：hover/标题 */
@@ -16,6 +17,7 @@
   --soft:#FBE9EF;            /* 柔和强调背景 */
   --soft-strong:#F0D9E3;     /* 柔和强调加深（选中态） */
   --line:#EFE4E9;            /* 分隔线 */
+  --line-strong:#E2D2DA;     /* 控件描边：比 line 深一档，让描边按钮在白卡上站得住 */
   --green:#5F7A50;           /* 成功/心情点缀 */
   --green-soft:#EBF1E6;
   --amber:#A06B38;           /* 提醒点缀 */
@@ -26,6 +28,9 @@
   --shadow-lift:0 8px 28px rgba(69,56,63,.10);
   --radius:20px;             /* 卡片圆角 */
   --radius-s:12px;           /* 按钮/输入框圆角 */
+  --ctrl-h:44px;             /* 标准控件高度：按钮、筛选、分段的统一基准 */
+  --ctrl-h-sm:36px;          /* 小号控件（chip / 密集操作行） */
+  --btn-lift:0 1px 2px rgba(69,56,63,.06);  /* 描边按钮的极淡投影，用来把边界"托起来" */
   --pad-x:20px;              /* 手机左右留白 */
   --font:"PingFang SC","Microsoft YaHei",system-ui,-apple-system,sans-serif;
   --serif:Georgia,"Songti SC","Microsoft YaHei",serif;
@@ -55,7 +60,9 @@ button{cursor:pointer;color:inherit;border:0;background:none;font:inherit;-webki
 html{-webkit-tap-highlight-color:transparent}
 button:disabled{opacity:.45;cursor:wait}
 a,input,textarea,select{-webkit-tap-highlight-color:transparent;touch-action:manipulation}
-:focus-visible{outline:2px solid var(--primary);outline-offset:2px;border-radius:4px}
+/* 键盘焦点圈：offset 从 2 提到 3，圆角跟按钮走，免得贴着描边糊成一条线 */
+:focus-visible{outline:2px solid var(--primary);outline-offset:3px;border-radius:8px}
+:root.dark :focus-visible{outline-color:#F0AFC2}
 ::placeholder{color:var(--muted);opacity:.75}
 input,textarea,select{width:100%;font:inherit;font-size:16px;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-s);padding:10px 12px;outline:none;transition:border-color var(--speed)}
 input:focus,textarea:focus,select:focus{border-color:var(--primary);box-shadow:0 0 0 3px var(--soft)}
@@ -66,22 +73,40 @@ input[type=date],input[type=datetime-local]{min-height:42px}
 label{display:grid;gap:6px;font-size:13px;color:var(--muted)}
 
 /* ── 3. 通用组件 ─────────────────────────────── */
-.button{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:40px;padding:9px 18px;border-radius:var(--radius-s);border:1px solid transparent;font-size:14px;font-weight:500;line-height:1.4;white-space:nowrap;transition:background var(--speed),border-color var(--speed),transform var(--speed),box-shadow var(--speed)}
+/* 按钮：一套高度/圆角/反馈，四种语义。改这里就改全站，
+   页面里不要再各写一份 min-height —— 之前 40/44/46/48 混着，同一屏里高低不齐。 */
+.button{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:var(--ctrl-h);padding:0 20px;border-radius:var(--radius-s);border:1px solid transparent;font-size:14px;font-weight:550;line-height:1.35;white-space:nowrap;letter-spacing:.2px;transition:background var(--speed),border-color var(--speed),color var(--speed),transform var(--speed),box-shadow var(--speed)}
 .button:active{transform:scale(.97)}
+.button:disabled,.button[aria-disabled=true]{opacity:.5;box-shadow:none;transform:none}
 .button .icon{width:17px;height:17px}
-.button.primary{background:var(--primary);color:var(--on-primary);box-shadow:0 3px 10px rgba(0,0,0,.08)}
-.button.primary:hover{background:var(--primary-dark)}
-.button.secondary{background:var(--surface);border-color:var(--line);color:var(--ink)}
-.button.secondary:hover{border-color:var(--primary);color:var(--primary-dark)}
+/* 主：实心。唯一给投影的按钮，用来抢第一眼 */
+.button.primary{background:var(--primary);color:var(--on-primary);box-shadow:0 3px 10px rgba(176,72,107,.22)}
+.button.primary:hover{background:var(--primary-dark);box-shadow:0 4px 14px rgba(176,72,107,.28)}
+/* 次：原来白底 + --line 描边，在白卡片上等于隐身；改浅底 + 深一档描边 + 极淡投影 */
+.button.secondary{background:var(--surface);border-color:var(--line-strong);color:var(--ink-2);box-shadow:var(--btn-lift)}
+.button.secondary:hover{border-color:var(--primary);color:var(--primary-dark);background:var(--soft)}
+/* 柔：底色块，不需要描边也能看出是按钮 */
 .button.soft{background:var(--soft);color:var(--primary-dark)}
 .button.soft:hover{background:var(--soft-strong)}
 .button.danger{background:var(--danger-soft);color:var(--danger)}
-.button.small{min-height:36px;padding:6px 13px;font-size:12px}
-.link-btn{display:inline-flex;align-items:center;gap:5px;color:var(--muted);font-size:13px;min-height:32px}
-.link-btn:hover{color:var(--primary-dark)}
+.button.danger:hover{background:var(--danger);color:#fff}
+/* 幽灵：低优先，靠 hover 才显形（卡片角落的次要操作） */
+.button.ghost{color:var(--muted);padding:0 12px}
+.button.ghost:hover{background:var(--soft);color:var(--primary-dark)}
+.button.small{min-height:var(--ctrl-h-sm);padding:0 14px;font-size:13px;border-radius:10px}
+.button.small .icon{width:15px;height:15px}
+.button.block{width:100%}
+/* 行内文字按钮（喜欢/回复/撤回…）：原来 muted 色、32px 高、无背景，
+   在手机上是 13px 灰字，既难点也看不出来能点。这里提到 ink-2 + 36px 触控区，
+   静态不加底色（避免消息下方一排色块很吵），hover/active 才显形。 */
+.link-btn{display:inline-flex;align-items:center;gap:5px;color:var(--ink-2);font-size:13px;min-height:36px;padding:0 8px;margin:0 -4px;border-radius:9px;transition:background var(--speed),color var(--speed)}
+.link-btn:hover{color:var(--primary-dark);background:var(--soft)}
+.link-btn:active{background:var(--soft-strong)}
 .link-btn .icon{width:15px;height:15px}
-.icon-btn{display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;border-radius:50%;background:var(--surface);border:1px solid var(--line);color:var(--muted);position:relative;transition:color var(--speed),border-color var(--speed)}
-.icon-btn:hover{color:var(--primary);border-color:var(--primary)}
+/* 顶栏圆形图标按钮：--line 描边在 --bg 上几乎看不见，加一档深描边 + 极淡投影站住形 */
+.icon-btn{display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;border-radius:50%;background:var(--surface);border:1px solid var(--line-strong);color:var(--ink-2);position:relative;box-shadow:var(--btn-lift);transition:color var(--speed),border-color var(--speed),background var(--speed),transform var(--speed)}
+.icon-btn:hover{color:var(--primary-dark);border-color:var(--primary);background:var(--soft)}
+.icon-btn:active{transform:scale(.94)}
 .icon-btn .icon{width:19px;height:19px}
 .badge{position:absolute;right:-3px;top:-4px;background:var(--primary);color:#fff;font-size:10px;line-height:1;border-radius:12px;min-width:17px;padding:3px 4px;text-align:center}
 .avatar{width:40px;height:40px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;background:var(--soft);color:var(--primary-dark);font-size:16px;font-weight:600;overflow:hidden;flex-shrink:0}
@@ -98,8 +123,10 @@ label{display:grid;gap:6px;font-size:13px;color:var(--muted)}
 .card-header small{display:block;font-size:12px;color:var(--muted);margin-top:2px}
 .card-header .avatar{width:34px;height:34px;font-size:12px}
 .card-menu{margin-left:auto;display:flex;gap:4px;align-items:center}
-.card-menu .icon-btn{width:38px;height:38px;border-color:transparent;background:transparent}
-.card-menu .icon-btn:hover{background:var(--soft)}
+/* 卡片角上的小图标按钮：原来 border/background 全透明，等于隐形的三个点，
+   给一层淡粉底，静默但看得见；不描边，免得卡片里到处是圈 */
+.card-menu .icon-btn{width:36px;height:36px;border-color:transparent;background:var(--soft);color:var(--primary-dark);box-shadow:none}
+.card-menu .icon-btn:hover{background:var(--soft-strong);border-color:transparent;color:var(--primary-dark)}
 .card-footer{display:flex;align-items:center;gap:18px;padding-top:10px;margin-top:11px;border-top:1px solid var(--line);font-size:12px;color:var(--muted)}
 .card-footer button{display:inline-flex;align-items:center;gap:5px;padding:4px 2px;color:inherit;min-height:28px}
 .card-footer button:hover{color:var(--primary-dark)}
@@ -119,8 +146,12 @@ label{display:grid;gap:6px;font-size:13px;color:var(--muted)}
 .empty p{font-size:13px;line-height:1.8;margin:6px 0 14px}
 .tabs{display:flex;gap:8px;margin-bottom:20px;overflow-x:auto;padding-bottom:4px;scrollbar-width:none}
 .tabs::-webkit-scrollbar{display:none}
-.tabs button{flex-shrink:0;min-height:38px;border:1px solid var(--line);padding:7px 16px;border-radius:20px;font-size:13px;background:var(--surface);color:var(--muted);transition:all var(--speed)}
-.tabs button.active{background:var(--soft);border-color:var(--soft-strong);color:var(--primary-dark);font-weight:500}
+/* tab 条：未选中原来只有 --line 描边 + muted 字，在 --bg 上几乎看不出是按钮。
+   描边提到 line-strong、字提到 ink-2；选中态改用主色描边 + 加粗，层级一眼分得开。 */
+.tabs button{flex-shrink:0;min-height:38px;border:1px solid var(--line-strong);padding:7px 16px;border-radius:20px;font-size:13px;background:var(--surface);color:var(--ink-2);box-shadow:var(--btn-lift);transition:background var(--speed),border-color var(--speed),color var(--speed),transform var(--speed)}
+.tabs button:hover{border-color:var(--primary);color:var(--primary-dark);background:var(--soft)}
+.tabs button:active{transform:scale(.97)}
+.tabs button.active{background:var(--soft);border-color:var(--primary);color:var(--primary-dark);font-weight:600;box-shadow:none}
 .inline-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:11px}
 .section-heading{display:flex;align-items:center;justify-content:space-between;margin-bottom:11px;gap:12px}
 .section-heading h2{font-size:16px;display:flex;align-items:center;gap:8px}
@@ -148,9 +179,12 @@ label{display:grid;gap:6px;font-size:13px;color:var(--muted)}
 
 /* 更多菜单（卡片编辑/删除收纳） */
 .more-menu{position:relative}
-.more-menu summary{list-style:none;display:inline-flex;align-items:center;justify-content:center;width:38px;height:38px;border-radius:50%;color:var(--muted);cursor:pointer;transition:background var(--speed)}
+/* ⋯ 原来只有 muted 色、没有底色，在卡片角落等于不存在；
+   给一层淡粉底，静态就能看出是个入口，hover 再加深 */
+.more-menu summary{list-style:none;display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:50%;color:var(--primary-dark);background:var(--soft);cursor:pointer;transition:background var(--speed),color var(--speed),transform var(--speed)}
 .more-menu summary::-webkit-details-marker{display:none}
-.more-menu summary:hover,.more-menu[open] summary{background:var(--soft);color:var(--primary-dark)}
+.more-menu summary:hover,.more-menu[open] summary{background:var(--soft-strong);color:var(--primary-dark)}
+.more-menu summary:active{transform:scale(.94)}
 .more-menu .menu-pop{position:absolute;right:0;top:42px;z-index:30;background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow-lift);padding:6px;min-width:130px;display:grid;gap:2px}
 .more-menu .menu-pop button{display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:9px;font-size:13px;text-align:left;min-height:40px;width:100%}
 .more-menu .menu-pop button:hover{background:var(--soft)}
@@ -165,13 +199,14 @@ label{display:grid;gap:6px;font-size:13px;color:var(--muted)}
 .brand strong{font-size:18px;letter-spacing:2px}
 .brand small{display:block;color:var(--muted);font-size:9px;letter-spacing:3px;margin-top:4px}
 .nav{display:grid;gap:6px}
-.nav button{display:flex;align-items:center;gap:14px;min-height:46px;padding:10px 18px;text-align:left;border-radius:var(--radius-s);color:var(--muted);font-size:14px;transition:background var(--speed),color var(--speed)}
+.nav button{display:flex;align-items:center;gap:14px;min-height:46px;padding:10px 18px;text-align:left;border-radius:var(--radius-s);color:var(--ink-2);font-size:14px;transition:background var(--speed),color var(--speed),transform var(--speed)}
 .nav button .icon{width:19px;height:19px}
 .nav button.active{color:var(--primary-dark);background:var(--soft);font-weight:600}
-.nav button:hover{background:var(--soft)}
+.nav button:hover{background:var(--soft);color:var(--primary-dark)}
+.nav button:active{transform:scale(.98)}
 .nav button.active:after{content:'';width:5px;height:5px;margin-left:auto;border-radius:50%;background:var(--primary)}
 .nav .nav-fab{display:flex;align-items:center;gap:14px;min-height:46px;padding:10px 18px;text-align:left;border-radius:var(--radius-s);color:var(--on-primary);font-size:14px;font-weight:600;background:var(--primary);transition:background var(--speed),transform var(--speed)}
-.nav .nav-fab:hover{background:var(--primary-dark)}
+.nav .nav-fab:hover{background:var(--primary-dark);color:var(--on-primary)}
 .nav .nav-fab:active{transform:scale(.98)}
 .nav .nav-fab .icon{width:19px;height:19px}
 /* 「回到我们」：子工具页专用，导航栏最左侧，用主色略作区分 */
@@ -365,7 +400,9 @@ button.mood-row.no-mood .mood-bubble.empty{color:var(--primary-dark)}
 .filters input{flex:1;min-width:150px;height:46px}
 .filters select,.filters input[type=date]{width:auto;flex:0 1 150px;font-size:14px;height:46px}
 .filter-box{margin-bottom:18px}
-.filter-box>summary{list-style:none;display:inline-flex;align-items:center;gap:8px;height:46px;padding:8px 14px;border:1px solid var(--line);border-radius:var(--radius-s);background:var(--surface);color:var(--ink);font-size:14px;cursor:pointer}
+.filter-box>summary{list-style:none;display:inline-flex;align-items:center;gap:8px;height:var(--ctrl-h);padding:0 16px;border:1px solid var(--line-strong);border-radius:var(--radius-s);background:var(--surface);color:var(--ink);font-size:14px;cursor:pointer;box-shadow:var(--btn-lift);transition:border-color var(--speed),color var(--speed),background var(--speed)}
+.filter-box>summary:hover{border-color:var(--primary);color:var(--primary-dark);background:var(--soft)}
+.filter-box[open]>summary{border-color:var(--primary);color:var(--primary-dark);background:var(--soft)}
 .filter-box>summary::-webkit-details-marker{display:none}
 .filter-box[open]>summary{border-color:var(--primary);color:var(--primary-dark)}
 .filter-chip{display:inline-flex;align-items:center;gap:5px;background:var(--soft);color:var(--primary-dark);border-radius:12px;padding:2px 9px;font-size:12px}
@@ -558,8 +595,10 @@ button.mood-row.no-mood .mood-bubble.empty{color:var(--primary-dark)}
 .sticker-dock .sticker-body{max-height:min(38dvh,320px)}
 .sticker-tabs{display:flex;gap:6px;margin-bottom:12px;overflow-x:auto;scrollbar-width:none}
 .sticker-tabs::-webkit-scrollbar{display:none}
-.sticker-tabs button{flex:0 0 auto;padding:0 14px;min-height:40px;border-radius:12px;background:var(--bg);color:var(--muted);font-size:14px;font-weight:500;white-space:nowrap;transition:background var(--speed),color var(--speed)}
-.sticker-tabs button.active{background:var(--soft);color:var(--primary-dark)}
+.sticker-tabs button{flex:0 0 auto;padding:0 14px;min-height:40px;border-radius:12px;background:var(--bg);color:var(--ink-2);font-size:14px;font-weight:500;white-space:nowrap;transition:background var(--speed),color var(--speed),box-shadow var(--speed)}
+.sticker-tabs button:hover{background:var(--soft);color:var(--primary-dark)}
+/* 选中态加一圈主色内描边：面板底色和未选中项很接近，只靠字色分不出来 */
+.sticker-tabs button.active{background:var(--soft);color:var(--primary-dark);font-weight:600;box-shadow:inset 0 0 0 1px var(--primary)}
 .sticker-body{max-height:min(46dvh,360px);overflow:auto;overscroll-behavior:contain}
 .sticker-grid{display:grid;grid-template-columns:repeat(8,1fr);gap:4px}
 .sticker-grid.mine{grid-template-columns:repeat(4,1fr);gap:8px}
@@ -654,10 +693,16 @@ body.cal-full{overflow:hidden;height:100dvh}
 /* ── 5f. 个人区 / 通知 / 渠道 / 备份 ────────── */
 .settings-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
 .settings-grid .card{margin:0}
+/* 设置行：原来只有 border-bottom、没有 hover 底色，整行是"一段文字 + 一个小灰图标"，
+   导出的 ↓ 这种关键操作看着像装饰。现在整行是一块可点区域（负边距撑满卡片宽度），
+   悬停有底色，图标转主色；分隔线用 inset 阴影而不是 border，圆角下不会画成弯线。 */
 .setting-list{display:grid}
-.setting-list button,.setting-list a{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:46px;padding:10px 4px;border-bottom:1px solid var(--line);font-size:14px;color:var(--ink);text-align:left}
-.setting-list button:last-child,.setting-list a:last-child{border:0}
-.setting-list .icon{width:16px;height:16px;color:var(--muted)}
+.setting-list button,.setting-list a{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:48px;padding:8px 10px;margin:0 -10px;border-radius:10px;box-shadow:inset 0 -1px 0 var(--line);font-size:14px;color:var(--ink);text-align:left;transition:background var(--speed),color var(--speed),padding-left var(--speed),box-shadow var(--speed)}
+.setting-list button:last-child,.setting-list a:last-child{box-shadow:none}
+.setting-list button:hover,.setting-list a:hover{background:var(--soft);color:var(--primary-dark);box-shadow:none;padding-left:14px}
+.setting-list button:active,.setting-list a:active{background:var(--soft-strong)}
+.setting-list .icon{width:16px;height:16px;color:var(--primary);opacity:.7}
+.setting-list button:hover .icon,.setting-list a:hover .icon{opacity:1}
 .notice{display:flex;gap:12px;align-items:center;padding:12px 2px;border-bottom:1px solid var(--line)}
 .notice:last-child{border:0}
 .notice p{font-size:14px;margin-bottom:3px;line-height:1.6}
@@ -960,11 +1005,15 @@ body.cal-full{overflow:hidden;height:100dvh}
 
 /* ── 9. 夜间主题 ─────────────────────────────── */
 :root.dark{
-  --bg:#211A1E;--surface:#2B2228;--ink:#F0E6EB;--muted:#9E8D96;
-  --soft:#3A2B33;--soft-strong:#4A3640;--line:#3D3138;
+  --bg:#211A1E;--surface:#2B2228;--ink:#F0E6EB;--ink-2:#C9B8C1;--muted:#9E8D96;
+  --soft:#3A2B33;--soft-strong:#4A3640;
+  /* 原来 line 是 #3D3138，跟 surface #2B2228 只差一点点，暗色下所有描边按钮、
+     分隔线、输入框边界基本糊成一片。line 提亮一档，另给 line-strong 供控件描边。 */
+  --line:#463A42;--line-strong:#5C4B55;
   --green:#93B380;--green-soft:#2C332A;--amber:#CFA06A;--amber-soft:#372E24;
   --danger:#E08585;--danger-soft:#3C282A;
   --shadow:0 2px 12px rgba(0,0,0,.25);--shadow-lift:0 8px 28px rgba(0,0,0,.4);
+  --btn-lift:0 1px 2px rgba(0,0,0,.35);
 }
 /* 夜间各主题独立主色（修复夜间统一变粉的问题） */
 :root.dark.theme-rose,
@@ -972,7 +1021,11 @@ body.cal-full{overflow:hidden;height:100dvh}
 :root.dark.theme-peach{--primary:#E0AE87;--primary-dark:#D29A70;--on-primary:#2B1D10}
 :root.dark.theme-lavender{--primary:#BDA3DE;--primary-dark:#AA8DD1;--on-primary:#1F1630}
 :root.dark .sidebar{background:var(--surface)}
-:root.dark input,:root.dark textarea,:root.dark select{background:var(--bg);color:var(--ink);border-color:var(--line)}
+:root.dark input,:root.dark textarea,:root.dark select{background:var(--bg);color:var(--ink);border-color:var(--line-strong)}
+/* 暗色下次按钮若用 surface 作底，和卡片完全同色，只剩一圈描边；
+   加一层极淡的白色浮层，让它"凸"出卡片一点点。 */
+:root.dark .button.secondary,:root.dark .icon-btn,:root.dark .tabs button{background:rgba(255,255,255,.045)}
+:root.dark .button.secondary:hover,:root.dark .icon-btn:hover,:root.dark .tabs button:hover{background:var(--soft)}
 :root.dark .chat-bubble{background:var(--bg)}
 :root.dark .mine .chat-bubble{background:var(--soft)}
 :root.dark .hero{background:linear-gradient(120deg,var(--soft),var(--surface) 55%,var(--green-soft))}
@@ -1007,7 +1060,10 @@ body.cal-full{overflow:hidden;height:100dvh}
 /* 账本：月份切换 + 近六月柱状趋势。柱子用 flex 底部对齐，高度按当月最大值归一 */
 .ledger-month-switch{display:flex;align-items:center;gap:6px}
 .ledger-month-switch strong{font-size:13px;color:var(--ink);font-weight:600;white-space:nowrap}
-.ledger-month-switch .icon-btn{width:30px;height:30px;border:1px solid var(--line);border-radius:9px;background:var(--surface)}
+/* 翻月按钮：30px 在手机上点不准，且描边用的是最淡的 --line。
+   32px + line-strong + 极淡投影，仍是"紧凑"但不至于点空。 */
+.ledger-month-switch .icon-btn{width:32px;height:32px;border:1px solid var(--line-strong);border-radius:10px;background:var(--surface);color:var(--ink-2);box-shadow:var(--btn-lift)}
+.ledger-month-switch .icon-btn:hover{background:var(--soft);border-color:var(--primary);color:var(--primary-dark)}
 .ledger-month-switch .icon-btn[disabled]{opacity:.35}
 .ledger-meta{font-size:12px;color:var(--muted);margin:2px 0 10px}
 .ledger-trend{display:flex;align-items:flex-end;gap:8px;height:112px;padding:4px 2px 0}
@@ -1113,7 +1169,8 @@ body.cal-full{overflow:hidden;height:100dvh}
   .cycle-ring text{font-size:21px}
 }
 .sym-chips{display:flex;flex-wrap:wrap;gap:8px;margin:-2px 0 2px}
-.sym-chip{padding:7px 14px;border-radius:999px;border:1px solid var(--line);background:var(--surface);font-size:13px;color:var(--muted);cursor:pointer;transition:background var(--speed),color var(--speed),border-color var(--speed)}
+.sym-chip{padding:7px 14px;border-radius:999px;border:1px solid var(--line-strong);background:var(--surface);font-size:13px;color:var(--ink-2);cursor:pointer;transition:background var(--speed),color var(--speed),border-color var(--speed)}
+.sym-chip:hover{border-color:var(--primary);color:var(--primary-dark);background:var(--soft)}
 .sym-chip.on{background:var(--primary);border-color:var(--primary);color:var(--on-primary);font-weight:600}
 
 /* ———— 生理期 · 顶部周条 ————
@@ -1148,11 +1205,15 @@ body.cal-full{overflow:hidden;height:100dvh}
 .plog-add.ghost{border-color:transparent;color:var(--muted);opacity:.6;font-size:15px;line-height:1}
 .plog-add .icon{width:13px;height:13px}
 .plog-seg{margin-left:auto;display:flex;gap:4px;flex:none}
-.seg-btn{min-width:0;padding:6px 11px;border-radius:9px;font-size:13px;font-weight:600;color:var(--muted);background:var(--soft);cursor:pointer;white-space:nowrap}
-.seg-btn.primary{background:#FF5C8A;color:#fff}
+.seg-btn{min-width:0;min-height:32px;padding:5px 12px;border-radius:9px;font-size:13px;font-weight:600;color:var(--ink-2);background:var(--soft);cursor:pointer;white-space:nowrap;transition:background var(--speed),color var(--speed),transform var(--speed)}
+.seg-btn:hover{background:var(--soft-strong);color:var(--primary-dark)}
+.seg-btn:active{transform:scale(.96)}
+/* 原来写死 #FF5C8A：主题换成蜜桃/薰衣草或浅色/夜间后，只有这颗按钮还是品红 */
+.seg-btn.primary{background:var(--primary);color:var(--on-primary)}
 /* 经期内两个动作分主次：「月经走了」描边、「月经又来了」浅底，别让两个实心块抢视线 */
-.seg-btn.outline{background:transparent;box-shadow:inset 0 0 0 1px rgba(255,92,138,.5);color:var(--primary-dark)}
-:root.dark .seg-btn.outline{color:#F3C0CE;box-shadow:inset 0 0 0 1px rgba(255,92,138,.55)}
+.seg-btn.outline{background:transparent;box-shadow:inset 0 0 0 1px var(--line-strong);color:var(--ink-2)}
+.seg-btn.outline:hover{background:var(--soft);color:var(--primary-dark);box-shadow:inset 0 0 0 1px var(--primary)}
+:root.dark .seg-btn.outline{color:var(--ink);box-shadow:inset 0 0 0 1px var(--line-strong)}
 
 /* ———— 生理期 · 数据分析页 ————
    一屏一卡；图表全是手画的 SVG/div，没有第三方图表库，离线一样能看。
@@ -1402,8 +1463,6 @@ body.cal-full{overflow:hidden;height:100dvh}
 .stat::after{content:'';position:absolute;right:-22px;top:-22px;width:86px;height:86px;border-radius:50%;background:radial-gradient(circle,var(--soft),transparent 70%);opacity:.7;pointer-events:none}
 
 /* J. 列表项交互反馈统一 */
-.setting-list button,.setting-list a{transition:background var(--speed),color var(--speed),padding-left var(--speed)}
-.setting-list button:hover,.setting-list a:hover{background:var(--soft);border-radius:var(--radius-s);padding-left:12px}
 .wish-line{transition:background var(--speed)}
 .wish-line:hover{background:var(--soft);border-radius:12px}
 .song-line{transition:background var(--speed)}
