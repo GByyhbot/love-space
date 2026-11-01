@@ -515,6 +515,7 @@ def pose_ai_config_put(body: PoseAiConfig, user=Depends(current_user)):
 # 所以这里只收「瘦记录」：图由注入脚本先转存到本站 /media 换成短 URL；data: 一律丢弃
 # （截断的 base64 渲染出来是坏图，不如不给）。
 _POSE_AI_HIS_KEY = 'pose_ai_history'
+_POSE_AI_MEDIA_KEY = 'pose_ai_media'
 _POSE_AI_HIS_MAX = 256 * 1024
 _POSE_AI_HIS_ITEMS = 30
 _HIS_FIELDS = ('id', 'createdAt', 'provider', 'model', 'prompt', 'recipeSummary')
@@ -566,7 +567,18 @@ def pose_ai_history_put(body: PoseAiHistory, user=Depends(current_user)):
     items = _clean_history(body.items)
     if len(json.dumps(items, ensure_ascii=False).encode()) > _POSE_AI_HIS_MAX:
         raise HTTPException(413, '记录过大')
+    # 记录里引用的图要单独登记：这些图不挂记录，另一半按常规规则判不到可见
+    mids = []
+    for it in items:
+        url = it.get('imageUrl') or ''
+        if url.startswith('/media/'):
+            mid = url[len('/media/'):].split('?')[0]
+            if mid:
+                mids.append(mid)
     with connect() as c:
+        c.execute('INSERT INTO settings(key,value) VALUES(?,?) '
+                  'ON CONFLICT(key) DO UPDATE SET value=excluded.value',
+                  (_POSE_AI_MEDIA_KEY, json.dumps(sorted(set(mids)))))
         row = c.execute('SELECT value FROM settings WHERE key=?', (_POSE_AI_HIS_KEY,)).fetchone()
         if row:
             # 同配置一样：内容没变就别刷时间戳，否则每次打开都判成「NAS 更新了」→ 覆盖本地

@@ -105,3 +105,23 @@ def test_boot_script_syncs_history():
     assert 'IDBObjectStore.prototype.put' in _POSE_AI_BOOT
     assert '/api/media' in _POSE_AI_BOOT          # 图片转存
     assert 'xhr.open' in _POSE_AI_BOOT and 'false' in _POSE_AI_BOOT
+
+
+def test_partner_can_open_the_generated_image(client_a, client_b):
+    """一人合成、两人共看。
+
+    这类图不挂在任何记录上，media_visible 按「作者本人 / 记录引用」都判不到，
+    所以 PUT 历史时把图 id 单独登记进 pose_ai_media —— 否则另一半看到的是裂图。
+    """
+    import io
+
+    from PIL import Image
+    buf = io.BytesIO()
+    Image.new('RGB', (24, 24), (200, 150, 180)).save(buf, 'PNG')
+    r = client_a.post('/api/media', files={'file': ('pose-1.png', buf.getvalue(), 'image/png')})
+    assert r.status_code == 200, r.text
+    mid = r.json()['id']
+
+    assert client_b.get(f'/media/{mid}?preview=true').status_code == 404   # 还没登记
+    client_a.put('/api/pose-ai/history', json={'items': [item(1, image=f'/media/{mid}?preview=true')]})
+    assert client_b.get(f'/media/{mid}?preview=true').status_code == 200

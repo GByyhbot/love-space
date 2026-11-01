@@ -423,6 +423,19 @@ def chat_bg_media_ids(space):
     return [v.get('media') for v in (space or {}).get('chat_bg_users', {}).values() if v.get('media')]
 
 
+def pose_ai_media_ids(c):
+    """AI 合成台生成图的 id 集合。
+
+    这类图不挂在任何记录上，按「作者本人 / 记录引用」都判不到，但两张图本来就是两人
+    一起合成的，另一半看历史记录时必须能加载出来，所以单独记一份。
+    """
+    try:
+        row = c.execute("SELECT value FROM settings WHERE key='pose_ai_media'").fetchone()
+        return set(json.loads(row['value'])) if row else set()
+    except Exception:
+        return set()
+
+
 def media_visible(c, media_id, user_id):
     if not media_id:
         return False
@@ -439,6 +452,9 @@ def media_visible(c, media_id, user_id):
         return True
     # 导入的聊天记录是两人共享的，里面的图片不能只让导入者看到
     if c.execute('SELECT 1 FROM import_messages WHERE media_id=? LIMIT 1', (media_id,)).fetchone():
+        return True
+    # AI 合成台生成的图同理：一人合成、两人共看
+    if media_id in pose_ai_media_ids(c):
         return True
     return bool(c.execute('SELECT 1 FROM users WHERE avatar=?', (media_id,)).fetchone())
 
