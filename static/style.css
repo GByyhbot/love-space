@@ -449,14 +449,22 @@ button.mood-row.no-mood .mood-bubble.empty{color:var(--primary-dark)}
 .chat-line{display:flex;gap:10px;align-items:flex-start;max-width:85%}
 .chat-line.mine{align-self:flex-end;flex-direction:row-reverse}
 .chat-line .avatar{width:32px;height:32px;font-size:12px}
-.chat-bubble{background:var(--bg);border:1px solid var(--line);border-radius:4px 16px 16px 16px;padding:11px 14px;font-size:15px;line-height:1.7;overflow-wrap:anywhere;min-width:70px}
-.mine .chat-bubble{background:var(--soft);border-color:var(--soft-strong);border-radius:16px 4px 16px 16px}
+/* 气泡：原来底是 --bg（和页面背景同一个色），只有一条最淡的 --line 描边，
+   在白卡上等于"没有气泡"，看着像一团浮着的字。改成实心跳色 + 深一档描边 + 极淡投影，
+   圆角也从 4px 提到 7px，小尖角还在（指向说话人），但不再像早年的方角对话框。 */
+.chat-bubble{background:var(--surface);border:1px solid var(--line-strong);border-radius:7px 18px 18px 18px;padding:11px 15px;font-size:15px;line-height:1.7;overflow-wrap:anywhere;min-width:70px;box-shadow:0 1px 2px rgba(69,56,63,.05)}
+.mine .chat-bubble{background:var(--soft);border-color:var(--soft-strong);border-radius:18px 7px 18px 18px}
 /* 纯语音消息：微信式短气泡，点击整条播放 */
 .chat-bubble.voice{padding:8px 12px;min-width:0}
 /* 引用：气泡顶部一小条，左边一条竖线，点它跳回原消息。置顶的气泡在右上角挂个 📌 */
-.chat-quote{display:block;width:100%;text-align:left;border:none;border-left:2px solid var(--soft-strong);background:rgba(0,0,0,.04);border-radius:0 8px 8px 0;padding:5px 8px;margin:-2px 0 7px;font-size:12px;color:var(--muted);line-height:1.5;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chat-quote{display:block;width:100%;text-align:left;border:none;border-left:2px solid var(--primary);background:rgba(0,0,0,.05);border-radius:0 9px 9px 0;padding:5px 9px;margin:-2px 0 7px;font-size:12.5px;color:var(--ink-2);line-height:1.5;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;transition:background var(--speed)}
+.chat-quote:hover{background:rgba(0,0,0,.08)}
+/* 自己气泡是实心的，引用块再叠一层黑就成了"污渍"。
+   改成透明底 + 左侧竖线用气泡字色：深浅主题下都不用另外配一套颜色，
+   边界靠一条 1px 的同色细线交代，读起来干净。 */
+.mine .chat-quote{background:transparent;border-left-color:currentColor;color:inherit;box-shadow:inset 0 0 0 1px rgba(0,0,0,.08);opacity:1}
 .chat-quote span{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.chat-bubble.pinned{border-color:var(--soft-strong);box-shadow:inset 0 0 0 1px var(--soft-strong)}
+.chat-bubble.pinned{border-color:var(--soft-strong);box-shadow:0 1px 2px rgba(69,56,63,.05),inset 0 0 0 1px var(--soft-strong)}
 .chat-bubble.pinned::after{content:'📌';position:absolute;top:-9px;right:6px;font-size:10px;background:var(--surface);border:1px solid var(--soft-strong);border-radius:999px;padding:0 4px;line-height:14px}
 .chat-bubble{position:relative}
 /* 置顶条：贴在消息区顶部，不进消息流，滚多远都看得见 */
@@ -477,8 +485,13 @@ button.mood-row.no-mood .mood-bubble.empty{color:var(--primary-dark)}
 /* 贴纸消息：无气泡框，直接显示图片/循环视频 */
 .chat-sticker{max-width:150px}
 .chat-sticker img,.chat-sticker video{display:block;max-width:150px;max-height:150px;width:auto;height:auto;border-radius:10px;object-fit:contain}
-.chat-time{color:var(--muted);font-size:11px;margin-top:5px;display:flex;gap:10px;flex-wrap:wrap;align-items:center}
-.chat-time button{font-size:11px;color:var(--primary);min-height:26px}
+/* 「撤回 / 引用 / 置顶 / 记入时光」：原来是 11px、无底色的灰字，
+   触控区只有 26px，手机上点不准也看不清。提到 12px + 30px 高，
+   每个动作是一颗小胶囊，hover/按下才显底色——静态不加底色，免得每条消息下面挂一排色块。 */
+.chat-time{color:var(--muted);font-size:12px;margin-top:6px;display:flex;gap:2px;flex-wrap:wrap;align-items:center;line-height:1.4}
+.chat-time button{font-size:12px;color:var(--ink-2);min-height:30px;padding:0 9px;border-radius:999px;transition:background var(--speed),color var(--speed)}
+.chat-time button:hover{background:var(--soft);color:var(--primary-dark)}
+.chat-time button:active{background:var(--soft-strong)}
 .chat-day{text-align:center;font-size:12px;color:var(--muted);margin:14px 0 6px;position:relative}
 .chat-day::before,.chat-day::after{content:'';position:absolute;top:50%;width:26%;height:1px;background:var(--line)}
 .chat-day::before{left:6px}
@@ -510,7 +523,7 @@ button.mood-row.no-mood .mood-bubble.empty{color:var(--primary-dark)}
 /* ── 沉浸式：用照片当背景时，气泡/标题栏/输入栏换成半透明深色（主流聊天 App 的观感） ──
    标题栏/输入栏用**渐变**而不是整块实色：实色块会在照片上切出一条生硬的分界线，
    渐变从上（下）往里淡出，和底图是连续过渡的，看起来才像"照片铺满了整屏"。 */
-.chat-panel.immersive .chat-header{background:linear-gradient(180deg,rgba(8,6,12,.58) 0%,rgba(8,6,12,.26) 58%,rgba(8,6,12,0) 100%);border:0}
+.chat-panel.immersive .chat-header{background:linear-gradient(180deg,rgba(8,6,12,.66) 0%,rgba(8,6,12,.34) 62%,rgba(8,6,12,0) 100%);border:0}
 .chat-panel.immersive .chat-compose{background:linear-gradient(0deg,rgba(8,6,12,.62) 0%,rgba(8,6,12,.28) 55%,rgba(8,6,12,0) 100%);border:0}
 .chat-panel.immersive .sticker-dock{background:rgba(14,12,18,.78);border-color:rgba(255,255,255,.14)}
 /* 表情面板里的浅色胶囊/浅色 hover 在深色面板上是一块块白团，一并压成半透明白 */
@@ -531,19 +544,38 @@ button.mood-row.no-mood .mood-bubble.empty{color:var(--primary-dark)}
 .chat-panel.has-wallpaper .icon-btn{background:rgba(255,255,255,.5);border-color:rgba(255,255,255,.55)}
 .chat-panel.immersive .icon-btn{background:transparent;border-color:transparent;color:rgba(255,255,255,.92)}
 .chat-panel.immersive .icon-btn:hover{background:rgba(255,255,255,.18);border-color:transparent;color:#fff}
-.chat-panel.immersive .chat-bubble{background:rgba(30,27,34,.56);border-color:rgba(255,255,255,.16);color:#fff;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
-/* 自己的气泡别用高饱和的粉：在暗紫调的照片上会跳成一块糖果色，压深压暗才融得进去 */
-.chat-panel.immersive .mine .chat-bubble{background:rgba(139,54,84,.62);border-color:rgba(255,255,255,.2);color:#fff}
+/* 透明图标压在照片的亮部（天空、白墙）就只剩一道虚影；
+   加一层投影而不是底色块，既守住"不挂白团"的初衷，又保证任何照片上都能辨认。 */
+.chat-panel.immersive .chat-header .icon-btn{filter:drop-shadow(0 1px 3px rgba(0,0,0,.5))}
+/* 照片壁纸下最大的坑：气泡原来固定用「深色半透明」。照片亮度是不定的，
+   压在浅色照片上就像一口脏水，压在深色照片上又分不出边界——同一个值不可能两头都对。
+   改成「亮玻璃 + 深字」：白玻璃在任何亮度的照片上都是高对比，
+   留一点半透明让照片透出来，沉浸感还在。 */
+.chat-panel.immersive .chat-bubble{background:rgba(255,255,255,.9);border-color:rgba(255,255,255,.65);color:#2B2029;backdrop-filter:blur(14px) saturate(1.12);-webkit-backdrop-filter:blur(14px) saturate(1.12);box-shadow:0 2px 12px rgba(24,16,26,.14)}
+/* 自己的气泡用主色实心：亮玻璃在浅照片上边界偏弱，实色才有"这是我说的"那点分量。
+   文字走 --on-primary，暗色主题下它自动变深，不会出现深字压深粉。 */
+/* 暗色主题的 --primary 是浅粉，原样铺在照片上会跳成一块糖果；
+   叠一层 18% 黑把它压沉稳，色相仍由主题决定（不写死颜色）。 */
+.chat-panel.immersive .mine .chat-bubble{background-color:var(--primary);background-image:linear-gradient(rgba(0,0,0,.18),rgba(0,0,0,.18));border-color:rgba(255,255,255,.3);color:var(--on-primary);box-shadow:0 2px 12px rgba(24,16,26,.2)}
 /* 沉浸式下「撤回 / 记入时光」常驻会让每条消息下面都挂一排小字，很杂乱：
    桌面 hover、手机点一下消息才展开（.tap-ops 由 app.js 点击时切换）。 */
 .chat-panel.immersive .chat-line:not(.pending) .chat-time{opacity:0;transition:opacity .16s var(--speed)}
 .chat-panel.immersive .chat-line:not(.pending):hover .chat-time,
 .chat-panel.immersive .chat-line.tap-ops .chat-time{opacity:1}
-.chat-panel.immersive .chat-time button{color:#fff}
+/* 白色 11px 小字直接压在照片上 = 看不见（浅色照片上尤其彻底）。
+   给每个动作一颗深色半透明胶囊，白字才立得住；照片再亮也不影响可读性。 */
+.chat-panel.immersive .chat-time{color:rgba(255,255,255,.95);text-shadow:0 1px 3px rgba(0,0,0,.35)}
+.chat-panel.immersive .chat-time button{color:#fff;background:rgba(22,17,24,.45);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);box-shadow:0 1px 5px rgba(0,0,0,.2)}
+.chat-panel.immersive .chat-time button:hover{background:rgba(22,17,24,.66);color:#fff}
 .chat-panel.immersive .chat-day{align-self:center;display:inline-block;margin:14px auto 6px;padding:3px 12px;border-radius:999px;background:rgba(0,0,0,.3);color:rgba(255,255,255,.88);font-size:11.5px}
 .chat-panel.immersive .chat-day::before,.chat-panel.immersive .chat-day::after{display:none}
-.chat-panel.immersive .chat-compose textarea{background:rgba(255,255,255,.18);border-color:rgba(255,255,255,.26);color:#fff}
-.chat-panel.immersive .chat-compose textarea::placeholder{color:rgba(255,255,255,.82)}
+/* 输入框原来是 18% 白底 + 白字：白纸上写白字，换个浅照片就彻底看不见。
+   跟气泡统一成亮玻璃 + 深字。 */
+.chat-panel.immersive .chat-compose textarea{background:rgba(255,255,255,.9);border-color:rgba(255,255,255,.65);color:#2B2029;-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px)}
+.chat-panel.immersive .chat-compose textarea::placeholder{color:rgba(43,32,41,.48)}
+/* 表情 / 加号两个圆钮：原来是浅色半透明圆 + 浅色线图标，压在浅照片上只剩一圈虚影 */
+.chat-panel.immersive .chat-compose .icon-btn{background:rgba(22,17,24,.45);border-color:transparent;color:#fff;-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
+.chat-panel.immersive .chat-compose .icon-btn:hover{background:rgba(22,17,24,.66);color:#fff}
 .chat-panel.immersive .voice-chip{color:#fff}
 .chat-panel.immersive .voice-chip .voice-dur{color:rgba(255,255,255,.8)}
 .chat-panel.immersive .media-grid button{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.18)}
@@ -1026,8 +1058,10 @@ body.cal-full{overflow:hidden;height:100dvh}
    加一层极淡的白色浮层，让它"凸"出卡片一点点。 */
 :root.dark .button.secondary,:root.dark .icon-btn,:root.dark .tabs button{background:rgba(255,255,255,.045)}
 :root.dark .button.secondary:hover,:root.dark .icon-btn:hover,:root.dark .tabs button:hover{background:var(--soft)}
-:root.dark .chat-bubble{background:var(--bg)}
-:root.dark .mine .chat-bubble{background:var(--soft)}
+/* 这两条原来把暗色下的气泡底色改回 --bg。但基础气泡现在统一用 --surface
+   （暗色下 --surface 比 --bg 亮一档，本身就是"浮起"的效果），不需要再改；
+   更要紧的是它们写在文件末尾、特异性又和 .chat-panel.immersive .chat-bubble 相同，
+   会把照片壁纸下的亮玻璃气泡整个盖掉（表现为深底压深字、什么都看不清）。 */
 :root.dark .hero{background:linear-gradient(120deg,var(--soft),var(--surface) 55%,var(--green-soft))}
 :root.dark .hero-tag{background:rgba(58,43,51,.8);color:var(--ink);border:1px solid var(--line)}
 :root.dark .hero-days .meta{color:var(--muted)}
