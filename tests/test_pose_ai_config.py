@@ -93,7 +93,8 @@ def test_boot_script_survives_html_without_head():
 
 
 def test_boot_script_only_touches_its_own_key():
-    # 注入脚本必须只认 pose_atlas_api_config_v3，别把上游其它 localStorage 键也拦下来
-    assert "k === KEY" in _POSE_AI_BOOT
+    # 注入脚本只认自己的两个键（provider 配置 + 生成记录），别把上游其它 localStorage 键也拦下来
+    assert 'k === CFG_KEY' in _POSE_AI_BOOT
+    assert 'k === HIS_KEY' in _POSE_AI_BOOT
     assert 'pose_atlas_api_config_v3' in _POSE_AI_BOOT
     assert 'xhr.open' in _POSE_AI_BOOT and 'false' in _POSE_AI_BOOT

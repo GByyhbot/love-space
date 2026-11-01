@@ -508,6 +508,82 @@ def pose_ai_config_put(body: PoseAiConfig, user=Depends(current_user)):
     return {'ok': True, 'saved': stored['saved']}
 
 
+# ---- AI 合成台的「生成记录」落库 ----
+# 上游把记录写进 IndexedDB，而记录里的 imageUrl 常常是 data:image/png;base64 的一整张图
+# （1–4MB/张，Gemini、通义、OpenAI 的 b64 分支都是），30 条就是上百 MB —— IndexedDB 一旦
+# 写不进配额，下次打开就只剩个空列表，表现就是「生成的记录不能保留」。
+# 所以这里只收「瘦记录」：图由注入脚本先转存到本站 /media 换成短 URL；data: 一律丢弃
+# （截断的 base64 渲染出来是坏图，不如不给）。
+_POSE_AI_HIS_KEY = 'pose_ai_history'
+_POSE_AI_HIS_MAX = 256 * 1024
+_POSE_AI_HIS_ITEMS = 30
+_HIS_FIELDS = ('id', 'createdAt', 'provider', 'model', 'prompt', 'recipeSummary')
+
+
+def _clean_history(raw) -> list:
+    out = []
+    for it in raw if isinstance(raw, list) else []:
+        if not isinstance(it, dict):
+            continue
+        row = {}
+        for key in _HIS_FIELDS:
+            val = it.get(key)
+            if isinstance(val, str) and key != 'createdAt':
+                row[key] = val[:2000] if key != 'prompt' else val[:4000]
+            elif isinstance(val, (int, float)) and not isinstance(val, bool):
+                row[key] = val
+        if not (row.get('id') or row.get('createdAt')):
+            continue
+        img = it.get('imageUrl')
+        if isinstance(img, str) and img and not img.startswith('data:'):
+            row['imageUrl'] = img[:1000]
+        out.append(row)
+        if len(out) >= _POSE_AI_HIS_ITEMS:
+            break
+    return out
+
+
+class PoseAiHistory(BaseModel):
+    items: list
+
+
+@app.get('/api/pose-ai/history')
+def pose_ai_history_get(user=Depends(current_user)):
+    with connect() as c:
+        row = c.execute('SELECT value FROM settings WHERE key=?', (_POSE_AI_HIS_KEY,)).fetchone()
+    if not row:
+        return {'items': [], 'saved': 0}
+    try:
+        stored = json.loads(cipher(PURPOSE_POSE_AI).decrypt(row['value'].encode()).decode())
+    except Exception:
+        logging.getLogger('love.space').warning('pose-ai 历史解不开，按空处理')
+        return {'items': [], 'saved': 0}
+    return {'items': _clean_history(stored.get('items')), 'saved': stored.get('saved', 0)}
+
+
+@app.put('/api/pose-ai/history')
+def pose_ai_history_put(body: PoseAiHistory, user=Depends(current_user)):
+    items = _clean_history(body.items)
+    if len(json.dumps(items, ensure_ascii=False).encode()) > _POSE_AI_HIS_MAX:
+        raise HTTPException(413, '记录过大')
+    with connect() as c:
+        row = c.execute('SELECT value FROM settings WHERE key=?', (_POSE_AI_HIS_KEY,)).fetchone()
+        if row:
+            # 同配置一样：内容没变就别刷时间戳，否则每次打开都判成「NAS 更新了」→ 覆盖本地
+            try:
+                old = json.loads(cipher(PURPOSE_POSE_AI).decrypt(row['value'].encode()).decode())
+                if _clean_history(old.get('items')) == items:
+                    return {'ok': True, 'saved': old.get('saved', 0), 'unchanged': True,
+                            'count': len(items)}
+            except Exception:
+                pass
+        stored = {'items': items, 'saved': int(now() * 1000)}
+        sealed = cipher(PURPOSE_POSE_AI).encrypt(json.dumps(stored, ensure_ascii=False).encode()).decode()
+        c.execute('INSERT INTO settings(key,value) VALUES(?,?) '
+                  'ON CONFLICT(key) DO UPDATE SET value=excluded.value', (_POSE_AI_HIS_KEY, sealed))
+    return {'ok': True, 'saved': stored['saved'], 'count': len(items)}
+
+
 @app.post('/api/setup')
 def setup(body: Credentials, request: Request, response: Response):
     rate_limit(request, 'setup')
@@ -2470,51 +2546,203 @@ _POSE_GALLERY_DIR = os.getenv('POSE_GALLERY_DIR', '/srv/pose-gallery')
 # 用同步 XHR 是刻意的——localStorage 是同步 API，异步拿回来时上游已经按空配置渲染了。
 _POSE_AI_BOOT = """<script>
 (function () {
-  var KEY = 'pose_atlas_api_config_v3', API = '/api/pose-ai/config', STAMP = KEY + '_nas_saved';
+  var CFG_KEY = 'pose_atlas_api_config_v3', CFG_API = '/api/pose-ai/config', CFG_STAMP = CFG_KEY + '_nas_saved';
+  var HIS_KEY = 'pose_atlas_history_v3', HIS_API = '/api/pose-ai/history', HIS_STAMP = HIS_KEY + '_nas_saved';
+  var DB_NAME = 'pose_atlas_studio_db', DB_STORE = 'kv_store', LIMIT = 30;
   var HEADERS = { 'Content-Type': 'application/json', 'X-Love-Space': '1' };
-  function stamp() {
-    try { return Number(localStorage.getItem(STAMP)) || 0; } catch (e) { return 0; }
-  }
-  function mark(at) {
-    try { localStorage.setItem(STAMP, String(at)); } catch (e) {}
-  }
-  function push(cfg) {
-    var at = Date.now();
+
+  function ls(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+  function lsSet(k, v) { try { localStorage.setItem(k, v); return true; } catch (e) { return false; } }
+  function stamp(k) { return Number(ls(k)) || 0; }
+  function getJSON(url) {
     try {
-      fetch(API, { method: 'PUT', headers: HEADERS, body: JSON.stringify({ config: cfg }) })
-        .then(function (r) { if (r && r.ok) mark(at); })
-        .catch(function () {});
+      var xhr = new XMLHttpRequest();
+      xhr.open('GET', url, false);
+      xhr.send(null);
+      if (xhr.status === 200) return JSON.parse(xhr.responseText || '{}');
     } catch (e) {}
+    return null;
   }
-  var remote = null, remoteSaved = 0;
-  try {
-    var xhr = new XMLHttpRequest();
-    xhr.open('GET', API, false);
-    xhr.send(null);
-    if (xhr.status === 200) {
-      var data = JSON.parse(xhr.responseText || '{}');
-      remote = data.config || null;
-      remoteSaved = Number(data.saved) || 0;
+  function putP(url, body) {
+    try {
+      return fetch(url, { method: 'PUT', headers: HEADERS, body: JSON.stringify(body) });
+    } catch (e) { return Promise.reject(e); }
+  }
+
+  /* ---------- 1. 合成台 provider 配置（含 API Key） ---------- */
+  var remote = getJSON(CFG_API) || {}, cfgRemote = remote.config || null;
+  var cfgSaved = Number(remote.saved) || 0, cfgLocal = null;
+  try { cfgLocal = JSON.parse(ls(CFG_KEY) || 'null'); } catch (e) {}
+  function pushConfig(cfg) {
+    var at = Date.now();
+    putP(CFG_API, { config: cfg }).then(function (r) {
+      if (r && r.ok) lsSet(CFG_STAMP, String(at));
+    }).catch(function () {});
+  }
+  if (cfgRemote && (!cfgLocal || cfgSaved > stamp(CFG_STAMP))) {
+    if (lsSet(CFG_KEY, JSON.stringify(cfgRemote))) lsSet(CFG_STAMP, String(cfgSaved));
+  } else if (cfgLocal) {
+    pushConfig(cfgLocal);
+  }
+
+  /* ---------- 2. 生成记录 ----------
+     上游把记录写 IndexedDB，imageUrl 常是 data:base64 的整张图（1-4MB/张），30 条上百 MB，
+     配额一崩记录就没了。这里把图转存到本站 /media 换成短 URL，再整份同步到 NAS。 */
+  var ours = false, slim = {}, tried = {};
+
+  function keyOf(it) { return String((it && (it.id || it.createdAt)) || ''); }
+  function isHosted(u) { return typeof u === 'string' && u.indexOf('/media/') === 0; }
+  function sameDb(store) {
+    try { return !!(store.transaction && store.transaction.db && store.transaction.db.name === DB_NAME); }
+    catch (e) { return false; }
+  }
+
+  function openDb(cb) {
+    try {
+      var req = indexedDB.open(DB_NAME, 1);
+      req.onupgradeneeded = function () {
+        var db = req.result;
+        if (db.objectStoreNames && !db.objectStoreNames.contains(DB_STORE)) db.createObjectStore(DB_STORE);
+      };
+      req.onsuccess = function () { cb(req.result); };
+      req.onerror = function () { cb(null); };
+      req.onblocked = function () { cb(null); };
+    } catch (e) { cb(null); }
+  }
+  function dbPut(list) {
+    openDb(function (db) {
+      if (!db) return;
+      try {
+        ours = true;
+        db.transaction(DB_STORE, 'readwrite').objectStore(DB_STORE).put(list, HIS_KEY);
+      } catch (e) {}
+      ours = false;
+    });
+  }
+
+  function uploadOne(it) {
+    var k = keyOf(it), url = it && it.imageUrl;
+    if (!url || isHosted(url) || tried[k]) return Promise.resolve();
+    tried[k] = 1;
+    return fetch(url).then(function (r) {
+      if (!r.ok && r.status !== 0) throw 0;
+      return r.blob();
+    }).then(function (blob) {
+      if (!blob || !blob.size) throw 0;
+      var fd = new FormData();
+      fd.append('file', blob, 'pose-' + (it.id || 'x') + '.png');
+      return fetch('/api/media', { method: 'POST', headers: { 'X-Love-Space': '1' }, body: fd });
+    }).then(function (r) { return r.json(); }).then(function (j) {
+      if (!j || !j.id) throw 0;
+      var copy = {}, key;
+      for (key in it) { if (Object.prototype.hasOwnProperty.call(it, key)) copy[key] = it[key]; }
+      copy.imageUrl = '/media/' + j.id + '?preview=true';
+      slim[k] = copy;
+    }).catch(function () {});
+  }
+
+  var pending = null, running = false;
+  function pushHistory(list) {
+    pending = Array.isArray(list) ? list : [];
+    if (!running) flush();
+  }
+  function flush() {
+    if (!pending) { running = false; return; }
+    var list = pending;
+    pending = null;
+    running = true;
+    var seq = Promise.resolve(), i;
+    for (i = 0; i < list.length; i++) {
+      (function (it) { seq = seq.then(function () { return uploadOne(it); }); })(list[i]);
     }
-  } catch (e) {}
-  var local = null;
-  try { local = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) {}
-  if (remote && (!local || remoteSaved > stamp())) {
-    try { localStorage.setItem(KEY, JSON.stringify(remote)); } catch (e) {}
-    mark(remoteSaved);
-  } else if (local) {
-    push(local);
+    seq.then(function () {
+      var out = [];
+      for (var j = 0; j < list.length; j++) out.push(slim[keyOf(list[j])] || list[j]);
+      return putP(HIS_API, { items: out }).then(function (r) {
+        if (r && r.ok) {
+          lsSet(HIS_STAMP, String(Date.now()));
+          /* 顺手把本地那份换成瘦记录：base64 不进 localStorage / IndexedDB */
+          var text = JSON.stringify(out);
+          if (text.length < 4 * 1024 * 1024) { lsSet(HIS_KEY, text); dbPut(out); }
+        }
+      });
+    }).catch(function () {}).then(flush);
   }
+
+  var hisRemote = getJSON(HIS_API) || {};
+  var remItems = Array.isArray(hisRemote.items) ? hisRemote.items : [];
+  var remSaved = Number(hisRemote.saved) || 0, locItems = [];
+  try { locItems = JSON.parse(ls(HIS_KEY) || '[]'); } catch (e) {}
+  if (!Array.isArray(locItems)) locItems = [];
+
+  var merged = [], i, it, k, seen = {}, cleared = false;
+  if (remSaved > stamp(HIS_STAMP) && !remItems.length) {
+    /* 空 + 时间戳更新 = 另一台设备清空过，本地跟着清，否则并集会把删掉的又拉回来 */
+    cleared = true;
+  } else {
+    var all = locItems.concat(remItems);
+    for (i = 0; i < all.length; i++) {
+      it = all[i];
+      if (!it || typeof it !== 'object') continue;
+      k = keyOf(it);
+      if (!k || seen[k]) continue;
+      seen[k] = 1;
+      merged.push(it);
+    }
+    merged.sort(function (a, b) { return (b.createdAt || 0) - (a.createdAt || 0); });
+    merged = merged.slice(0, LIMIT);
+  }
+  var newText = JSON.stringify(merged);
+  if (JSON.stringify(locItems) !== newText) lsSet(HIS_KEY, newText);
+  /* 两个来源都空时（多半是 localStorage 曾经写爆）不要拿空数组去覆盖 IndexedDB，
+     那可能是唯一还留着记录的地方；只有明确「别处清空过」才真清。 */
+  if (merged.length || cleared) dbPut(merged);
+  var remKeys = {}, needPush = false;
+  for (i = 0; i < remItems.length; i++) remKeys[keyOf(remItems[i])] = 1;
+  for (i = 0; i < merged.length; i++) {
+    if (!remKeys[keyOf(merged[i])]) needPush = true;
+    if (merged[i].imageUrl && !isHosted(merged[i].imageUrl)) needPush = true;
+  }
+  if (needPush) pushHistory(merged);
+
+  /* ---------- 3. 把这个 App 自己的两个键接住 ---------- */
   var rawSet = Storage.prototype.setItem;
   Storage.prototype.setItem = function (k, v) {
     var out = rawSet.apply(this, arguments);
-    if (this === localStorage && k === KEY) {
-      try { push(JSON.parse(v)); } catch (e) {}
+    if (this === localStorage && k === CFG_KEY) {
+      try { pushConfig(JSON.parse(v)); } catch (e) {}
     }
     return out;
   };
+  var rawDel = Storage.prototype.removeItem;
+  Storage.prototype.removeItem = function (k) {
+    var out = rawDel.apply(this, arguments);
+    if (this === localStorage && k === HIS_KEY) pushHistory([]);
+    return out;
+  };
+  try {
+    var rawPut = IDBObjectStore.prototype.put;
+    IDBObjectStore.prototype.put = function (value, key) {
+      var args = arguments;
+      try {
+        if (!ours && args.length > 1 && key === HIS_KEY && this.name === DB_STORE &&
+            sameDb(this) && Array.isArray(value)) {
+          pushHistory(value);
+          var out = [], swapped = false;
+          for (var j = 0; j < value.length; j++) {
+            var c = slim[keyOf(value[j])];
+            if (c) swapped = true;
+            out.push(c || value[j]);
+          }
+          return swapped ? rawPut.call(this, out, key) : rawPut.apply(this, args);
+        }
+      } catch (e) {}
+      return rawPut.apply(this, args);
+    };
+  } catch (e) {}
 })();
 </script>"""
+
 
 
 def _inject_pose_ai_boot(html: str) -> str:
