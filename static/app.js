@@ -207,6 +207,11 @@ async function loadTimeline(reset=false) {
  } finally {state.timelineLoading=false;}
 }
 function renderShell() {
+ // 图库页整页挂着一个 iframe（正在挑姿势 / AI 合成台正在出图）：整页 innerHTML 替换会把
+ // iframe 整个销毁重建，任务直接断，用户看到的就是「页面自己在快速刷新，来不及点生成」。
+ // 这一页不依赖主站数据即时变化、结构也固定，已经渲染过就跳过；切页时 state.page 变了，
+ // 判断自然不成立，会正常重绘。
+ if (state.page==='figure' && $('#app .figure-page')) return;
  // 整页 innerHTML 替换会把滚动位置清零。SSE 每来一条就重渲染一次的话，
  // 正在翻相册/看时光的人会被不断弹回顶部——所以重渲染前后把位置接回去。
  // 主动切页时 navigate() 会在之后显式 scrollTo(0,0)，不受这里影响。
@@ -2666,7 +2671,9 @@ function scheduleServerEvent(rev){
  eventTimer=setTimeout(async()=>{
   const rev=pendingRev;pendingRev='';
   if(rev&&rev===lastRev)return;  // 数据没变，这一轮可以直接跳过
-  try{await handleServerEvent();if(rev)lastRev=rev;}catch{}
+  // 无论 handleServerEvent 成功与否都要记下 rev：以前写在 try 里，一旦 refreshData 抛错
+  // lastRev 就永远停在旧值，于是每次心跳都被当成"数据变了"，整页 5 秒重绘一次。
+  try{await handleServerEvent();}catch{}finally{if(rev)lastRev=rev;}
  },500);
 }
 async function handleServerEvent(){if(!state.me)return;if(refreshing){state.pendingRefresh=true;return;}try{const oldNotice=state.notices[0]?.id||null;const focused=document.activeElement,canRender=!$('.modal')&&!$('.more-menu[open]')&&!['INPUT','TEXTAREA','SELECT'].includes(focused?.tagName);await refresh(false);if(state.page==='messages'&&$('#chat-log')){const log=$('#chat-log'),atBottom=log.scrollHeight-log.scrollTop-log.clientHeight<100;log.innerHTML=chatRows();if(atBottom)scrollChat();state.me.chat_unread=0;post('/notices/read?event=chat').catch(()=>{});}else if(canRender)renderShell();/* 系统弹窗/锁屏通知已停用：手机端通知改由第三方渠道（企业微信等）+ 浏览器 Web Push 送达；在聊天页停留时消息即时标记已读，后端不再推送 */}catch{};}

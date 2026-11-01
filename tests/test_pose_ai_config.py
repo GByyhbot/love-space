@@ -64,6 +64,18 @@ def test_oversized_config_is_rejected(client_a):
     assert r.status_code == 413
 
 
+def test_identical_config_does_not_write(client_a):
+    """同样的配置重复回写不该刷新 saved 时间戳——图库每次打开都会回写一次，
+    时间戳一路前进会让「NAS 上有更新版本」的判断永远成立，客户端跟着反复覆盖本地。"""
+    client_a.put('/api/pose-ai/config', json={'config': CONFIG})
+    first = client_a.get('/api/pose-ai/config').json()['saved']
+    again = client_a.put('/api/pose-ai/config', json={'config': CONFIG})
+    assert again.status_code == 200
+    assert again.json().get('unchanged') is True
+    assert again.json()['saved'] == first
+    assert client_a.get('/api/pose-ai/config').json()['saved'] == first
+
+
 def test_boot_script_goes_before_head_close():
     html = '<html><head><link rel="stylesheet" href="/a.css"></head><body><div id="root"></div></body></html>'
     out = _inject_pose_ai_boot(html)

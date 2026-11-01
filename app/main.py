@@ -478,12 +478,22 @@ def pose_ai_config_get(user=Depends(current_user)):
 
 @app.put('/api/pose-ai/config')
 def pose_ai_config_put(body: PoseAiConfig, user=Depends(current_user)):
-    stored = {'config': body.config, 'saved': int(now() * 1000)}
-    payload = json.dumps(stored, ensure_ascii=False)
+    payload = json.dumps(body.config, ensure_ascii=False)
     if len(payload.encode()) > _POSE_AI_MAX:
         raise HTTPException(413, '配置过大，请检查是否选错了字段')
-    sealed = cipher(PURPOSE_POSE_AI).encrypt(payload.encode()).decode()
     with connect() as c:
+        row = c.execute('SELECT value FROM settings WHERE key=?', (_POSE_AI_KEY,)).fetchone()
+        if row:
+            # 内容没变就别写库：图库每次打开都会回写一次，若无条件更新 saved 时间戳，
+            # 下次加载又会被判成「NAS 上有更新的版本」→ 覆盖本地 → 再回写，无限抖动。
+            try:
+                old = json.loads(cipher(PURPOSE_POSE_AI).decrypt(row['value'].encode()).decode())
+                if old.get('config') == body.config:
+                    return {'ok': True, 'saved': old.get('saved', 0), 'unchanged': True}
+            except Exception:
+                pass
+        stored = {'config': body.config, 'saved': int(now() * 1000)}
+        sealed = cipher(PURPOSE_POSE_AI).encrypt(json.dumps(stored, ensure_ascii=False).encode()).decode()
         c.execute('INSERT INTO settings(key,value) VALUES(?,?) '
                   'ON CONFLICT(key) DO UPDATE SET value=excluded.value', (_POSE_AI_KEY, sealed))
     return {'ok': True, 'saved': stored['saved']}
@@ -1526,7 +1536,7 @@ async def events(request: Request, user=Depends(current_user)):
     async def stream():
         # retry: 浏览器断线后 3s 自动重连（默认值因浏览器而异，显式指定）
         yield 'retry: 3000\n\n'
-        previous = ''
+        previous = None
         token = digest_token(request.cookies.get('love_session', ''))
         rounds = 0
         # 长连接循环：靠 is_disconnected（客户端断开）与 session 失效退出；5s 心跳防止代理空闲超时
@@ -1540,7 +1550,14 @@ async def events(request: Request, user=Depends(current_user)):
                 break
             revision, private_revision, unread = probe
             signature = f'{revision}:{private_revision}:{unread}'
-            if signature != previous:
+            if previous is None:
+                # 首轮只建立基线，不推 data：EventSource 断线重连很常见（代理空闲超时、
+                # 切前后台），每建一次连接就推一条，客户端会当成「数据变了」整页重绘，
+                # 图库页那个 iframe 于是被反复销毁重建——用户看到的就是页面自己在刷新。
+                # 真正的首次加载本来就走 refreshData()，不需要这条推送。
+                previous = signature
+                yield ': ready\n\n'
+            elif signature != previous:
                 # 带上 revision：客户端据此判断"数据到底变没变"，避免每次心跳都整页重渲染
                 yield 'data: ' + dumps({'refresh': True, 'unread': unread, 'rev': signature}) + '\n\n'
                 previous = signature
