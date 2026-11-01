@@ -51,7 +51,9 @@ public class MainActivity extends BridgeActivity {
     private static final String KEY_BEST_URL = "best_url";
     private static final String KEY_SESSION = "session_token";
     private static final String SESSION_COOKIE = "love_session";
-    private static final int PROBE_TIMEOUT_MS = 3000;
+    // 公网链路（Cloudflare Tunnel 绕海外边缘）实测 /api/status 要 1.9~2.8s，
+    // 3s 超时在手机 5G/VPN 下必然全部超时 → 「所有线路均无法连接」。放宽到 8s。
+    private static final int PROBE_TIMEOUT_MS = 8000;
     private final Handler sessionHandler = new Handler(Looper.getMainLooper());
     private final Runnable sessionTick = new Runnable() {
         @Override public void run() {
@@ -64,6 +66,10 @@ public class MainActivity extends BridgeActivity {
     };
     private volatile String currentUrl = SPACE_URL;
     private volatile boolean probing = false;
+    /* 主帧最近一次是否成功加载出应用页面。探测线程全超时（公网链路慢）时，
+       只要页面已经加载成功就绝不能抢屏成离线页——浏览器无超时都能打开的线路，
+       WebView 同样能打开，只是探测的 3~8 秒预算不够而已。 */
+    private volatile boolean pageLoaded = false;
     private final Set<String> attemptedUrls = Collections.synchronizedSet(new HashSet<String>());
 
     @Override
@@ -169,6 +175,7 @@ public class MainActivity extends BridgeActivity {
     }
 
     private void showRecoveryPage(WebView view, String detail) {
+        pageLoaded = false;
         String url = OFFLINE_PAGE
             + "?version=" + Uri.encode(appVersion())
             + "&network=" + Uri.encode(networkState())
@@ -217,6 +224,7 @@ public class MainActivity extends BridgeActivity {
         public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
             super.onReceivedError(view, request, error);
             if (request.isForMainFrame()) {
+                pageLoaded = false;
                 CharSequence message = error == null ? null : error.getDescription();
                 String description = message == null ? "无法连接服务器" : message.toString();
                 failover(view, description);
@@ -236,6 +244,7 @@ public class MainActivity extends BridgeActivity {
             super.onPageFinished(view, url);
             // 真正的应用页面加载成功 → 重置已尝试线路，并抓取登录 cookie 同步到全部线路
             if (url != null && !url.startsWith("file:")) {
+                pageLoaded = true;
                 attemptedUrls.clear();
                 captureAndShareSession(url);
             }
@@ -333,6 +342,8 @@ public class MainActivity extends BridgeActivity {
                         if (lat[i] >= 0 && lat[i] < bestMs) { bestMs = lat[i]; bestIdx = i; }
                     }
                     if (bestIdx < 0) {
+                        // 页面已经加载成功（只是探测预算不够）→ 别抢屏，保留当前页面
+                        if (pageLoaded) return;
                         wv.post(new Runnable() { public void run() { showRecoveryPage(wv, "所有线路均无法连接"); } });
                         return;
                     }
@@ -414,7 +425,8 @@ public class MainActivity extends BridgeActivity {
             t.start();
         }
         try {
-            latch.await(PROBE_TIMEOUT_MS + 1500L, TimeUnit.MILLISECONDS);
+            // probe 内部 connect/read 各 PROBE_TIMEOUT_MS，满等只作兜底；正常线路 2~3s 内就绪
+            latch.await(PROBE_TIMEOUT_MS * 2L + 2000L, TimeUnit.MILLISECONDS);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
