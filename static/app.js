@@ -2159,6 +2159,50 @@ function jumpToRecord(id,overlay){
 }
 function field(label,name,value='',type='text',extra=''){return `<label>${label}<input name="${name}" type="${type}" value="${esc(value)}" ${extra}></label>`;}
 function selectField(label,name,options,value){return `<label>${label}<select name="${name}">${options.map(([v,l])=>`<option value="${esc(v)}" ${String(value)===String(v)?'selected':''}>${esc(l)}</option>`).join('')}</select></label>`;}
+
+/* ── 自绘「日期 / 下拉选择」控件 ──
+   原生 <input type=date> 和 <select> 在手机上弹出的是系统 UI——绿头白底的日历、
+   白底黑字的列表，跟应用的主题完全两个世界。这里换成「只读按钮 + 原地展开的面板」：
+   视觉走同一套令牌，点选即收，从头到尾不离开当前弹窗。 */
+const WEEK_HEAD=['一','二','三','四','五','六','日'];
+function formatDateCn(v){
+ if(!v)return '';
+ const d=new Date(v+'T00:00:00');if(isNaN(d))return v;
+ const wk=['周日','周一','周二','周三','周四','周五','周六'][d.getDay()],[y,m,day]=v.split('-');
+ return `${y}年${Number(m)}月${Number(day)}日 · ${wk}`;
+}
+function miniCalHtml(month,selected){
+ const [y,m]=month.split('-').map(Number);
+ const lead=(new Date(y,m-1,1).getDay()+6)%7,days=new Date(y,m,0).getDate(),td=today();
+ let cells='';for(let i=0;i<lead;i++)cells+='<i class="mc-blank"></i>';
+ for(let d=1;d<=days;d++){
+  const ds=`${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+  cells+=`<button type="button" class="mc-day${ds===selected?' on':''}${ds===td?' ring':''}" data-day="${ds}">${d}</button>`;
+ }
+ return `<div class="mc-head"><button type="button" class="mc-nav" data-mc-nav="-1" aria-label="上个月">‹</button><b>${y} 年 ${m} 月</b><button type="button" class="mc-nav" data-mc-nav="1" aria-label="下个月">›</button></div><div class="mc-week">${WEEK_HEAD.map(w=>`<i>${w}</i>`).join('')}</div><div class="mc-grid">${cells}</div>`;
+}
+function wireDatePick(form,btn,input,box){
+ if(!btn||!input||!box)return;
+ let month=(input.value||today()).slice(0,7);
+ const paint=()=>{box.innerHTML=miniCalHtml(month,input.value);};
+ btn.textContent=input.value?formatDateCn(input.value):'选个日子';
+ btn.onclick=()=>{if(box.hidden){month=(input.value||today()).slice(0,7);paint();}box.hidden=!box.hidden;btn.classList.toggle('open',!box.hidden);};
+ box.onclick=e=>{
+  const nav=e.target.closest('[data-mc-nav]');
+  if(nav){let [y,m]=month.split('-').map(Number);m+=Number(nav.dataset.mcNav);if(m<1){m=12;y--;}if(m>12){m=1;y++;}month=`${y}-${String(m).padStart(2,'0')}`;paint();return;}
+  const day=e.target.closest('[data-day]');
+  if(day){input.value=day.dataset.day;btn.textContent=formatDateCn(input.value);box.hidden=true;btn.classList.remove('open');}
+ };
+}
+function wireChipsPick(form,btn,input,box){
+ if(!btn||!input||!box)return;
+ const sync=()=>{const on=box.querySelector('.chip.on');btn.textContent=on?on.textContent.trim():(box.dataset.placeholder||'请选择');};
+ sync();
+ btn.onclick=()=>{box.hidden=!box.hidden;btn.classList.toggle('open',!box.hidden);};
+ box.onclick=e=>{const chip=e.target.closest('[data-value]');if(!chip)return;
+  box.querySelectorAll('.chip').forEach(c=>c.classList.toggle('on',c===chip));
+  input.value=chip.dataset.value;sync();box.hidden=true;btn.classList.remove('open');};
+}
 function simpleForm(title,fields,onSubmit,label='保存') {
  openModal(title,`<form class="modal-form" id="simple-form">${fields}<div class="form-error" role="alert"></div><div class="form-actions">${button('取消','close-modal')}<button class="button primary" type="submit">${label}</button></div></form>`);
  $('#simple-form').onsubmit=async e=>{e.preventDefault();const form=e.currentTarget,b=$('button[type=submit]',form);b.disabled=true;try{await onSubmit(Object.fromEntries(new FormData(form)),form);closeModal();await refresh();toast('已保存这份小美好');}catch(err){$('.form-error',form).textContent=err.message;}finally{b.disabled=false;}};
@@ -2177,8 +2221,11 @@ function composer(kind='post',record=null,prefill={}) {
  const actualKind=record?.kind||kind;
  let commitId=saved.client_id||uuid();
  const persist=()=>{const form=$('#composer-form');if(!form)return;const vals=Object.fromEntries(new FormData(form));localStorage.setItem(key,JSON.stringify({...vals,media:media.map(m=>m.id),mediaObjects:media,client_id:commitId}));};
- openModal(actualKind==='chat'?'分享一个瞬间':record?'继续写我们的故事':kind==='diary'?'给自己的心里话':kind==='surprise'?'藏一份未来的惊喜':'记录此刻的小美好',`<form id="composer-form" class="modal-form">${actualKind!=='chat'?field('给这份回忆一个小标题（可选）','title',data.title||'','text','maxlength="200"'):''}<label>${actualKind==='diary'?'只有你能看见，放心写吧':'这一刻，想说些什么？'}<textarea name="content" maxlength="20000" placeholder="今天的小事，也值得认真收藏…">${esc(data.content||'')}</textarea></label>${actualKind!=='chat'?`<div class="form-row">${field('事情发生的日期','date',data.date,'date','required')}${selectField('收进相册','album',[['','暂不分类'],...recordsOf('album').map(a=>[a.id,a.body.title])],data.album||state.album||'')}</div>`:''}${kind==='surprise'||actualKind==='surprise'?field('给 TA 看见的时间','publish_at',data.publish_at?localDateTime(data.publish_at):'','datetime-local','required'):''}<div class="upload-zone"><div class="upload-main"><label class="upload-tile"><span class="upload-ico">🖼️</span><b>照片 / 视频</b><small>选图或拍摄</small><input type="file" id="composer-files" accept="image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif,video/mp4,video/quicktime,video/webm" multiple></label><label class="upload-tile"><span class="upload-ico">🎵</span><b>语音</b><small>上传已有音频</small><input type="file" id="composer-audio" accept="audio/*"></label><button type="button" class="upload-tile" data-action="record-audio"><span class="upload-ico">🎙️</span><b>录音</b><small>现场说两句</small></button></div><p class="small-note">原文件会被保留 · 最多三十个附件，可调整顺序，也支持把文件拖进来</p></div><div class="upload-preview" id="upload-preview"></div><div class="switch-row"><span id="upload-progress" class="progress"></span></div><div class="form-error" role="alert"></div><p class="small-note">编辑内容自动暂存于当前浏览器。点击保存草稿，可同步到服务器。</p><div class="form-actions">${actualKind!=='chat'&&!record?.id?'<button class="button secondary" type="submit" name="mode" value="draft">保存草稿</button>':''}${draftKind?'<button class="button secondary" type="submit" name="mode" value="draft">继续存草稿</button>':''}<button class="button primary" type="submit" name="mode" value="${draftKind?'post':kind}">${actualKind==='chat'?'发送':kind==='diary'?'保存日记':kind==='surprise'?'藏好这份惊喜':record&&!draftKind?'保存修改':'发布到我们的时光'}</button></div></form>`,{cleanup:()=>{persist();closed=true;if(recording&&recording.state!=='inactive')recording.stop();stream?.getTracks().forEach(t=>t.stop());},sheet:actualKind==='post'||actualKind==='diary'||actualKind==='draft'||actualKind==='surprise'||actualKind==='chat'});
+ openModal(actualKind==='chat'?'分享一个瞬间':record?'继续写我们的故事':kind==='diary'?'给自己的心里话':kind==='surprise'?'藏一份未来的惊喜':'记录此刻的小美好',`<form id="composer-form" class="modal-form">${actualKind!=='chat'?field('给这份回忆一个小标题（可选）','title',data.title||'','text','maxlength="200"'):''}<label>${actualKind==='diary'?'只有你能看见，放心写吧':'这一刻，想说些什么？'}<textarea name="content" maxlength="20000" placeholder="今天的小事，也值得认真收藏…">${esc(data.content||'')}</textarea></label>${actualKind!=='chat'?`<div class="form-row"><div class="pick-field"><span class="pick-label">事情发生的日期</span><button type="button" class="fake-field" id="date-pick-btn"></button><input type="hidden" name="date" value="${esc(data.date||today())}"><div class="fake-panel mini-cal" id="date-pick-box" hidden></div></div><div class="pick-field"><span class="pick-label">收进相册</span><button type="button" class="fake-field" id="album-pick-btn"></button><input type="hidden" name="album" value="${esc(data.album||state.album||'')}"><div class="fake-panel chip-list" id="album-chips" hidden data-placeholder="暂不分类"><button type="button" class="chip${(data.album||state.album||'')===''?' on':''}" data-value="">暂不分类</button>${recordsOf('album').map(a=>`<button type="button" class="chip${(data.album||state.album||'')===a.id?' on':''}" data-value="${esc(a.id)}">${esc(a.body.title)}</button>`).join('')}</div></div></div>`:''}${kind==='surprise'||actualKind==='surprise'?field('给 TA 看见的时间','publish_at',data.publish_at?localDateTime(data.publish_at):'','datetime-local','required'):''}<div class="upload-zone"><div class="upload-main"><label class="upload-tile"><span class="upload-ico">🖼️</span><b>照片 / 视频</b><small>选图或拍摄</small><input type="file" id="composer-files" accept="image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif,video/mp4,video/quicktime,video/webm" multiple></label><label class="upload-tile"><span class="upload-ico">🎵</span><b>语音</b><small>上传已有音频</small><input type="file" id="composer-audio" accept="audio/*"></label><button type="button" class="upload-tile" data-action="record-audio"><span class="upload-ico">🎙️</span><b>录音</b><small>现场说两句</small></button></div><p class="small-note">原文件会被保留 · 最多三十个附件，可调整顺序，也支持把文件拖进来</p></div><div class="upload-preview" id="upload-preview"></div><div class="switch-row"><span id="upload-progress" class="progress"></span></div><div class="form-error" role="alert"></div><p class="small-note">编辑内容自动暂存于当前浏览器。点击保存草稿，可同步到服务器。</p><div class="form-actions">${actualKind!=='chat'&&!record?.id?'<button class="button secondary" type="submit" name="mode" value="draft">保存草稿</button>':''}${draftKind?'<button class="button secondary" type="submit" name="mode" value="draft">继续存草稿</button>':''}<button class="button primary" type="submit" name="mode" value="${draftKind?'post':kind}">${actualKind==='chat'?'发送':kind==='diary'?'保存日记':kind==='surprise'?'藏好这份惊喜':record&&!draftKind?'保存修改':'发布到我们的时光'}</button></div></form>`,{cleanup:()=>{persist();closed=true;if(recording&&recording.state!=='inactive')recording.stop();stream?.getTracks().forEach(t=>t.stop());},sheet:actualKind==='post'||actualKind==='diary'||actualKind==='draft'||actualKind==='surprise'||actualKind==='chat'});
  const form=$('#composer-form'),progress=$('#upload-progress');
+ /* 日期与相册分类：自绘面板，别再用系统 UI */
+ wireDatePick(form,$('#date-pick-btn',form),$('[name=date]',form),$('#date-pick-box',form));
+ wireChipsPick(form,$('#album-pick-btn',form),$('[name=album]',form),$('#album-chips',form));
  function previews(){if(closed)return;$('#upload-preview').innerHTML=media.map((m,i)=>`<div class="upload-chip">${m.mime.startsWith('image/')?`<img src="/media/${m.id}?preview=true" alt="附件预览">`:''}<span class="filename">${esc(m.name)}</span><button type="button" data-move="${i}" aria-label="向前移动">←</button><button type="button" data-remove="${i}" aria-label="移除附件">移除</button></div>`).join('');persist();}
  async function addFiles(files){uploading=true;$$('button[type=submit]',form).forEach(b=>b.disabled=true);try{for(const file of files){if(closed)break;if(media.length>=30)throw new Error('每条记录最多三十个附件');progress.textContent='正在上传 '+file.name;const m=await uploadFile(file,p=>progress.textContent=`上传中 ${p}% · ${file.name}`);media.push(m);previews();}progress.textContent='附件已保存';}catch(e){$('.form-error',form).textContent=e.message;}finally{uploading=false;$$('button[type=submit]',form).forEach(b=>b.disabled=false);}}
  $('#composer-files').onchange=e=>{addFiles([...e.target.files]);e.target.value='';};

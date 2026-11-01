@@ -1781,3 +1781,29 @@ html.is-native-app body.chat-immersive .shell.chat-full .chat-panel.immersive .c
 .album-thumb:hover img{transform:scale(1.05)}
 .crb-mark{flex:none;font-style:normal;font-size:14px;line-height:1;opacity:.72}
 .chat-panel.has-wallpaper .crb-mark{opacity:.9}
+
+/* ── 自绘日期/选择控件（替代原生 date / select 的系统 UI） ── */
+.pick-field{position:relative;display:flex;flex-direction:column;align-items:stretch;gap:7px;min-width:0}
+.pick-label{font-size:12.5px;color:var(--ink-2)}
+.fake-field{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;min-height:var(--ctrl-h);padding:0 13px;border:1px solid var(--line-strong);border-radius:12px;background:var(--surface);color:var(--ink);font-size:14px;font-weight:600;text-align:left;transition:border-color var(--speed),background var(--speed)}
+.fake-field::after{content:'▾';flex:none;font-size:11px;color:var(--muted);transition:transform var(--speed)}
+.fake-field.open{border-color:var(--primary)}
+.fake-field.open::after{transform:rotate(180deg)}
+.fake-panel{position:absolute;top:calc(100% + 6px);left:0;z-index:40;background:var(--surface);border:1px solid var(--line-strong);border-radius:14px;box-shadow:0 16px 38px rgba(24,16,26,.3);padding:10px}
+:root.dark .fake-panel{background:#332A31;box-shadow:0 16px 38px rgba(0,0,0,.5)}
+.mini-cal{width:max-content;min-width:242px}
+.mc-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px;font-size:13.5px;color:var(--ink)}
+.mc-nav{width:30px;height:30px;border-radius:9px;border:1px solid var(--line);background:var(--soft);color:var(--ink);font-size:15px;line-height:1;transition:background var(--speed)}
+.mc-nav:hover{background:var(--soft-strong)}
+.mc-week,.mc-grid{display:grid;grid-template-columns:repeat(7,31px);gap:2px;justify-content:center}
+.mc-week i{font-style:normal;text-align:center;font-size:11.5px;color:var(--muted);padding:3px 0}
+.mc-blank{display:block;height:31px}
+.mc-day{height:31px;border-radius:9px;border:0;background:transparent;color:var(--ink);font-size:13px;font-weight:600;transition:background var(--speed)}
+.mc-day:hover{background:var(--soft)}
+.mc-day.ring{box-shadow:inset 0 0 0 1.5px var(--primary)}
+.mc-day.on{background:var(--primary);color:#fff}
+.chip-list{display:flex;flex-direction:column;gap:2px;min-width:200px;max-height:238px;overflow:auto;padding:6px}
+.chip{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border:0;border-radius:9px;background:transparent;color:var(--ink);font-size:13.5px;text-align:left;transition:background var(--speed)}
+.chip:hover{background:var(--soft)}
+.chip.on{background:var(--soft);color:var(--primary);font-weight:700}
+.chip.on::after{content:'✓';font-size:12px;font-weight:700}
