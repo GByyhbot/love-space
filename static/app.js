@@ -2189,27 +2189,44 @@ function miniCalHtml(month,selected){
  }
  return `<div class="mc-head"><button type="button" class="mc-nav" data-mc-nav="-1" aria-label="上个月">‹</button><b>${y} 年 ${m} 月</b><button type="button" class="mc-nav" data-mc-nav="1" aria-label="下个月">›</button></div><div class="mc-week">${WEEK_HEAD.map(w=>`<i>${w}</i>`).join('')}</div><div class="mc-grid">${cells}</div>`;
 }
+/* ── 面板互斥与定位 ──
+   日期、相册、自绘 select 共用一个状态：同一时刻只允许一个下拉面板展开，
+   打开新的之前先收掉旧的。展开前先看一眼剩余空间——表单底部放不下且上方
+   够用就改成向上弹，别让面板顶出屏幕。 */
+let openPanel=null;
+function closeOpenPanel(){
+ if(!openPanel)return;
+ openPanel.box.hidden=true;openPanel.btn.classList.remove('open');openPanel=null;
+}
+function togglePanel(btn,box){
+ if(openPanel&&openPanel.box===box){closeOpenPanel();return;}
+ closeOpenPanel();
+ box.classList.remove('up');box.hidden=false;
+ const need=box.offsetHeight,r=btn.getBoundingClientRect();
+ if(window.innerHeight-r.bottom<need+16&&r.top>need+16)box.classList.add('up');
+ btn.classList.add('open');openPanel={btn,box};
+}
 function wireDatePick(form,btn,input,box){
  if(!btn||!input||!box)return;
  let month=(input.value||today()).slice(0,7);
  const paint=()=>{box.innerHTML=miniCalHtml(month,input.value);};
  btn.textContent=input.value?formatDateCn(input.value):'选个日子';
- btn.onclick=()=>{if(box.hidden){month=(input.value||today()).slice(0,7);paint();}box.hidden=!box.hidden;btn.classList.toggle('open',!box.hidden);};
+ btn.onclick=()=>{if(openPanel&&openPanel.box===box){closeOpenPanel();return;}month=(input.value||today()).slice(0,7);paint();togglePanel(btn,box);};
  box.onclick=e=>{
   const nav=e.target.closest('[data-mc-nav]');
   if(nav){let [y,m]=month.split('-').map(Number);m+=Number(nav.dataset.mcNav);if(m<1){m=12;y--;}if(m>12){m=1;y++;}month=`${y}-${String(m).padStart(2,'0')}`;paint();return;}
   const day=e.target.closest('[data-day]');
-  if(day){input.value=day.dataset.day;btn.textContent=formatDateCn(input.value);box.hidden=true;btn.classList.remove('open');}
+  if(day){input.value=day.dataset.day;btn.textContent=formatDateCn(input.value);closeOpenPanel();}
  };
 }
 function wireChipsPick(form,btn,input,box){
  if(!btn||!input||!box)return;
  const sync=()=>{const on=box.querySelector('.chip.on');btn.textContent=on?on.textContent.trim():(box.dataset.placeholder||'请选择');};
  sync();
- btn.onclick=()=>{box.hidden=!box.hidden;btn.classList.toggle('open',!box.hidden);};
+ btn.onclick=()=>togglePanel(btn,box);
  box.onclick=e=>{const chip=e.target.closest('[data-value]');if(!chip)return;
   box.querySelectorAll('.chip').forEach(c=>c.classList.toggle('on',c===chip));
-  input.value=chip.dataset.value;sync();box.hidden=true;btn.classList.remove('open');};
+  input.value=chip.dataset.value;sync();closeOpenPanel();};
 }
 /* 弹窗里剩余的原生控件统一升级：simpleForm 拼出来的 date / datetime-local / select
    不必逐个改模板，openModal 写入 DOM 后扫一遍，就地换成自绘控件。
@@ -2239,10 +2256,10 @@ function enhanceNativeControls(root){
    panel.classList.add('chip-list');panel.innerHTML=html;
    const sync=()=>{const o=el.selectedOptions[0];btn.textContent=o?o.textContent:'请选择';};
    sync();
-   btn.onclick=()=>{panel.hidden=!panel.hidden;btn.classList.toggle('open',!panel.hidden);};
+   btn.onclick=()=>togglePanel(btn,panel);
    panel.onclick=e=>{const c=e.target.closest('[data-value]');if(!c)return;
     panel.querySelectorAll('.chip').forEach(x=>x.classList.toggle('on',x===c));
-    el.value=c.dataset.value;el.dispatchEvent(new Event('change',{bubbles:true}));sync();panel.hidden=true;btn.classList.remove('open');};
+    el.value=c.dataset.value;el.dispatchEvent(new Event('change',{bubbles:true}));sync();closeOpenPanel();};
   }else{
    const dtLocal=el.type==='datetime-local';
    panel.classList.add('mini-cal');
@@ -2251,7 +2268,7 @@ function enhanceNativeControls(root){
    const paint=()=>{panel.innerHTML=miniCalHtml(month,(el.value||'').slice(0,10))+timeRow;};
    const sync=()=>{const v=el.value;btn.textContent=dtLocal?(v?`${formatDateCn(v.slice(0,10))} ${v.slice(11,16)}`:'选个时间'):(v?formatDateCn(v):'选个日子');};
    paint();sync();
-   btn.onclick=()=>{if(panel.hidden){month=(el.value||today()).slice(0,7);paint();}panel.hidden=!panel.hidden;btn.classList.toggle('open',!panel.hidden);};
+   btn.onclick=()=>{if(openPanel&&openPanel.box===panel){closeOpenPanel();return;}month=(el.value||today()).slice(0,7);paint();togglePanel(btn,panel);};
    panel.onclick=e=>{
     const nav=e.target.closest('[data-mc-nav]');
     if(nav){let [y,m]=month.split('-').map(Number);m+=Number(nav.dataset.mcNav);if(m<1){m=12;y--;}if(m>12){m=1;y++;}month=`${y}-${String(m).padStart(2,'0')}`;paint();return;}
@@ -2259,7 +2276,7 @@ function enhanceNativeControls(root){
     if(day){
      if(dtLocal){const t=panel.querySelector('.mc-time input')?.value||'20:00';el.value=`${day.dataset.day}T${t}`;}
      else el.value=day.dataset.day;
-     el.dispatchEvent(new Event('change',{bubbles:true}));sync();panel.hidden=true;btn.classList.remove('open');}
+     el.dispatchEvent(new Event('change',{bubbles:true}));sync();closeOpenPanel();}
    };
    if(dtLocal){const t=panel.querySelector('.mc-time input');if(t)t.onchange=e=>{if(el.value)el.value=`${el.value.slice(0,10)}T${e.target.value||'20:00'}`;};}
   }
