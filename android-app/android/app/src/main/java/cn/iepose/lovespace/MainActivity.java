@@ -61,7 +61,19 @@ public class MainActivity extends BridgeActivity {
     // 公网链路（Cloudflare Tunnel 绕海外边缘）实测 /api/status 要 1.9~2.8s，
     // 3s 超时在手机 5G/VPN 下必然全部超时 → 「所有线路均无法连接」。放宽到 8s。
     private static final int PROBE_TIMEOUT_MS = 8000;
+    /* 启动看门狗：正常线路 133ms~2.3s 就能把页面拉出来，超过 6 秒还没动静才算「慢」。
+       在此之前一律不探测、不换线路 —— 从哪条链接进来就用哪条。 */
+    private static final int SLOW_LOAD_MS = 6000;
     private final Handler sessionHandler = new Handler(Looper.getMainLooper());
+    /* 页面迟迟没出来时的兜底：到点还没 pageLoaded，才去探测别的线路并择优切换。
+       页面一旦加载成功就什么也不做——这条线路就是用户要用的那条。 */
+    private final Runnable slowLoadWatchdog = new Runnable() {
+        @Override public void run() {
+            if (pageLoaded || probing) return;
+            Log.i(TAG, "启动 " + SLOW_LOAD_MS + "ms 仍未加载出页面，转为探测并择优");
+            startUrlProbe(true);
+        }
+    };
     private final Runnable sessionTick = new Runnable() {
         @Override public void run() {
             try {
@@ -97,11 +109,15 @@ public class MainActivity extends BridgeActivity {
             currentUrl = remembered;
             WebView wv = getBridge().getWebView();
             if (wv != null && !remembered.equals(SPACE_URL)) {
+                // super.load() 已经把默认线路发了一发，这里先掐掉，别白等它。
+                wv.stopLoading();
                 seedSessionForHost(remembered); // 先把登录 cookie 种到这条线路
                 wv.loadUrl(remembered); // 覆盖 super.load() 的默认地址
             }
-            // 后台并行探测各线路，按需切到最快可用线路
-            startUrlProbe(false);
+            // 启动不再主动探测：从哪条线路进来（上次记住的那条）就用哪条。
+            // 只有「迟迟加载不出来」或「加载失败」才值得花时间去测别的线路。
+            sessionHandler.removeCallbacks(slowLoadWatchdog);
+            sessionHandler.postDelayed(slowLoadWatchdog, SLOW_LOAD_MS);
             // 定期把登录 cookie 同步到全部线路，切域免重登
             sessionHandler.removeCallbacks(sessionTick);
             sessionHandler.postDelayed(sessionTick, 6000);
@@ -379,6 +395,8 @@ public class MainActivity extends BridgeActivity {
             if (url != null && !url.startsWith("file:")) {
                 pageLoaded = true;
                 attemptedUrls.clear();
+                // 页面出来了就不用再探测了，取消启动看门狗
+                sessionHandler.removeCallbacks(slowLoadWatchdog);
                 captureAndShareSession(url);
             }
         }
@@ -418,6 +436,7 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onDestroy() {
         try { sessionHandler.removeCallbacks(sessionTick); } catch (Exception ignored) {}
+        try { sessionHandler.removeCallbacks(slowLoadWatchdog); } catch (Exception ignored) {}
         super.onDestroy();
     }
 
@@ -510,9 +529,10 @@ public class MainActivity extends BridgeActivity {
     }
 
     /**
-     * 后台并行探测所有线路，按需切换到最快可用线路。
-     * force=true（离线页「重试」）时强制重新择优；否则保留上次线路（免重登），
-     * 仅当它不可达或明显过慢时才切换。
+     * 并行探测所有线路并按需择优切换。只由两处触发：
+     * ① {@link #slowLoadWatchdog} —— 启动 6 秒还没把页面拉出来（线路慢或不通）；
+     * ② 离线页「重试」。
+     * 正常进入时不会走到这里：从哪条链接进来，就用哪条，不额外探测。
      */
     private void startUrlProbe(final boolean force) {
         if (probing) return;
