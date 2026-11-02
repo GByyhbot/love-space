@@ -32,7 +32,7 @@ const paths = {
  search:'M21 21l-4.35-4.35M10 18a8 8 0 1 1 0-16 8 8 0 0 1 0 16Z'
 };
 const icon = name => `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="${paths[name] || paths.heart}"/></svg>`;
-const state = {page:'home', tab:'', me:null, records:[], photos:[], notices:[], channels:[], deliveries:[], webpush:null, nativePush:null, dashboard:null, weekly:null, weekOffset:0, periodDay:'', timelinePosts:[],timelineCursor:null,timelineHasMore:false,stream:null, online:navigator.onLine};
+const state = {page:'home', tab:'', me:null, records:[], photos:[], notices:[], channels:[], deliveries:[], webpush:null, nativePush:null, dashboard:null, weekly:null, weekOffset:0, periodDay:'', timelinePosts:[],timelineCursor:null,timelineHasMore:false,stream:null, online:navigator.onLine, linkRoutes:null, linkProbing:false};
 let modalCleanup = null, focusReturn = null, refreshing = false;
 
 function clearUserLocalData(userId) {
@@ -163,7 +163,7 @@ async function boot() {
   if (!state.me) return renderAuth(status,invite);
   history.replaceState(null,'',location.pathname+location.hash);
   state.page=location.hash.slice(1).split('/')[0] || 'home';
-  if (!['home','timeline','albums','messages','together','personal','settings','notices','channels','backups','imports','importdetail','dashboard','weekly','figure'].includes(state.page)) state.page='home';
+  if (!['home','timeline','albums','messages','together','personal','settings','notices','channels','backups','imports','importdetail','dashboard','weekly','figure','linkcheck'].includes(state.page)) state.page='home';
   await refreshData(); if(state.page==='timeline')await loadTimeline(true); renderShell(); connectEvents(); connectNtfy(); syncNativePush(); startKeepAlive();
  } catch(e) {$('#app').innerHTML=empty('暂时无法连接空间',e.message,'reload','重新连接');}
 }
@@ -217,11 +217,11 @@ function renderShell() {
  // 主动切页时 navigate() 会在之后显式 scrollTo(0,0)，不受这里影响。
  const keepScroll=window.scrollY||0;
   const navs=[['home','home','首页'],['timeline','book','时光'],['albums','photo','相册'],['together','heart','我们']];
- const navActive=['personal','settings','channels','backups','notices','imports','importdetail'].includes(state.page)?'together':state.page;
+ const navActive=['personal','settings','channels','backups','notices','imports','importdetail','linkcheck'].includes(state.page)?'together':state.page;
  const navHtml=navs.map(([id,ico,label])=>`<button data-nav="${id}" class="${navActive===id?'active':''}" ${navActive===id?'aria-current="page"':''}>${icon(ico)}<span>${label}</span></button>`);navHtml.splice(2,0,`<button class="nav-fab" data-action="compose" aria-label="记录此刻">${icon('plus')}<span>记录</span></button>`);
  // 「我们」的子工具页（figure/dashboard/weekly 或 together 带 tab）在导航栏最左侧放「回到我们」，
  // 取代原先各页顶部那排 back 条（已移除），回到 together 根页。
- const toolsSub=state.page==='figure'||['dashboard','weekly','settings','channels','backups'].includes(state.page)||(state.page==='together'&&!!state.tab);
+ const toolsSub=state.page==='figure'||['dashboard','weekly','settings','channels','backups','linkcheck'].includes(state.page)||(state.page==='together'&&!!state.tab);
 /* 返回按钮已移至顶部 topbar（renderShell 内 has-back 分支注入），此处不再在侧边栏/底部 tab 栏注入 */
  const themeClass='theme-'+state.me.space.theme,motion=state.me.space.motion?'':'reduced-motion',root=document.documentElement;
  [themeClass,'theme-rose','theme-peach','theme-lavender','theme-custom','reduced-motion'].forEach(c=>root.classList.remove(c));
@@ -235,7 +235,7 @@ function renderShell() {
 }
 
 function renderPage() {
- const pages={home:homePage,timeline:timelinePage,albums:albumsPage,messages:messagesPage,together:togetherPage,personal:personalPage,settings:settingsPage,notices:noticesPage,channels:channelsPage,backups:backupsPage,imports:importsPage,importdetail:importDetailPage,dashboard:dashboardPage,weekly:weeklyPage,figure:figurePage};
+ const pages={home:homePage,timeline:timelinePage,albums:albumsPage,messages:messagesPage,together:togetherPage,personal:personalPage,settings:settingsPage,notices:noticesPage,channels:channelsPage,backups:backupsPage,imports:importsPage,importdetail:importDetailPage,dashboard:dashboardPage,weekly:weeklyPage,figure:figurePage,linkcheck:linkCheckPage};
  $('#page').innerHTML=(pages[state.page] || homePage)();
  if(state.page==='timeline'&&state.timelineHasMore)$('#timeline-list')?.insertAdjacentHTML('afterend',`<div class="timeline-more">${button('继续往前翻','load-more-timeline','secondary')}</div>`);
  if(state.page==='messages') {$('#chat-text').value=localStorage.getItem('chat-text:'+state.me.user.id)||'';autoGrow($('#chat-text'));scrollChat();$('#chat-text')?.addEventListener('focus',()=>{const d=$('#sticker-dock');if(d)d.hidden=true;});applyWallpaper();}
@@ -2031,6 +2031,83 @@ function weeklyPage(){
  const moodRows=moods.length?moods.map(([e,n])=>`<div class="mood-stat"><span class="mood-emoji">${esc(e)}</span><div class="stat-bar"><i style="width:${Math.round(n/peak*100)}%"></i></div><b>${n}</b></div>`).join(''):'<p class="meta">这一周还没有心情记录。</p>';
  return `${heading('回忆周报','把这一周，收进一封小小的信。')}${back}<div class="tabs week-switch"><button data-action="week-prev">← 上一周</button><span class="week-range">${w.start.slice(0,4)} 年 · ${short(w.start)} – ${short(w.end)}</span><button data-action="week-next" ${off>=0?'disabled':''}>下一周 →</button></div><section class="card week-hero"><h2>${esc(w.message)}</h2><p class="meta">${esc(delta)}${w.top_mood?` · 这周最常见的心情是 ${esc(w.top_mood)}`:''}<br><strong style="color:var(--accent)">${esc(streakLine)}</strong></p></section><div class="stats-hero"><div class="stat-card"><span>记录</span><strong>${w.total}<em>条</em></strong></div><div class="stat-card"><span>有记录的天数</span><strong>${w.days_active}<em>天</em></strong></div><div class="stat-card"><span>照片</span><strong>${w.photos}<em>张</em></strong></div><div class="stat-card"><span>互动</span><strong>${(w.likes||0)+(w.comments||0)}<em>次</em></strong></div></div><div class="grid-2"><section class="card"><div class="section-heading"><h2>这一周写了什么</h2></div>${kindRows}</section><section class="card"><div class="section-heading"><h2>心情分布</h2></div>${moodRows}</section></div>${w.highlights.length?`<div class="section-heading"><h2>${icon('heart')} 本周精选</h2></div>${w.highlights.map(recordCard).join('')}`:empty('这一周的信封还是空的','写下一点什么，下一封周报就会有了。','compose','记录此刻')}<div class="inline-actions" style="margin-top:16px">${button('复制文字版','week-copy','small soft','download')}</div>`;
 }
+/* ── 链路检测 ──────────────────────────────────────────────────────────
+   多线路的真实探测能力在原生层（MainActivity.probeAll），网页侧拿不到，
+   所以 App 内走 LinkBridge 插件；浏览器里退化成 fetch 打点 —— 跨域用
+   mode:'no-cors' 拿不到状态码，但能区分「连上了」和「压根没连上」，够判死活。
+   切换线路只在 App 内可用：换域要重种登录 cookie，那是原生层的活。 */
+const BROWSER_ROUTES=[
+ {name:'Cloudflare 隧道',url:'https://love.yangyuhui.xyz/'},
+ {name:'节点小宝',url:'https://love-space.iepose.cn/'},
+ {name:'腾讯云 CloudBase',url:'https://love.350921.xyz/'},
+ {name:'Lucky 直连',url:'https://love-space.yangyuhui.xyz:4019/'}];
+function linkTone(ms){if(ms<0)return 'var(--muted)';if(ms<=300)return 'var(--green)';if(ms<=1200)return 'var(--amber)';return 'var(--danger)';}
+function linkText(ms){return ms<0?'不可达':ms+' ms';}
+function linkBridge(){return window.Capacitor?.Plugins?.LinkBridge||null;}
+function linkCheckPage(){
+ const rows=state.linkRoutes,native=Boolean(linkBridge());
+ const body=!rows
+  ?empty('还没有检测结果','点上面的「开始检测」，会依次测一遍每条线路的响应速度。')
+  :`<div class="link-list">${rows.map(r=>`<div class="link-row${r.current?' is-current':''}">
+      <div class="link-row-main"><strong>${esc(r.name)}</strong><small class="meta">${esc(String(r.url||'').replace(/^https?:\/\//,'').replace(/\/$/,''))}</small></div>
+      <span class="link-ms" style="color:${linkTone(r.ms)}">${linkText(r.ms)}</span>
+      ${r.current?'<span class="status-pill sent">当前</span>':(r.best?'<span class="status-pill">最快</span>':'')}
+      ${r.current||!native?'':`<button class="link-use" data-action="link-use" data-id="${esc(r.url)}">切换</button>`}
+    </div>`).join('')}</div>`;
+ return `${heading('链路检测','看看现在哪条线路最快，也可以手动切换。')}
+  <div class="inline-actions" style="margin:-6px 0 14px">
+   <button class="button primary" data-action="link-probe" ${state.linkProbing?'disabled':''}>${icon('gear')} ${state.linkProbing?'检测中…':'开始检测'}</button>
+  </div>
+  <section class="card">${body}</section>
+  <p class="hint">${native
+    ?'检测在手机本地直接发起，不经过服务器；数值是访问 /api/status 的往返耗时。切换线路后会重新加载页面，登录状态会自动带到新线路。'
+    :'当前在浏览器里，只能测到「跨域是否连得上」，数值仅供参考；完整检测与线路切换请在 App 内操作。'}</p>`;
+}
+async function probeRoutesInBrowser(){
+ const origin=location.origin;
+ const out=await Promise.all(BROWSER_ROUTES.map(async r=>{
+  const base=r.url.replace(/\/$/,''),same=base===origin,url=base+'/api/status';
+  const t0=performance.now();
+  try{
+   if(same)await fetch(url,{cache:'no-store'});
+   else await fetch(url,{mode:'no-cors',cache:'no-store'});
+   return {...r,ms:Math.round(performance.now()-t0),current:same,best:false};
+  }catch{return {...r,ms:-1,current:same,best:false};}
+ }));
+ const fastest=out.filter(r=>r.ms>=0).sort((a,b)=>a.ms-b.ms)[0];
+ if(fastest)fastest.best=true;
+ return out;
+}
+async function runLinkProbe(){
+ if(state.linkProbing)return;
+ state.linkProbing=true;renderPage();
+ try{
+  const bridge=linkBridge();
+  let routes;
+  if(bridge){
+   const res=await bridge.probe();
+   routes=(res?.routes||[]).map(r=>({name:r.name,url:r.url,ms:Number(r.ms),current:Boolean(r.current),best:Boolean(r.best)}));
+  }else{
+   routes=await probeRoutesInBrowser();
+  }
+  if(!routes.length)throw new Error('没有取到线路信息');
+  state.linkRoutes=routes;
+  const alive=routes.filter(r=>r.ms>=0).length;
+  toast(alive?`检测完成，${alive}/${routes.length} 条线路可用`:'所有线路都没连上，检查一下网络');
+ }catch(e){
+  toast(e?.message||'检测失败，请稍后再试');
+ }finally{
+  state.linkProbing=false;renderPage();
+ }
+}
+async function useLinkRoute(url){
+ const bridge=linkBridge();
+ if(!bridge)return toast('切换线路需要在 App 内操作');
+ try{
+  await bridge.use({url});
+  toast('正在切换到新线路…');
+ }catch(e){toast(e?.message||'切换失败');}
+}
 function settingsPage() {
  const v=state.appVersion||{};
  /* 存储占用以前只存在于「数据管理 → 完整备份与迁移」里面，外面连个数字都没有，
@@ -2039,7 +2116,7 @@ function settingsPage() {
  const fmtSize=b=>b>=1073741824?(b/1073741824).toFixed(2)+' GB':(b/1048576).toFixed(1)+' MB';
  const isAdmin=!!state.me.user.admin;
  const storageStrip=isAdmin&&st?`<button class="storage-strip" data-nav="backups"><span class="storage-strip-icon">${icon('gear')}</span><span class="storage-strip-body"><strong>已用 ${fmtSize(st.total||0)}</strong><small>可用 ${fmtSize(st.disk_free||0)} · ${st.record_count||0} 条记录 · ${st.media_count||0} 个媒体文件</small></span><span class="storage-strip-more">存储占用与备份 ${icon('arrow')}</span></button>`:'';
- return `${heading('设置','管理空间、账号和数据。')}<div class="settings-grid"><section class="card"><h2>${icon('home')} 空间设置</h2><div class="setting-list"><button data-action="space">名称、封面与主题 ${icon('arrow')}</button>${state.me.users.length<2?`<button data-action="invite">邀请另一半 ${icon('arrow')}</button>`:''}<button data-nav="channels">通知渠道与提醒偏好 ${icon('arrow')}</button></div></section><section class="card"><h2>${icon('gear')} 我的账号</h2><div class="setting-list"><button data-action="profile">头像、昵称与密码 ${icon('arrow')}</button><button data-action="logout">退出登录 ${icon('arrow')}</button></div></section><section class="card"><h2>${icon('download')} 数据管理</h2>${storageStrip}<div class="setting-list"><a href="/api/export" download>导出我有权查看的记录与原文件 ${icon('download')}</a><a href="/api/export/markdown" download>导出 Markdown 知识库（第二大脑） ${icon('download')}</a><a href="/api/export/ics" download>导出日历 .ics（纪念日与计划） ${icon('download')}</a>${state.me.user.admin?`<button data-nav="backups">完整备份与存储占用 ${icon('arrow')}</button>`:''}</div><p class="small-note">第二大脑是纯 Markdown 文件夹，可拖进 Obsidian / Logseq，也可直接给 AI 当长期记忆；只含你自己可见的内容，个人心愿只导出标题。私密日记按账号隔离，完整备份由服务器管理员管理。日历文件导进手机自带日历后，纪念日就能用系统提醒，比站内推送更稳。</p></section><section class="card"><h2>${icon('info')} 关于</h2><div class="setting-list"><div style="display:flex;align-items:center;gap:10px;padding:12px 0"><span class="stat-icon" style="font-size:28px">💕</span><div><h3 style="margin:0;font-size:15px">恋爱空间</h3><p class="meta" style="margin:2px 0 0">${v.version?((state.apkVersion?'APK v'+state.apkVersion+' · ':'')+'网页 v'+v.version+(state.apkLatest&&state.apkVersion&&newerVer(state.apkLatest,state.apkVersion)?' · <span style="color:#c0392b">可更新到 v'+state.apkLatest+'</span>':'')):'加载中…'}</p></div></div><button data-action="check-update">检查更新 ${icon('arrow')}</button><button data-action="copy-apk-link">复制 App 下载链接 ${icon('arrow')}</button></div><p class="small-note">网页功能自动更新；原生功能（如后台通知）需下载新版 APK，可在检查更新中获取，也可复制下载链接发给对方在手机浏览器打开。</p></section></div>`;
+ return `${heading('设置','管理空间、账号和数据。')}<div class="settings-grid"><section class="card"><h2>${icon('home')} 空间设置</h2><div class="setting-list"><button data-action="space">名称、封面与主题 ${icon('arrow')}</button>${state.me.users.length<2?`<button data-action="invite">邀请另一半 ${icon('arrow')}</button>`:''}<button data-nav="channels">通知渠道与提醒偏好 ${icon('arrow')}</button></div></section><section class="card"><h2>${icon('gear')} 我的账号</h2><div class="setting-list"><button data-action="profile">头像、昵称与密码 ${icon('arrow')}</button><button data-action="logout">退出登录 ${icon('arrow')}</button></div></section><section class="card"><h2>${icon('chat')} 连接</h2><div class="setting-list"><button data-nav="linkcheck">链路检测与线路切换 ${icon('arrow')}</button></div><p class="small-note">进页面偏慢、或某条线路连不上时，可以在这里测一遍各线路的响应速度，并手动切换到最快的那条。</p></section><section class="card"><h2>${icon('download')} 数据管理</h2>${storageStrip}<div class="setting-list"><a href="/api/export" download>导出我有权查看的记录与原文件 ${icon('download')}</a><a href="/api/export/markdown" download>导出 Markdown 知识库（第二大脑） ${icon('download')}</a><a href="/api/export/ics" download>导出日历 .ics（纪念日与计划） ${icon('download')}</a>${state.me.user.admin?`<button data-nav="backups">完整备份与存储占用 ${icon('arrow')}</button>`:''}</div><p class="small-note">第二大脑是纯 Markdown 文件夹，可拖进 Obsidian / Logseq，也可直接给 AI 当长期记忆；只含你自己可见的内容，个人心愿只导出标题。私密日记按账号隔离，完整备份由服务器管理员管理。日历文件导进手机自带日历后，纪念日就能用系统提醒，比站内推送更稳。</p></section><section class="card"><h2>${icon('info')} 关于</h2><div class="setting-list"><div style="display:flex;align-items:center;gap:10px;padding:12px 0"><span class="stat-icon" style="font-size:28px">💕</span><div><h3 style="margin:0;font-size:15px">恋爱空间</h3><p class="meta" style="margin:2px 0 0">${v.version?((state.apkVersion?'APK v'+state.apkVersion+' · ':'')+'网页 v'+v.version+(state.apkLatest&&state.apkVersion&&newerVer(state.apkLatest,state.apkVersion)?' · <span style="color:#c0392b">可更新到 v'+state.apkLatest+'</span>':'')):'加载中…'}</p></div></div><button data-action="check-update">检查更新 ${icon('arrow')}</button><button data-action="copy-apk-link">复制 App 下载链接 ${icon('arrow')}</button></div><p class="small-note">网页功能自动更新；原生功能（如后台通知）需下载新版 APK，可在检查更新中获取，也可复制下载链接发给对方在手机浏览器打开。</p></section></div>`;
 }
 function personalPage() {
  const tab=state.tab||'diary',tabs=[['diary','私密日记'],['draft','草稿箱'],['surprise','定时惊喜'],['trash','回收站']];
@@ -2763,6 +2840,8 @@ async function act(action,id,el) {
   state.ledgerMonth=next>today().slice(0,7)?today().slice(0,7):next;
   return renderPage();
  }
+ if(action==='link-probe'){await runLinkProbe();return;}
+ if(action==='link-use'){await useLinkRoute(id);return;}
  if(action==='check-update'){try{const s=await api('/status');state.appVersion={version:s.version,build:s.build};renderShell();
   if(isNativeApp()){
    /* App 内只比 App 版本：网页是随服务器一起更新的，与本机判断无关。 */

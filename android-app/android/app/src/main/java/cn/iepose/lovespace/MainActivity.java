@@ -45,6 +45,13 @@ public class MainActivity extends BridgeActivity {
         "https://love-space.yangyuhui.xyz:4019/"
     };
     private static final String SPACE_URL = SPACE_URLS[0];
+    /* 与 SPACE_URLS 一一对应的展示名，设置页「链路检测」用。 */
+    private static final String[] ROUTE_NAMES = {
+        "Cloudflare 隧道",
+        "节点小宝",
+        "腾讯云 CloudBase",
+        "Lucky 直连"
+    };
     private static final String OFFLINE_PAGE = "file:///android_asset/lovespace-offline.html";
     private static final String PREFS = "lovespace_prefs";
     private static final String KEY_FIRST_LAUNCH = "first_launch_done";
@@ -105,6 +112,7 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         // 注册 JS→原生桥（必须在 super.onCreate 之前，桥初始化时才会扫描）
         registerPlugin(PushBridge.class);
+        registerPlugin(LinkBridge.class);
         // ⓪ 把本进程绑到物理网卡，绕开节点小宝一类的组网隧道。
         //    必须赶在 super.onCreate 之前：BridgeActivity.onCreate 内部就会调 load() 装载页面，
         //    等 super 返回再绑，首个页面请求已经走过隧道了。
@@ -200,6 +208,16 @@ public class MainActivity extends BridgeActivity {
         try {
             ConnectivityManager cm = (ConnectivityManager) getSystemService(CONNECTIVITY_SERVICE);
             if (cm == null) return;
+            // 没开组网隧道就别多事。1.6.3 是无条件绑定物理网卡，个别机型/网络下会
+            // 影响分应用代理与 IPv6 出网，反而让部分线路探测不到 —— 现在先确认真的
+            // 存在 VPN 传输，不存在就把进程还回系统默认。
+            if (!hasVpnTransport(cm)) {
+                if (tunnelBoundNetwork != null) {
+                    cm.bindProcessToNetwork(null);
+                    tunnelBoundNetwork = null;
+                }
+                return;
+            }
             Network target = pickPhysicalNetwork(cm);
             if (target == null) return; // 只有隧道、没有物理网卡 → 保持系统默认行为
             if (target.equals(tunnelBoundNetwork)) return;
@@ -210,6 +228,15 @@ public class MainActivity extends BridgeActivity {
         } catch (Throwable e) {
             Log.w(TAG, "绑定物理网络失败（不影响使用）", e);
         }
+    }
+
+    /** 当前是否存在 VPN 类型的网络（节点小宝 / 任意 VpnService）。 */
+    private boolean hasVpnTransport(ConnectivityManager cm) {
+        for (Network n : cm.getAllNetworks()) {
+            NetworkCapabilities caps = cm.getNetworkCapabilities(n);
+            if (caps != null && caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) return true;
+        }
+        return false;
     }
 
     /** 挑一张能上网的物理网卡：优先「已验证连通」，其次任意带 INTERNET 能力的物理网卡。 */
@@ -427,6 +454,61 @@ public class MainActivity extends BridgeActivity {
         return -1;
     }
 
+    /* ── 供 LinkBridge（设置页「链路检测」）调用 ─────────────────────────── */
+
+    /** 当前正在使用的线路地址。 */
+    public String currentRoute() {
+        return currentUrl;
+    }
+
+    /** 该地址是否属于内置候选线路（LinkBridge 用它拦截任意 URL）。 */
+    public boolean isKnownRoute(String url) {
+        return indexOf(SPACE_URLS, url) >= 0;
+    }
+
+    /**
+     * 现场探测全部线路，供设置页展示。会阻塞至多约 16 秒，**必须在后台线程调用**。
+     * 返回 [{name,url,ms,current,best}]，ms 为 -1 表示不可达。
+     */
+    public org.json.JSONArray probeRoutesForUi() {
+        long[] lat = probeAll();
+        String cur = currentUrl;
+        int bestIdx = -1;
+        long bestMs = Long.MAX_VALUE;
+        for (int i = 0; i < lat.length; i++) {
+            if (lat[i] >= 0 && lat[i] < bestMs) { bestMs = lat[i]; bestIdx = i; }
+        }
+        org.json.JSONArray arr = new org.json.JSONArray();
+        for (int i = 0; i < SPACE_URLS.length; i++) {
+            org.json.JSONObject o = new org.json.JSONObject();
+            try {
+                o.put("url", SPACE_URLS[i]);
+                o.put("name", i < ROUTE_NAMES.length ? ROUTE_NAMES[i] : SPACE_URLS[i]);
+                o.put("ms", lat[i]);
+                o.put("current", SPACE_URLS[i].equals(cur));
+                o.put("best", i == bestIdx);
+            } catch (Exception ignored) {}
+            arr.put(o);
+        }
+        return arr;
+    }
+
+    /** 手动切换到指定线路（设置页「链路检测」里点选），并立即重新加载页面。 */
+    public void switchToRoute(final String url) {
+        if (indexOf(SPACE_URLS, url) < 0) return;
+        currentUrl = url;
+        saveBest(url);
+        final WebView wv = getBridge() == null ? null : getBridge().getWebView();
+        if (wv == null) return;
+        wv.post(new Runnable() {
+            @Override public void run() {
+                seedSessionForHost(url);
+                attemptedUrls.clear();
+                wv.loadUrl(url);
+            }
+        });
+    }
+
     /**
      * 后台并行探测所有线路，按需切换到最快可用线路。
      * force=true（离线页「重试」）时强制重新择优；否则保留上次线路（免重登），
@@ -466,8 +548,13 @@ public class MainActivity extends BridgeActivity {
                     final String best = SPACE_URLS[bestIdx];
                     int ci = indexOf(SPACE_URLS, currentUrl);
                     long curMs = ci >= 0 ? lat[ci] : -1;
-                    // 上次线路可用且不算太慢（<= 最优*2+400ms）→ 保留，避免换域重登
-                    boolean keepCurrent = !force && curMs >= 0 && curMs <= bestMs * 2 + 400;
+                    // 页面已经加载成功 → 只要当前线路还能用就绝不换。
+                    // 1.6.3 及以前这里是「curMs <= bestMs*2+400 才保留」，而实测最快 133ms、
+                    // CF Tunnel 1781ms，这个条件永远不成立，于是每次冷启动都会在页面已经
+                    // 加载完之后再整页重载一遍 —— 用户感知就是「进页面特别慢」；
+                    // 而重载又会打断刚建立的连接与探测状态，看起来就像「链路检测失效」。
+                    // 想换线路请走设置里的「链路检测」手动切换，或离线页的「重试」。
+                    boolean keepCurrent = !force && curMs >= 0 && (pageLoaded || curMs <= bestMs * 2 + 400);
                     if (keepCurrent) {
                         saveBest(currentUrl);
                         return;

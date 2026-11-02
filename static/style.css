@@ -1831,3 +1831,17 @@ html.is-native-app body.chat-immersive .shell.chat-full .chat-panel.immersive .c
 .habit-info .tiny{color:var(--ink-2)}
 .habit-done{flex:none;width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--soft);color:var(--primary);font-size:15px;font-weight:700}
 .habit-card .meta{margin:2px 0 0}
+
+/* ---- 链路检测（设置 → 连接 → 链路检测）---------------------------------
+   每行：线路名 + 域名 / 耗时 / 状态标签 / 切换按钮。
+   耗时颜色由 app.js 按阈值内联给出（绿/琥珀/红），这里只管排版。 */
+.link-list{display:flex;flex-direction:column}
+.link-row{display:flex;align-items:center;gap:10px;padding:13px 0;border-bottom:1px solid var(--line)}
+.link-row:last-child{border-bottom:0}
+.link-row-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.link-row-main strong{font-size:14px;font-weight:500;color:var(--ink)}
+.link-row-main .meta{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.link-ms{flex:none;font-size:14px;font-weight:500;font-variant-numeric:tabular-nums;white-space:nowrap}
+.link-use{flex:none;height:var(--ctrl-h-sm);padding:0 14px;border-radius:var(--radius-s);border:1px solid var(--line-strong);background:var(--surface);color:var(--ink-2);font:inherit;font-size:13px;cursor:pointer;transition:background var(--speed),border-color var(--speed)}
+.link-use:hover{background:var(--soft);border-color:var(--primary)}
+.link-row.is-current .link-row-main strong{color:var(--primary-dark)}
