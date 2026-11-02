@@ -6,6 +6,8 @@
 """
 import os
 import re
+import zipfile
+from pathlib import Path
 from urllib.parse import urlparse
 
 
@@ -37,15 +39,48 @@ def clean_version(raw, default='dev'):
 
 
 # ---- 版本信息 ----------------------------------------------------------------
-# 全部来自构建期注入（Docker build-arg / compose environment），默认值只在
+# 网页版本全部来自构建期注入（Docker build-arg / compose environment），默认值只在
 # 本地 `uvicorn --reload` 这种没有注入的场景下出现。CI 打 tag 时用 git tag
 # 填 LOVE_VERSION，/api/status 里的网页版本号就自动跟着走，不需要人手改代码。
-#
-# APK 版本单独一个变量：App 的发版节奏和网页解耦，但两处必须同号，
-# tests/test_version_config.py 会拿这里的值和 android-app 的 build.gradle 对账。
 WEB_VERSION = clean_version(_env('LOVE_VERSION', 'dev'), 'dev')
 BUILD_ID = _env('LOVE_BUILD', 'local')
-APK_VERSION = clean_version(_env('LOVE_APK_VERSION', '1.6.1'), '1.6.1')
+
+
+def _static_dir():
+    """镜像内 /srv/static；本地开发时退回仓库根的 static/。"""
+    p = Path('/srv/static')
+    if p.is_dir():
+        return p
+    return Path(__file__).resolve().parent.parent / 'static'
+
+
+# APK 版本：不写死在构建期，而是运行时扫 static/ 下所有 .apk 包，从
+# assets/capacitor.config.json 里解出 `LoveSpaceApp/<version>` 标记。
+# 这样同步新包（sync_apk.py 覆盖 static/lovespace.apk）部署后，/api/status
+# 自动反映新版本，App 内「检查更新」立刻能发现——不再依赖打 v* tag 才前进。
+# 旧行为（构建期注入 LOVE_APK_VERSION）保留为兜底：扫不到包时用它。
+def _scan_apk_version():
+    fallback = clean_version(_env('LOVE_APK_VERSION', ''), '1.6.1')
+    best = ''
+    try:
+        for apk in sorted(_static_dir().glob('*.apk'), key=lambda p: p.stat().st_mtime):
+            try:
+                with zipfile.ZipFile(apk) as z:
+                    cfg = z.read('assets/capacitor.config.json').decode('utf-8', 'replace')
+            except Exception:
+                continue
+            m = re.search(r'LoveSpaceApp/(\d+(?:\.\d+)*)', cfg)
+            if m:
+                v = clean_version(m.group(1), '')
+                # 取最大版本（多包并存时挑新的）
+                if v > best:
+                    best = v
+    except OSError:
+        pass
+    return best or fallback
+
+
+APK_VERSION = _scan_apk_version()
 
 
 def public_origin():
