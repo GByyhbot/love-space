@@ -7,7 +7,9 @@ import android.content.pm.PackageManager;
 import android.net.ConnectivityManager;
 import android.net.Network;
 import android.net.NetworkCapabilities;
+import android.net.NetworkRequest;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -69,6 +71,11 @@ public class MainActivity extends BridgeActivity {
        WebView 同样能打开，只是探测的 3~8 秒预算不够而已。 */
     private volatile boolean pageLoaded = false;
     private final Set<String> attemptedUrls = Collections.synchronizedSet(new HashSet<String>());
+    /* 当前已绑定的物理网卡；null = 未绑定（走系统默认网络，可能被组网隧道接管） */
+    private volatile Network tunnelBoundNetwork = null;
+    /* 绑定物理网络后若所有线路反而全挂（存在「只有隧道能出网」的网络），
+       解绑回退一次并置此标志，本次运行内不再尝试绑定。 */
+    private volatile boolean tunnelBypassOff = false;
 
     @Override
     protected void load() {
@@ -98,7 +105,13 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         // 注册 JS→原生桥（必须在 super.onCreate 之前，桥初始化时才会扫描）
         registerPlugin(PushBridge.class);
+        // ⓪ 把本进程绑到物理网卡，绕开节点小宝一类的组网隧道。
+        //    必须赶在 super.onCreate 之前：BridgeActivity.onCreate 内部就会调 load() 装载页面，
+        //    等 super 返回再绑，首个页面请求已经走过隧道了。
+        bypassTunnelNetwork();
         super.onCreate(savedInstanceState);
+        // ⓪' 网络变化（切 WiFi/流量、隧道开关）时重新择优绑定
+        watchNetworkChange();
         // ① 首次打开权限引导（通知权限等）
         requestFirstLaunchPermissions();
         // ② 启动原生 ntfy 长连接服务（topic 未写入时不启动，JS 登录后写入即生效）
@@ -170,6 +183,101 @@ public class MainActivity extends BridgeActivity {
         return caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
             ? "网络可用，空间服务器暂时未响应"
             : "网络已连接，互联网连通性未确认";
+    }
+
+    /* ── 隔绝组网隧道（节点小宝 / Tailscale / 任意 VpnService）───────────────
+       节点小宝的「组网」底层就是 VpnService + Tailscale 那套路由与防火墙：
+       它把 100.64.0.0/10 当成自己的私网，并在 ts-input 链里对「来源属于该段、
+       却不是从本隧道进来的包」直接 DROP。而家里宽带正好在运营商 CGNAT
+       （100.64.0.0/10）后面，于是 App 的请求、DNS 解析、回程都可能被它拦掉 ——
+       表现就是「某条线路本该最快，却始终连不上」。
+       这里不做任何对抗，只是把本进程绑定到物理网卡（WiFi / 蜂窝 / 有线），
+       让网络请求不经过 VPN 转发。任何一步失败都静默降级，绝不影响正常使用。 */
+
+    private void bypassTunnelNetwork() {
+        if (tunnelBypassOff) return;
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return; // bindProcessToNetwork 需 API 23
+        try {
+            ConnectivityManager cm = (ConnectivityManager) getSystemService(CONNECTIVITY_SERVICE);
+            if (cm == null) return;
+            Network target = pickPhysicalNetwork(cm);
+            if (target == null) return; // 只有隧道、没有物理网卡 → 保持系统默认行为
+            if (target.equals(tunnelBoundNetwork)) return;
+            if (cm.bindProcessToNetwork(target)) {
+                tunnelBoundNetwork = target;
+                Log.i(TAG, "本进程已绑定物理网络，绕过组网隧道");
+            }
+        } catch (Throwable e) {
+            Log.w(TAG, "绑定物理网络失败（不影响使用）", e);
+        }
+    }
+
+    /** 挑一张能上网的物理网卡：优先「已验证连通」，其次任意带 INTERNET 能力的物理网卡。 */
+    private Network pickPhysicalNetwork(ConnectivityManager cm) {
+        Network fallback = null;
+        for (Network n : cm.getAllNetworks()) {
+            NetworkCapabilities caps = cm.getNetworkCapabilities(n);
+            if (caps == null) continue;
+            if (caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) continue; // 组网隧道，跳过
+            if (!caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)) continue;
+            boolean physical = caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
+                || caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)
+                || caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET);
+            if (!physical) continue;
+            if (caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)) return n;
+            if (fallback == null) fallback = n;
+        }
+        return fallback;
+    }
+
+    /** 网络变化时重新择优，避免一直绑在一张已经消失的网卡上。 */
+    private void watchNetworkChange() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return;
+        try {
+            ConnectivityManager cm = (ConnectivityManager) getSystemService(CONNECTIVITY_SERVICE);
+            if (cm == null) return;
+            NetworkRequest req = new NetworkRequest.Builder()
+                .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                .build();
+            cm.registerNetworkCallback(req, new ConnectivityManager.NetworkCallback() {
+                @Override public void onAvailable(Network network) {
+                    bypassTunnelNetwork();
+                }
+                @Override public void onLost(Network network) {
+                    Network bound = tunnelBoundNetwork;
+                    if (bound != null && bound.equals(network)) tunnelBoundNetwork = null;
+                    bypassTunnelNetwork();
+                }
+                @Override public void onCapabilitiesChanged(Network network, NetworkCapabilities caps) {
+                    bypassTunnelNetwork();
+                }
+            });
+        } catch (Throwable e) {
+            Log.w(TAG, "注册网络监听失败（不影响使用）", e);
+        }
+    }
+
+    /**
+     * 解除物理网络绑定。仅在所有线路都探测失败时作为兜底调用：
+     * 万一用户的网络环境「只有隧道能出网」，绑物理网卡反而更差，此时退回系统默认。
+     */
+    private boolean releaseTunnelBinding() {
+        if (tunnelBoundNetwork == null) return false;
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return false;
+        try {
+            ConnectivityManager cm = (ConnectivityManager) getSystemService(CONNECTIVITY_SERVICE);
+            if (cm == null) return false;
+            boolean ok = cm.bindProcessToNetwork(null);
+            if (ok) {
+                tunnelBoundNetwork = null;
+                tunnelBypassOff = true;
+                Log.w(TAG, "所有线路不通，已解除物理网络绑定并回退系统默认网络");
+            }
+            return ok;
+        } catch (Throwable e) {
+            Log.w(TAG, "解除物理网络绑定失败", e);
+            return false;
+        }
     }
 
     private void showRecoveryPage(WebView view, String detail) {
@@ -338,6 +446,16 @@ public class MainActivity extends BridgeActivity {
                     long bestMs = Long.MAX_VALUE;
                     for (int i = 0; i < lat.length; i++) {
                         if (lat[i] >= 0 && lat[i] < bestMs) { bestMs = lat[i]; bestIdx = i; }
+                    }
+                    // 全部失败且之前绑过物理网卡：可能是「只有组网隧道能出网」的环境，
+                    // 解绑退回系统默认网络再测一轮，仍然全挂才判定离线。
+                    if (bestIdx < 0 && !pageLoaded && releaseTunnelBinding()) {
+                        lat = probeAll();
+                        bestIdx = -1;
+                        bestMs = Long.MAX_VALUE;
+                        for (int i = 0; i < lat.length; i++) {
+                            if (lat[i] >= 0 && lat[i] < bestMs) { bestMs = lat[i]; bestIdx = i; }
+                        }
                     }
                     if (bestIdx < 0) {
                         // 页面已经加载成功（只是探测预算不够）→ 别抢屏，保留当前页面
