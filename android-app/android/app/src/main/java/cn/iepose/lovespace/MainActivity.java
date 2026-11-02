@@ -40,9 +40,7 @@ public class MainActivity extends BridgeActivity {
         "https://love.yangyuhui.xyz/",
         "https://love-space.iepose.cn/",
         "https://love.350921.xyz/",
-        "https://love-space.yangyuhui.xyz:4019/",
-        "https://fn.350921.xyz:1314/",
-        "https://yangyuhui86.top:1314/"
+        "https://love-space.yangyuhui.xyz:4019/"
     };
     private static final String SPACE_URL = SPACE_URLS[0];
     private static final String OFFLINE_PAGE = "file:///android_asset/lovespace-offline.html";
