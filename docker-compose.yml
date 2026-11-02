@@ -17,7 +17,13 @@ services:
     # 避免单个容器把整台 NAS 拖垮（OOM 只杀这个容器，宿主其它服务不受影响）
     mem_limit: ${LOVE_MEM_LIMIT:-2g}
     ports:
-      - "${LOVE_BIND_ADDRESS:-127.0.0.1}:1314:1314"
+      # 双栈监听（IPv4 + IPv6 全接口）。写死不用 .env：
+      # yangyuhui86.top 是纯 AAAA 域名，App 靠 [240e:...]:1314 做 IPv6 直连加速，
+      # 原先 ${LOVE_BIND_ADDRESS:-127.0.0.1} 只绑 IPv4 内网 —— IPv6 连接直接被拒，
+      # 表现为「本来最快的最后一条线路无法连通」。Docker 简写 "1314:1314"
+      # 会同时监听 0.0.0.0:1314 和 [::]:1314；IPv4 公网仍无映射（路由器只转 4019），
+      # 所以实际新增暴露面只有公网 IPv6 —— 这正是直连线路需要的。
+      - "1314:1314"
     read_only: true
     security_opt:
       - no-new-privileges:true
