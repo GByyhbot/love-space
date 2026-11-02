@@ -86,11 +86,14 @@ jobs:
         run: |
           set -euo pipefail
           VERSION="${GITHUB_REF_NAME#v}"
-          # 必须按北京时间取日期：runner 是 UTC，凌晨发布时 UTC 还是前一天，
-          # 会和上一版撞出同一个 versionCode（1.2.5 第一次构建就撞成了 20261024）。
-          CODE="$(TZ=Asia/Shanghai date +%Y%m%d)"
-          echo "版本 $VERSION，versionCode $CODE"
-          sed -i -E "s/versionCode [0-9]+/versionCode $CODE/" android/app/build.gradle
+          # ⚠️ versionCode 不再由 CI 按日期生成。
+          # 本地出包（同步到站内 /static/lovespace.apk）用的是一路递增的手工 versionCode，
+          # 而 CI 用 `date +%Y%m%d` 算出来往往比本地小（例如本地 20261109、CI 20261103），
+          # 于是同一个 tag 下：站内 APK 装得上，Release 资产却是低 versionCode，安卓直接
+          # 拒绝降级安装——「检查更新」点了没反应就是这个。现在 CI 沿用仓库里的
+          # build.gradle 值，和本地出的包完全同号；真要改版本号就改 build.gradle 再打 tag。
+          CODE="$(grep -oE 'versionCode [0-9]+' android/app/build.gradle | head -1 | awk '{print $2}')"
+          echo "版本 $VERSION，versionCode $CODE（沿用 build.gradle）"
           sed -i -E "s/versionName \"[^\"]*\"/versionName \"$VERSION\"/" android/app/build.gradle
           # UA 版本标记必须与 versionName 同号：远程加载模式下 Capacitor 桥常不注入，
           # 前端只能靠 UA 里的 LoveSpaceApp/<版本> 认版本，不同号会让「检查更新」永远报旧版。

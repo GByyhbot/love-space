@@ -2,13 +2,24 @@
 dedupe 保证同一天同一条打卡对同一个人只提醒一次；两人都打卡后彻底安静。
 其他测试可能留下 habit 记录，这里统一按唯一标题过滤再断言。"""
 import datetime as dt
+from zoneinfo import ZoneInfo
+
+from app import db
+from app.db import connect
+from app.worker import habit_reminders
 
 
 def _evening(hour):
-    return dt.datetime.combine(dt.date.today(), dt.time(hour, 0))
+    """空间时区里「今天」的某个整点。
 
-from app.db import connect
-from app.worker import habit_reminders
+    以前这里用 `dt.date.today()`（进程本地日期）。打卡记录里的 day 是服务端按
+    空间时区算的，而 CI runner 是 UTC：北京时间凌晨跑测试时，runner 的"今天"
+    还会是昨天，于是查 checks 查不到刚打的卡，两个人各被提醒一次 → 断言 2==1。
+    按空间时区取日期，测试就跟跑在哪台机器、什么时区无关了。
+    """
+    with connect() as c:
+        zone = ZoneInfo(db.setting(c, 'space')['timezone'])
+    return dt.datetime.now(zone).replace(hour=hour, minute=0, second=0, microsecond=0)
 
 
 def _notice_titles(marker):
