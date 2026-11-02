@@ -4,7 +4,7 @@ services:
     # 镜像 tag 由 .env 里的 LOVE_IMAGE 指定，部署脚本每次按 commit sha 写入；
     # 没设时退回 latest —— 注意 latest 只在打 v* 正式 tag 时才前进，不是"最新提交"。
     # 想在 NAS 上编译（GitHub/CI 不可用时的应急），见 .workbuddy/deploy_sync.py --local。
-    image: ${LOVE_IMAGE:-ghcr.io/gbyyhbot/love-space:latest}
+    image: ${LOVE_IMAGE:-2126263229/love-space:latest}
     container_name: love-space
     restart: unless-stopped
     # 日志不设上限时 json-file 会一直长，跑几个月能把 /var/lib/docker 撑爆
@@ -28,7 +28,8 @@ services:
     volumes:
       - ./data:/data
       # 情侣摆拍参考图库（ai-pose-gallery-zh 静态站）：同源托管，只读挂载，不进镜像
-      - /vol1/1000/pose-gallery:/srv/pose-gallery:ro
+      # 卷路径已随 2026-11-01 迁移入 LARJ，勿改回 /vol1/1000/pose-gallery
+      - /vol1/1000/LARJ/pose-gallery:/srv/pose-gallery:ro
     environment:
       TZ: Asia/Shanghai
       DATA_DIR: /data
