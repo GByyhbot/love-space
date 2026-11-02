@@ -7,6 +7,7 @@ import tempfile
 import time
 import zipfile
 from pathlib import Path
+from urllib.parse import urlparse
 
 import pytest
 
@@ -15,6 +16,7 @@ from fastapi.testclient import TestClient
 from PIL import Image
 
 from app import db
+from app.config import SPACE_ROUTES
 from app.main import app
 
 
@@ -39,6 +41,11 @@ def test_openapi_schema_is_not_public(monkeypatch):
         assert client.get('/openapi.json').status_code == 404
         assert client.get('/health').headers['strict-transport-security'] == 'max-age=31536000'
         assert 'wss://push.example.com' in client.get('/').headers['content-security-policy']
+        # 链路检测要在浏览器里跨域打点四条线路，CSP 少放通一个 origin，
+        # 那条线路就会被浏览器拦成「不可达」——线上踩过一次。
+        csp = client.get('/').headers['content-security-policy']
+        for _name, url in SPACE_ROUTES:
+            assert urlparse(url).netloc in csp, f'CSP 未放通线路 {url}'
         assert client.get('/static/sw.js').headers['service-worker-allowed'] == '/'
         # 陌生公网主机 + 明文 → 踢回 HTTPS 域名；内网直连不放行到这条分支（见下个用例）
         raw_ip = client.get('http://testserver/', headers={'host': '1.2.3.4:1314'}, follow_redirects=False)
@@ -49,6 +56,9 @@ def test_openapi_schema_is_not_public(monkeypatch):
         proxied = client.get('/', headers={'host': '172.30.0.1:1314', 'x-forwarded-proto': 'https'},
                              follow_redirects=False)
         assert proxied.status_code == 200
+        routes = client.get('/api/routes').json()['routes']
+        assert [r['url'] for r in routes] == [url for _n, url in SPACE_ROUTES]
+        assert routes[0]['name'] and routes[0]['url'].startswith('https://')
 
 
 def test_lan_plain_http_is_not_redirected(client_a, monkeypatch):

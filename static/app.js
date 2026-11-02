@@ -2035,12 +2035,29 @@ function weeklyPage(){
    多线路的真实探测能力在原生层（MainActivity.probeAll），网页侧拿不到，
    所以 App 内走 LinkBridge 插件；浏览器里退化成 fetch 打点 —— 跨域用
    mode:'no-cors' 拿不到状态码，但能区分「连上了」和「压根没连上」，够判死活。
-   切换线路只在 App 内可用：换域要重种登录 cookie，那是原生层的活。 */
-const BROWSER_ROUTES=[
+   切换线路只在 App 内可用：换域要重种登录 cookie，那是原生层的活。
+
+   ⚠️ 浏览器里跨域打点有两个死穴，以前没处理，表现出来就是「只有本网址可达」：
+   ① CSP 的 connect-src 只写了 'self' → fetch 直接被拦，报错在控制台，页面上
+      只剩「不可达」。现在服务端按 SPACE_ROUTES 把四条线路的 origin 都放通了；
+   ② fetch 没有默认超时，线路挂着不响应会一直等，整页卡在「检测中」。加 8s abort。 */
+let BROWSER_ROUTES=[
  {name:'Cloudflare 隧道',url:'https://love.yangyuhui.xyz/'},
  {name:'节点小宝',url:'https://love-space.iepose.cn/'},
  {name:'腾讯云 CloudBase',url:'https://love.350921.xyz/'},
  {name:'Lucky 直连',url:'https://love-space.yangyuhui.xyz:4019/'}];
+/* 服务端才是线路清单的权威来源（app/config.py: SPACE_ROUTES）。
+   拿到就覆盖本地这份兜底清单，省得改一处漏两处。 */
+async function loadRoutes(){
+ try{
+  const res=await fetch('/api/routes',{cache:'no-store'});
+  if(!res.ok)return;
+  const data=await res.json();
+  const list=(data?.routes||[]).filter(r=>r&&r.url);
+  if(list.length)BROWSER_ROUTES=list.map(r=>({name:r.name||r.url,url:r.url}));
+ }catch{}
+}
+const PROBE_ABORT_MS=8000;
 function linkTone(ms){if(ms<0)return 'var(--muted)';if(ms<=300)return 'var(--green)';if(ms<=1200)return 'var(--amber)';return 'var(--danger)';}
 function linkText(ms){return ms<0?'不可达':ms+' ms';}
 function linkBridge(){return window.Capacitor?.Plugins?.LinkBridge||null;}
@@ -2066,13 +2083,18 @@ function linkCheckPage(){
 async function probeRoutesInBrowser(){
  const origin=location.origin;
  const out=await Promise.all(BROWSER_ROUTES.map(async r=>{
-  const base=r.url.replace(/\/$/,''),same=base===origin,url=base+'/api/status';
+  const base=String(r.url||'').replace(/\/$/,''),same=base===origin;
+  // 打 /api/status 而不是首页：体积小，且能顺带确认后端还活着。加时间戳避开缓存。
+  const url=base+'/api/status?_p='+Date.now();
+  const ctrl=typeof AbortController==='function'?new AbortController():null;
+  const timer=ctrl?setTimeout(()=>ctrl.abort(),PROBE_ABORT_MS):null;
   const t0=performance.now();
   try{
-   if(same)await fetch(url,{cache:'no-store'});
-   else await fetch(url,{mode:'no-cors',cache:'no-store'});
+   if(same)await fetch(url,{cache:'no-store',signal:ctrl?ctrl.signal:undefined});
+   else await fetch(url,{mode:'no-cors',cache:'no-store',signal:ctrl?ctrl.signal:undefined});
    return {...r,ms:Math.round(performance.now()-t0),current:same,best:false};
   }catch{return {...r,ms:-1,current:same,best:false};}
+  finally{if(timer)clearTimeout(timer);}
  }));
  const fastest=out.filter(r=>r.ms>=0).sort((a,b)=>a.ms-b.ms)[0];
  if(fastest)fastest.best=true;
@@ -2088,6 +2110,7 @@ async function runLinkProbe(){
    const res=await bridge.probe();
    routes=(res?.routes||[]).map(r=>({name:r.name,url:r.url,ms:Number(r.ms),current:Boolean(r.current),best:Boolean(r.best)}));
   }else{
+   await loadRoutes();
    routes=await probeRoutesInBrowser();
   }
   if(!routes.length)throw new Error('没有取到线路信息');

@@ -31,7 +31,7 @@ from starlette.middleware.gzip import GZipMiddleware
 from . import db
 from . import importers
 from . import period
-from .config import APK_VERSION, BUILD_ID, WEB_VERSION
+from .config import APK_VERSION, BUILD_ID, WEB_VERSION, SPACE_ROUTES, route_origins
 from .serializers import serialize, serialize_many
 from . import webpush as webpush_service
 from .db import connect, dumps, now, uid
@@ -273,7 +273,14 @@ async def protection(request, call_next):
     if ':' in push_host and not push_host.startswith('['):
         push_host = '[' + push_host + ']'
     push_port = f':{push_origin.port}' if push_origin.port and push_origin.port != 443 else ''
-    connect_src = f"connect-src 'self' https://{push_host}{push_port} wss://{push_host}{push_port}"
+    # connect-src 除了推送服务器，还要放通四条线路自身的 origin：
+    # 「链路检测」页在浏览器里用 fetch 跨域打点，CSP 少一个 origin 就等于
+    # 那条线路直接被判死（报错在控制台，页面上只显示「不可达」）。
+    route_src = ' '.join(route_origins())
+    connect_src = (
+        f"connect-src 'self' https://{push_host}{push_port} wss://{push_host}{push_port}"
+        + (f' {route_src}' if route_src else '')
+    )
     # 姿势参考图库（/pose-gallery/）已同源托管在本地（原外链 ai-pose-gallery.anhao.app 退役）：
     # 它是我们自己静态目录里的开源静态站，允许其内联脚本/样式运行（原生 JS 画廊常含内联脚本，
     # 严格 CSP 会把它整页拦成空白）；该路径与主体接口隔离，放宽不波及其余请求。
@@ -381,6 +388,15 @@ def health():
     with connect() as c:
         c.execute('SELECT 1')
     return {'status': 'ok'}
+
+
+@app.get('/api/routes')
+def routes():
+    """可选线路清单（前端「链路检测」用它渲染，不再自己硬编码一份）。
+
+    不涉密：这些域名本来就是公开入口，谁访问都能看到首页。
+    """
+    return {'routes': [{'name': name, 'url': url} for name, url in SPACE_ROUTES]}
 
 
 # ---- AI 合成台同源转发（/pose-gallery 里「AI 合成台」的出图通道） --------------

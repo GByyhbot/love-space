@@ -656,7 +656,16 @@ public class MainActivity extends BridgeActivity {
         return lat;
     }
 
-    /** 对单条线路发一次 GET /api/status，返回耗时毫秒；不可达/非 2xx-3xx 返回 -1。 */
+    /**
+     * 对单条线路发一次 GET /api/status，返回耗时毫秒；不可达返回 -1。
+     *
+     * 两个坑都在这里踩过（1.6.6）：
+     * ① HttpsURLConnection 默认 UA 是 `Java/1.8.0_392`，Cloudflare 对它的
+     *    判定是恶意的，CF 隧道那条线路直接 403 —— 探测以为线路死了，其实
+     *    WebView（UA=LoveSpaceApp/…）访问完全正常。必须显式带 App 的 UA。
+     * ② 原来要求 2xx~3xx 才算通，于是 403/404 这种「TCP 通了、服务也应答了」
+     *    的情况被判成不可达。改成 <500 即认为线路可达，只有 5xx 与网络异常算死。
+     */
     private long probeLatency(String base) {
         HttpsURLConnection conn = null;
         try {
@@ -667,11 +676,19 @@ public class MainActivity extends BridgeActivity {
             conn.setUseCaches(false);
             conn.setRequestMethod("GET");
             conn.setInstanceFollowRedirects(true);
+            // UA 必须是纯 ASCII：versionName 取不到时 appVersion() 会返回「未知」，
+            // 非 ISO-8859-1 的值会让 HttpURLConnection 直接抛 IllegalArgumentException。
+            String ver = appVersion();
+            if (ver == null || !ver.matches("[0-9.]+")) ver = "1.0";
+            conn.setRequestProperty("User-Agent", "LoveSpaceApp/" + ver + " (Android; LinkProbe)");
+            conn.setRequestProperty("Accept", "application/json");
+            conn.setRequestProperty("Cache-Control", "no-store");
             long t0 = System.nanoTime();
             int code = conn.getResponseCode();
             long ms = (System.nanoTime() - t0) / 1_000_000L;
-            return (code >= 200 && code < 400) ? ms : -1;
+            return (code > 0 && code < 500) ? ms : -1;
         } catch (Exception e) {
+            Log.i(TAG, "探测 " + base + " 失败: " + e);
             return -1;
         } finally {
             if (conn != null) {
