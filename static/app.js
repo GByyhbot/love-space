@@ -812,9 +812,28 @@ async function applyWallpaper(){
  }catch{/* 离线或失败：这次就没背景图，下次进来再试 */}
 }
 
+/* ── 聊天气泡皮肤 ────────────────────────────────────────────────────
+   素材是 128×112 的整图（四角带装饰），前端用 CSS border-image 切九宫格拉伸，
+   所以图不裁不切，原样引用即可。自己的消息用服务器预先水平翻转过的 -r.png：
+   微信气泡的尖角和装饰都在左下角（对方那一侧），镜像之后才落在靠外的那边。
+   皮肤存在 space 设置里（两个人共用一份），字色单独存一个字段——图有深有浅，
+   白字深字没法自动判断。 */
+function chatSkin(){
+ const v=state.me?.space?.chat_bubble;
+ return typeof v==='string'?v:'';
+}
+function chatSkinFg(){return (state.me?.space?.chat_bubble_fg||'dark')==='light'?'light':'dark';}
+function chatSkinAttrs(){
+ const skin=chatSkin();
+ if(!skin)return {cls:'',style:''};
+ const mirror=skin.replace(/\.png$/,'-r.png');
+ return {cls:' skin-on'+(chatSkinFg()==='light'?' skin-light':''),
+         style:` style="--skin:url('/api/bubbles/${esc(skin)}');--skin-r:url('/api/bubbles/${esc(mirror)}')"`};
+}
+
 function messagesPage() {
  const partner=state.me.users.find(u=>u.id!==state.me.user.id);
- const immersive=chatBgIsPhoto(),bgOn=!!myChatBg().bg;
+ const immersive=chatBgIsPhoto(),bgOn=!!myChatBg().bg,skinAttrs=chatSkinAttrs();
  /* 置顶条只显示最新的一条，点开跳过去；多条时给个总数，不挤占聊天区 */
  const pinned=recordsOf('chat').filter(r=>r.body.pinned&&!r.body.recalled).sort((a,b)=>b.created-a.created);
  const pinnedBar=pinned.length?`<button type="button" class="chat-pinned" data-action="chat-jump" data-id="${pinned[0].id}"><span class="cp-tag">📌 置顶</span><span class="cp-text">${esc((pinned[0].body.content||'一条附件').slice(0,42))}</span>${pinned.length>1?`<i>共 ${pinned.length} 条</i>`:''}</button>`:'';
@@ -841,7 +860,7 @@ function messagesPage() {
    <button type="button" class="fn-tile" data-action="chat-song"><span class="fn-ico">${icon('music')}</span><b>音乐</b></button>
   </div>
  </div>`;
- return `<section class="chat-panel${bgOn?' has-wallpaper':''}${immersive?' immersive':''}">${chatWallpaper()}<header class="chat-header"><button class="icon-btn" data-action="chat-back" aria-label="返回">${icon('back')}</button>${partner?avatar(partner.id):'<span class="avatar">♡</span>'}<div><h3>${partner?esc(partner.name):'等待另一半加入'}</h3><small>我们的悄悄话 · 仅彼此可见</small></div><button class="icon-btn" data-action="chat-search" aria-label="搜索消息" title="搜索消息" style="margin-left:auto">${icon('search')}</button><button class="icon-btn" data-action="chat-bg" aria-label="聊天背景" title="聊天背景">${icon('photo')}</button><button class="icon-btn" data-nav="imports" aria-label="聊天记录">${icon('book')}</button></header><div class="chat-body">${pinnedBar}${searchBar}<div id="chat-log" class="chat-log" aria-live="polite">${chatRows()}</div></div><div id="sticker-dock" class="sticker-dock" hidden></div>${replyBar}${composeBar}${fnPanel}<input id="chat-file" type="file" accept="image/*,video/*" multiple hidden><input id="chat-shot" type="file" accept="image/*" capture="environment" hidden></section>`;
+ return `<section class="chat-panel${bgOn?' has-wallpaper':''}${immersive?' immersive':''}${skinAttrs.cls}"${skinAttrs.style}>${chatWallpaper()}<header class="chat-header"><button class="icon-btn" data-action="chat-back" aria-label="返回">${icon('back')}</button>${partner?avatar(partner.id):'<span class="avatar">♡</span>'}<div><h3>${partner?esc(partner.name):'等待另一半加入'}</h3><small>我们的悄悄话 · 仅彼此可见</small></div><button class="icon-btn" data-action="chat-search" aria-label="搜索消息" title="搜索消息" style="margin-left:auto">${icon('search')}</button><button class="icon-btn" data-action="chat-bg" aria-label="聊天背景" title="聊天背景">${icon('photo')}</button><button class="icon-btn" data-nav="imports" aria-label="聊天记录">${icon('book')}</button></header><div class="chat-body">${pinnedBar}${searchBar}<div id="chat-log" class="chat-log" aria-live="polite">${chatRows()}</div></div><div id="sticker-dock" class="sticker-dock" hidden></div>${replyBar}${composeBar}${fnPanel}<input id="chat-file" type="file" accept="image/*,video/*" multiple hidden><input id="chat-shot" type="file" accept="image/*" capture="environment" hidden></section>`;
 }
 function scrollChat(){const log=$('#chat-log');if(log)log.scrollTop=log.scrollHeight;}
 
@@ -1210,6 +1229,106 @@ async function sendAlbumPick(){
   toast(ids.length>1?`已发送 ${ids.length} 张`:'已发送');
  }catch(e){toast(e.message||'发送失败');syncAlbumPick();}
 }
+/* ── 聊天气泡皮肤：两千多张图，分批画、选中先预览再落库 ────────────────
+   图是 128×112 的整图（四角带装饰），前端靠 CSS border-image 切九宫格随
+   内容拉伸，所以这里只管"挑哪一张"。两件事特意没做成即点即生效：
+   ① 图底深浅差得远，深字压在紫气泡上根本看不见，得让人配着预览选字色；
+   ② 一组的图有一千多张，全塞进 DOM 会卡，所以滚到底再画下一批。 */
+let bpGroups=[],bpPack='',bpPick='',bpFg='dark',bpShown=0;
+const BP_PAGE=90;
+async function bubblePicker(){
+ focusReturn=document.activeElement;
+ bpPick=chatSkin();bpFg=chatSkinFg();bpShown=0;bpGroups=[];
+ const cur=bpPick?bpPick.split('/')[0]:'';
+ $('#modal-root').innerHTML=`<div class="pick-overlay" id="bp-overlay"><section class="pick-sheet bp-sheet" role="dialog" aria-modal="true" aria-labelledby="bp-title">
+  <header class="ps-head"><div><b id="bp-title">聊天气泡</b><small id="bp-count">正在读素材…</small></div><button type="button" class="icon-btn" data-action="close-modal" aria-label="关闭">${icon('close')}</button></header>
+  <div class="bp-tabs" id="bp-tabs"></div>
+  <div class="bp-preview" id="bp-preview"></div>
+  <div class="bp-grid" id="bp-grid"><p class="meta">正在加载…</p></div>
+  <div class="ps-foot">
+   <div class="bp-fg"><span>字色</span><button type="button" data-fg="dark">深色字</button><button type="button" data-fg="light">浅色字</button><i>气泡图有深有浅，按这张图选</i></div>
+   <div class="ps-row"><button type="button" class="button soft" id="bp-none">不用皮肤</button><button type="button" class="button primary" id="bp-apply">使用这个</button></div>
+  </div>
+ </section></div>`;
+ document.body.style.overflow='hidden';
+ $('#bp-overlay').onclick=e=>{
+  if(e.target.id==='bp-overlay'){closeModal();return;}
+  const pack=e.target.closest('[data-pack]');
+  if(pack){if(pack.dataset.pack===bpPack)return;bpPack=pack.dataset.pack;renderBubbleTabs();renderBubbleGrid();return;}
+  const cell=e.target.closest('[data-skin]');
+  if(cell){bpPick=cell.dataset.skin;syncBubblePick();return;}
+  const fg=e.target.closest('[data-fg]');
+  if(fg){bpFg=fg.dataset.fg;syncBubblePick();}
+ };
+ $('#bp-none').onclick=()=>{bpPick='';syncBubblePick();};
+ $('#bp-apply').onclick=applyBubblePick;
+ let data={groups:[]};
+ try{data=await api('/bubbles');}catch(e){toast(e.message||'气泡素材读不出来');}
+ bpGroups=data.groups||[];
+ if(!bpGroups.length){
+  $('#bp-grid').innerHTML='<p class="meta">服务器上还没有气泡素材。把图放进数据卷的 bubbles/ 目录，按包分文件夹即可。</p>';
+  $('#bp-count').textContent='没有素材';renderBubbleTabs();syncBubblePick();return;
+ }
+ bpPack=bpGroups.some(g=>g.id===cur)?cur:bpGroups[0].id;
+ renderBubbleTabs();renderBubbleGrid();syncBubblePick();
+ const grid=$('#bp-grid');
+ grid.onscroll=()=>{if(grid.scrollTop+grid.clientHeight>grid.scrollHeight-180)growBubbleGrid();};
+}
+function bpPackLabel(id,i){
+ const m=/^p(\d+)$/.exec(id);
+ return `第 ${m?m[1]:i+1} 组`;
+}
+function renderBubbleTabs(){
+ const box=$('#bp-tabs');if(!box)return;
+ box.innerHTML=bpGroups.map((g,i)=>`<button type="button" class="bp-tab${g.id===bpPack?' on':''}" data-pack="${esc(g.id)}" aria-pressed="${g.id===bpPack}">${bpPackLabel(g.id,i)}<i>${g.count}</i></button>`).join('');
+}
+function bpCells(items){
+ return items.map(n=>`<button type="button" class="bp-cell" data-skin="${esc(bpPack)}/${esc(n)}" aria-label="气泡 ${esc(n)}"><img src="/api/bubbles/${esc(bpPack)}/${esc(n)}" alt="" loading="lazy" decoding="async"></button>`).join('');
+}
+function renderBubbleGrid(){
+ const g=bpGroups.find(x=>x.id===bpPack),grid=$('#bp-grid');if(!grid)return;
+ if(!g){grid.innerHTML='<p class="meta">这一组没有图。</p>';return;}
+ bpShown=Math.min(BP_PAGE,g.items.length);
+ grid.scrollTop=0;
+ grid.innerHTML=bpCells(g.items.slice(0,bpShown));
+ const total=bpGroups.reduce((n,x)=>n+x.count,0),cnt=$('#bp-count');
+ if(cnt)cnt.textContent=`共 ${total} 张 · 这一组 ${g.count} 张`;
+}
+function growBubbleGrid(){
+ const g=bpGroups.find(x=>x.id===bpPack),grid=$('#bp-grid');
+ if(!g||!grid||bpShown>=g.items.length)return;
+ const from=bpShown;
+ bpShown=Math.min(bpShown+BP_PAGE,g.items.length);
+ grid.insertAdjacentHTML('beforeend',bpCells(g.items.slice(from,bpShown)));
+ syncBubbleCells();
+}
+function syncBubbleCells(){
+ const on=bpPick;
+ $$('#bp-grid [data-skin]').forEach(c=>c.classList.toggle('on',!!on&&c.dataset.skin===on));
+}
+function syncBubblePick(){
+ syncBubbleCells();
+ const pv=$('#bp-preview');
+ if(pv){
+  const on=!!bpPick,cls=(on?' skinned':'')+(bpFg==='light'?' light':'');
+  const style=on?` style="--skin:url('/api/bubbles/${esc(bpPick)}');--skin-r:url('/api/bubbles/${esc(bpPick.replace(/\.png$/,'-r.png'))}')"`:'';
+  pv.innerHTML=`<div class="bp-preview-row"><div class="bp-bubble${cls}"${style}>今天下班去买菜，回来给你做番茄牛腩，路上有点堵</div></div>`
+   +`<div class="bp-preview-row mine"><div class="bp-bubble mine${cls}"${style}>好呀，路上慢点</div></div>`;
+ }
+ $$('#bp-overlay [data-fg]').forEach(b=>b.classList.toggle('on',b.dataset.fg===bpFg));
+ const ap=$('#bp-apply');
+ if(ap)ap.textContent=bpPick?'使用这个':'用默认气泡';
+}
+async function applyBubblePick(){
+ const s=state.me.space||{},btn=$('#bp-apply');
+ if(btn)btn.disabled=true;
+ try{
+  await put('/space',{...s,chat_bubble:bpPick||'',chat_bubble_fg:bpFg});
+  await refresh();closeModal();
+  toast(bpPick?'气泡换好了，两个人都看得见':'已换回默认气泡');
+ }catch(e){toast(e.message||'保存失败');}
+ finally{if(btn)btn.disabled=false;}
+}
 /* ── 点开一条位置消息：先想办法唤起高德 App ──────────────────────────
    原来整张卡是一个 target=_blank 的链接，点下去直接切到浏览器看网页地图，
    在 App 里等于"跳出恋爱空间"。现在的顺序：
@@ -1562,7 +1681,7 @@ function togetherPage() {
  if(state.tab==='period-analysis')return periodAnalysisPage();
  if(state.tab==='music')return musicPage();
  if(state.tab){const meta=toolsList.find(x=>x[0]===state.tab);if(meta)return `${heading(meta[2],meta[3],'new-'+state.tab,'添加'+({anniversary:'纪念日',wish:'愿望',mood:'心情',note:'留言',question:'问题',habit:'目标'}[state.tab]))}${state.tab==='question'?'<p class="hint">可以写下自己的问题，也可以从内置题目里挑一个。双方回答后才揭晓彼此的答案。</p>':''}${recordsOf(state.tab).length?recordsOf(state.tab).map(recordCard).join(''):empty('给我们，多一点小小的仪式感',meta[3],'new-'+state.tab,'现在开始')}`;}
- return `${heading('关于我们，还有好多好多','把喜欢落在实处，把日子过成纪念。')}<div class="tools-grid"><button class="tool-card tool-card-wide" data-action="tool-period"><span class="tool-emoji">🌸</span><span class="tool-wide-copy"><h3>生理期</h3><p>记下周期，把照顾提前一点</p></span><span class="tool-wide-go">${icon('arrow')}</span></button><button class="tool-card" data-nav="dashboard"><span class="tool-emoji">📊</span><h3>数据看板</h3><p>我们的点滴，都在这里</p></button><button class="tool-card" data-nav="weekly"><span class="tool-emoji">✉️</span><h3>回忆周报</h3><p>把这一周，收进一封信</p></button><button class="tool-card" data-nav="figure"><span class="tool-emoji">📸</span><h3>情侣摆拍参考</h3><p>照着姿势参考，拍一张</p></button>${toolsList.map(([id,emoji,title,desc])=>`<button class="tool-card" data-action="tool-${id}"><span class="tool-emoji">${emoji}</span><h3>${title}</h3><p>${desc}</p></button>`).join('')}</div><div class="section-heading settings-section-heading"><h2>${icon('gear')} 设置</h2></div><div class="tools-grid settings-tools"><button class="tool-card" data-action="space"><span class="tool-emoji">🏡</span><h3>空间设置</h3><p>空间名称、封面与相恋日期</p></button>${state.me.users.length<2?`<button class="tool-card" data-action="invite"><span class="tool-emoji">💌</span><h3>邀请另一半入住</h3><p>把你们的专属空间分享给 TA</p></button>`:''}<button class="tool-card" data-nav="channels"><span class="tool-emoji">🔔</span><h3>提醒设置</h3><p>通知渠道与提醒偏好</p></button><button class="tool-card" data-nav="settings"><span class="tool-emoji">⚙️</span><h3>全部设置</h3><p>账号资料、数据导出与备份</p></button></div>`;
+ return `${heading('关于我们，还有好多好多','把喜欢落在实处，把日子过成纪念。')}<div class="tools-grid"><button class="tool-card tool-card-wide" data-action="tool-period"><span class="tool-emoji">🌸</span><span class="tool-wide-copy"><h3>生理期</h3><p>记下周期，把照顾提前一点</p></span><span class="tool-wide-go">${icon('arrow')}</span></button><button class="tool-card" data-nav="dashboard"><span class="tool-emoji">📊</span><h3>数据看板</h3><p>我们的点滴，都在这里</p></button><button class="tool-card" data-nav="weekly"><span class="tool-emoji">✉️</span><h3>回忆周报</h3><p>把这一周，收进一封信</p></button><button class="tool-card" data-nav="figure"><span class="tool-emoji">📸</span><h3>情侣摆拍参考</h3><p>照着姿势参考，拍一张</p></button>${toolsList.map(([id,emoji,title,desc])=>`<button class="tool-card" data-action="tool-${id}"><span class="tool-emoji">${emoji}</span><h3>${title}</h3><p>${desc}</p></button>`).join('')}</div><div class="section-heading settings-section-heading"><h2>${icon('gear')} 设置</h2></div><div class="tools-grid settings-tools"><button class="tool-card" data-action="space"><span class="tool-emoji">🏡</span><h3>空间信息</h3><p>空间名称与相恋日期</p></button><button class="tool-card" data-action="theme-form"><span class="tool-emoji">🎨</span><h3>主题与外观</h3><p>主题色、夜间模式与动效</p></button><button class="tool-card" data-action="home-bg"><span class="tool-emoji">🖼️</span><h3>主页背景</h3><p>换一张首页封面照片</p></button><button class="tool-card" data-action="chat-bg"><span class="tool-emoji">🌄</span><h3>聊天背景</h3><p>聊天壁纸与文字对比度</p></button><button class="tool-card" data-action="chat-bubble"><span class="tool-emoji">💬</span><h3>聊天气泡</h3><p>两千多款气泡皮肤随手挑</p></button>${state.me.users.length<2?`<button class="tool-card" data-action="invite"><span class="tool-emoji">💌</span><h3>邀请另一半入住</h3><p>把你们的专属空间分享给 TA</p></button>`:''}<button class="tool-card" data-nav="channels"><span class="tool-emoji">🔔</span><h3>提醒设置</h3><p>通知渠道与提醒偏好</p></button><button class="tool-card" data-nav="settings"><span class="tool-emoji">⚙️</span><h3>全部设置</h3><p>账号资料、数据导出与备份</p></button></div>`;
 }
 /* 恋爱清单：对齐「小恩爱 200+ 件小事」的思路，但只用 40 条精选做引子，
    不批量灌库——清单是两个人的，不是产品的。 */
@@ -2663,7 +2782,7 @@ function settingsPage() {
  const fmtSize=b=>b>=1073741824?(b/1073741824).toFixed(2)+' GB':(b/1048576).toFixed(1)+' MB';
  const isAdmin=!!state.me.user.admin;
  const storageStrip=isAdmin&&st?`<button class="storage-strip" data-nav="backups"><span class="storage-strip-icon">${icon('gear')}</span><span class="storage-strip-body"><strong>已用 ${fmtSize(st.total||0)}</strong><small>可用 ${fmtSize(st.disk_free||0)} · ${st.record_count||0} 条记录 · ${st.media_count||0} 个媒体文件</small></span><span class="storage-strip-more">存储占用与备份 ${icon('arrow')}</span></button>`:'';
- return `${heading('设置','管理空间、账号和数据。')}<div class="settings-grid"><section class="card"><h2>${icon('home')} 空间设置</h2><div class="setting-list"><button data-action="space">名称、封面与主题 ${icon('arrow')}</button>${state.me.users.length<2?`<button data-action="invite">邀请另一半 ${icon('arrow')}</button>`:''}<button data-nav="channels">通知渠道与提醒偏好 ${icon('arrow')}</button></div></section><section class="card"><h2>${icon('gear')} 我的账号</h2><div class="setting-list"><button data-action="profile">头像、昵称与密码 ${icon('arrow')}</button><button data-action="logout">退出登录 ${icon('arrow')}</button></div></section><section class="card"><h2>${icon('chat')} 连接</h2><div class="setting-list"><button data-nav="linkcheck">链路检测与线路切换 ${icon('arrow')}</button></div><p class="small-note">平时 App 从哪条线路进来就用哪条，不会自动切换。进页面明显变慢、或某条线路连不上时，可以在这里测一遍响应速度并手动换一条——换过之后，下次打开会直接走新选的这条。</p></section><section class="card"><h2>${icon('download')} 数据管理</h2>${storageStrip}<div class="setting-list"><a href="/api/export" download>导出我有权查看的记录与原文件 ${icon('download')}</a><a href="/api/export/markdown" download>导出 Markdown 知识库（第二大脑） ${icon('download')}</a><a href="/api/export/ics" download>导出日历 .ics（纪念日与计划） ${icon('download')}</a>${state.me.user.admin?`<button data-nav="backups">完整备份与存储占用 ${icon('arrow')}</button>`:''}</div><p class="small-note">第二大脑是纯 Markdown 文件夹，可拖进 Obsidian / Logseq，也可直接给 AI 当长期记忆；只含你自己可见的内容，个人心愿只导出标题。私密日记按账号隔离，完整备份由服务器管理员管理。日历文件导进手机自带日历后，纪念日就能用系统提醒，比站内推送更稳。</p></section><section class="card"><h2>${icon('info')} 关于</h2><div class="setting-list"><div style="display:flex;align-items:center;gap:10px;padding:12px 0"><span class="stat-icon" style="font-size:28px">💕</span><div><h3 style="margin:0;font-size:15px">恋爱空间</h3><p class="meta" style="margin:2px 0 0">${v.version?((state.apkVersion?'APK v'+state.apkVersion+' · ':'')+'网页 v'+v.version+(state.apkLatest&&state.apkVersion&&newerVer(state.apkLatest,state.apkVersion)?' · <span style="color:#c0392b">可更新到 v'+state.apkLatest+'</span>':'')):'加载中…'}</p></div></div><button data-action="check-update">检查更新 ${icon('arrow')}</button><button data-action="copy-apk-link">复制 App 下载链接 ${icon('arrow')}</button></div><p class="small-note">网页功能自动更新；原生功能（如后台通知）需下载新版 APK，可在检查更新中获取，也可复制下载链接发给对方在手机浏览器打开。</p></section></div>`;
+ return `${heading('设置','管理空间、账号和数据。')}<div class="settings-grid"><section class="card"><h2>${icon('home')} 空间设置</h2><div class="setting-list"><button data-action="space">空间名称与相恋日期 ${icon('arrow')}</button>${state.me.users.length<2?`<button data-action="invite">邀请另一半 ${icon('arrow')}</button>`:''}<button data-nav="channels">通知渠道与提醒偏好 ${icon('arrow')}</button></div><p class="small-note">名称和日期是两个人共用的；通知渠道只影响你自己收到的提醒。</p></section><section class="card"><h2>${icon('image')} 外观与背景</h2><div class="setting-list"><button data-action="theme-form">主题与外观 ${icon('arrow')}</button><button data-action="home-bg">主页背景 ${icon('arrow')}</button><button data-action="chat-bg">聊天背景 ${icon('arrow')}</button><button data-action="chat-bubble">聊天气泡 ${icon('arrow')}</button></div><p class="small-note">主题色、主页封面、聊天壁纸和气泡皮肤各管一摊，改哪样只动哪样，不用整张表一起提交。夜间模式只记在这台设备上。</p></section><section class="card"><h2>${icon('gear')} 我的账号</h2><div class="setting-list"><button data-action="profile">头像、昵称与密码 ${icon('arrow')}</button><button data-action="logout">退出登录 ${icon('arrow')}</button></div></section><section class="card"><h2>${icon('chat')} 连接</h2><div class="setting-list"><button data-nav="linkcheck">链路检测与线路切换 ${icon('arrow')}</button></div><p class="small-note">平时 App 从哪条线路进来就用哪条，不会自动切换。进页面明显变慢、或某条线路连不上时，可以在这里测一遍响应速度并手动换一条——换过之后，下次打开会直接走新选的这条。</p></section><section class="card"><h2>${icon('download')} 数据管理</h2>${storageStrip}<div class="setting-list"><a href="/api/export" download>导出我有权查看的记录与原文件 ${icon('download')}</a><a href="/api/export/markdown" download>导出 Markdown 知识库（第二大脑） ${icon('download')}</a><a href="/api/export/ics" download>导出日历 .ics（纪念日与计划） ${icon('download')}</a>${state.me.user.admin?`<button data-nav="backups">完整备份与存储占用 ${icon('arrow')}</button>`:''}</div><p class="small-note">第二大脑是纯 Markdown 文件夹，可拖进 Obsidian / Logseq，也可直接给 AI 当长期记忆；只含你自己可见的内容，个人心愿只导出标题。私密日记按账号隔离，完整备份由服务器管理员管理。日历文件导进手机自带日历后，纪念日就能用系统提醒，比站内推送更稳。</p></section><section class="card"><h2>${icon('info')} 关于</h2><div class="setting-list"><div style="display:flex;align-items:center;gap:10px;padding:12px 0"><span class="stat-icon" style="font-size:28px">💕</span><div><h3 style="margin:0;font-size:15px">恋爱空间</h3><p class="meta" style="margin:2px 0 0">${v.version?((state.apkVersion?'APK v'+state.apkVersion+' · ':'')+'网页 v'+v.version+(state.apkLatest&&state.apkVersion&&newerVer(state.apkLatest,state.apkVersion)?' · <span style="color:#c0392b">可更新到 v'+state.apkLatest+'</span>':'')):'加载中…'}</p></div></div><button data-action="check-update">检查更新 ${icon('arrow')}</button><button data-action="copy-apk-link">复制 App 下载链接 ${icon('arrow')}</button></div><p class="small-note">网页功能自动更新；原生功能（如后台通知）需下载新版 APK，可在检查更新中获取，也可复制下载链接发给对方在手机浏览器打开。</p></section></div>`;
 }
 function personalPage() {
  const tab=state.tab||'diary',tabs=[['diary','私密日记'],['draft','草稿箱'],['surprise','定时惊喜'],['trash','回收站']];
@@ -2972,35 +3091,40 @@ function quickMoodForm() {
   await post('/records',{kind:'mood',body:{emoji:data.emoji,date:today(),content:(data.content||'').trim()},client_id:uuid()});
  },'记下今天');
 }
+/* ── 空间设置拆成四块：改什么就进哪一张表 ──────────────────────────────
+   原先名称/日期/主题/封面/壁纸全塞在一张大表里，改个主题要滚半屏，还会把
+   不相干的字段一起提交（PUT /api/space 是全量覆盖）。现在每张表只动自己那几个键，
+   其余原样带回，谁也不碰谁。聊天气泡单独在 bubblePicker() 里选。 */
 function spaceForm() {
  const s=state.me.space;
- const darkPref=localStorage.getItem(DARK_KEY)||'auto';
- const bg=s.chat_bg||'',dim=s.chat_bg_dim??35,wm=s.chat_bg_media||'';
- /* 壁纸色卡：预设直接复用 .chat-wallpaper 的样式，所见即所得；选「用照片」时先弹文件选择 */
- const swatches=CHAT_BG_PRESETS.map(([key,label])=>{
-  const on=key===bg;
-  const art=key==='photo'
-   ?(wm?`<span class="chat-wallpaper" aria-hidden="true" style="background-image:url('/media/${esc(wm)}?preview=true')"></span>`:'<span class="pico" aria-hidden="true">📷</span>')
-   :(key?`<span class="chat-wallpaper" data-bg="${key}" aria-hidden="true"></span>`:'');
-  return `<button type="button" class="wallpaper-swatch${on?' selected':''}${key==='photo'&&!wm?' photo-empty':''}" data-bg="${key}" aria-pressed="${on}">${art}<b>${label}</b></button>`;
- }).join('');
- simpleForm('空间设置',field('空间名称','name',s.name,'text','required maxlength="60"')+field('从哪一天开始相爱','since',s.since,'date')+`<div class="form-row">${selectField('主题色','theme',[['rose','草莓牛奶'],['peach','蜜桃奶油'],['lavender','香芋云朵'],['custom','自定义']],s.theme)}${selectField('夜间模式','dark',[['auto','跟随系统'],['on','始终开启'],['off','始终关闭']],darkPref)}</div><label>自定义颜色（主题选「自定义」时生效）<input type="color" name="custom_color" value="${s.custom_color||'#c6748a'}"></label><div class="file-picker"><span class="file-picker-title">更换封面照片</span><label class="upload-tile file-picker-tile"><span class="upload-ico">🖼️</span><b>选择封面照片</b><small id="cover-file-name">${s.cover?'已设置封面，可重新选择':'选择一张照片作为我们的空间封面'}</small><input type="file" id="cover-file" accept="image/jpeg,image/png,image/webp"></label><button type="button" class="button soft" data-action="cover-album">从相册里选一张</button><div class="album-inline" id="cover-album-list" hidden></div><input type="hidden" id="cover-album" value=""><p class="small-note">换好照片保存后会直接弹出构图调整：按住图拖动摆位置，缩放挑画面大小。之后想换封面，回首页点封面右上角那颗图片按钮就行。</p></div><div class="wallpaper-picker"><span class="file-picker-title">聊天壁纸</span><div class="wallpaper-swatches" id="wallpaper-swatches">${swatches}</div><label class="wallpaper-dim-row">背景遮罩 <input type="range" name="chat_bg_dim" id="wallpaper-dim" min="0" max="80" step="5" value="${dim}"><span id="wallpaper-dim-val">${dim}%</span></label><label class="upload-tile file-picker-tile"><span class="upload-ico">🖼️</span><b>用你们的照片</b><small id="wallpaper-file-name">${wm?'已设置背景照片，可重新选择':'选一张照片铺在聊天背景上'}</small><input type="file" id="wallpaper-file" accept="image/jpeg,image/png,image/webp"></label><button type="button" class="button soft" data-action="bg-album">从相册里选一张</button><div class="album-inline" id="bg-album-list" hidden></div><input type="hidden" name="chat_bg" value="${esc(bg)}"><input type="hidden" name="chat_bg_media" value="${esc(wm)}"><p class="small-note">遮罩越强，背景越淡、文字越清楚。这里是**共同背景**——只是两个人各自没单独设置时的默认值。想设自己的、或替对方换一张，去聊天页点右上角的背景按钮。</p></div><label class="switch-row">启用轻柔动效<input name="motion" type="checkbox" ${s.motion?'checked':''}></label>`,async(data,form)=>{let cover=s.cover;const file=$('#cover-file').files[0];if(file)cover=(await uploadFile(file)).id;else if($('#cover-album').value)cover=$('#cover-album').value;let wallpaper=data.chat_bg_media||'';const wfile=$('#wallpaper-file').files[0];if(wfile){wallpaper=(await uploadFile(wfile)).id;data.chat_bg='photo';}localStorage.setItem(DARK_KEY,data.dark);applyDarkMode();delete data.dark;if(data.theme!=='custom')data.custom_color='';if(data.theme==='custom'&&!data.custom_color)data.custom_color=s.custom_color||'#c6748a';data.chat_bg_dim=Math.min(80,Math.max(0,Number(data.chat_bg_dim)||0));await put('/space',{...data,cover,chat_bg_media:wallpaper,cover_pos:file?{x:50,y:50,z:1}:(s.cover_pos||{x:50,y:50,z:1}),motion:$('[name=motion]',form).checked});applyCustomColor(data.theme,data.custom_color);/* 换了新封面就顺势把构图弹出来：选图 → 拖动摆位 → 保存，一口气做完 */if(file)setTimeout(()=>{if(!$('.modal'))coverCropModal(cover);},450);});
- $('#cover-file').onchange=e=>{$('#cover-file-name').textContent=e.target.files[0]?.name||'选择一张照片作为我们的空间封面';};
- /* 色卡点选：「用照片」在还没有照片时先弹文件框，避免存下一个没有图的 photo 壁纸 */
- $('#wallpaper-swatches').onclick=e=>{
-  const btn=e.target.closest('.wallpaper-swatch');if(!btn)return;
-  const key=btn.dataset.bg;
-  if(key==='photo'&&!$('#simple-form [name=chat_bg_media]').value){$('#wallpaper-file').click();return;}
-  $('#simple-form [name=chat_bg]').value=key;
-  $$('.wallpaper-swatch').forEach(b=>{const on=b===btn;b.classList.toggle('selected',on);b.setAttribute('aria-pressed',String(on));});
- };
- $('#wallpaper-file').onchange=e=>{
-  const f=e.target.files[0];if(!f)return;
-  $('#wallpaper-file-name').textContent=f.name;
-  $('#simple-form [name=chat_bg]').value='photo';
-  $$('.wallpaper-swatch').forEach(b=>{const on=b.dataset.bg==='photo';b.classList.toggle('selected',on);b.setAttribute('aria-pressed',String(on));b.classList.remove('photo-empty');});
- };
- $('#wallpaper-dim').oninput=e=>{$('#wallpaper-dim-val').textContent=e.target.value+'%';};
+ simpleForm('空间信息',field('空间名称','name',s.name,'text','required maxlength="60"')+field('从哪一天开始相爱','since',s.since,'date')+'<p class="small-note">名字会出现在首页和分享出去的那张卡片上；日期决定首页「在一起第几天」从哪天算起。</p>',async(data)=>{
+  await put('/space',{...s,name:data.name,since:data.since});
+ });
+}
+function themeForm() {
+ const s=state.me.space,darkPref=localStorage.getItem(DARK_KEY)||'auto';
+ simpleForm('主题与外观',`<div class="form-row">${selectField('主题色','theme',[['rose','草莓牛奶'],['peach','蜜桃奶油'],['lavender','香芋云朵'],['custom','自定义']],s.theme)}${selectField('夜间模式','dark',[['auto','跟随系统'],['on','始终开启'],['off','始终关闭']],darkPref)}</div><label>自定义颜色（主题选「自定义」时生效）<input type="color" name="custom_color" value="${s.custom_color||'#c6748a'}"></label><label class="switch-row">启用轻柔动效<input name="motion" type="checkbox" ${s.motion?'checked':''}></label><p class="small-note">夜间模式记在这台设备上，只影响你自己看到的界面；主题色是两个人共用的。</p>`,async(data,form)=>{
+  localStorage.setItem(DARK_KEY,data.dark);applyDarkMode();
+  let custom=data.custom_color||'';
+  if(data.theme!=='custom')custom='';
+  else if(!custom)custom=s.custom_color||'#c6748a';
+  await put('/space',{...s,theme:data.theme,custom_color:custom,motion:$('[name=motion]',form).checked});
+  applyCustomColor(data.theme,custom);
+ });
+}
+function homeBgForm() {
+ const s=state.me.space;
+ simpleForm('主页背景',`<div class="file-picker"><span class="file-picker-title">首页封面照片</span><label class="upload-tile file-picker-tile"><span class="upload-ico">🖼️</span><b>选择封面照片</b><small id="cover-file-name">${s.cover?'已设置封面，可重新选择':'选择一张照片作为我们的空间封面'}</small><input type="file" id="cover-file" accept="image/jpeg,image/png,image/webp"></label><button type="button" class="button soft" data-action="cover-album">从相册里选一张</button><div class="album-inline" id="cover-album-list" hidden></div><input type="hidden" id="cover-album" value=""><p class="small-note">换好照片保存后会直接弹出构图调整：按住图拖动摆位置、缩放挑画面大小。之后想换，回首页点封面右上角那颗图片按钮也一样。</p></div>`,async()=>{
+  let cover=s.cover;
+  const file=$('#cover-file').files[0];
+  if(file)cover=(await uploadFile(file)).id;
+  else if($('#cover-album').value)cover=$('#cover-album').value;
+  if(!cover)throw new Error('还没选照片');
+  await put('/space',{...s,cover,cover_pos:file?{x:50,y:50,z:1}:(s.cover_pos||{x:50,y:50,z:1})});
+  if(file)setTimeout(()=>{if(!$('.modal'))coverCropModal(cover);},450);
+ });
+ const inp=$('#cover-file');
+ if(inp)inp.onchange=e=>{const n=$('#cover-file-name');if(n)n.textContent=e.target.files[0]?.name||'选择一张照片作为我们的空间封面';};
 }
 /* 聊天页里的「换背景」：只管壁纸三件套，不用进空间设置翻一大张表。
    壁纸是 space 级设置，PUT /api/space 要带全量必填字段（name 等），所以这里摊上现有 space 再覆盖。 */
@@ -3364,6 +3488,9 @@ async function act(action,id,el) {
  if(action==='lb-out')return lbStep(1/1.6);
  if(action==='lb-fit')return lbReset();
  if(action==='space')return spaceForm();
+ if(action==='theme-form')return themeForm();
+ if(action==='home-bg')return homeBgForm();
+ if(action==='chat-bubble')return bubblePicker();
  if(action==='cover-pick')return pickCover();
  if(action==='cover-album')return albumInline($('#cover-album-list'),mid=>{const h=$('#cover-album');if(h)h.value=mid;const n=$('#cover-file-name');if(n)n.textContent='已从相册选好，保存后生效';});
  if(action==='bg-album')return albumInline($('#bg-album-list'),mid=>{

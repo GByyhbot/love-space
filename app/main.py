@@ -306,6 +306,13 @@ async def protection(request, call_next):
         #      靠 ETag 校验，不会重传整张图。
         # 只有封面走这条路，相册/聊天里的图仍然 no-store：它们量太大，也不该长期躺在设备上。
         result.headers['Cache-Control'] = 'private, max-age=0, must-revalidate'
+    elif request.url.path.startswith('/api/bubbles/'):
+        # 聊天气泡皮肤图：文件名即内容（发上去就不再改），一张只有几 KB，
+        # 一年强缓存能让"来回挑皮肤"不再反复打网络；也是 private——
+        # 这是两个人自己挑的东西，不该进共享缓存。
+        # 注意带斜杠：清单接口 /api/bubbles 仍走下面的 no-store，
+        # 否则新加的素材包在客户端永远看不见。
+        result.headers['Cache-Control'] = 'private, max-age=31536000, immutable'
     elif request.url.path.startswith(('/api/', '/media/')):
         result.headers['Cache-Control'] = 'no-store'
     elif request.url.path.startswith('/static/stickers/'):
@@ -765,6 +772,11 @@ class Space(BaseModel):
     chat_bg_users: dict[str, dict] | None = None
     # 这次要改谁的背景；留空表示改共同默认值（旧客户端的行为）
     chat_bg_target: str | None = Field(default=None, max_length=64)
+    # 聊天气泡皮肤，形如 "p1/1000.png"；空串表示用回默认的圆角气泡。
+    # None = 旧客户端没带这个字段，沿用原值（否则旧版一保存就把皮肤清掉）。
+    chat_bubble: str | None = Field(default=None, max_length=80)
+    # 皮肤上的字色：气泡图的底色深浅不一，白字/深字只能由人选一次。
+    chat_bubble_fg: str | None = Field(default=None, max_length=8)
 
 
 # 内置壁纸预设（前端 CSS 里同名实现）；'photo' 表示用自己上传的照片，'' 表示默认无壁纸
@@ -787,6 +799,11 @@ def space(body: Space, user=Depends(current_user)):
         if body.chat_bg is not None and body.chat_bg not in CHAT_BG_PRESETS | {'', 'photo'}:
             raise ValueError()
         if body.chat_bg_dim is not None and not 0 <= body.chat_bg_dim <= 80:
+            raise ValueError()
+        if body.chat_bubble is not None and body.chat_bubble:
+            if not re.fullmatch(r'[A-Za-z0-9_-]{1,24}/[A-Za-z0-9_-]{1,40}\.png', body.chat_bubble):
+                raise ValueError()
+        if body.chat_bubble_fg not in (None, '', 'dark', 'light'):
             raise ValueError()
     except Exception:
         raise HTTPException(422, '请检查日期、时区、主题和聊天背景')
@@ -833,6 +850,11 @@ def space(body: Space, user=Depends(current_user)):
                 validate_owned_image(c, data['chat_bg_media'], user['id'])
         if data.get('chat_bg_users') is None:
             data['chat_bg_users'] = old.get('chat_bg_users') or {}
+        # 气泡皮肤同理：旧客户端不带这个字段时保留现状，别一保存就退回默认气泡
+        if data.get('chat_bubble') is None:
+            data['chat_bubble'] = old.get('chat_bubble') or ''
+        if data.get('chat_bubble_fg') is None:
+            data['chat_bubble_fg'] = old.get('chat_bubble_fg') or 'dark'
         # 旧客户端保存空间设置时不会带 cover_pos，此时保留主人已经调好的构图
         data['cover_pos'] = clean_cover_pos(
             body.cover_pos if body.cover_pos is not None else old.get('cover_pos'))
@@ -1820,6 +1842,53 @@ async def music_stream(u: str = '', user=Depends(current_user)):
         relay(),
         media_type=mime or 'audio/mp4',
         headers=headers)
+
+
+# ── 聊天气泡皮肤 ────────────────────────────────────────────────────────
+# 素材是用户自己整理的微信风格气泡图（128×112 的整图，四角带装饰），
+# 前端用 CSS border-image 切九宫格拉伸，所以服务器只要把文件原样吐出来。
+# 不放进 static/：两千多张图会把仓库和镜像一起撑大，而且这些是"用户内容"，
+# 跟业务代码不该混在一块——它们在数据卷里，导出备份也自然带上。
+BUBBLE_DIR_NAME = 'bubbles'
+_BUBBLE_PACK_RE = re.compile(r'[A-Za-z0-9_-]{1,24}')
+_BUBBLE_FILE_RE = re.compile(r'[A-Za-z0-9_-]{1,40}\.png')
+
+
+def _bubble_dir():
+    return db.DATA / BUBBLE_DIR_NAME
+
+
+@app.get('/api/bubbles')
+def bubble_list(user=Depends(current_user)):
+    """气泡皮肤清单：按目录分组，每组只回文件名。
+
+    两千多张图不可能一次全发给前端当预览（光缩略图就十几兆），
+    所以只回名字、图片靠浏览器自己 lazyload——原图本来就是 128×112，当缩略图够用。
+    """
+    root = _bubble_dir()
+    if not root.is_dir():
+        return {'groups': []}
+    groups = []
+    for folder in sorted(p for p in root.iterdir() if p.is_dir()):
+        if not _BUBBLE_PACK_RE.fullmatch(folder.name):
+            continue
+        names = sorted(f.name for f in folder.glob('*.png')
+                       if _BUBBLE_FILE_RE.fullmatch(f.name) and not f.name.endswith('-r.png'))
+        if names:
+            groups.append({'id': folder.name, 'count': len(names), 'items': names})
+    return {'groups': groups}
+
+
+@app.get('/api/bubbles/{pack}/{name}')
+def bubble_image(pack: str, name: str, user=Depends(current_user)):
+    if not _BUBBLE_PACK_RE.fullmatch(pack) or not _BUBBLE_FILE_RE.fullmatch(name):
+        raise HTTPException(404, '没有这张气泡')
+    path = _bubble_dir() / pack / name
+    if not path.is_file():
+        raise HTTPException(404, '没有这张气泡')
+    # 图不会改：一年强缓存，来回切皮肤不再重复打网络
+    return FileResponse(path, media_type='image/png',
+                        headers={'Cache-Control': 'private, max-age=31536000, immutable'})
 
 
 @app.get('/api/notices')

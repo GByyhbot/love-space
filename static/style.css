@@ -2057,3 +2057,77 @@ body.kb-open .pick-overlay{padding-bottom:0}
 .link-use{flex:none;height:var(--ctrl-h-sm);padding:0 14px;border-radius:var(--radius-s);border:1px solid var(--line-strong);background:var(--surface);color:var(--ink-2);font:inherit;font-size:13px;cursor:pointer;transition:background var(--speed),border-color var(--speed)}
 .link-use:hover{background:var(--soft);border-color:var(--primary)}
 .link-row.is-current .link-row-main strong{color:var(--primary-dark)}
+
+/* ── 聊天气泡皮肤：选择面板 ────────────────────────────────────────
+   上半截是"发出去长什么样"（左右各一条示例），下半截是图库。
+   图库里的图有一千多张，一次只画 90 个，滚到底再接着画——全塞进 DOM 会卡。 */
+.bp-sheet{height:min(80dvh,780px)}
+.bp-tabs{flex:none;display:flex;gap:6px;padding:10px 12px 4px;overflow-x:auto;scrollbar-width:none}
+.bp-tabs::-webkit-scrollbar{display:none}
+.bp-tab{flex:none;display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 13px;border-radius:999px;border:1px solid var(--line-strong);background:var(--surface);color:var(--ink-2);font:inherit;font-size:13px;font-weight:600;line-height:1;white-space:nowrap;cursor:pointer;transition:background var(--speed),border-color var(--speed)}
+.bp-tab i{font-style:normal;font-size:11px;opacity:.6}
+.bp-tab.on{background:var(--primary);border-color:var(--primary);color:var(--on-primary)}
+.bp-tab.on i{opacity:.8}
+.bp-preview{flex:none;display:flex;flex-direction:column;gap:7px;padding:8px 14px 11px;border-bottom:1px solid var(--line);background:var(--bg)}
+.bp-preview-row{display:flex}
+.bp-preview-row.mine{justify-content:flex-end}
+.bp-bubble{font-size:14px;line-height:1.6;font-weight:600;max-width:82%;background:var(--bubble);border:1px solid var(--bubble-line);border-radius:7px 18px 18px 18px;padding:9px 13px;color:var(--ink);overflow-wrap:anywhere}
+.bp-bubble.mine{background:var(--soft);border-color:var(--soft-strong);border-radius:18px 7px 18px 18px}
+.bp-grid{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;display:grid;grid-template-columns:repeat(auto-fill,minmax(78px,1fr));gap:6px;padding:10px 12px 14px;align-content:start}
+.bp-grid .meta{grid-column:1/-1}
+.bp-cell{height:58px;display:grid;place-items:center;padding:0;border:2px solid transparent;border-radius:12px;background:var(--soft);cursor:pointer;overflow:hidden}
+.bp-cell img{max-width:100%;max-height:100%;object-fit:contain;display:block}
+.bp-cell.on{border-color:var(--primary);background:var(--soft-strong)}
+.bp-fg{display:flex;align-items:center;gap:7px;padding:0 2px 8px;font-size:12.5px;color:var(--muted)}
+.bp-fg button{height:28px;padding:0 12px;border-radius:999px;border:1px solid var(--line-strong);background:var(--surface);color:var(--ink-2);font:inherit;font-size:12.5px;font-weight:600;line-height:1;cursor:pointer;transition:background var(--speed),border-color var(--speed)}
+.bp-fg button.on{background:var(--primary);border-color:var(--primary);color:var(--on-primary)}
+.bp-fg i{font-style:normal;font-size:11.5px;color:var(--muted);margin-left:2px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* ── 聊天气泡皮肤：真正贴在消息上的那套规则 ────────────────────────
+   素材是 128×112 的整图：四角画了装饰，只有中间是平的，所以不能整图缩放
+   （装饰会被整个拉扁）。用它做 border-image 切九宫格——slice 42 让四角的
+   装饰完整落在角里，border-image-width 缩到 16px：角上的圆弧与装饰等比缩小，
+   中间的边带随内容横向拉伸，一句「好」和一段长话能用同一张图。实测 slice30
+   会把左下角的装饰切进边带、横向糊成一道条，42 才干净。
+   `fill` 必须带上，否则气泡中间是透的，字直接压在壁纸上。
+   自己那侧用 --skin-r：服务器预先水平翻转过的镜像，尖角才朝外（CSS 的
+   transform 无法作用在 border-image 的源图上，所以只能生成新图）。
+
+   特异性说明：基础 .chat-bubble 是 (0,1,0)，照片壁纸那套
+   .chat-panel.immersive .chat-bubble 是 (0,3,0)，它那侧的 .mine 版本到 (0,4,0)，
+   而且都写着 background / border-radius / box-shadow。所以这一组一律带
+   .chat-panel.skin-on 前缀、并把 .mine 也写进同一条规则凑到 (0,4,0)，
+   再靠"放在文件末尾"压过去——不需要 !important，也不会被夜间主题反杀。 */
+.chat-panel.skin-on .chat-bubble,
+.chat-panel.skin-on .mine .chat-bubble,
+.bp-bubble.skinned{background:none;background-color:transparent;
+ border:0 solid transparent;border-width:16px;
+ border-image-source:var(--skin);border-image-slice:42 fill;
+ border-image-width:16px;border-image-repeat:stretch;
+ border-radius:0;box-shadow:none;padding:3px 7px;min-width:0;
+ /* 字色必须写死：气泡图是浅色的，而夜间主题的 --ink 是浅灰，
+    不写就成了"浅色字压在浅色图上"，整段看不见。深色字是默认值。 */
+ color:#2B2029}
+.chat-panel.skin-on .mine .chat-bubble,
+.bp-bubble.skinned.mine{border-image-source:var(--skin-r)}
+/* 气泡图的底色深浅不一（浅粉、正紫、荧光绿都有），字色只能由人选一次：
+   白字压深色图、深字压浅色图。浅色字加一层极淡投影，压在浅色图上也能读。 */
+.chat-panel.skin-on.skin-light .chat-bubble,
+.chat-panel.skin-on.skin-light .mine .chat-bubble,
+.bp-bubble.skinned.light{color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.32)}
+/* 引用块：底色跟着气泡走，别再压一层固定的黑灰 */
+.chat-panel.skin-on .chat-quote{background:rgba(0,0,0,.055);color:inherit;border-left-color:currentColor;opacity:.9}
+.chat-panel.skin-on .mine .chat-quote{background:rgba(255,255,255,.16)}
+/* 位置卡片 / 语音条：外面那圈 16px 已经是图了，内边距再给厚就只剩一小块卡片 */
+.chat-panel.skin-on .chat-bubble.loc{padding:5px 7px}
+.chat-panel.skin-on .chat-bubble.voice{padding:6px 9px}
+.chat-panel.skin-on .chat-loc,
+.chat-panel.skin-on .mine .chat-loc{background:transparent}
+/* 置顶气泡：图本身自带一圈边，内描边和投影都收掉，只留右上角那颗 📌 */
+.chat-panel.skin-on .chat-bubble.pinned{box-shadow:none}
+.chat-panel.skin-on .chat-bubble.pinned::after{top:-3px;right:14px}
+/* 卡片里的小图标（位置针脚 / 歌曲封面）与进度条按字色翻色 */
+.chat-panel.skin-on.skin-light .chat-bubble .cl-ico,
+.chat-panel.skin-on.skin-light .chat-bubble .cs-cover{background:rgba(255,255,255,.22);color:#fff}
+.chat-panel.skin-on.skin-light .chat-bubble .cs-track{background:rgba(255,255,255,.3)}
+.chat-panel.skin-on.skin-light .chat-bubble .cs-track i{background:#fff}
