@@ -782,6 +782,10 @@ class Space(BaseModel):
 # 内置壁纸预设（前端 CSS 里同名实现）；'photo' 表示用自己上传的照片，'' 表示默认无壁纸
 CHAT_BG_PRESETS = {'sakura', 'night', 'cream', 'mint', 'stars'}
 CHAT_BG_DEFAULT_DIM = 35
+# 七套内置主题 + 'custom'。必须跟 static/app.js 的 THEME_IDS 对齐——
+# 少一个就会在保存时报 422，而这条文案把日期/时区/主题/背景全归成一句，
+# 用户根本看不出是主题的问题（1.7.13 海盐汽水保存失败就是这么来的）。
+SPACE_THEMES = {'rose', 'peach', 'lemon', 'mint', 'sky', 'lavender', 'cocoa'}
 
 
 @app.put('/api/space')
@@ -789,22 +793,28 @@ def space(body: Space, user=Depends(current_user)):
     try:
         ZoneInfo(body.timezone)
         if body.since:
-            dt.date.fromisoformat(body.since)
-        if body.theme not in {'rose', 'peach', 'lavender', 'custom'}:
-            raise ValueError()
+            try:
+                dt.date.fromisoformat(body.since)
+            except ValueError:
+                raise ValueError('相恋日期的格式不对')
+        if body.theme not in SPACE_THEMES | {'custom'}:
+            raise ValueError('未知的主题配色')
         if body.theme == 'custom' and not re.fullmatch(r'#[0-9a-fA-F]{6}', body.custom_color):
-            raise ValueError()
+            raise ValueError('自定义颜色要是 #RRGGBB')
         if body.theme != 'custom':
             body.custom_color = ''
         if body.chat_bg is not None and body.chat_bg not in CHAT_BG_PRESETS | {'', 'photo'}:
-            raise ValueError()
+            raise ValueError('聊天背景参数不正确')
         if body.chat_bg_dim is not None and not 0 <= body.chat_bg_dim <= 80:
-            raise ValueError()
+            raise ValueError('聊天背景的对比度超出范围')
         if body.chat_bubble is not None and body.chat_bubble:
             if not re.fullmatch(r'[A-Za-z0-9_-]{1,24}/[A-Za-z0-9_-]{1,40}\.png', body.chat_bubble):
-                raise ValueError()
+                raise ValueError('气泡皮肤的名字不对')
         if body.chat_bubble_fg not in (None, '', 'dark', 'light'):
-            raise ValueError()
+            raise ValueError('气泡字色只能选深色或浅色')
+    except ValueError as exc:
+        # 逐项自带中文说明就透出去，比笼统一句好定位
+        raise HTTPException(422, str(exc) or '请检查日期、时区、主题和聊天背景')
     except Exception:
         raise HTTPException(422, '请检查日期、时区、主题和聊天背景')
     with connect() as c:
