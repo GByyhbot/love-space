@@ -707,7 +707,7 @@ function chatRows() {
    +`<button data-action="chat-to-draft" data-id="${r.id}">记入时光</button>`;
   /* 位置消息：body.location = {lat,lng}，点开用高德 URI 打开地图（不依赖任何 KEY） */
   const loc=r.body.location&&typeof r.body.location.lat==='number'&&typeof r.body.location.lng==='number'?r.body.location:null;
-  const locCard=loc?`<a class="chat-loc" href="https://uri.amap.com/marker?position=${loc.lng},${loc.lat}&name=${encodeURIComponent('我们的位置')}" target="_blank" rel="noopener"><span class="cl-ico">${icon('location')}</span><span class="cl-body"><b>位置</b><small>${loc.lat.toFixed(5)}, ${loc.lng.toFixed(5)} · 点开看地图</small></span></a>`:'';
+  const locCard=loc?`<button type="button" class="chat-loc" data-action="chat-open-map" data-lat="${loc.lat}" data-lng="${loc.lng}" title="用高德地图打开"><span class="cl-ico">${icon('location')}</span><span class="cl-body"><b>位置</b><small>点开用高德地图看</small></span><span class="cl-go">${icon('arrow')}</span></button>`:'';
   /* 分享的歌：body.song = {title,artist,mid,src,art,dur}。mid 指向歌单里的音频媒体，
      src 是在线搜来的 30 秒试听地址（走同源 /api/music/stream 转发）。两个都有就优先本地文件。 */
   const song=r.body.song&&r.body.song.title?r.body.song:null;
@@ -1147,24 +1147,101 @@ async function sendOnlineSong(idx){
   await refresh();scrollChat();toast('已分享这首');
  }catch(e){toast(e.message||'分享失败');}
 }
-/* ── 从已上传的相册里挑图发出去（不再要求重新上传一遍） ────────────── */
+/* ── 从相册选：铺满下半屏，多选 + 写一句，一次发出去 ──────────────────
+   以前点一张就立刻发送，想发三张得开三次面板。现在点选只做"引用"（打勾 + 序号），
+   底部还能写一句描述跟着一起发；半屏高度让缩略图一屏能看清更多。 */
+let albumPickList=[],albumPickSel=[];
 async function chatAlbumPick(){
+ albumPickSel=[];
  let list=[];
- try{list=await api('/media/images?limit=200');}catch{}
- openModal('从相册选',`<div class="album-pick-head"><span>${list.length?`共 ${list.length} 张，点一张直接发出`:'相册里还没有照片'}</span><button type="button" class="button soft" id="album-pick-upload">从手机上传</button></div>
-  <div class="album-pick" id="album-pick">${list.length?albumTiles(list):'<p class="meta">先从手机传一张，之后的照片都能在这里点着发。</p>'}</div>`,{wide:true});
- const box=$('#album-pick');
- if(box)box.onclick=async e=>{
-  const b=e.target.closest('[data-mid]');if(!b)return;
-  const mid=b.dataset.mid;
-  closeModal();toast('正在发送照片…');
-  try{
-   await sendChat({content:'',date:today(),media:[mid]});
-   await refresh();scrollChat();
-  }catch(err){toast(err.message||'发送失败');}
+ try{list=await api('/media/images?limit=300');}catch{}
+ albumPickList=list;
+ focusReturn=document.activeElement;
+ $('#modal-root').innerHTML=`<div class="pick-overlay" id="pick-overlay"><section class="pick-sheet" role="dialog" aria-modal="true" aria-labelledby="pick-title">
+  <header class="ps-head"><div><b id="pick-title">从相册选</b><small id="ps-count">${list.length?`相册里 ${list.length} 张`:'相册还是空的'}</small></div><button type="button" class="button soft small" id="ps-upload">上传</button><button type="button" class="icon-btn" data-action="close-modal" aria-label="关闭">${icon('close')}</button></header>
+  <div class="ps-grid" id="ps-grid">${list.length?list.map(m=>`<button type="button" class="ps-cell" data-mid="${esc(m.id)}" aria-label="${esc(m.name||'照片')}"><img src="/media/${esc(m.id)}?preview=true" alt="" loading="lazy" decoding="async"><i></i></button>`).join(''):'<p class="meta">相册里还没有照片。先用上面的「上传」传一张，或者去相册页传。</p>'}</div>
+  <div class="ps-foot">
+   <div class="ps-picked" id="ps-picked"></div>
+   <div class="ps-row"><input id="ps-caption" maxlength="200" placeholder="说点什么…（可以留空）" autocomplete="off"><button type="button" class="button primary" id="ps-send" disabled>发送</button></div>
+  </div>
+ </section></div>`;
+ document.body.style.overflow='hidden';
+ syncAlbumPick();
+ const grid=$('#ps-grid');
+ if(grid)grid.onclick=e=>{
+  const cell=e.target.closest('[data-mid]');if(!cell)return;
+  const mid=cell.dataset.mid,at=albumPickSel.indexOf(mid);
+  if(at>=0)albumPickSel.splice(at,1);else albumPickSel.push(mid);
+  syncAlbumPick();
  };
- const up=$('#album-pick-upload');
- if(up)up.onclick=()=>{closeModal();$('#chat-file')?.click();};
+ const picked=$('#ps-picked');
+ if(picked)picked.onclick=e=>{
+  const chip=e.target.closest('[data-drop]');if(!chip)return;
+  albumPickSel.splice(Number(chip.dataset.drop),1);syncAlbumPick();
+ };
+ $('#ps-send')?.addEventListener('click',sendAlbumPick);
+ $('#ps-upload')?.addEventListener('click',()=>{closeModal();$('#chat-file')?.click();});
+ $('#ps-caption')?.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();sendAlbumPick();}});
+ /* 点面板外的暗色区域 = 取消（和别的弹窗一致） */
+ $('#pick-overlay')?.addEventListener('click',e=>{if(e.target.id==='pick-overlay')closeModal();});
+}
+function syncAlbumPick(){
+ const n=albumPickSel.length;
+ $$('.ps-cell').forEach(c=>{
+  const at=albumPickSel.indexOf(c.dataset.mid);
+  c.classList.toggle('on',at>=0);
+  const badge=c.querySelector('i');if(badge)badge.textContent=at>=0?String(at+1):'';
+ });
+ const picked=$('#ps-picked');
+ if(picked)picked.innerHTML=albumPickSel.map((mid,i)=>`<button type="button" class="ps-chip" data-drop="${i}" aria-label="取消第 ${i+1} 张"><img src="/media/${esc(mid)}?preview=true" alt=""><span>${i+1}</span></button>`).join('');
+ const cnt=$('#ps-count');
+ if(cnt)cnt.textContent=n?`已选 ${n} 张`:(albumPickList.length?`相册里 ${albumPickList.length} 张`:'相册还是空的');
+ const btn=$('#ps-send');
+ if(btn){btn.disabled=!n;btn.textContent=n?`发送 ${n}`:'发送';}
+}
+async function sendAlbumPick(){
+ if(!albumPickSel.length)return;
+ const cap=($('#ps-caption')?.value||'').trim(),ids=albumPickSel.slice();
+ const btn=$('#ps-send');if(btn)btn.disabled=true;
+ try{
+  await sendChat({content:cap,date:today(),media:ids});
+  closeModal();
+  await refresh();scrollChat();
+  toast(ids.length>1?`已发送 ${ids.length} 张`:'已发送');
+ }catch(e){toast(e.message||'发送失败');syncAlbumPick();}
+}
+/* ── 点开一条位置消息：先想办法唤起高德 App ──────────────────────────
+   原来整张卡是一个 target=_blank 的链接，点下去直接切到浏览器看网页地图，
+   在 App 里等于"跳出恋爱空间"。现在的顺序：
+   Android → intent://（装了就直开高德，没装由 Chrome/WebView 内核按
+   browser_fallback_url 自己回落到网页）；iOS → iosamap://；
+   其它/都失败 → 1.4 秒后在本窗口打开 uri.amap.com（callnative=1，网页自己也会再试一次）。
+   "唤起来了"的判断：页面被切到后台（visibilitychange / pagehide）。 */
+function openMap(lat,lng,name){
+ const nm=name||'我们的位置';
+ const web='https://uri.amap.com/marker?position='+lng+','+lat
+  +'&name='+encodeURIComponent(nm)+'&coordinate=gaode&callnative=1&src=love-space';
+ const ua=navigator.userAgent||'';
+ if(!/android|iphone|ipad|ipod|harmony|mobile/i.test(ua)){window.location.href=web;return;}
+ const q='sourceApplication=LoveSpace&poiname='+encodeURIComponent(nm)+'&lat='+lat+'&lon='+lng+'&dev=0';
+ let gone=false;
+ const mark=()=>{gone=true;};
+ document.addEventListener('visibilitychange',mark);
+ window.addEventListener('pagehide',mark);
+ const timer=setTimeout(()=>{
+  document.removeEventListener('visibilitychange',mark);
+  window.removeEventListener('pagehide',mark);
+  if(gone||document.hidden)return;
+  window.location.href=web;
+ },1400);
+ void timer;
+ if(/android|harmony/i.test(ua)){
+  window.location.href='intent://viewMap?'+q
+   +'#Intent;scheme=androidamap;package=com.autonavi.minimap;S.browser_fallback_url='
+   +encodeURIComponent(web)+';end';
+ }else{
+  window.location.href='iosamap://viewMap?'+q;
+ }
 }
 /* 位置：浏览器定位拿经纬度，作为一条 location 消息发出去 */
 function chatLocate(){
@@ -3342,6 +3419,11 @@ async function act(action,id,el) {
  if(action==='chat-pick'){const p=$('#chat-fn');if(p)p.hidden=true;return id==='camera'?$('#chat-shot')?.click():chatAlbumPick();}
  if(action==='chat-voice'){const p=$('#chat-fn');if(p)p.hidden=true;return chatVoiceToggle();}
  if(action==='chat-locate')return chatLocate();
+ if(action==='chat-open-map'){
+  const lat=parseFloat(el.dataset.lat||''),lng=parseFloat(el.dataset.lng||'');
+  if(!isFinite(lat)||!isFinite(lng))return toast('这条位置信息不完整');
+  return openMap(lat,lng,'我们的位置');
+ }
  if(action==='chat-watch'){const p=$('#chat-fn');if(p)p.hidden=true;return navigate('watch');}
  if(action==='chat-song'){const p=$('#chat-fn');if(p)p.hidden=true;return songPicker();}
  if(action==='song-tab'){state.songTab=id;$$('.ss-tab').forEach(b=>b.classList.toggle('active',b.dataset.id===id));return renderSongPane();}

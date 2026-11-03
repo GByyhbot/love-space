@@ -18,6 +18,11 @@
   --soft-strong:#F0D9E3;     /* 柔和强调加深（选中态） */
   --line:#EFE4E9;            /* 分隔线 */
   --line-strong:#E2D2DA;     /* 控件描边：比 line 深一档，让描边按钮在白卡上站得住 */
+  /* 气泡底：原来直接用 --surface（纯白），压在照片壁纸或彩色背景上像贴了两块不透光的纸。
+     改成带一点透明度的玻璃：底下透出一点点壁纸，字仍然读得清。
+     只给"对方"的气泡用；自己的气泡保持实色，否则左右两边都没有分量。 */
+  --bubble:rgba(255,255,255,.86);
+  --bubble-line:rgba(226,210,218,.9);
   --green:#5F7A50;           /* 成功/心情点缀 */
   --green-soft:#EBF1E6;
   --amber:#A06B38;           /* 提醒点缀 */
@@ -456,8 +461,17 @@ button.mood-row.no-mood .mood-bubble.empty{color:var(--primary-dark)}
 /* 气泡：原来底是 --bg（和页面背景同一个色），只有一条最淡的 --line 描边，
    在白卡上等于"没有气泡"，看着像一团浮着的字。改成实心跳色 + 深一档描边 + 极淡投影，
    圆角也从 4px 提到 7px，小尖角还在（指向说话人），但不再像早年的方角对话框。 */
-.chat-bubble{background:var(--surface);border:1px solid var(--line-strong);border-radius:7px 18px 18px 18px;padding:11px 15px;font-size:15px;line-height:1.7;overflow-wrap:anywhere;min-width:44px;max-width:100%;box-shadow:0 1px 2px rgba(69,56,63,.05)}
+.chat-bubble{background:var(--bubble);border:1px solid var(--bubble-line);border-radius:7px 18px 18px 18px;padding:11px 15px;font-size:15px;line-height:1.7;overflow-wrap:anywhere;min-width:44px;max-width:100%;box-shadow:0 1px 2px rgba(69,56,63,.05)}
+/* 自己的一侧保持实色：两边都半透明就没有"主次"了，读起来也更费劲 */
 .mine .chat-bubble{background:var(--soft);border-color:var(--soft-strong);border-radius:18px 7px 18px 18px}
+/* 聊天区整体加粗一档：默认 400 压在玻璃气泡/照片壁纸上会发灰，
+   600 在手机小屏上清晰得多（时间戳这类附属信息仍留 500，免得抢正文）。 */
+.chat-panel,.watch-chat{font-weight:600}
+.chat-panel .chat-bubble,.watch-chat .chat-bubble{font-weight:600}
+.chat-panel .chat-day,.chat-panel .chat-time,.chat-panel .chat-no-match,
+.watch-chat .chat-day,.watch-chat .chat-time{font-weight:500}
+.chat-panel .chat-pinned,.chat-panel .chat-reply-bar,.chat-panel .chat-search-bar{font-weight:500}
+.chat-panel .chat-quote{font-weight:500}
 /* 纯语音消息：微信式短气泡，点击整条播放 */
 .chat-bubble.voice{padding:8px 12px;min-width:0}
 /* 引用：气泡顶部一小条，左边一条竖线，点它跳回原消息。置顶的气泡在右上角挂个 📌 */
@@ -552,13 +566,22 @@ button.mood-row.no-mood .mood-bubble.empty{color:var(--primary-dark)}
 .chat-panel.immersive .fn-ico{background:rgba(255,255,255,.12);color:#fff}
 .chat-panel.immersive .fn-tile:hover .fn-ico{background:rgba(255,255,255,.2)}
 
-/* 位置消息卡片：不依赖地图 SDK，点开走高德 URI 用系统浏览器看 */
-.chat-loc{display:flex;gap:10px;align-items:center;text-decoration:none;padding:8px;border-radius:12px;background:rgba(255,255,255,.6);min-width:180px}
+/* 位置消息卡片：整块可点，点了先试高德 App，唤不起来再回落到网页地图 */
+.chat-loc{display:flex;gap:10px;align-items:center;text-align:left;padding:6px;border-radius:12px;background:rgba(0,0,0,.03);border:0;min-width:0;max-width:100%;box-sizing:border-box;color:inherit;cursor:pointer}
+.chat-loc:hover{background:rgba(0,0,0,.06)}
+.chat-panel.immersive .chat-loc{background:rgba(0,0,0,.04)}
+.mine .chat-loc{background:rgba(255,255,255,.45)}
+/* 位置消息整条气泡只包一张卡，外层那一圈内边距和卡片自己的 6px 叠起来太厚 */
+.chat-bubble.loc{padding:5px}
 .cl-ico{width:36px;height:36px;flex:none;display:grid;place-items:center;border-radius:50%;background:var(--soft);color:var(--primary-dark)}
 .cl-ico .icon{width:20px;height:20px}
-.cl-body{display:flex;flex-direction:column;line-height:1.35}
-.cl-body b{font-size:14px;color:var(--ink)}
-.cl-body small{font-size:11.5px;color:var(--muted)}
+.cl-body{display:flex;flex-direction:column;line-height:1.35;min-width:0;flex:1}
+/* 卡片里的文字一律继承气泡字色：照片壁纸下气泡是"亮玻璃 + 深字"、自己那侧是主色底，
+   写死 --ink/--muted 会在这两种情况下分别变成白字压白底 / 灰字压粉底。 */
+.cl-body b{font-size:14px;color:inherit}
+.cl-body small{font-size:11.5px;color:inherit;opacity:.7;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cl-go{margin-left:auto;flex:none;color:inherit;opacity:.5;display:grid;place-items:center}
+.cl-go .icon{width:16px;height:16px}
 
 /* 分享的歌：自绘播放器（不用原生 <audio controls>——那个在深色气泡里会带
    一条系统菜单「右下角三点」，老 WebView 上还会多画一层边框） */
@@ -568,21 +591,27 @@ button.mood-row.no-mood .mood-bubble.empty{color:var(--primary-dark)}
 .cs-cover img{width:100%;height:100%;object-fit:cover;display:block}
 .cs-cover .icon{width:19px;height:19px}
 .cs-body{display:flex;flex-direction:column;line-height:1.35;min-width:0;flex:1}
-.cs-body b{font-size:14px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.cs-body small{font-size:11.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cs-body b{font-size:14px;color:inherit;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cs-body small{font-size:11.5px;color:inherit;opacity:.7;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cs-play{width:34px;height:34px;flex:none;border-radius:50%;border:0;padding:0;display:grid;place-items:center;background:var(--primary);color:#fff;cursor:pointer}
 .cs-play .icon{width:15px;height:15px}
 .cs-play:active{transform:scale(.94)}
 .cs-foot{display:flex;align-items:center;gap:8px}
-.cs-time{font-size:10.5px;color:var(--muted);font-variant-numeric:tabular-nums;flex:none;min-width:26px;text-align:center}
+.cs-time{font-size:10.5px;color:inherit;opacity:.62;font-variant-numeric:tabular-nums;flex:none;min-width:26px;text-align:center}
 .cs-track{flex:1;height:3px;border-radius:2px;background:var(--line);overflow:hidden}
 .cs-track i{display:block;height:100%;width:0%;border-radius:2px;background:var(--primary);transition:width .2s linear}
 .chat-song.playing .cs-track i{transition:width .25s linear}
-.cs-warn{font-size:11.5px;color:var(--muted)}
-.chat-panel.immersive .mine .cs-body b,.chat-panel.immersive .mine .cs-time{color:var(--on-primary)}
-.chat-panel.immersive .mine .cs-body small{color:rgba(255,255,255,.72)}
-.chat-panel.immersive .mine .cs-track{background:rgba(255,255,255,.28)}
-.chat-panel.immersive .mine .cs-track i{background:#fff}
+.cs-warn{font-size:11.5px;color:inherit;opacity:.6}
+/* 亮玻璃气泡里的圆形小图标（位置 / 封面）在夜间主题下会变成深色圆点，单独翻成浅底深字；
+   进度条同理（夜间 --line 是深色，压在玻璃上像一道黑杠）。 */
+.chat-panel.immersive .chat-bubble .cl-ico,
+.chat-panel.immersive .chat-bubble .cs-cover{background:rgba(43,32,41,.07);color:#2B2029;opacity:.8}
+.chat-panel.immersive .chat-bubble .cs-track{background:rgba(43,32,41,.16)}
+/* 自己那侧是实色主色底，图标与进度条回到白系 */
+.chat-panel.immersive .mine .chat-bubble .cl-ico,
+.chat-panel.immersive .mine .chat-bubble .cs-cover{background:rgba(255,255,255,.22);color:var(--on-primary);opacity:1}
+.chat-panel.immersive .mine .chat-bubble .cs-track{background:rgba(255,255,255,.3)}
+.chat-panel.immersive .mine .chat-bubble .cs-track i{background:#fff}
 
 /* 选歌弹窗：共同歌单 / 在线搜歌两个面板 */
 .song-sheet{display:flex;flex-direction:column;gap:12px}
@@ -692,7 +721,7 @@ body.watch-open.kb-open .watch-chat .chat-compose{padding-bottom:8px}
    压在浅色照片上就像一口脏水，压在深色照片上又分不出边界——同一个值不可能两头都对。
    改成「亮玻璃 + 深字」：白玻璃在任何亮度的照片上都是高对比，
    留一点半透明让照片透出来，沉浸感还在。 */
-.chat-panel.immersive .chat-bubble{background:rgba(255,255,255,.9);border-color:rgba(255,255,255,.65);color:#2B2029;backdrop-filter:blur(14px) saturate(1.12);-webkit-backdrop-filter:blur(14px) saturate(1.12);box-shadow:0 2px 12px rgba(24,16,26,.14)}
+.chat-panel.immersive .chat-bubble{background:rgba(255,255,255,.78);border-color:rgba(255,255,255,.55);color:#2B2029;backdrop-filter:blur(14px) saturate(1.12);-webkit-backdrop-filter:blur(14px) saturate(1.12);box-shadow:0 2px 12px rgba(24,16,26,.14)}
 /* 自己的气泡用主色实心：亮玻璃在浅照片上边界偏弱，实色才有"这是我说的"那点分量。
    文字走 --on-primary，暗色主题下它自动变深，不会出现深字压深粉。 */
 /* 暗色主题的 --primary 是浅粉，原样铺在照片上会跳成一块糖果；
@@ -1189,6 +1218,8 @@ body.cal-full{overflow:hidden;height:100dvh}
   /* 原来 line 是 #3D3138，跟 surface #2B2228 只差一点点，暗色下所有描边按钮、
      分隔线、输入框边界基本糊成一片。line 提亮一档，另给 line-strong 供控件描边。 */
   --line:#463A42;--line-strong:#5C4B55;
+  /* 夜间气泡：比 surface 稍亮一点点、带 10% 透明度，压在暗色壁纸上才有"浮起来"的层次 */
+  --bubble:rgba(52,42,49,.86);--bubble-line:rgba(92,75,85,.9);
   --green:#93B380;--green-soft:#2C332A;--amber:#CFA06A;--amber-soft:#372E24;
   --danger:#E08585;--danger-soft:#3C282A;
   --shadow:0 2px 12px rgba(0,0,0,.25);--shadow-lift:0 8px 28px rgba(0,0,0,.4);
@@ -1921,6 +1952,44 @@ html.is-native-app body.chat-immersive .shell.chat-full .chat-panel.immersive .c
 .album-thumb img{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;transition:transform var(--speed)}
 .album-thumb:hover{border-color:var(--primary)}
 .album-thumb:hover img{transform:scale(1.05)}
+
+/* ── 聊天里「从相册选」：铺满下半屏的多选面板 ────────────────────────
+   和通用 moda 弹窗的区别：这个是"挑图 + 写一句 + 发出去"的一条龙，
+   关掉弹窗再回到输入框等于多两步，所以把描述框直接放进面板底部。 */
+.pick-overlay{position:fixed;inset:0;z-index:120;background:rgba(69,56,63,.42);backdrop-filter:blur(3px);display:flex;align-items:flex-end;justify-content:center;padding-bottom:var(--kb-h,0px);animation:fade-in var(--speed)}
+:root.dark .pick-overlay{background:rgba(0,0,0,.55)}
+.pick-sheet{display:flex;flex-direction:column;width:min(720px,100%);height:min(58dvh,620px);background:var(--surface);border:1px solid var(--line);border-bottom:0;border-radius:22px 22px 0 0;box-shadow:0 -8px 28px rgba(69,56,63,.16);overflow:hidden;animation:sheet-up .22s ease-out}
+.ps-head{flex:none;display:flex;align-items:center;gap:10px;padding:12px 14px 10px;border-bottom:1px solid var(--line);position:relative}
+.ps-head::before{content:'';position:absolute;left:50%;top:6px;transform:translateX(-50%);width:38px;height:4px;border-radius:2px;background:var(--line-strong)}
+.ps-head>div{flex:1;min-width:0;padding-top:6px}
+.ps-head b{display:block;font-size:15px;line-height:1.3}
+.ps-head small{display:block;font-size:11.5px;color:var(--muted);line-height:1.4;margin-top:1px}
+.ps-grid{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;display:grid;grid-template-columns:repeat(auto-fill,minmax(82px,1fr));gap:4px;padding:8px 10px}
+.ps-grid .meta{grid-column:1/-1}
+/* 正方形缩略图用 padding-top 撑（老 WebView 不支持 aspect-ratio） */
+.ps-cell{position:relative;padding:100% 0 0;border:0;border-radius:9px;overflow:hidden;background:var(--soft);cursor:pointer}
+.ps-cell img{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;display:block}
+.ps-cell i{position:absolute;top:5px;right:5px;width:20px;height:20px;border-radius:50%;background:rgba(0,0,0,.34);color:#fff;font-size:11px;font-style:normal;display:grid;place-items:center;line-height:1}
+/* 没选中的格子别留一个空的黑点（序号是空的，圆底却还在） */
+.ps-cell:not(.on) i{display:none}
+.ps-cell.on::after{content:'';position:absolute;top:0;left:0;right:0;bottom:0;border:2px solid var(--primary);border-radius:9px;pointer-events:none}
+.ps-cell.on i{background:var(--primary)}
+.ps-cell.on img{opacity:.86}
+.ps-foot{flex:none;border-top:1px solid var(--line);background:var(--surface);padding:8px 12px calc(10px + env(safe-area-inset-bottom))}
+.ps-picked{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding:2px 0 8px}
+.ps-picked::-webkit-scrollbar{display:none}
+.ps-picked:empty{display:none}
+.ps-chip{position:relative;flex:none;width:44px;height:44px;border-radius:9px;overflow:hidden;padding:0;border:1px solid var(--line-strong);background:var(--soft);cursor:pointer}
+.ps-chip img{width:100%;height:100%;object-fit:cover;display:block}
+.ps-chip span{position:absolute;top:0;right:0;background:rgba(0,0,0,.5);color:#fff;font-size:10px;line-height:13px;padding:0 4px;border-bottom-left-radius:6px}
+.ps-row{display:flex;gap:8px;align-items:center}
+.ps-row input{flex:1;min-width:0;height:var(--ctrl-h-sm);border-radius:999px;border:1px solid var(--line-strong);background:var(--bg);color:var(--ink);padding:0 14px;font-size:13.5px;font-family:inherit;font-weight:600}
+.ps-row input:focus{outline:none;border-color:var(--primary)}
+.ps-row .button{flex:none;height:var(--ctrl-h-sm);padding:0 16px;font-size:13.5px;border-radius:999px}
+.ps-row .button:disabled{opacity:.45}
+/* 键盘顶上来时下沿那圈安全区已经被键盘占了，再留就是多一条空白 */
+body.kb-open .ps-foot{padding-bottom:10px}
+body.kb-open .pick-overlay{padding-bottom:0}
 .crb-mark{flex:none;font-style:normal;font-size:14px;line-height:1;opacity:.72}
 .chat-panel.has-wallpaper .crb-mark{opacity:.9}
 
