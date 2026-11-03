@@ -500,10 +500,51 @@ button.mood-row.no-mood .mood-bubble.empty{color:var(--primary-dark)}
 .chat-day::before,.chat-day::after{content:'';position:absolute;top:50%;width:26%;height:1px;background:var(--line)}
 .chat-day::before{left:6px}
 .chat-day::after{right:6px}
-.chat-compose{padding:12px 16px calc(12px + env(safe-area-inset-bottom));border-top:1px solid var(--line);display:flex;gap:10px;align-items:flex-end}
-.chat-compose textarea{min-height:40px;height:40px;max-height:100px;resize:none;flex:1;font-size:14px;line-height:1.5;padding:9px 14px;background:var(--bg);border-radius:20px;overflow-y:auto;scrollbar-width:none}
+/* ── 输入栏：左侧功能、中间胶囊输入框、右侧语音/表情/更多 ──
+   有文字时语音按钮让位给发送按钮（form.has-text 控制），和主流聊天 App 一致。 */
+.chat-compose{padding:10px 12px calc(10px + env(safe-area-inset-bottom));border-top:1px solid var(--line);display:flex;gap:6px;align-items:flex-end}
+.compose-ib{width:var(--ctrl-h);height:var(--ctrl-h);min-width:var(--ctrl-h);flex:none;border-radius:50%;display:grid;place-items:center;color:var(--ink-2);background:transparent;border:0;transition:background var(--speed),color var(--speed)}
+.compose-ib:hover{background:var(--soft);color:var(--primary-dark)}
+.compose-ib .icon{width:22px;height:22px}
+.compose-field{flex:1;min-width:0;display:flex;align-items:center;background:var(--soft);border:1px solid var(--line);border-radius:20px;padding:2px 12px;min-height:var(--ctrl-h)}
+.chat-compose textarea{width:100%;min-height:26px;height:26px;max-height:96px;resize:none;font-size:14.5px;line-height:1.55;padding:4px 0;background:transparent;border:0;border-radius:0;overflow-y:auto;scrollbar-width:none}
+.chat-compose textarea:focus{outline:none}
 .chat-compose textarea::-webkit-scrollbar{display:none}
-.chat-compose .button{padding:0;width:44px;height:44px;flex-shrink:0}
+.chat-compose textarea::placeholder{color:var(--muted)}
+.compose-send{display:none;width:var(--ctrl-h);height:var(--ctrl-h);min-width:var(--ctrl-h);flex:none;border-radius:50%;place-items:center;color:var(--on-primary);background:var(--primary);border:0;box-shadow:0 4px 12px rgba(139,54,84,.26);transition:transform var(--speed),filter var(--speed)}
+.compose-send:active{transform:scale(.94);filter:brightness(.96)}
+.compose-send .icon{width:20px;height:20px;transform:translateX(1px)}
+.chat-compose.has-text .compose-send{display:grid}
+.chat-compose.has-text .compose-mic{display:none}
+.chat-compose.recording .compose-mic{color:#fff;background:var(--danger)}
+.chat-compose.recording .compose-mic .icon{animation:pulse 1.1s infinite}
+
+/* ── 「发消息」功能面板（相册/拍摄/通话/一起看/红包/位置/转账/一起玩） ── */
+.fn-panel{border-top:1px solid var(--line);background:var(--surface);padding:10px 14px calc(14px + env(safe-area-inset-bottom))}
+.fn-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:2px 0 10px}
+.fn-head strong{font-size:14px;color:var(--ink);font-weight:600}
+.fn-head-ops{display:flex;gap:2px}
+.fn-head-ops .icon-btn{width:var(--ctrl-h-sm);height:var(--ctrl-h-sm)}
+.fn-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px 8px}
+.fn-tile{display:flex;flex-direction:column;align-items:center;gap:7px;background:transparent;border:0;padding:0;color:var(--ink-2)}
+.fn-tile b{font-size:12.5px;font-weight:500;line-height:1.2;color:var(--ink-2)}
+/* 不用 aspect-ratio：老 WebView（内嵌 Android 6/7）不认，高度会塌成 0 */
+.fn-ico{width:56px;height:56px;display:grid;place-items:center;border-radius:16px;background:var(--soft);color:var(--primary-dark)}
+.fn-tile:hover .fn-ico{background:var(--soft-strong)}
+.fn-tile:active .fn-ico{transform:scale(.96)}
+.fn-ico .icon{width:24px;height:24px}
+
+/* 位置消息卡片：不依赖地图 SDK，点开走高德 URI 用系统浏览器看 */
+.chat-loc{display:flex;gap:10px;align-items:center;text-decoration:none;padding:8px;border-radius:12px;background:rgba(255,255,255,.6);min-width:180px}
+.cl-ico{width:36px;height:36px;flex:none;display:grid;place-items:center;border-radius:50%;background:var(--soft);color:var(--primary-dark)}
+.cl-ico .icon{width:20px;height:20px}
+.cl-body{display:flex;flex-direction:column;line-height:1.35}
+.cl-body b{font-size:14px;color:var(--ink)}
+.cl-body small{font-size:11.5px;color:var(--muted)}
+/* 键盘避让：新版 WebView 靠 viewport 的 interactive-widget=resizes-content 自己缩，
+   旧版只缩视觉视口，app.js 的 syncKeyboard() 把差值写进 --kb-h，这里把输入栏整体顶上去。 */
+body.chat-full .chat-panel{padding-bottom:var(--kb-h,0px)}
+body.chat-full .fn-panel{padding-bottom:calc(14px + env(safe-area-inset-bottom) + var(--kb-h,0px))}
 /* ── 聊天壁纸：底图铺满整个聊天面板（标题栏和输入栏也压在图上） ──
    .chat-wallpaper 挂到 .chat-panel 上绝对定位铺满，::after 是压在图上的遮罩（--chat-bg-dim 控制强度）。
    底图不随消息滚动，标题栏/输入栏改成半透明玻璃让图透出来，文字对比度靠气泡自身背景兜底。 */
@@ -523,7 +564,7 @@ button.mood-row.no-mood .mood-bubble.empty{color:var(--primary-dark)}
 /* 有壁纸时标题栏/输入栏变半透明玻璃，让底图真正"全屏" */
 .chat-panel.has-wallpaper{background:transparent;border-color:transparent;box-shadow:none}
 .chat-panel.has-wallpaper .chat-header,.chat-panel.has-wallpaper .chat-compose{background:rgba(255,255,255,.62);backdrop-filter:blur(16px) saturate(1.25);-webkit-backdrop-filter:blur(16px) saturate(1.25);border-color:rgba(255,255,255,.45)}
-.chat-panel.has-wallpaper .chat-compose textarea{background:rgba(255,255,255,.82)}
+.chat-panel.has-wallpaper .chat-compose .compose-field{background:rgba(255,255,255,.82);border-color:rgba(255,255,255,.6)}
 /* ── 沉浸式：用照片当背景时，气泡/标题栏/输入栏换成半透明深色（主流聊天 App 的观感） ──
    标题栏/输入栏用**渐变**而不是整块实色：实色块会在照片上切出一条生硬的分界线，
    渐变从上（下）往里淡出，和底图是连续过渡的，看起来才像"照片铺满了整屏"。 */
@@ -575,11 +616,12 @@ button.mood-row.no-mood .mood-bubble.empty{color:var(--primary-dark)}
 .chat-panel.immersive .chat-day::before,.chat-panel.immersive .chat-day::after{display:none}
 /* 输入框原来是 18% 白底 + 白字：白纸上写白字，换个浅照片就彻底看不见。
    跟气泡统一成亮玻璃 + 深字。 */
-.chat-panel.immersive .chat-compose textarea{background:rgba(255,255,255,.9);border-color:rgba(255,255,255,.65);color:#2B2029;-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px)}
-.chat-panel.immersive .chat-compose textarea::placeholder{color:rgba(43,32,41,.48)}
-/* 表情 / 加号两个圆钮：原来是浅色半透明圆 + 浅色线图标，压在浅照片上只剩一圈虚影 */
-.chat-panel.immersive .chat-compose .icon-btn{background:rgba(22,17,24,.45);border-color:transparent;color:#fff;-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
-.chat-panel.immersive .chat-compose .icon-btn:hover{background:rgba(22,17,24,.66);color:#fff}
+.chat-panel.immersive .chat-compose .compose-field{background:rgba(255,255,255,.9);border-color:rgba(255,255,255,.65);color:#2B2029;-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px)}
+.chat-panel.immersive .chat-compose .compose-field textarea{color:#2B2029}
+.chat-panel.immersive .chat-compose .compose-field textarea::placeholder{color:rgba(43,32,41,.48)}
+/* 表情 / 语音 / 更多几个圆钮：原来是浅色半透明圆 + 浅色线图标，压在浅照片上只剩一圈虚影 */
+.chat-panel.immersive .chat-compose .compose-ib{background:rgba(22,17,24,.45);color:#fff;-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
+.chat-panel.immersive .chat-compose .compose-ib:hover{background:rgba(22,17,24,.66);color:#fff}
 .chat-panel.immersive .voice-chip{color:#fff}
 .chat-panel.immersive .voice-chip .voice-dur{color:rgba(255,255,255,.8)}
 .chat-panel.immersive .media-grid button{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.18)}
@@ -1001,7 +1043,12 @@ body.cal-full{overflow:hidden;height:100dvh}
      副标题会被 header 的下边界切掉半行，所以留 6px 兜住。 */
   .chat-header{padding:6px 14px}
   .chat-log{padding:14px}
-  .chat-compose{padding:10px 12px calc(10px + env(safe-area-inset-bottom))}
+  .chat-compose{padding:8px 10px calc(8px + env(safe-area-inset-bottom));gap:4px}
+  /* 手机上四个圆钮挤在一起会把输入框压到 160px 以下，整体收小一档 */
+  .compose-ib,.compose-send{width:40px;height:40px;min-width:40px}
+  .compose-ib .icon{width:20px;height:20px}
+  .compose-field{min-height:40px;padding:2px 10px}
+  .fn-grid{gap:12px 6px}
   .chat-line{max-width:92%}
   .chat-bubble{padding:10px 13px}
   .chat-line .avatar{width:28px;height:28px}

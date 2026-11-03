@@ -868,8 +868,21 @@ def clean_body(c, kind, data, user_id, previous=None):
                  'category', 'done', 'emoji', 'target', 'completion_post', 'sticker', 'amount',
                  'start', 'cycle', 'length', 'flow', 'symptoms',
                  'color', 'pain', 'sex', 'mood', 'weight', 'discharge', 'temp',
-                 'reply_to', 'pinned'}
+                 'reply_to', 'pinned', 'location'}
     body = {k: v for k, v in data.items() if k in permitted}
+    if 'location' in body:
+        # 聊天里的「位置」消息：只存经纬度，地名让客户端去地图里显示，
+        # 免得把第三方逆地理编码服务写进数据层。
+        loc = body['location']
+        if not isinstance(loc, dict):
+            raise HTTPException(422, '位置格式不正确')
+        try:
+            lat, lng = float(loc.get('lat')), float(loc.get('lng'))
+        except (TypeError, ValueError):
+            raise HTTPException(422, '位置坐标不正确')
+        if not (-90 <= lat <= 90 and -180 <= lng <= 180):
+            raise HTTPException(422, '位置坐标超出范围')
+        body['location'] = {'lat': round(lat, 5), 'lng': round(lng, 5)}
     if 'sticker' in body and (not isinstance(body['sticker'], str)
                               or not re.fullmatch(r'/static/stickers/[a-z0-9]+/\d+\.(webm|webp)', body['sticker'])):
         raise HTTPException(422, '表情格式不正确')
@@ -1002,7 +1015,8 @@ def clean_body(c, kind, data, user_id, previous=None):
     body['media'] = list(dict.fromkeys(mids))
     if kind in {'album', 'anniversary', 'wish', 'habit', 'question', 'music'} and not body.get('title', '').strip():
         raise HTTPException(422, '请填写标题')
-    if kind in {'post', 'diary', 'surprise', 'note', 'chat'} and not (body.get('content', '').strip() or mids or body.get('sticker')):
+    if kind in {'post', 'diary', 'surprise', 'note', 'chat'} and not (
+            body.get('content', '').strip() or mids or body.get('sticker') or body.get('location')):
         raise HTTPException(422, '写点什么或添加一个附件吧')
     if kind == 'question' and mids:
         raise HTTPException(422, '问答暂不支持附件')

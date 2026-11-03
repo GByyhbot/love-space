@@ -74,6 +74,18 @@ def test_chat_reply_rejects_bad_shape(client_a):
     assert r.status_code == 422
 
 
+def test_chat_location_message(client_a):
+    """聊天里的「位置」：只存归一化后的经纬度，越界或形状不对一律 422。"""
+    r = client_a.post('/api/records', json={'kind': 'chat', 'body': {
+        'content': '', 'location': {'lat': '31.230416', 'lng': 121.473701}}})
+    assert r.status_code == 200, r.text
+    record = r.json()['body']['location']
+    assert record == {'lat': 31.23042, 'lng': 121.4737}
+    for bad in ('nope', {'lat': 'x', 'lng': 1}, {'lat': 91, 'lng': 0}, {'lat': 0, 'lng': 181}):
+        r = client_a.post('/api/records', json={'kind': 'chat', 'body': {'content': '', 'location': bad}})
+        assert r.status_code == 422, f'{bad} 应该被拒绝'
+
+
 def test_reply_and_pin_dropped_for_non_chat(client_a):
     r = client_a.post('/api/records', json={'kind': 'post', 'body': {
         'content': '普通动态', 'reply_to': {'id': 'abc', 'text': '引用的'}, 'pinned': True}})
