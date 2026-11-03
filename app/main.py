@@ -1800,9 +1800,8 @@ async def music_stream(u: str = '', user=Depends(current_user)):
         await upstream.aclose()
         await client.aclose()
         raise HTTPException(502, '试听线路暂时打不开')
+    # 不转发上游的 Content-Length：httpx 会自动解压 gzip，长度就对不上了，宁可回 chunked
     headers = {'Cache-Control': 'private, max-age=86400'}
-    if upstream.headers.get('content-length'):
-        headers['Content-Length'] = upstream.headers['content-length']
 
     async def relay():
         try:

@@ -1101,7 +1101,7 @@ function renderSongPane(){
  }
  const songs=recordsOf('music').slice().sort((a,b)=>b.created-a.created);
  if(!songs.length){
-  pane.innerHTML='<p class="meta ss-tip">共同歌单还空着。换成「在线搜歌」直接搜一首发出去，或者去歌单页添加你们自己的音频文件。</p>';
+  pane.innerHTML='<p class="meta ss-tip">共同歌单还空着。换成「在线搜歌」直接搜一首发出去，或者去歌单页添加你们自己的音频文件。</p><div class="form-actions"><button type="button" class="button soft" data-action="chat-song-golist">去歌单添加</button></div>';
   return;
  }
  pane.innerHTML=`<div class="song-picks">${songs.map(songListRow).join('')}</div><p class="small-note ss-note">点一首直接发出去，右边的小按钮只在本机试听。</p>`;
