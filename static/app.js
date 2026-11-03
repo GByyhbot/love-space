@@ -236,15 +236,15 @@ function renderShell() {
  [themeClass,'theme-rose','theme-peach','theme-lavender','theme-custom','reduced-motion'].forEach(c=>root.classList.remove(c));
  root.classList.add(state.me.space.theme==='peach'||state.me.space.theme==='lavender'||state.me.space.theme==='custom'?themeClass:'theme-rose');
  if(!state.me.space.motion)root.classList.add('reduced-motion');
- document.body.className=state.page==='messages'?('chat-full'+(chatBgIsPhoto()?' chat-immersive':'')):(state.page==='together'&&state.tab==='calendar'?'cal-full':(state.page==='figure'?'figure-full':''));
+ document.body.className=state.page==='messages'?('chat-full'+(chatBgIsPhoto()?' chat-immersive':'')):(state.page==='watch'?'chat-full watch-open':(state.page==='together'&&state.tab==='calendar'?'cal-full':(state.page==='figure'?'figure-full':'')));
  applyCustomColor(state.me.space.theme,state.me.space.custom_color);
- $('#app').innerHTML=`<div class="shell${state.page==='messages'?' chat-full':''}${state.page==='figure'?' figure-full':''}"><aside class="sidebar"><div class="brand"><img src="/static/icon.svg" alt=""><div><strong>恋爱空间</strong><small>LOVE, EVERY DAY</small></div></div><nav class="nav" aria-label="主要导航">${navHtml.join('')}</nav><div class="sidebar-bottom"><div class="little-note"><span>❀</span><br>把喜欢，写进每一天。<br>little things, lasting love</div><button class="profile-btn" data-nav="personal">${avatar(state.me.user.id)}<div><strong>${esc(state.me.user.name)}</strong><small>我的小角落 ${icon('arrow')}</small></div></button></div></aside><main class="main"><header class="topbar${toolsSub?' has-back':''}">${toolsSub?`<button class="nav-back topbar-back" data-action="tools-back" aria-label="回到我们">${icon('back')}</button>`:''}<span class="desktop-date">${new Date().toLocaleDateString('zh-CN',{timeZone:state.me.space.timezone,month:'long',day:'numeric',weekday:'long'})} · 今天也要好好相爱</span><div class="topbar-right"><span class="pill">${icon('lock')} 双人私密空间</span><button class="icon-btn" id="dark-toggle" data-action="toggle-dark" aria-label="切换深浅色">${icon(document.documentElement.classList.contains('dark')?'sun':'moon')}</button><button class="icon-btn" data-action="open-search" aria-label="搜索">${icon('search')}</button><button class="icon-btn" data-nav="messages" aria-label="私聊">${icon('chat')}${state.me.chat_unread&&state.page!=='messages'?`<span class="badge">${state.me.chat_unread>99?'99+':state.me.chat_unread}</span>`:''}</button><button class="icon-btn" data-nav="notices" aria-label="通知">${icon('bell')}${state.me.unread?`<span class="badge">${state.me.unread>99?'99+':state.me.unread}</span>`:''}</button><details class="more-menu account-menu"><summary class="mobile-profile" aria-label="打开账号菜单" title="账号菜单">${avatar(state.me.user.id)}</summary><div class="menu-pop account-popover"><div class="account-menu-heading"><strong>${esc(state.me.user.name)}</strong><small>我的账号</small></div><button data-action="profile">${icon('edit')} 账号资料</button><button data-nav="personal">${icon('lock')} 个人小角落</button><button data-nav="settings">${icon('gear')} 设置</button><button data-action="logout" class="danger account-logout">${icon('arrow')} 退出登录</button></div></details></div></header>${!state.online?'<div class="offline-banner">网络暂时断开，正在等待重连。未发送的文字会为你保留。</div>':''}<div id="page"></div><p class="footer-note">♡ 有你在，平凡的日子也闪闪发光。</p></main></div>`;
+ $('#app').innerHTML=`<div class="shell${state.page==='messages'?' chat-full':''}${state.page==='watch'?' chat-full watch-full':''}${state.page==='figure'?' figure-full':''}"><aside class="sidebar"><div class="brand"><img src="/static/icon.svg" alt=""><div><strong>恋爱空间</strong><small>LOVE, EVERY DAY</small></div></div><nav class="nav" aria-label="主要导航">${navHtml.join('')}</nav><div class="sidebar-bottom"><div class="little-note"><span>❀</span><br>把喜欢，写进每一天。<br>little things, lasting love</div><button class="profile-btn" data-nav="personal">${avatar(state.me.user.id)}<div><strong>${esc(state.me.user.name)}</strong><small>我的小角落 ${icon('arrow')}</small></div></button></div></aside><main class="main"><header class="topbar${toolsSub?' has-back':''}">${toolsSub?`<button class="nav-back topbar-back" data-action="tools-back" aria-label="回到我们">${icon('back')}</button>`:''}<span class="desktop-date">${new Date().toLocaleDateString('zh-CN',{timeZone:state.me.space.timezone,month:'long',day:'numeric',weekday:'long'})} · 今天也要好好相爱</span><div class="topbar-right"><span class="pill">${icon('lock')} 双人私密空间</span><button class="icon-btn" id="dark-toggle" data-action="toggle-dark" aria-label="切换深浅色">${icon(document.documentElement.classList.contains('dark')?'sun':'moon')}</button><button class="icon-btn" data-action="open-search" aria-label="搜索">${icon('search')}</button><button class="icon-btn" data-nav="messages" aria-label="私聊">${icon('chat')}${state.me.chat_unread&&state.page!=='messages'?`<span class="badge">${state.me.chat_unread>99?'99+':state.me.chat_unread}</span>`:''}</button><button class="icon-btn" data-nav="notices" aria-label="通知">${icon('bell')}${state.me.unread?`<span class="badge">${state.me.unread>99?'99+':state.me.unread}</span>`:''}</button><details class="more-menu account-menu"><summary class="mobile-profile" aria-label="打开账号菜单" title="账号菜单">${avatar(state.me.user.id)}</summary><div class="menu-pop account-popover"><div class="account-menu-heading"><strong>${esc(state.me.user.name)}</strong><small>我的账号</small></div><button data-action="profile">${icon('edit')} 账号资料</button><button data-nav="personal">${icon('lock')} 个人小角落</button><button data-nav="settings">${icon('gear')} 设置</button><button data-action="logout" class="danger account-logout">${icon('arrow')} 退出登录</button></div></details></div></header>${!state.online?'<div class="offline-banner">网络暂时断开，正在等待重连。未发送的文字会为你保留。</div>':''}<div id="page"></div><p class="footer-note">♡ 有你在，平凡的日子也闪闪发光。</p></main></div>`;
  renderPage();
  if(keepScroll>0)window.scrollTo({top:keepScroll});
 }
 
 function renderPage() {
- const pages={home:homePage,timeline:timelinePage,albums:albumsPage,messages:messagesPage,together:togetherPage,personal:personalPage,settings:settingsPage,notices:noticesPage,channels:channelsPage,backups:backupsPage,imports:importsPage,importdetail:importDetailPage,dashboard:dashboardPage,weekly:weeklyPage,figure:figurePage,linkcheck:linkCheckPage};
+ const pages={home:homePage,timeline:timelinePage,albums:albumsPage,messages:messagesPage,together:togetherPage,personal:personalPage,settings:settingsPage,notices:noticesPage,channels:channelsPage,backups:backupsPage,imports:importsPage,importdetail:importDetailPage,dashboard:dashboardPage,weekly:weeklyPage,figure:figurePage,linkcheck:linkCheckPage,watch:watchPage};
  $('#page').innerHTML=(pages[state.page] || homePage)();
  if(state.page==='timeline'&&state.timelineHasMore)$('#timeline-list')?.insertAdjacentHTML('afterend',`<div class="timeline-more">${button('继续往前翻','load-more-timeline','secondary')}</div>`);
  if(state.page==='messages') {
@@ -261,6 +261,11 @@ function renderPage() {
   $('#chat-file')?.addEventListener('change',e=>{const fs=[...e.target.files];e.target.value='';sendChatFiles(fs);});
   $('#chat-shot')?.addEventListener('change',e=>{const fs=[...e.target.files];e.target.value='';sendChatFiles(fs);});
   applyWallpaper();
+ }
+ if(state.page==='watch'){
+  const wt=$('#watch-text');
+  if(wt)wt.addEventListener('focus',()=>setTimeout(()=>{try{wt.scrollIntoView({block:'end'});}catch{}},300));
+  watchScroll();
  }
  if(state.page==='importdetail') initImportLog();
  syncStatusBarOverlay();
@@ -692,7 +697,10 @@ function chatRows() {
   /* 位置消息：body.location = {lat,lng}，点开用高德 URI 打开地图（不依赖任何 KEY） */
   const loc=r.body.location&&typeof r.body.location.lat==='number'&&typeof r.body.location.lng==='number'?r.body.location:null;
   const locCard=loc?`<a class="chat-loc" href="https://uri.amap.com/marker?position=${loc.lng},${loc.lat}&name=${encodeURIComponent('我们的位置')}" target="_blank" rel="noopener"><span class="cl-ico">${icon('location')}</span><span class="cl-body"><b>位置</b><small>${loc.lat.toFixed(5)}, ${loc.lng.toFixed(5)} · 点开看地图</small></span></a>`:'';
-  const inner=locCard?`<div class="chat-bubble loc">${quote}${locCard}</div>`:sticker?`<div class="chat-sticker${sticker.endsWith('.webm')?' video':''}">${sticker.endsWith('.webm')?`<video src="${esc(sticker)}" autoplay loop muted playsinline></video>`:`<img src="${esc(sticker)}" alt="贴纸" loading="lazy">`}</div>`:`<div class="chat-bubble${voiceOnly?' voice':''}${r.body.pinned?' pinned':''}">${quote}<span style="white-space:pre-wrap">${esc(r.body.content)}</span>${mediaMarkup(r.media)}</div>`;
+  /* 分享的歌：body.song = {title,artist,mid}，mid 是歌单里那首歌的音频媒体 id */
+  const song=r.body.song&&r.body.song.title?r.body.song:null;
+  const songCard=song?`<div class="chat-song"><div class="cs-top"><span class="cs-ico">${icon('music')}</span><span class="cs-body"><b>${esc(song.title)}</b>${song.artist?`<small>${esc(song.artist)}</small>`:''}</span></div>${song.mid?`<audio controls preload="none" src="/media/${esc(song.mid)}"></audio>`:'<small class="cs-warn">这首歌没有音频文件</small>'}</div>`:'';
+  const inner=songCard?`<div class="chat-bubble song">${quote}${songCard}</div>`:locCard?`<div class="chat-bubble loc">${quote}${locCard}</div>`:sticker?`<div class="chat-sticker${sticker.endsWith('.webm')?' video':''}">${sticker.endsWith('.webm')?`<video src="${esc(sticker)}" autoplay loop muted playsinline></video>`:`<img src="${esc(sticker)}" alt="贴纸" loading="lazy">`}</div>`:`<div class="chat-bubble${voiceOnly?' voice':''}${r.body.pinned?' pinned':''}">${quote}<span style="white-space:pre-wrap">${esc(r.body.content)}</span>${mediaMarkup(r.media)}</div>`;
   return `${tl?`<div class="chat-day">${tl}</div>`:''}<div class="chat-line ${mine?'mine':''}" id="msg-${r.id}">${avatar(r.author)}<div>${inner}${ops?`<div class="chat-time">${ops}</div>`:''}</div></div>`;
  }).join('');
  const pend=pending.map(p=>`<div class="chat-line mine pending">${avatar(state.me.user.id)}<div><div class="chat-bubble">${esc(p.body.content||'一个附件')}</div><div class="chat-time">尚未发送 <button data-action="retry-chat" data-id="${p.client_id}">点击重试</button></div></div></div>`).join('');
@@ -809,22 +817,70 @@ function messagesPage() {
   <button type="button" class="compose-ib compose-plus" data-action="chat-fn" aria-label="更多" title="更多">${icon('plus')}</button>
   <button class="compose-send" type="submit" aria-label="发送消息" title="发送">${icon('send')}</button>
  </form>`;
+ /* 面板只有网格：上方输入栏已经有一模一样的语音/表情/关闭，再加一行头就是重复。
+     点 ⊕ 再点一次即可收起，选完任一项也会自动收起。 */
  const fnPanel=`<div id="chat-fn" class="fn-panel" hidden>
-  <div class="fn-head"><strong>发消息</strong><div class="fn-head-ops"><button type="button" class="icon-btn" data-action="chat-voice" aria-label="发语音">${icon('mic')}</button><button type="button" class="icon-btn" data-action="sticker-panel" aria-label="表情">${icon('smile')}</button><button type="button" class="icon-btn" data-action="chat-fn-close" aria-label="收起">${icon('close')}</button></div></div>
   <div class="fn-grid">
    <button type="button" class="fn-tile" data-action="chat-pick" data-id="media"><span class="fn-ico">${icon('image')}</span><b>相册</b></button>
    <button type="button" class="fn-tile" data-action="chat-pick" data-id="camera"><span class="fn-ico">${icon('camera')}</span><b>拍摄</b></button>
    <button type="button" class="fn-tile" data-action="chat-call"><span class="fn-ico">${icon('phone')}</span><b>发起通话</b></button>
    <button type="button" class="fn-tile" data-action="chat-watch"><span class="fn-ico">${icon('film')}</span><b>一起看</b></button>
-   <button type="button" class="fn-tile" data-action="chat-money" data-id="gift"><span class="fn-ico">${icon('gift')}</span><b>红包</b></button>
    <button type="button" class="fn-tile" data-action="chat-locate"><span class="fn-ico">${icon('location')}</span><b>位置</b></button>
-   <button type="button" class="fn-tile" data-action="chat-money" data-id="transfer"><span class="fn-ico">${icon('transfer')}</span><b>转账</b></button>
-   <button type="button" class="fn-tile" data-action="chat-play"><span class="fn-ico">${icon('game')}</span><b>一起玩</b></button>
+   <button type="button" class="fn-tile" data-action="chat-song"><span class="fn-ico">${icon('music')}</span><b>音乐</b></button>
   </div>
  </div>`;
  return `<section class="chat-panel${bgOn?' has-wallpaper':''}${immersive?' immersive':''}">${chatWallpaper()}<header class="chat-header"><button class="icon-btn" data-action="chat-back" aria-label="返回">${icon('back')}</button>${partner?avatar(partner.id):'<span class="avatar">♡</span>'}<div><h3>${partner?esc(partner.name):'等待另一半加入'}</h3><small>我们的悄悄话 · 仅彼此可见</small></div><button class="icon-btn" data-action="chat-search" aria-label="搜索消息" title="搜索消息" style="margin-left:auto">${icon('search')}</button><button class="icon-btn" data-action="chat-bg" aria-label="聊天背景" title="聊天背景">${icon('photo')}</button><button class="icon-btn" data-nav="imports" aria-label="聊天记录">${icon('book')}</button></header><div class="chat-body">${pinnedBar}${searchBar}<div id="chat-log" class="chat-log" aria-live="polite">${chatRows()}</div></div><div id="sticker-dock" class="sticker-dock" hidden></div>${replyBar}${composeBar}${fnPanel}<input id="chat-file" type="file" accept="image/*,video/*" multiple hidden><input id="chat-shot" type="file" accept="image/*" capture="environment" hidden></section>`;
 }
 function scrollChat(){const log=$('#chat-log');if(log)log.scrollTop=log.scrollHeight;}
+
+/* ── 一起看（框架版，竖屏上下分屏）──────────────────────────
+   上半：放映区（本机放一个视频，谁选的片源谁看得见；真正同步播放要等信令/时间轴对齐）
+   下半：聊天区，复用同一套消息渲染，边看边说
+   之所以先做框架：同步播放要处理片源合法性、双方缓冲对齐、进度心跳，属于独立一轮的量。 */
+let watchObjectUrl=null;
+function watchPage(){
+ const chats=chatRows();
+ return `<section class="watch-page">
+  <header class="watch-head">
+   <button class="icon-btn" data-action="watch-back" aria-label="返回聊天">${icon('back')}</button>
+   <div><h3>一起看</h3><small>边看边聊 · 同步播放还在路上</small></div>
+   <button class="button soft small" data-action="watch-pick">${icon('film')} 选片源</button>
+  </header>
+  <div class="watch-stage" id="watch-stage">
+   <video id="watch-video" class="watch-video" playsinline controls hidden></video>
+   <div class="watch-empty" id="watch-empty">
+    <span class="we-emoji">🎬</span>
+    <b>还没有片源</b>
+    <small>先在下面选一部本地视频，两个人各自打开同一部就能对着看</small>
+    <button class="button primary small" data-action="watch-pick">选择视频</button>
+   </div>
+  </div>
+  <div class="watch-chat">
+   <div class="watch-log" id="watch-log" aria-live="polite">${chats}</div>
+   <form id="watch-form" class="chat-compose">
+    <div class="compose-field"><textarea id="watch-text" rows="1" maxlength="20000" placeholder="边看边说" aria-label="聊天内容" autocomplete="off" enterkeyhint="send"></textarea></div>
+    <button class="compose-send" type="submit" aria-label="发送消息">${icon('send')}</button>
+   </form>
+   <input id="watch-file" type="file" accept="video/*" hidden>
+  </div>
+ </section>`;
+}
+function watchScroll(){const log=$('#watch-log');if(log)log.scrollTop=log.scrollHeight;}
+/* 选本地视频：只在本机播放，不上传（片源可能很大，也不该进你们的备份） */
+function watchPick(){
+ const input=$('#watch-file');if(!input)return;
+ input.value='';
+ input.onchange=()=>{
+  const f=input.files&&input.files[0];if(!f)return;
+  const v=$('#watch-video'),empty=$('#watch-empty');
+  if(watchObjectUrl)URL.revokeObjectURL(watchObjectUrl);
+  watchObjectUrl=URL.createObjectURL(f);
+  v.src=watchObjectUrl;v.hidden=false;
+  if(empty)empty.hidden=true;
+  v.play().catch(()=>{});
+ };
+ input.click();
+}
 
 /* ── 表情包：内置 emoji 两组（日常 / 涩涩）+ 个人自定义表情包（存本机，上传即存服务器媒体库） ── */
 const CUTE_EMOJI=['😊','😄','🥰','😘','😗','💋','❤️','🧡','💕','💞','🤗','😳','🙈','✨','🌹','🍰','🍜','☕','🌙','⭐','🍀','🎁','📷','🎵','💤','🫶','🏠','🌈','☀️','🌧️'];
@@ -889,18 +945,55 @@ async function chatVoiceToggle(){
   toast('正在录音，再点一次麦克风结束并发送');
  }catch(e){toast(e.message||'录音失败');}
 }
+/* ── 分享一首歌：从共同歌单里挑，发一条带 body.song 的聊天消息 ── */
+function songPicker(){
+ const songs=recordsOf('music').slice().sort((a,b)=>b.created-a.created);
+ if(!songs.length){
+  openModal('发一首歌','<p class="meta" style="margin:0 0 14px">共同歌单还空着。先去放一首歌进来，之后在聊天里就能直接分享。</p><div class="form-actions"><button class="button primary" data-action="chat-song-golist">去歌单添加</button><button class="button soft" data-action="close-modal">先算了</button></div>');
+  return;
+ }
+ const rows=songs.map(r=>{
+  const b=r.body||{},m=songMedia(r);
+  return `<button type="button" class="song-pick" data-action="chat-song-send" data-id="${r.id}"><span class="sp-ico">♪</span><span class="sp-body"><b>${esc(b.title||'未命名')}</b><small>${esc(b.content||'')}</small></span>${m?'':`<i class="sp-warn">无音频</i>`}</button>`;
+ }).join('');
+ openModal('发一首歌',`<div class="song-picks">${rows}</div><p class="small-note">从共同歌单里挑一首，对方在聊天里就能直接播放。</p>`);
+}
+async function sendSong(rid){
+ const r=recordsOf('music').find(x=>x.id===rid);
+ if(!r)return;
+ const m=songMedia(r);
+ closeModal();
+ try{
+  await sendChat({content:'',date:today(),media:[],song:{
+   title:String(r.body?.title||'未命名').slice(0,120),
+   artist:String(r.body?.content||'').slice(0,120),
+   mid:m?m.id:''}});
+  await refresh();scrollChat();toast('已分享这首');
+ }catch(e){toast(e.message||'分享失败');}
+}
 /* 位置：浏览器定位拿经纬度，作为一条 location 消息发出去 */
 function chatLocate(){
  if(!navigator.geolocation)return toast('这台设备不支持定位');
+ if(!window.isSecureContext)return toast('定位只允许在 https 页面使用，当前连接不是安全上下文');
  const p=$('#chat-fn');if(p)p.hidden=true;
  toast('正在获取位置…');
- navigator.geolocation.getCurrentPosition(async pos=>{
+ /* 首次使用会弹系统权限框，用户点「允许」之后第一次回调仍可能是 PERMISSION_DENIED
+    （权限刚落、WebView 还没接住），所以对 code=1 给一次自动重试。 */
+ let retried=false;
+ const tips={1:'位置权限没给：到「设置 → 应用 → 恋爱空间 → 权限」里打开「位置」，再试一次',
+             2:'暂时定不到位置——室内、地下室或没开 GPS 都会这样，换个地方再试',
+             3:'定位超时了，再点一次'};
+ const attempt=()=>navigator.geolocation.getCurrentPosition(async pos=>{
   try{
    const lat=Math.round(pos.coords.latitude*1e5)/1e5,lng=Math.round(pos.coords.longitude*1e5)/1e5;
    await sendChat({content:'',date:today(),media:[],location:{lat,lng}});
    await refresh();scrollChat();toast('位置已发送');
   }catch(e){toast(e.message||'发送失败');}
- },err=>toast('定位失败：'+(err?.message||'检查一下定位权限')),{enableHighAccuracy:true,timeout:10000,maximumAge:60000});
+ },err=>{
+  if(err&&err.code===1&&!retried){retried=true;setTimeout(attempt,1200);return;}
+  toast(tips[err&&err.code]||('定位失败：'+(err&&err.message)||'未知原因'));
+ },{enableHighAccuracy:true,timeout:8000,maximumAge:300000});
+ attempt();
 }
 /* 表情面板：内嵌于输入栏上方（输入框始终可见），点击按钮开合；点 emoji 只插入文本不弹键盘 */
 function stickerPanel(){
@@ -3051,11 +3144,14 @@ async function act(action,id,el) {
  if(action==='chat-pick'){const p=$('#chat-fn');if(p)p.hidden=true;(id==='camera'?$('#chat-shot'):$('#chat-file'))?.click();return;}
  if(action==='chat-voice'){const p=$('#chat-fn');if(p)p.hidden=true;return chatVoiceToggle();}
  if(action==='chat-locate')return chatLocate();
- /* 红包/转账没有支付通道，落到「共同账本」记一笔——这才是这个空间里能兑现的那一步 */
- if(action==='chat-money'){const p=$('#chat-fn');if(p)p.hidden=true;navigate('together','ledger');toast(id==='transfer'?'在共同账本里记一笔转账':'在共同账本里记一笔，红包也算');return;}
- if(action==='chat-watch'){const p=$('#chat-fn');if(p)p.hidden=true;navigate('albums');toast('一起翻翻你们的相册');return;}
- if(action==='chat-play'){const p=$('#chat-fn');if(p)p.hidden=true;navigate('figure');return;}
- if(action==='chat-call'){toast('实时通话还没做，先用语音说两句吧');return;}
+ if(action==='chat-watch'){const p=$('#chat-fn');if(p)p.hidden=true;return navigate('watch');}
+ if(action==='chat-song'){const p=$('#chat-fn');if(p)p.hidden=true;return songPicker();}
+ if(action==='chat-song-send')return sendSong(id);
+ if(action==='chat-song-golist'){closeModal();return navigate('together','music');}
+ /* 实时通话需要 WebRTC + 信令，属于独立一轮的量，这里明说而不是假装点了没反应 */
+ if(action==='chat-call')return toast('实时通话还没接（要 WebRTC + 信令服务），先用语音说两句');
+ if(action==='watch-back')return navigate('messages');
+ if(action==='watch-pick')return watchPick();
  if(action==='chat-bg')return chatBgForm();
  if(action==='chat-to-draft')return composer('post',null,{...r.body,mediaObjects:r.media});
  if(action==='retry-chat'){const p=pendingChats().find(p=>p.client_id===id);if(p){await sendChat(p.body,p.client_id);await refresh();}return;}
@@ -3146,7 +3242,11 @@ document.addEventListener('touchend',e=>{
  renderPage();
 },{passive:true});
 document.addEventListener('click',async e=>{$$('.more-menu[open]').forEach(d=>{if(!d.contains(e.target))d.removeAttribute('open');});const nav=e.target.closest('[data-nav]'),el=e.target.closest('[data-action]');try{if(nav||el)e.target.closest('.account-menu')?.removeAttribute('open');if(nav)return await navigate(nav.dataset.nav);if(el)await act(el.dataset.action,el.dataset.id||'',el);}catch(err){toast(err.message);}});
-document.addEventListener('submit',async e=>{if(e.target.id!=='chat-form')return;e.preventDefault();const input=$('#chat-text'),content=input.value.trim();if(!content)return;const btn=$('button[type=submit]',e.target);btn.disabled=true;try{const body={content,date:today(),media:[]};if(state.chatReply)body.reply_to=state.chatReply;await sendChat(body);state.chatReply=null;input.value='';localStorage.removeItem('chat-text:'+state.me.user.id);await refresh();syncCompose();}catch(err){toast(err.message);}finally{btn.disabled=false;}});
+document.addEventListener('submit',async e=>{const isWatch=e.target.id==='watch-form';if(e.target.id!=='chat-form'&&!isWatch)return;e.preventDefault();const input=$(isWatch?'#watch-text':'#chat-text'),content=input.value.trim();if(!content)return;const btn=$('button[type=submit]',e.target);btn.disabled=true;try{const body={content,date:today(),media:[]};if(!isWatch&&state.chatReply)body.reply_to=state.chatReply;await sendChat(body);if(!isWatch)state.chatReply=null;input.value='';localStorage.removeItem('chat-text:'+state.me.user.id);
+ /* 一起看页不能整页重渲染：视频是本机 objectURL，重渲染就把放映区清空了 */
+ if(isWatch){await refresh(false);const log=$('#watch-log');if(log)log.innerHTML=chatRows();watchScroll();}
+ else{await refresh();syncCompose();}
+ }catch(err){toast(err.message);}finally{btn.disabled=false;}});
 document.addEventListener('input',e=>{if(e.target.id==='chat-text'){localStorage.setItem('chat-text:'+state.me.user.id,e.target.value);syncCompose();}if(e.target.id==='filter-q'){state.filters={...(state.filters||{}),q:e.target.value};clearTimeout(state.filterTimer);state.filterTimer=setTimeout(async()=>{const pos=$('#filter-q')?.selectionStart;try{await loadTimeline(true);renderPage();$('#filter-q')?.focus();$('#filter-q')?.setSelectionRange(pos,pos);}catch(err){toast(err.message);}},250);}});
 document.addEventListener('change',e=>{const map={'filter-author':'author','filter-date':'date','filter-media':'media'};if(map[e.target.id]){state.filters={...(state.filters||{}),[map[e.target.id]]:e.target.value};state.timelineCursor=null;loadTimeline(true).then(renderPage).catch(err=>toast(err.message));}});
 document.addEventListener('keydown',e=>{if(e.key==='Escape'){const menu=$('.more-menu[open]');if(menu){menu.removeAttribute('open');$('summary',menu)?.focus();}}if(e.key==='Escape'&&$('.modal'))closeModal();if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing&&e.target?.id==='chat-text'){e.preventDefault();const form=$('#chat-form'),btn=form&&$('button[type=submit]',form);if(form&&btn&&!btn.disabled)form.requestSubmit();}if(e.key==='Tab'&&$('.modal')){const els=$$('button,input,textarea,select,a[href]',$('.modal')).filter(el=>!el.disabled),first=els[0],last=els.at(-1);if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}}});
@@ -3285,7 +3385,7 @@ function scheduleServerEvent(rev){
   try{await handleServerEvent();}catch{}finally{if(rev)lastRev=rev;}
  },500);
 }
-async function handleServerEvent(){if(!state.me)return;if(refreshing){state.pendingRefresh=true;return;}try{const oldNotice=state.notices[0]?.id||null;const focused=document.activeElement,canRender=!$('.modal')&&!$('.more-menu[open]')&&!['INPUT','TEXTAREA','SELECT'].includes(focused?.tagName);await refresh(false);if(state.page==='messages'&&$('#chat-log')){const log=$('#chat-log'),atBottom=log.scrollHeight-log.scrollTop-log.clientHeight<100;log.innerHTML=chatRows();if(atBottom)scrollChat();state.me.chat_unread=0;post('/notices/read?event=chat').catch(()=>{});}else if(canRender)renderShell();/* 系统弹窗/锁屏通知已停用：手机端通知改由第三方渠道（企业微信等）+ 浏览器 Web Push 送达；在聊天页停留时消息即时标记已读，后端不再推送 */}catch{};}
+async function handleServerEvent(){if(!state.me)return;if(refreshing){state.pendingRefresh=true;return;}try{const oldNotice=state.notices[0]?.id||null;const focused=document.activeElement,canRender=!$('.modal')&&!$('.more-menu[open]')&&!['INPUT','TEXTAREA','SELECT'].includes(focused?.tagName);await refresh(false);if(state.page==='messages'&&$('#chat-log')){const log=$('#chat-log'),atBottom=log.scrollHeight-log.scrollTop-log.clientHeight<100;log.innerHTML=chatRows();if(atBottom)scrollChat();state.me.chat_unread=0;post('/notices/read?event=chat').catch(()=>{});}else if(state.page==='watch'&&$('#watch-log')){const log=$('#watch-log'),atBottom=log.scrollHeight-log.scrollTop-log.clientHeight<80;log.innerHTML=chatRows();if(atBottom)watchScroll();state.me.chat_unread=0;post('/notices/read?event=chat').catch(()=>{});}else if(canRender)renderShell();/* 系统弹窗/锁屏通知已停用：手机端通知改由第三方渠道（企业微信等）+ 浏览器 Web Push 送达；在聊天页停留时消息即时标记已读，后端不再推送 */}catch{};}
 let sseRetry=0;
 function connectEvents(){clearTimeout(state.sseTimer);state.stream?.close();const es=new EventSource('/api/events');state.stream=es;es.onopen=()=>{sseRetry=0;};es.onmessage=e=>{let rev='';try{rev=(JSON.parse(e.data||'{}').rev)||'';}catch{}scheduleServerEvent(rev);};/* 断线兜底：浏览器只自动重连“可恢复”断线（readyState=CONNECTING）；致命断流（401/代理掐断）进 CLOSED 后永不自愈 → 指数退避手动重建，1s 起步、30s 封顶，连上即清零 */
 es.onerror=()=>{if(es.readyState!==EventSource.CLOSED)return;state.stream=null;clearTimeout(state.sseTimer);sseRetry=sseRetry?Math.min(sseRetry*2,30):1;state.sseTimer=setTimeout(()=>{if(state.me)connectEvents();},sseRetry*1000);};}

@@ -868,7 +868,7 @@ def clean_body(c, kind, data, user_id, previous=None):
                  'category', 'done', 'emoji', 'target', 'completion_post', 'sticker', 'amount',
                  'start', 'cycle', 'length', 'flow', 'symptoms',
                  'color', 'pain', 'sex', 'mood', 'weight', 'discharge', 'temp',
-                 'reply_to', 'pinned', 'location'}
+                 'reply_to', 'pinned', 'location', 'song'}
     body = {k: v for k, v in data.items() if k in permitted}
     if 'location' in body:
         # 聊天里的「位置」消息：只存经纬度，地名让客户端去地图里显示，
@@ -883,6 +883,21 @@ def clean_body(c, kind, data, user_id, previous=None):
         if not (-90 <= lat <= 90 and -180 <= lng <= 180):
             raise HTTPException(422, '位置坐标超出范围')
         body['location'] = {'lat': round(lat, 5), 'lng': round(lng, 5)}
+    if 'song' in body:
+        # 聊天里分享的歌：只存歌单条目的摘要 + 音频媒体 id，不复制音频文件本身。
+        song = body['song']
+        if not isinstance(song, dict):
+            raise HTTPException(422, '歌曲格式不正确')
+        title = song.get('title')
+        artist = song.get('artist') or ''
+        mid = song.get('mid') or ''
+        if not isinstance(title, str) or not title.strip() or len(title) > 120:
+            raise HTTPException(422, '歌名不能为空且不超过 120 字')
+        if not isinstance(artist, str) or len(artist) > 200:
+            raise HTTPException(422, '歌手信息过长')
+        if not isinstance(mid, str) or not re.fullmatch(r'[0-9A-Za-z_-]{0,64}', mid):
+            raise HTTPException(422, '音频编号不正确')
+        body['song'] = {'title': title.strip()[:120], 'artist': artist.strip()[:200], 'mid': mid}
     if 'sticker' in body and (not isinstance(body['sticker'], str)
                               or not re.fullmatch(r'/static/stickers/[a-z0-9]+/\d+\.(webm|webp)', body['sticker'])):
         raise HTTPException(422, '表情格式不正确')
@@ -1016,7 +1031,8 @@ def clean_body(c, kind, data, user_id, previous=None):
     if kind in {'album', 'anniversary', 'wish', 'habit', 'question', 'music'} and not body.get('title', '').strip():
         raise HTTPException(422, '请填写标题')
     if kind in {'post', 'diary', 'surprise', 'note', 'chat'} and not (
-            body.get('content', '').strip() or mids or body.get('sticker') or body.get('location')):
+            body.get('content', '').strip() or mids or body.get('sticker')
+            or body.get('location') or body.get('song')):
         raise HTTPException(422, '写点什么或添加一个附件吧')
     if kind == 'question' and mids:
         raise HTTPException(422, '问答暂不支持附件')

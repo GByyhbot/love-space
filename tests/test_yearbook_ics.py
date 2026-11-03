@@ -86,6 +86,17 @@ def test_chat_location_message(client_a):
         assert r.status_code == 422, f'{bad} 应该被拒绝'
 
 
+def test_chat_song_message(client_a):
+    """聊天里分享一首歌：只存摘要 + 音频媒体 id，空歌名/野路径一律 422。"""
+    r = client_a.post('/api/records', json={'kind': 'chat', 'body': {
+        'content': '', 'song': {'title': ' 晚安 ', 'artist': '陈奕迅', 'mid': 'abc123'}}})
+    assert r.status_code == 200, r.text
+    assert r.json()['body']['song'] == {'title': '晚安', 'artist': '陈奕迅', 'mid': 'abc123'}
+    for bad in ('nope', {'title': ''}, {'title': 'x', 'mid': '../etc/passwd'}, {'title': 'x' * 121}):
+        r = client_a.post('/api/records', json={'kind': 'chat', 'body': {'content': '', 'song': bad}})
+        assert r.status_code == 422, f'{bad} 应该被拒绝'
+
+
 def test_reply_and_pin_dropped_for_non_chat(client_a):
     r = client_a.post('/api/records', json={'kind': 'post', 'body': {
         'content': '普通动态', 'reply_to': {'id': 'abc', 'text': '引用的'}, 'pinned': True}})

@@ -527,10 +527,6 @@ button.mood-row.no-mood .mood-bubble.empty{color:var(--primary-dark)}
    （z-index:0），普通流内元素（这里原本没有定位）会被它整个盖住——面板"点了没反应"
    就是这个原因，只剩几个自身定位的小圆钮从壁纸上透出来。 */
 .fn-panel{position:relative;z-index:1;border-top:1px solid var(--line);background:var(--surface);padding:10px 14px calc(14px + env(safe-area-inset-bottom))}
-.fn-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:2px 0 10px}
-.fn-head strong{font-size:14px;color:var(--ink);font-weight:600}
-.fn-head-ops{display:flex;gap:2px}
-.fn-head-ops .icon-btn{width:var(--ctrl-h-sm);height:var(--ctrl-h-sm)}
 .fn-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px 8px}
 .fn-tile{display:flex;flex-direction:column;align-items:center;gap:7px;background:transparent;border:0;padding:0;color:var(--ink-2)}
 .fn-tile b{font-size:12.5px;font-weight:500;line-height:1.2;color:var(--ink-2)}
@@ -550,7 +546,6 @@ button.mood-row.no-mood .mood-bubble.empty{color:var(--primary-dark)}
 :root.dark .chat-panel.has-wallpaper .chat-compose .compose-field textarea{background:transparent;color:#fff}
 /* 照片壁纸上的功能面板：深玻璃 + 浅色图标，不然浅底面板会在照片上切出生硬的一块白 */
 .chat-panel.immersive .fn-panel{background:rgba(18,14,18,.92);border-top-color:rgba(255,255,255,.14);-webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px)}
-.chat-panel.immersive .fn-head strong{color:#fff}
 .chat-panel.immersive .fn-tile b{color:rgba(255,255,255,.86)}
 .chat-panel.immersive .fn-ico{background:rgba(255,255,255,.12);color:#fff}
 .chat-panel.immersive .fn-tile:hover .fn-ico{background:rgba(255,255,255,.2)}
@@ -562,6 +557,52 @@ button.mood-row.no-mood .mood-bubble.empty{color:var(--primary-dark)}
 .cl-body{display:flex;flex-direction:column;line-height:1.35}
 .cl-body b{font-size:14px;color:var(--ink)}
 .cl-body small{font-size:11.5px;color:var(--muted)}
+
+/* 分享的歌：气泡里直接给一个音频条，不用点进去再播 */
+.chat-song{display:flex;flex-direction:column;gap:8px;min-width:196px;max-width:260px}
+.cs-top{display:flex;gap:10px;align-items:center}
+.cs-ico{width:36px;height:36px;flex:none;display:grid;place-items:center;border-radius:10px;background:var(--soft);color:var(--primary-dark);font-size:17px}
+.cs-body{display:flex;flex-direction:column;line-height:1.35;min-width:0}
+.cs-body b{font-size:14px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cs-body small{font-size:11.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chat-song audio{width:100%;height:34px}
+.cs-warn{font-size:11.5px;color:var(--muted)}
+.chat-panel.immersive .mine .cs-body b{color:var(--on-primary)}
+.chat-panel.immersive .mine .cs-body small{color:rgba(255,255,255,.72)}
+
+/* 从歌单里挑歌的列表 */
+.song-picks{display:flex;flex-direction:column;gap:8px;max-height:56vh;overflow-y:auto}
+.song-pick{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--surface);color:var(--ink)}
+.song-pick:hover{background:var(--soft)}
+.sp-ico{width:34px;height:34px;flex:none;display:grid;place-items:center;border-radius:50%;background:var(--soft);color:var(--primary-dark)}
+.sp-body{display:flex;flex-direction:column;min-width:0;flex:1}
+.sp-body b{font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sp-body small{font-size:11.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sp-warn{font-size:11px;color:var(--amber);font-style:normal}
+
+/* ── 一起看（框架版）：竖屏上下分屏，放映区在上、聊天区在下 ──
+   用 flex 比例分而不是固定 16:9：竖屏手机 16:9 只占三成高度，剩下会空一大块；
+   50/50 让两边都能用，视频按 contain 居中，多出来的地方留黑边。 */
+body.watch-open{overflow:hidden;height:100dvh}
+.shell.watch-full .main{height:100dvh;padding:0;display:flex;flex-direction:column;overflow:hidden}
+.shell.watch-full .topbar,.shell.watch-full .footer-note{display:none}
+.watch-full #page{display:flex;flex-direction:column;flex:1;min-height:0;padding:0}
+.watch-page{flex:1;min-height:0;display:flex;flex-direction:column;background:var(--bg)}
+.watch-head{flex:none;display:flex;align-items:center;gap:10px;padding:calc(8px + env(safe-area-inset-top)) 14px 8px;border-bottom:1px solid var(--line);background:var(--surface)}
+/* App 内 .main 已经由 html.is-native-app 补过 --safe-top，这里别再叠一次 */
+html.is-native-app .watch-head{padding-top:8px}
+.watch-head>div{flex:1;min-width:0}
+.watch-head h3{margin:0;font-size:15px}
+.watch-head small{display:block;color:var(--muted);font-size:11.5px;line-height:1.3}
+.watch-stage{flex:1 1 48%;min-height:0;position:relative;background:#0B090C;display:grid;place-items:center;overflow:hidden}
+.watch-video{width:100%;height:100%;object-fit:contain;background:#000}
+.watch-empty{display:flex;flex-direction:column;align-items:center;gap:8px;color:rgba(255,255,255,.86);text-align:center;padding:18px}
+.watch-empty .we-emoji{font-size:34px;line-height:1}
+.watch-empty small{color:rgba(255,255,255,.55);max-width:280px;line-height:1.5;font-size:12px}
+.watch-chat{flex:1 1 52%;min-height:0;display:flex;flex-direction:column;background:var(--surface);border-top:1px solid var(--line)}
+.watch-log{flex:1;min-height:0;overflow-y:auto;padding:12px 14px;display:flex;flex-direction:column;gap:10px;scrollbar-width:none}
+.watch-log::-webkit-scrollbar{display:none}
+.watch-chat .chat-compose{padding:8px 12px calc(8px + env(safe-area-inset-bottom))}
 /* 键盘避让：新版 WebView 靠 viewport 的 interactive-widget=resizes-content 自己缩，
    旧版只缩视觉视口，app.js 的 syncKeyboard() 把差值写进 --kb-h，这里把输入栏整体顶上去。 */
 body.chat-full .chat-panel{padding-bottom:var(--kb-h,0px)}

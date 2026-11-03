@@ -59,6 +59,11 @@
          否则 launcher 回调任一 denied 即整体 request.deny() -->
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <uses-permission android:name="android.permission.CAMERA" />
+    <!-- 定位（聊天里发「位置」）：Capacitor 7 的 BridgeWebChromeClient 已经实现了
+         onGeolocationPermissionsShowPrompt → 动态申请运行时权限 → 回调 WebView，
+         但前提是清单里**声明**了这两个权限；只差这一处，之前点「位置」必然失败。 -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 
     <!-- 消息轮询前台服务、通知权限与系统开机广播 -->
     <!-- ① 前台消息服务权限；WAKE_LOCK 由旧版后台插件声明，当前消息接收以 NtfyStreamService 为准 -->

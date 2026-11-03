@@ -16,7 +16,7 @@ REMOTE = '/vol1/1000/LARJ'
 BUILD_DIR = '/vol1/1000/LARJ-patch-build'
 CANONICAL = '2126263229/love-space'
 # ⚠️ 版本号写死在这里，发版必须同步改（曾漏改，线上版本号一直显示 152）
-VERSION = '1.7.7'
+VERSION = '1.7.8'
 
 # 本地 → 容器内路径映射（只改静态文件时够用）
 IN_CONTAINER = {
