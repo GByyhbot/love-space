@@ -2061,8 +2061,15 @@ const PROBE_ABORT_MS=8000;
 function linkTone(ms){if(ms<0)return 'var(--muted)';if(ms<=300)return 'var(--green)';if(ms<=1200)return 'var(--amber)';return 'var(--danger)';}
 function linkText(ms){return ms<0?'不可达':ms+' ms';}
 function linkBridge(){return window.Capacitor?.Plugins?.LinkBridge||null;}
+/* 桥不可靠：远程加载模式下 Capacitor 桥不保证注入（window.Capacitor 可能整个不在），
+   但原生端 appendUserAgent 加了 LoveSpaceApp/<版本>，UA 里一定有 —— 用它兜底识别。 */
+function isNativeApp(){return Boolean(linkBridge())||/LoveSpaceApp\//.test(navigator.userAgent||'');}
+/* 桥不在时的备用通道：主框架导航到自定义 scheme，原生 WebViewClient 的
+   shouldOverrideUrlLoading 会截到并 return true（页面原地不动，不会弹错误页）。
+   离线页的 lovespace://retry 就是这么工作的，已经验证过。 */
+function nativeScheme(u){try{location.href='lovespace://'+u;}catch{}}
 function linkCheckPage(){
- const rows=state.linkRoutes,native=Boolean(linkBridge());
+ const rows=state.linkRoutes,native=isNativeApp();
  const body=!rows
   ?empty('还没有检测结果','点上面的「开始检测」，会依次测一遍每条线路的响应速度。')
   :`<div class="link-list">${rows.map(r=>`<div class="link-row${r.current?' is-current':''}">
@@ -2103,8 +2110,35 @@ async function probeRoutesInBrowser(){
 async function runLinkProbe(){
  if(state.linkProbing)return;
  state.linkProbing=true;renderPage();
+ const bridge=linkBridge();
+ if(!bridge&&isNativeApp()){
+  /* 桥没注入但确实在 App 里：走 lovespace:// 协议通道，原生端现场探测
+     完用 evaluateJavascript 回调 window.__lovespaceLinkProbe。
+     挂 30 秒看门狗，防止原生端万一没接住时按钮永远「检测中」。 */
+  clearTimeout(runLinkProbe._guard);
+  runLinkProbe._guard=setTimeout(()=>{
+   window.__lovespaceLinkProbe=null;
+   state.linkProbing=false;renderPage();
+   toast('检测超时，请再试一次');
+  },30000);
+  window.__lovespaceLinkProbe=(data)=>{
+   clearTimeout(runLinkProbe._guard);
+   window.__lovespaceLinkProbe=null;
+   try{
+    const routes=(data?.routes||[]).map(r=>({name:r.name,url:r.url,ms:Number(r.ms),current:Boolean(r.current),best:Boolean(r.best)}));
+    if(!routes.length)throw new Error('没有取到线路信息');
+    state.linkRoutes=routes;
+    const alive=routes.filter(r=>r.ms>=0).length;
+    toast(alive?`检测完成，${alive}/${routes.length} 条线路可用`:'所有线路都没连上，检查一下网络');
+   }catch(e){
+    toast(e?.message||'检测失败，请稍后再试');
+   }
+   state.linkProbing=false;renderPage();
+  };
+  nativeScheme('link-probe');
+  return;
+ }
  try{
-  const bridge=linkBridge();
   let routes;
   if(bridge){
    const res=await bridge.probe();
@@ -2125,11 +2159,20 @@ async function runLinkProbe(){
 }
 async function useLinkRoute(url){
  const bridge=linkBridge();
- if(!bridge)return toast('切换线路需要在 App 内操作');
- try{
-  await bridge.use({url});
+ if(bridge){
+  try{
+   await bridge.use({url});
+   toast('正在切换到新线路…');
+  }catch(e){toast(e?.message||'切换失败');}
+  return;
+ }
+ if(isNativeApp()){
+  /* 桥没注入的备用通道：原生端 switchToRoute 接管，整页加载新线路 */
+  nativeScheme('link-use?url='+encodeURIComponent(url));
   toast('正在切换到新线路…');
- }catch(e){toast(e?.message||'切换失败');}
+  return;
+ }
+ toast('切换线路需要在 App 内操作');
 }
 function settingsPage() {
  const v=state.appVersion||{};

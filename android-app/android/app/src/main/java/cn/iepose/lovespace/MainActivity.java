@@ -378,6 +378,32 @@ public class MainActivity extends BridgeActivity {
                 }
                 return true;
             }
+            // 链路检测页备用通道：Capacitor 桥在远程加载模式下不保证注入，
+            // JS 侧用 UA 识别出 App 后，通过自定义 scheme 求助原生端。
+            if ("link-probe".equals(uri.getHost())) {
+                final WebView wv = view;
+                new Thread(new Runnable() {
+                    @Override public void run() {
+                        final String json = probeRoutesForUi().toString();
+                        wv.post(new Runnable() {
+                            @Override public void run() {
+                                wv.evaluateJavascript(
+                                    "window.__lovespaceLinkProbe&&window.__lovespaceLinkProbe({routes:" + json + "})", null);
+                            }
+                        });
+                    }
+                }, "link-probe-cb").start();
+                return true;
+            }
+            if ("link-use".equals(uri.getHost())) {
+                try {
+                    String url = uri.getQueryParameter("url");
+                    if (url != null && isKnownRoute(url)) switchToRoute(url);
+                } catch (Exception e) {
+                    Log.w(TAG, "切换线路失败", e);
+                }
+                return true;
+            }
             return false;
         }
 
