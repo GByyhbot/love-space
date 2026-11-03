@@ -279,7 +279,25 @@ function renderPage() {
 /* state.me 还没到时不要渲染：boot() 是异步的，用户在首屏加载完之前点导航（或 hashchange 抢跑）
    会让 renderShell 读到 null.space 抛 TypeError，被 catch 成一条吓人的报错提示。
    直接返回即可——boot() 结束时会按 location.hash 渲染到正确的页面。 */
-async function navigate(page,tab='') {if(!state.me)return;if(page!=='messages')state.chatReturn={page,tab};if(page==='messages'&&state.me){state.me.chat_unread=0;post('/notices/read?event=chat').catch(()=>{});/* 进聊天不主动弹输入法：先把上一页可能还活着的焦点交还，再渲染 */if(document.activeElement&&document.activeElement.blur)document.activeElement.blur();}state.page=page;state.tab=tab;location.hash=page;try{if(page==='timeline')await loadTimeline(true);await loadSpecial();renderShell();window.scrollTo({top:0});}catch(e){toast(e.message);}}
+/* 本次会话里由 navigate() 往历史栈压过几条。用来判断"现在能不能后退"：
+   直接从深链进来（#watch）时 history 里没有上一页，这时候 history.back()
+   会把整个 App 关掉，必须回落到 navigate。 */
+let navDepth=0;
+async function navigate(page,tab='') {if(!state.me)return;if(page!=='messages')state.chatReturn={page,tab};if(page==='messages'&&state.me){state.me.chat_unread=0;post('/notices/read?event=chat').catch(()=>{});/* 进聊天不主动弹输入法：先把上一页可能还活着的焦点交还，再渲染 */if(document.activeElement&&document.activeElement.blur)document.activeElement.blur();}state.page=page;state.tab=tab;if(location.hash!=='#'+page){location.hash=page;navDepth++;}try{if(page==='timeline')await loadTimeline(true);await loadSpecial();renderShell();window.scrollTo({top:0});}catch(e){toast(e.message);}}
+/* 返回上一页：走浏览器后退，**不要**再 push 一条新的 hash。
+   以前「一起看 → 返回」写的是 navigate('messages')，等于在历史里又压了一条 #messages，
+   于是栈变成 [ #messages, #watch, #messages ]——安卓实体返回键每按一次就在这两个界面
+   之间来回跳，怎么都退不回首页。现在三处"返回"统一走这里。
+   万一历史里确实没有上一页（深链直进），history.back() 什么也不会发生，
+   220ms 后按 fallback 兜底；真没有上一页时 back() 还可能把整个 App 退掉，
+   所以先用 navDepth/history.length 挡一层。 */
+function goBack(fallback='home',tab=''){
+ const ok=navDepth>0&&history.length>1;
+ if(!ok)return navigate(fallback,tab);
+ const before=location.hash;
+ history.back();navDepth--;
+ setTimeout(()=>{if(location.hash===before)navigate(fallback,tab);},220);
+}
 /* 摆拍参考：整页一屏（body/shell 加 figure-full 修饰类），iframe 直接吃掉标题以下的
    全部空间——不再套 .card 的边框/圆角/内边距，下方不留白。 */
 function figurePage() {
@@ -3457,7 +3475,7 @@ async function act(action,id,el) {
  if(action==='unlock-personal-wish')return unlockPersonalWish(id);
  if(action.startsWith('tool-'))return navigate('together',action.slice(5));
  // 分析页是从生理期页进去的，顶栏返回就退回生理期，而不是跳回工具宫格
- if(action==='tools-back')return navigate('together',state.tab==='period-analysis'?'period':'');
+ if(action==='tools-back')return goBack('together',state.tab==='period-analysis'?'period':'');
  if(action==='mood')return recordForm('mood');
  if(action==='mood-quick')return quickMoodForm();
  if(action==='mood-history')return navigate('together','mood');
@@ -3567,7 +3585,7 @@ async function act(action,id,el) {
  if(action==='chat-song-golist'){closeModal();return navigate('together','music');}
  /* 实时通话需要 WebRTC + 信令，属于独立一轮的量，这里明说而不是假装点了没反应 */
  if(action==='chat-call')return toast('实时通话还没接（要 WebRTC + 信令服务），先用语音说两句');
- if(action==='watch-back')return navigate('messages');
+ if(action==='watch-back')return goBack('messages');
  if(action==='watch-pick')return watchPick();
  if(action==='chat-bg')return chatBgForm();
  if(action==='chat-to-draft')return composer('post',null,{...r.body,mediaObjects:r.media});
@@ -3590,7 +3608,7 @@ async function act(action,id,el) {
  if(action==='sticker-del'){setStickers(myStickers().filter(s=>s.mid!==id));return renderStickerTabs();}
  if(action==='sticker-send'){const dock=$('#sticker-dock');if(dock)dock.hidden=true;await sendChat({content:'',media:[id]});await refresh();scrollChat();return;}
  if(action==='sticker-pack-send'){const dock=$('#sticker-dock');if(dock)dock.hidden=true;await sendChat({content:'',sticker:id});await refresh();scrollChat();return;}
- if(action==='chat-back'){const ret=state.chatReturn||{page:'home',tab:''};return navigate(ret.page,ret.tab||'');}
+ if(action==='chat-back'){const ret=state.chatReturn||{page:'home',tab:''};return goBack(ret.page,ret.tab||'');}
  if(action==='test-channel'){await post('/channels/'+id+'/test');toast('测试已加入发送队列，请稍后刷新日志');return;}
  if(action==='delete-channel')return confirmAction('移除这个通知渠道？','该渠道的配置和发送日志会一并移除。',()=>del('/channels/'+id));
  if(action==='retry-delivery'){await post('/deliveries/'+id+'/retry');return refresh();}
@@ -3811,5 +3829,13 @@ document.addEventListener('visibilitychange',()=>{if(document.hidden||!state.me)
 window.addEventListener('focus',()=>{if(document.hidden||!state.me)return;if(!state.stream||state.stream.readyState===EventSource.CLOSED){connectEvents();handleServerEvent();}});
 window.addEventListener('online',async()=>{state.online=true;try{await refresh();connectEvents();syncNativePush();}catch{}});
 window.addEventListener('offline',()=>{state.online=false;toast('网络断开，未发送内容会保留');});
-window.addEventListener('hashchange',()=>{const page=location.hash.slice(1);if(page&&page!==state.page)navigate(page);});
+window.addEventListener('hashchange',()=>{
+ const page=location.hash.slice(1);
+ if(page){if(page!==state.page)navigate(page);return;}
+ /* 退回到"入栈时那条没有 hash 的初始记录"：它其实就是首页。
+    以前这里 page 为空直接跳过，表现为"按了返回，地址栏变了、界面一动不动"。
+    也不能调 navigate('home')——那会再压一条 #home，返回键又开始走回头路。
+    就地把它替换成 #home，再正常渲染。 */
+ if(state.page!=='home'){history.replaceState(null,'',location.pathname+'#home');navigate('home');}
+});
 boot();

@@ -2007,7 +2007,14 @@ body.kb-open .pick-overlay{padding-bottom:0}
 /* 表单底部放不下时向上弹（togglePanel 判断后加 .up） */
 .fake-panel.up{top:auto;bottom:calc(100% + 6px)}
 /* 双列表单的右列面板朝左展开，别冲出屏幕右边 */
-.form-row .pick-field:last-child .fake-panel{left:auto;right:0}
+/* 双列表单的右列，面板朝左展开，别冲出屏幕右边。
+   ⚠️ 这里必须用 `.form-row > :last-child`，不能写 `.pick-field:last-child`：
+   enhanceNativeControls 会把 label 的内容整个换成一个 .pick-field，于是**每个**
+   .pick-field 都是自己 label 的最后一个子元素——两列全被命中，左列也被强制 right:0，
+   再叠上窄屏那条"面板铺满 100vw"的宽度，一个 171px 宽的字段挂了个 350px 的面板，
+   直接往左顶出屏幕 160px：chip 上的文字全部落在屏幕外，只剩最右边那个 ✓ 还在，
+   看上去就是"下拉框打开了但是一片空白"。 */
+.form-row > :last-child .fake-panel{left:auto;right:0}
 :root.dark .fake-panel{background:#332A31;box-shadow:0 16px 38px rgba(0,0,0,.5)}
 .mini-cal{width:max-content;min-width:242px}
 .mc-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px;font-size:13.5px;color:var(--ink)}
@@ -2034,6 +2041,10 @@ body.kb-open .pick-overlay{padding-bottom:0}
 /* 窄屏上面板铺满可用宽度（两侧各留 20px 边距）：日历等面板铺开到屏幕右缘，
    芯片列表也更舒展；右列面板经 right:0 对齐后同样落在边距内 */
 @media (max-width:560px){.fake-panel{width:calc(100vw - 40px);max-width:calc(100vw - 40px)}}
+/* 双列表单里开出来的面板按内容宽度长，别吃满整屏：
+   面板挂在半宽的那一列上，铺满整屏就会顶出屏幕（左列 left:0 往右溢、右列 right:0 往左溢）。
+   320px 是"左右两种对齐都能完整落在屏幕内"的上限，窄屏再跟着视口收。 */
+.form-row .pick-field .fake-panel{width:max-content;max-width:min(320px,calc(100vw - 48px))}
 /* ── 首页共同打卡卡 ── */
 .habit-card{display:flex;flex-direction:column;gap:8px;margin:14px 0;padding:16px 18px;background:var(--card);border:1px solid var(--line);border-radius:18px}
 .habit-row{display:flex;align-items:center;gap:12px}
