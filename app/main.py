@@ -1812,9 +1812,14 @@ async def music_stream(u: str = '', user=Depends(current_user)):
             await upstream.aclose()
             await client.aclose()
 
+    # Apple 有时回 audio/x-m4p（"受保护的 AAC"），部分浏览器按这个 MIME 会拒绝播放；
+    # 试听片段本身是普通 AAC-in-MP4，统一报成 audio/mp4 最稳。
+    mime = (upstream.headers.get('content-type') or '').lower()
+    if 'm4p' in mime or 'm4a' in mime or mime.startswith('audio/x-'):
+        mime = 'audio/mp4'
     return StreamingResponse(
         relay(),
-        media_type=upstream.headers.get('content-type') or 'audio/mp4',
+        media_type=mime or 'audio/mp4',
         headers=headers)
 
 

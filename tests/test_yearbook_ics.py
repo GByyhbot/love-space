@@ -118,6 +118,13 @@ def test_chat_song_online_preview(client_a):
         assert r.status_code == 422, f'{bad} 应该被拒绝'
 
 
+def test_music_endpoints_guard(client_a):
+    """在线搜歌的两个端点：空关键词不打外网，试听转发只认 Apple 域名。"""
+    assert client_a.get('/api/music/search?q=').json()['items'] == []
+    for bad in ('https://evil.example/x.mp3', 'http://audio-ssl.itunes.apple.com/x.m4a', 'not-a-url'):
+        assert client_a.get('/api/music/stream', params={'u': bad}).status_code == 400
+
+
 def test_reply_and_pin_dropped_for_non_chat(client_a):
     r = client_a.post('/api/records', json={'kind': 'post', 'body': {
         'content': '普通动态', 'reply_to': {'id': 'abc', 'text': '引用的'}, 'pinned': True}})
