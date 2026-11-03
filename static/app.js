@@ -840,7 +840,7 @@ const STICKER_PACKS=[
 const stickerKey=()=>'stickers:'+state.me.user.id;
 function myStickers(){try{return JSON.parse(localStorage.getItem(stickerKey())||'[]');}catch{return[];}}
 function setStickers(list){localStorage.setItem(stickerKey(),JSON.stringify(list.slice(0,100)));}
-function insertStickerText(em){const ta=$('#chat-text');if(!ta)return;if(document.activeElement===ta){const s=ta.selectionStart??ta.value.length,e=ta.selectionEnd??s;ta.value=ta.value.slice(0,s)+em+ta.value.slice(e);ta.selectionStart=ta.selectionEnd=s+em.length;}else ta.value+=em;autoGrow(ta);}
+function insertStickerText(em){const ta=$('#chat-text');if(!ta)return;if(document.activeElement===ta){const s=ta.selectionStart??ta.value.length,e=ta.selectionEnd??s;ta.value=ta.value.slice(0,s)+em+ta.value.slice(e);ta.selectionStart=ta.selectionEnd=s+em.length;}else ta.value+=em;syncCompose();}
 /* 微信式输入框：初始一行，输入后自动长高，超过约 4 行内部滚动 */
 function autoGrow(ta){if(!ta)return;ta.style.height='auto';ta.style.height=Math.min(ta.scrollHeight,96)+'px';}
 /* 有文字时把语音位换成发送按钮（.has-text 由样式接管显示/隐藏） */
@@ -908,6 +908,7 @@ function chatLocate(){
 function stickerPanel(){
  const dock=$('#sticker-dock');if(!dock)return;
  if(!dock.hidden){dock.hidden=true;return;}
+ const fn=$('#chat-fn');if(fn)fn.hidden=true;
  state.stickerTab=state.stickerTab||'cute';
  dock.innerHTML=`<div class="sticker-tabs" id="sticker-tabs"></div><div class="sticker-body" id="sticker-body"></div>`;
  dock.hidden=false;
