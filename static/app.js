@@ -1236,9 +1236,15 @@ function openMap(lat,lng,name){
  },1400);
  void timer;
  if(/android|harmony/i.test(ua)){
-  window.location.href='intent://viewMap?'+q
-   +'#Intent;scheme=androidamap;package=com.autonavi.minimap;S.browser_fallback_url='
-   +encodeURIComponent(web)+';end';
+  /* 两条路各有各的道理：
+     - APK 里（WebView）走 androidamap:// 直 scheme，Capacitor 的 WebViewClient 会把
+       非 http 的地址当外部 Intent 拉起，比 intent:// 更稳；
+     - 浏览器里走 intent://，因为只有 Chrome 认 #Intent; 里的 browser_fallback_url，
+       没装高德时会自己回落到网页地图，而不是丢一个"无法打开"的错误页。 */
+  const scheme='androidamap://viewMap?'+q;
+  window.location.href=isNativeApp()
+   ?scheme
+   :'intent://viewMap?'+q+'#Intent;scheme=androidamap;package=com.autonavi.minimap;S.browser_fallback_url='+encodeURIComponent(web)+';end';
  }else{
   window.location.href='iosamap://viewMap?'+q;
  }
