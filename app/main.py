@@ -83,7 +83,7 @@ class SelectiveGZip(GZipMiddleware):
     而且压缩过的流不支持 Range，视频拖动进度条会直接坏掉。
     """
 
-    PASSTHROUGH = ('/api/events', '/media/', '/api/export')
+    PASSTHROUGH = ('/api/events', '/media/', '/api/export', '/api/music/stream')
 
     async def __call__(self, scope, receive, send):
         if scope['type'] == 'http' and scope['path'].startswith(self.PASSTHROUGH):
@@ -897,7 +897,18 @@ def clean_body(c, kind, data, user_id, previous=None):
             raise HTTPException(422, '歌手信息过长')
         if not isinstance(mid, str) or not re.fullmatch(r'[0-9A-Za-z_-]{0,64}', mid):
             raise HTTPException(422, '音频编号不正确')
-        body['song'] = {'title': title.strip()[:120], 'artist': artist.strip()[:200], 'mid': mid}
+        # 在线搜来的歌没有本地媒体 id，只有 Apple 的 30 秒试听地址；两个都没有就等于
+        # 发了一张空卡片，直接拦掉。地址走白名单，免得把 body 当成任意 URL 的跳板。
+        src = _music_url(song.get('src'))
+        art = _music_url(song.get('art'))
+        if not mid and not src:
+            raise HTTPException(422, '这首歌没有可播放的音频')
+        try:
+            dur = int(song.get('dur') or 0)
+        except (TypeError, ValueError):
+            dur = 0
+        body['song'] = {'title': title.strip()[:120], 'artist': artist.strip()[:200], 'mid': mid,
+                        'src': src, 'art': art, 'dur': max(0, min(3600, dur))}
     if 'sticker' in body and (not isinstance(body['sticker'], str)
                               or not re.fullmatch(r'/static/stickers/[a-z0-9]+/\d+\.(webm|webp)', body['sticker'])):
         raise HTTPException(422, '表情格式不正确')
@@ -1669,6 +1680,142 @@ def media_images(limit: int = 200, user=Depends(current_user)):
                 if len(out) >= limit:
                     break
     return out
+
+
+# ── 在线音乐搜索（iTunes Search API）───────────────────────────────────────
+# 聊天里想分享一首"在线"的歌，又不想让用户去第三方音乐平台找链接。这里用 Apple 的
+# 公开搜索接口：不需要任何 KEY，返回的是**30 秒试听片段**（previewUrl），不是整首歌，
+# 既够在聊天里听一句，也不涉及完整版权内容。
+#
+# 一个坑：中国区店铺（country=cn）返回的结果里没有 previewUrl，只有曲目信息；把
+# storefront 固定成 us 之后中文歌名/歌手照样能搜到，而且每条都带试听地址。
+MUSIC_STOREFRONT = 'us'
+MUSIC_SEARCH_URL = 'https://itunes.apple.com/search'
+# 只允许代理 Apple 自家的地址：这个端点会把上游字节原样转给浏览器，
+# 白名单是挡 SSRF 的唯一一道门（urlparse 出来的 hostname 已小写化）。
+MUSIC_MEDIA_SUFFIX = ('.apple.com', '.mzstatic.com', '.itunes.apple.com')
+_music_cache = {}
+_music_cache_lock = threading.Lock()
+
+
+def _music_host_ok(host):
+    host = (host or '').lower()
+    if not host:
+        return False
+    return host == 'itunes.apple.com' or any(host.endswith(s) for s in MUSIC_MEDIA_SUFFIX)
+
+
+def _music_url(raw, max_len=700):
+    """校验并返回可安全存进 body.song 的地址；不合格就返回空串（不报错，少个字段而已）。"""
+    if not isinstance(raw, str):
+        return ''
+    raw = raw.strip()
+    if not raw or len(raw) > max_len:
+        return ''
+    try:
+        parts = urlparse(raw)
+    except ValueError:
+        return ''
+    if parts.scheme != 'https' or not _music_host_ok(parts.hostname):
+        return ''
+    return raw
+
+
+@app.get('/api/music/search')
+async def music_search(q: str = '', limit: int = 20, user=Depends(current_user)):
+    """在线搜歌：只回试听片段，不落地任何音频。
+
+    结果缓存在进程内存里 10 分钟——同一个关键词反复敲（改一个字又删回去）不该反复打外网，
+    Apple 那边对无 KEY 的接口有频率限制。
+    """
+    term = (q or '').strip()[:80]
+    if not term:
+        return {'items': []}
+    limit = max(1, min(30, limit))
+    key = f'{term}|{limit}'
+    stamp = time.time()
+    with _music_cache_lock:
+        hit = _music_cache.get(key)
+        if hit and stamp - hit[0] < 600:
+            return {'items': hit[1]}
+    params = {'term': term, 'media': 'music', 'entity': 'song', 'limit': limit,
+              'country': MUSIC_STOREFRONT, 'lang': 'zh_cn'}
+    try:
+        async with httpx.AsyncClient(timeout=9, trust_env=False) as client:
+            resp = await client.get(MUSIC_SEARCH_URL, params=params)
+            resp.raise_for_status()
+            payload = resp.json()
+    except Exception as exc:  # 网络不通 / 上游改结构：给一句人话，不把栈抛给前端
+        log.warning('music search failed: %s', exc)
+        return {'items': [], 'error': '在线音乐暂时连不上（服务器出网被挡），先从歌单里挑一首吧'}
+    items = []
+    for row in payload.get('results') or []:
+        preview = _music_url(row.get('previewUrl'))
+        if not preview:
+            continue
+        artwork = _music_url(row.get('artworkUrl100'))
+        try:
+            dur = int((row.get('trackTimeMillis') or 0) / 1000)
+        except (TypeError, ValueError):
+            dur = 0
+        items.append({
+            'title': str(row.get('trackName') or '')[:120],
+            'artist': str(row.get('artistName') or '')[:200],
+            'album': str(row.get('collectionName') or '')[:200],
+            'preview': preview,
+            'art': artwork,
+            'dur': max(0, min(3600, dur)),
+        })
+        if len(items) >= limit:
+            break
+    with _music_cache_lock:
+        _music_cache[key] = (stamp, items)
+        # 缓存别无限长（关键词是用户输入，理论上能撑爆内存）
+        if len(_music_cache) > 200:
+            for old in sorted(_music_cache, key=lambda k: _music_cache[k][0])[:100]:
+                _music_cache.pop(old, None)
+    return {'items': items}
+
+
+@app.get('/api/music/stream')
+async def music_stream(u: str = '', user=Depends(current_user)):
+    """试听转发：把 Apple CDN 上的 30 秒片段经本站吐给浏览器。
+
+    为什么不直接让 <audio> 指向 Apple：一是手机在弱网/被墙时 Apple CDN 未必通，
+    二是同源之后 CSP 不用为了听歌去放开 media-src。
+    """
+    url = _music_url(u)
+    if not url:
+        raise HTTPException(400, '音频地址不正确')
+    client = httpx.AsyncClient(timeout=httpx.Timeout(20.0, connect=8.0),
+                               trust_env=False, follow_redirects=True)
+    try:
+        request = client.build_request('GET', url, headers={'User-Agent': 'LoveSpace/1.0'})
+        upstream = await client.send(request, stream=True)
+    except Exception as exc:
+        await client.aclose()
+        log.warning('music stream failed: %s', exc)
+        raise HTTPException(502, '试听线路暂时打不开')
+    if upstream.status_code >= 400:
+        await upstream.aclose()
+        await client.aclose()
+        raise HTTPException(502, '试听线路暂时打不开')
+    headers = {'Cache-Control': 'private, max-age=86400'}
+    if upstream.headers.get('content-length'):
+        headers['Content-Length'] = upstream.headers['content-length']
+
+    async def relay():
+        try:
+            async for chunk in upstream.aiter_bytes(64 * 1024):
+                yield chunk
+        finally:
+            await upstream.aclose()
+            await client.aclose()
+
+    return StreamingResponse(
+        relay(),
+        media_type=upstream.headers.get('content-type') or 'audio/mp4',
+        headers=headers)
 
 
 @app.get('/api/notices')

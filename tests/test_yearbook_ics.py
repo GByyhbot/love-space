@@ -91,9 +91,30 @@ def test_chat_song_message(client_a):
     r = client_a.post('/api/records', json={'kind': 'chat', 'body': {
         'content': '', 'song': {'title': ' 晚安 ', 'artist': '陈奕迅', 'mid': 'abc123'}}})
     assert r.status_code == 200, r.text
-    assert r.json()['body']['song'] == {'title': '晚安', 'artist': '陈奕迅', 'mid': 'abc123'}
+    assert r.json()['body']['song'] == {'title': '晚安', 'artist': '陈奕迅', 'mid': 'abc123',
+                                        'src': '', 'art': '', 'dur': 0}
     for bad in ('nope', {'title': ''}, {'title': 'x', 'mid': '../etc/passwd'}, {'title': 'x' * 121}):
         r = client_a.post('/api/records', json={'kind': 'chat', 'body': {'content': '', 'song': bad}})
+        assert r.status_code == 422, f'{bad} 应该被拒绝'
+
+
+def test_chat_song_online_preview(client_a):
+    """在线搜来的歌没有本地媒体 id，只有 30 秒试听地址：只放行 Apple 家域名。
+
+    白名单挡的是「把 body.song 当成任意 URL 跳板」——洗不掉就整条拒收，
+    不能留一个空地址的卡片。
+    """
+    url = 'https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview/x.m4a'
+    r = client_a.post('/api/records', json={'kind': 'chat', 'body': {
+        'content': '', 'song': {'title': '晴天', 'artist': '周杰伦', 'src': url, 'dur': 269}}})
+    assert r.status_code == 200, r.text
+    song = r.json()['body']['song']
+    assert song['src'] == url and song['dur'] == 269 and song['mid'] == ''
+    for bad in ('http://audio-ssl.itunes.apple.com/x.m4a',
+                'https://evil.example/x.mp3',
+                'https://itunes.apple.com.evil.example/x.m4a'):
+        r = client_a.post('/api/records', json={'kind': 'chat', 'body': {
+            'content': '', 'song': {'title': '坏地址', 'src': bad}}})
         assert r.status_code == 422, f'{bad} 应该被拒绝'
 
 

@@ -519,6 +519,8 @@ button.mood-row.no-mood .mood-bubble.empty{color:var(--primary-dark)}
 .compose-send .icon{width:20px;height:20px;transform:translateX(1px)}
 .chat-compose.has-text .compose-send{display:grid}
 .chat-compose.has-text .compose-mic{display:none}
+/* 一起看的输入栏只有发送键、没有语音位，所以发送键常显（聊天页仍沿用"有字才出现"） */
+.watch-chat .chat-compose .compose-send{display:grid}
 .chat-compose.recording .compose-mic{color:#fff;background:var(--danger)}
 .chat-compose.recording .compose-mic .icon{animation:pulse 1.1s infinite}
 
@@ -558,32 +560,61 @@ button.mood-row.no-mood .mood-bubble.empty{color:var(--primary-dark)}
 .cl-body b{font-size:14px;color:var(--ink)}
 .cl-body small{font-size:11.5px;color:var(--muted)}
 
-/* 分享的歌：气泡里直接给一个音频条，不用点进去再播 */
-.chat-song{display:flex;flex-direction:column;gap:8px;min-width:196px;max-width:260px}
-.cs-top{display:flex;gap:10px;align-items:center}
-.cs-ico{width:36px;height:36px;flex:none;display:grid;place-items:center;border-radius:10px;background:var(--soft);color:var(--primary-dark);font-size:17px}
-.cs-body{display:flex;flex-direction:column;line-height:1.35;min-width:0}
+/* 分享的歌：自绘播放器（不用原生 <audio controls>——那个在深色气泡里会带
+   一条系统菜单「右下角三点」，老 WebView 上还会多画一层边框） */
+.chat-song{display:flex;flex-direction:column;gap:9px;min-width:200px;max-width:252px}
+.cs-main{display:flex;gap:10px;align-items:center}
+.cs-cover{width:38px;height:38px;flex:none;display:grid;place-items:center;border-radius:10px;background:var(--soft);color:var(--primary-dark);overflow:hidden}
+.cs-cover img{width:100%;height:100%;object-fit:cover;display:block}
+.cs-cover .icon{width:19px;height:19px}
+.cs-body{display:flex;flex-direction:column;line-height:1.35;min-width:0;flex:1}
 .cs-body b{font-size:14px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cs-body small{font-size:11.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.chat-song audio{width:100%;height:34px}
+.cs-play{width:34px;height:34px;flex:none;border-radius:50%;border:0;padding:0;display:grid;place-items:center;background:var(--primary);color:#fff;cursor:pointer}
+.cs-play .icon{width:15px;height:15px}
+.cs-play:active{transform:scale(.94)}
+.cs-foot{display:flex;align-items:center;gap:8px}
+.cs-time{font-size:10.5px;color:var(--muted);font-variant-numeric:tabular-nums;flex:none;min-width:26px;text-align:center}
+.cs-track{flex:1;height:3px;border-radius:2px;background:var(--line);overflow:hidden}
+.cs-track i{display:block;height:100%;width:0%;border-radius:2px;background:var(--primary);transition:width .2s linear}
+.chat-song.playing .cs-track i{transition:width .25s linear}
 .cs-warn{font-size:11.5px;color:var(--muted)}
-.chat-panel.immersive .mine .cs-body b{color:var(--on-primary)}
+.chat-panel.immersive .mine .cs-body b,.chat-panel.immersive .mine .cs-time{color:var(--on-primary)}
 .chat-panel.immersive .mine .cs-body small{color:rgba(255,255,255,.72)}
+.chat-panel.immersive .mine .cs-track{background:rgba(255,255,255,.28)}
+.chat-panel.immersive .mine .cs-track i{background:#fff}
 
-/* 从歌单里挑歌的列表 */
-.song-picks{display:flex;flex-direction:column;gap:8px;max-height:56vh;overflow-y:auto}
-.song-pick{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--surface);color:var(--ink)}
+/* 选歌弹窗：共同歌单 / 在线搜歌两个面板 */
+.song-sheet{display:flex;flex-direction:column;gap:12px}
+.ss-tabs{display:flex;gap:4px;padding:3px;background:var(--soft);border-radius:12px;flex:none}
+.ss-tab{flex:1;height:36px;border:0;background:transparent;border-radius:9px;color:var(--muted);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit}
+.ss-tab.active{background:var(--surface);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.1)}
+.ss-search{position:relative;flex:none;margin-bottom:10px}
+.ss-search input{width:100%;height:var(--ctrl-h-sm,36px);padding:0 12px 0 34px;border-radius:11px;border:1px solid var(--line-strong);background:var(--surface);color:var(--ink);font-size:14px;font-family:inherit;box-sizing:border-box}
+.ss-search input:focus{outline:none;border-color:var(--primary)}
+.ss-lens{position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--muted);display:grid;place-items:center;pointer-events:none}
+.ss-lens .icon{width:15px;height:15px}
+.ss-tip{margin:0;padding:14px 2px;line-height:1.6}
+.ss-note{margin:10px 0 0}
+.song-picks{display:flex;flex-direction:column;gap:8px;max-height:min(52vh,430px);overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;padding:1px}
+.song-pick{display:flex;align-items:center;gap:11px;width:100%;text-align:left;padding:9px 10px;border:1px solid var(--line);border-radius:14px;background:var(--surface);color:var(--ink);cursor:pointer;box-sizing:border-box}
 .song-pick:hover{background:var(--soft)}
-.sp-ico{width:34px;height:34px;flex:none;display:grid;place-items:center;border-radius:50%;background:var(--soft);color:var(--primary-dark)}
-.sp-body{display:flex;flex-direction:column;min-width:0;flex:1}
-.sp-body b{font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.sp-body small{font-size:11.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.sp-warn{font-size:11px;color:var(--amber);font-style:normal}
+.song-pick:active{transform:scale(.995)}
+.sp-cover{width:42px;height:42px;flex:none;display:grid;place-items:center;border-radius:11px;background:var(--soft);color:var(--primary-dark);overflow:hidden}
+.sp-cover img{width:100%;height:100%;object-fit:cover;display:block}
+.sp-cover .icon{width:19px;height:19px}
+.sp-body{display:flex;flex-direction:column;gap:1px;min-width:0;flex:1}
+.sp-body b{font-size:14px;line-height:1.35;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sp-body small{font-size:11.5px;line-height:1.35;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sp-btn{width:32px;height:32px;flex:none;border-radius:50%;border:1px solid var(--line-strong);background:transparent;color:var(--primary-dark);display:grid;place-items:center;cursor:pointer;padding:0}
+.sp-btn .icon{width:14px;height:14px}
+.sp-btn:hover{background:var(--soft)}
+.sp-warn{font-size:11px;color:var(--amber);font-style:normal;flex:none}
 
 /* ── 一起看（框架版）：竖屏上下分屏，放映区在上、聊天区在下 ──
    用 flex 比例分而不是固定 16:9：竖屏手机 16:9 只占三成高度，剩下会空一大块；
    50/50 让两边都能用，视频按 contain 居中，多出来的地方留黑边。 */
-body.watch-open{overflow:hidden;height:100dvh}
+body.watch-open{overflow:hidden;height:100dvh;overscroll-behavior:none}
 .shell.watch-full .main{height:100dvh;padding:0;display:flex;flex-direction:column;overflow:hidden}
 .shell.watch-full .topbar,.shell.watch-full .footer-note{display:none}
 .watch-full #page{display:flex;flex-direction:column;flex:1;min-height:0;padding:0}
@@ -594,7 +625,7 @@ html.is-native-app .watch-head{padding-top:8px}
 .watch-head>div{flex:1;min-width:0}
 .watch-head h3{margin:0;font-size:15px}
 .watch-head small{display:block;color:var(--muted);font-size:11.5px;line-height:1.3}
-.watch-stage{flex:1 1 48%;min-height:0;position:relative;background:#0B090C;display:grid;place-items:center;overflow:hidden}
+.watch-stage{flex:1 1 48%;min-height:88px;position:relative;background:#0B090C;display:grid;place-items:center;overflow:hidden}
 .watch-video{width:100%;height:100%;object-fit:contain;background:#000}
 .watch-empty{display:flex;flex-direction:column;align-items:center;gap:8px;color:rgba(255,255,255,.86);text-align:center;padding:18px}
 .watch-empty .we-emoji{font-size:34px;line-height:1}
@@ -604,9 +635,13 @@ html.is-native-app .watch-head{padding-top:8px}
 .watch-log::-webkit-scrollbar{display:none}
 .watch-chat .chat-compose{padding:8px 12px calc(8px + env(safe-area-inset-bottom))}
 /* 键盘避让：新版 WebView 靠 viewport 的 interactive-widget=resizes-content 自己缩，
-   旧版只缩视觉视口，app.js 的 syncKeyboard() 把差值写进 --kb-h，这里把输入栏整体顶上去。 */
+   旧版只缩视觉视口，app.js 的 syncKeyboard() 把差值写进 --kb-h，这里把输入栏整体顶上去。
+   一起看页是独立的全屏分屏（不套 .chat-panel），所以得单独补一条，否则键盘一弹
+   整页被顶出屏幕、分屏比例全乱。 */
 body.chat-full .chat-panel{padding-bottom:var(--kb-h,0px)}
 body.chat-full .fn-panel{padding-bottom:calc(14px + env(safe-area-inset-bottom) + var(--kb-h,0px))}
+body.watch-open .watch-page{padding-bottom:var(--kb-h,0px)}
+body.watch-open.kb-open .watch-chat .chat-compose{padding-bottom:8px}
 /* ── 聊天壁纸：底图铺满整个聊天面板（标题栏和输入栏也压在图上） ──
    .chat-wallpaper 挂到 .chat-panel 上绝对定位铺满，::after 是压在图上的遮罩（--chat-bg-dim 控制强度）。
    底图不随消息滚动，标题栏/输入栏改成半透明玻璃让图透出来，文字对比度靠气泡自身背景兜底。 */

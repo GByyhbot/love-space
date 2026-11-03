@@ -237,6 +237,8 @@ function renderShell() {
  root.classList.add(state.me.space.theme==='peach'||state.me.space.theme==='lavender'||state.me.space.theme==='custom'?themeClass:'theme-rose');
  if(!state.me.space.motion)root.classList.add('reduced-motion');
  document.body.className=state.page==='messages'?('chat-full'+(chatBgIsPhoto()?' chat-immersive':'')):(state.page==='watch'?'chat-full watch-open':(state.page==='together'&&state.tab==='calendar'?'cal-full':(state.page==='figure'?'figure-full':'')));
+ /* className 是整体覆盖写的，会把 syncKeyboard 加的 kb-open 一起冲掉；键盘还开着就补回来 */
+ if(parseFloat(document.documentElement.style.getPropertyValue('--kb-h'))>90)document.body.classList.add('kb-open');
  applyCustomColor(state.me.space.theme,state.me.space.custom_color);
  $('#app').innerHTML=`<div class="shell${state.page==='messages'?' chat-full':''}${state.page==='watch'?' chat-full watch-full':''}${state.page==='figure'?' figure-full':''}"><aside class="sidebar"><div class="brand"><img src="/static/icon.svg" alt=""><div><strong>恋爱空间</strong><small>LOVE, EVERY DAY</small></div></div><nav class="nav" aria-label="主要导航">${navHtml.join('')}</nav><div class="sidebar-bottom"><div class="little-note"><span>❀</span><br>把喜欢，写进每一天。<br>little things, lasting love</div><button class="profile-btn" data-nav="personal">${avatar(state.me.user.id)}<div><strong>${esc(state.me.user.name)}</strong><small>我的小角落 ${icon('arrow')}</small></div></button></div></aside><main class="main"><header class="topbar${toolsSub?' has-back':''}">${toolsSub?`<button class="nav-back topbar-back" data-action="tools-back" aria-label="回到我们">${icon('back')}</button>`:''}<span class="desktop-date">${new Date().toLocaleDateString('zh-CN',{timeZone:state.me.space.timezone,month:'long',day:'numeric',weekday:'long'})} · 今天也要好好相爱</span><div class="topbar-right"><span class="pill">${icon('lock')} 双人私密空间</span><button class="icon-btn" id="dark-toggle" data-action="toggle-dark" aria-label="切换深浅色">${icon(document.documentElement.classList.contains('dark')?'sun':'moon')}</button><button class="icon-btn" data-action="open-search" aria-label="搜索">${icon('search')}</button><button class="icon-btn" data-nav="messages" aria-label="私聊">${icon('chat')}${state.me.chat_unread&&state.page!=='messages'?`<span class="badge">${state.me.chat_unread>99?'99+':state.me.chat_unread}</span>`:''}</button><button class="icon-btn" data-nav="notices" aria-label="通知">${icon('bell')}${state.me.unread?`<span class="badge">${state.me.unread>99?'99+':state.me.unread}</span>`:''}</button><details class="more-menu account-menu"><summary class="mobile-profile" aria-label="打开账号菜单" title="账号菜单">${avatar(state.me.user.id)}</summary><div class="menu-pop account-popover"><div class="account-menu-heading"><strong>${esc(state.me.user.name)}</strong><small>我的账号</small></div><button data-action="profile">${icon('edit')} 账号资料</button><button data-nav="personal">${icon('lock')} 个人小角落</button><button data-nav="settings">${icon('gear')} 设置</button><button data-action="logout" class="danger account-logout">${icon('arrow')} 退出登录</button></div></details></div></header>${!state.online?'<div class="offline-banner">网络暂时断开，正在等待重连。未发送的文字会为你保留。</div>':''}<div id="page"></div><p class="footer-note">♡ 有你在，平凡的日子也闪闪发光。</p></main></div>`;
  renderPage();
@@ -603,6 +605,15 @@ document.addEventListener('click',e=>{
   if(isFinite(t.duration))chip.style.minWidth=(84+Math.min(t.duration,90)*2.2).toFixed(0)+'px';
  }
 },true));
+/* 在线搜来的封面走 /api/music/stream 转发，Apple 那边偶尔拿不到图：失败就退回一个音符。
+   用捕获阶段监听而不是行内 onerror —— CSP 的 script-src 'self' 会把行内处理器整条拦掉。 */
+document.addEventListener('error',e=>{
+ const img=e.target;
+ if(!img||img.tagName!=='IMG'||!img.parentNode)return;
+ const box=img.parentNode;
+ if(!box.classList||!(box.classList.contains('cs-cover')||box.classList.contains('sp-cover')))return;
+ box.innerHTML=icon('music');
+},true);
 /* 纪念日序数：把所有年度重复的纪念日按日期排好，给每个标上「今年第几个」 */
 function anniversaryOrdinals(){
  const items=recordsOf('anniversary').filter(r=>r.body.annual===true||r.body.annual==='lunar');
@@ -697,9 +708,10 @@ function chatRows() {
   /* 位置消息：body.location = {lat,lng}，点开用高德 URI 打开地图（不依赖任何 KEY） */
   const loc=r.body.location&&typeof r.body.location.lat==='number'&&typeof r.body.location.lng==='number'?r.body.location:null;
   const locCard=loc?`<a class="chat-loc" href="https://uri.amap.com/marker?position=${loc.lng},${loc.lat}&name=${encodeURIComponent('我们的位置')}" target="_blank" rel="noopener"><span class="cl-ico">${icon('location')}</span><span class="cl-body"><b>位置</b><small>${loc.lat.toFixed(5)}, ${loc.lng.toFixed(5)} · 点开看地图</small></span></a>`:'';
-  /* 分享的歌：body.song = {title,artist,mid}，mid 是歌单里那首歌的音频媒体 id */
+  /* 分享的歌：body.song = {title,artist,mid,src,art,dur}。mid 指向歌单里的音频媒体，
+     src 是在线搜来的 30 秒试听地址（走同源 /api/music/stream 转发）。两个都有就优先本地文件。 */
   const song=r.body.song&&r.body.song.title?r.body.song:null;
-  const songCard=song?`<div class="chat-song"><div class="cs-top"><span class="cs-ico">${icon('music')}</span><span class="cs-body"><b>${esc(song.title)}</b>${song.artist?`<small>${esc(song.artist)}</small>`:''}</span></div>${song.mid?`<audio controls preload="none" src="/media/${esc(song.mid)}"></audio>`:'<small class="cs-warn">这首歌没有音频文件</small>'}</div>`:'';
+  const songCard=song?songCardMarkup(song):'';
   const inner=songCard?`<div class="chat-bubble song">${quote}${songCard}</div>`:locCard?`<div class="chat-bubble loc">${quote}${locCard}</div>`:sticker?`<div class="chat-sticker${sticker.endsWith('.webm')?' video':''}">${sticker.endsWith('.webm')?`<video src="${esc(sticker)}" autoplay loop muted playsinline></video>`:`<img src="${esc(sticker)}" alt="贴纸" loading="lazy">`}</div>`:`<div class="chat-bubble${voiceOnly?' voice':''}${r.body.pinned?' pinned':''}">${quote}<span style="white-space:pre-wrap">${esc(r.body.content)}</span>${mediaMarkup(r.media)}</div>`;
   return `${tl?`<div class="chat-day">${tl}</div>`:''}<div class="chat-line ${mine?'mine':''}" id="msg-${r.id}">${avatar(r.author)}<div>${inner}${ops?`<div class="chat-time">${ops}</div>`:''}</div></div>`;
  }).join('');
@@ -897,14 +909,22 @@ function setStickers(list){localStorage.setItem(stickerKey(),JSON.stringify(list
 function insertStickerText(em){const ta=$('#chat-text');if(!ta)return;if(document.activeElement===ta){const s=ta.selectionStart??ta.value.length,e=ta.selectionEnd??s;ta.value=ta.value.slice(0,s)+em+ta.value.slice(e);ta.selectionStart=ta.selectionEnd=s+em.length;}else ta.value+=em;syncCompose();}
 /* 微信式输入框：初始一行，输入后自动长高，超过约 4 行内部滚动 */
 function autoGrow(ta){if(!ta)return;ta.style.height='auto';ta.style.height=Math.min(ta.scrollHeight,96)+'px';}
-/* 有文字时把语音位换成发送按钮（.has-text 由样式接管显示/隐藏） */
-function syncCompose(){const form=$('#chat-form'),ta=$('#chat-text');if(!form||!ta)return;form.classList.toggle('has-text',!!ta.value.trim());autoGrow(ta);}
+/* 有文字时把语音位换成发送按钮（.has-text 由样式接管显示/隐藏）。
+   一起看的输入栏只有发送键、按键常显，这里只负责让它跟着文字长高。 */
+function syncCompose(){
+ const form=$('#chat-form'),ta=$('#chat-text');
+ if(form&&ta){form.classList.toggle('has-text',!!ta.value.trim());autoGrow(ta);}
+ const wt=$('#watch-text');if(wt)autoGrow(wt);
+}
 /* 键盘避让：Chrome 108+ 的 interactive-widget=resizes-content 会让布局视口跟着键盘
    一起缩，输入栏自然浮在键盘上；旧 WebView 只缩视觉视口，这里用 --kb-h 手动顶上去。 */
 function syncKeyboard(){
  const vv=window.visualViewport;if(!vv)return;
  const hidden=Math.max(0,Math.round(window.innerHeight-vv.height-vv.offsetTop));
  document.documentElement.style.setProperty('--kb-h',hidden>90?hidden+'px':'0px');
+ /* kb-open 用来给"底部安全区内边距"让位：键盘顶上来时那块安全区已经被键盘占了，
+    再留一道 env(safe-area-inset-bottom) 就成了多出来的空白条。 */
+ if(document.body)document.body.classList.toggle('kb-open',hidden>90);
 }
 if(window.visualViewport){addEventListener('resize',syncKeyboard);window.visualViewport.addEventListener('resize',syncKeyboard);window.visualViewport.addEventListener('scroll',syncKeyboard);}
 
@@ -945,18 +965,162 @@ async function chatVoiceToggle(){
   toast('正在录音，再点一次麦克风结束并发送');
  }catch(e){toast(e.message||'录音失败');}
 }
-/* ── 分享一首歌：从共同歌单里挑，发一条带 body.song 的聊天消息 ── */
+/* ── 分享一首歌 ────────────────────────────────────────────────────────
+   一条聊天消息里只存摘要（歌名 / 歌手 / 媒体 id 或在线试听地址），不复制音频文件。
+   播放器是自己画的：原生 <audio controls> 在深色气泡里会带一条系统菜单（右下角三点），
+   既和整体风格不搭，老 WebView 上还会多画一层边框。 */
+let songAudio=null,songCur=null;   // songCur={node,kind:'bubble'|'preview'}
+function songSrcOf(s){
+ if(!s)return '';
+ if(s.mid)return '/media/'+s.mid;
+ if(s.src)return '/api/music/stream?u='+encodeURIComponent(s.src);
+ return '';
+}
+/* 封面同样走同源转发：Apple 的图床不在 CSP 的 img-src 里，直连会被拦成空白 */
+function artSrcOf(u){return u?'/api/music/stream?u='+encodeURIComponent(u):'';}
+function fmtDur(sec){const s=Math.max(0,Math.round(sec||0));return Math.floor(s/60)+':'+String(s%60).padStart(2,'0');}
+function audioCtl(){
+ if(!songAudio){
+  songAudio=new Audio();
+  songAudio.preload='none';
+  ['timeupdate','loadedmetadata','play','pause','durationchange'].forEach(ev=>songAudio.addEventListener(ev,()=>paintSong()));
+  songAudio.addEventListener('ended',()=>{paintSong(true);songReset();});
+ }
+ return songAudio;
+}
+function paintSong(idle){
+ if(!songCur)return;
+ const a=audioCtl(),paused=idle||a.paused;
+ let node=songCur.node;
+ if(songCur.kind==='bubble'&&node&&!node.isConnected){
+  /* 聊天日志被整块重绘（对方发来新消息就会重绘）后，旧节点已经不在文档里：
+     按 data-src 找回同一首歌的那个卡片，接着显示进度，别让"正在播"变回"未播"。 */
+  const again=$$('.chat-song').find(n=>n.dataset.src&&n.dataset.src===songCur.src);
+  if(!again){songCur=null;return;}
+  songCur.node=again;node=again;
+ }
+ if(songCur.kind==='bubble'){
+  const total=isFinite(a.duration)&&a.duration>0?a.duration:0;
+  const bar=node.querySelector('.cs-track i'),cur=node.querySelector('[data-role=cur]'),dur=node.querySelector('[data-role=dur]'),btn=node.querySelector('.cs-play');
+  if(bar)bar.style.width=(total?(a.currentTime/total*100):0)+'%';
+  if(cur)cur.textContent=fmtDur(a.currentTime);
+  if(dur&&total)dur.textContent=fmtDur(total);
+  if(btn)btn.innerHTML=icon(paused?'play':'pause');
+  node.classList.toggle('playing',!paused);
+ }else if(node.innerHTML!==icon(paused?'play':'pause'))node.innerHTML=icon(paused?'play':'pause');
+}
+function songReset(){
+ const cur=songCur;if(!cur)return;
+ songCur=null;
+ if(cur.kind==='bubble'){
+  const bar=cur.node.querySelector('.cs-track i'),c=cur.node.querySelector('[data-role=cur]'),btn=cur.node.querySelector('.cs-play');
+  if(bar)bar.style.width='0%';if(c)c.textContent='0:00';if(btn)btn.innerHTML=icon('play');
+  cur.node.classList.remove('playing');
+ }else cur.node.innerHTML=icon('play');
+}
+/* 气泡里播放：同一时刻只有一首在响，换歌自动掐掉上一首 */
+async function songToggle(btn){
+ const card=btn.closest('.chat-song');if(!card)return;
+ const src=card.dataset.src;
+ if(!src)return toast('这首歌没有音频文件');
+ const a=audioCtl();
+ if(songCur&&songCur.node===card){if(a.paused)a.play().catch(()=>toast('放不出来，可能是网络问题'));else a.pause();return;}
+ if(songCur){try{a.pause();}catch{}songReset();}
+ songCur={node:card,kind:'bubble',src};
+ a.src=src;
+ try{await a.play();}catch{toast('放不出来，可能是网络问题');songReset();}
+}
+/* 选择面板里的试听：不发送，只在弹窗里听一段 */
+async function songTry(btn){
+ const src=btn.dataset.src;if(!src)return;
+ const a=audioCtl();
+ if(songCur&&songCur.node===btn){if(a.paused)a.play().catch(()=>toast('试听打不开'));else a.pause();return;}
+ if(songCur){try{a.pause();}catch{}songReset();}
+ songCur={node:btn,kind:'preview',src};
+ a.src=src;
+ try{await a.play();}catch{toast('试听打不开，换一首试试');songReset();}
+}
+function songCardMarkup(song){
+ const src=songSrcOf(song);
+ const tip=song.mid?'本地音频':(song.src?'在线试听 · 30 秒':'');
+ const cover=song.art?`<img src="${esc(artSrcOf(song.art))}" alt="" loading="lazy" decoding="async">`:'';
+ return `<div class="chat-song" data-src="${esc(src)}">
+  <div class="cs-main">
+   <span class="cs-cover">${cover||icon('music')}</span>
+   <span class="cs-body"><b>${esc(song.title)}</b><small>${esc(song.artist||tip||'一首歌')}</small></span>
+   ${src?`<button type="button" class="cs-play" data-action="song-toggle" aria-label="播放">${icon('play')}</button>`:''}
+  </div>
+  ${src?`<div class="cs-foot"><span class="cs-time" data-role="cur">0:00</span><div class="cs-track"><i></i></div><span class="cs-time" data-role="dur">--:--</span></div>`
+        :'<small class="cs-warn">这首歌没有音频文件</small>'}
+ </div>`;
+}
+/* ── 选歌弹窗：共同歌单 + 在线搜歌两个面板 ─────────────────────────── */
+let songSearchSeq=0;
 function songPicker(){
- const songs=recordsOf('music').slice().sort((a,b)=>b.created-a.created);
- if(!songs.length){
-  openModal('发一首歌','<p class="meta" style="margin:0 0 14px">共同歌单还空着。先去放一首歌进来，之后在聊天里就能直接分享。</p><div class="form-actions"><button class="button primary" data-action="chat-song-golist">去歌单添加</button><button class="button soft" data-action="close-modal">先算了</button></div>');
+ state.songTab=state.songTab||'list';
+ openModal('发一首歌',`<div class="song-sheet">
+  <div class="ss-tabs">
+   <button type="button" class="ss-tab${state.songTab==='list'?' active':''}" data-action="song-tab" data-id="list">共同歌单</button>
+   <button type="button" class="ss-tab${state.songTab==='online'?' active':''}" data-action="song-tab" data-id="online">在线搜歌</button>
+  </div>
+  <div id="song-pane"></div>
+ </div>`,{wide:true});
+ renderSongPane();
+}
+function songListRow(r){
+ const b=r.body||{},m=songMedia(r),src=m?'/media/'+m.id:'';
+ return `<div class="song-pick" role="button" tabindex="0" data-action="chat-song-send" data-id="${r.id}">
+  <span class="sp-cover">${icon('music')}</span>
+  <span class="sp-body"><b>${esc(b.title||'未命名')}</b><small>${esc(b.content||(m?'你们放进来的音频':'没配音频文件'))}</small></span>
+  ${src?`<button type="button" class="sp-btn" data-action="song-try" data-src="${esc(src)}" aria-label="试听">${icon('play')}</button>`:'<i class="sp-warn">无音频</i>'}
+ </div>`;
+}
+function onlineSongRow(it,i){
+ const sub=[it.artist,it.album].filter(Boolean).join(' · ');
+ return `<div class="song-pick" role="button" tabindex="0" data-action="chat-song-online" data-idx="${i}">
+  <span class="sp-cover">${it.art?`<img src="${esc(artSrcOf(it.art))}" alt="" loading="lazy" decoding="async">`:icon('music')}</span>
+  <span class="sp-body"><b>${esc(it.title||'未命名')}</b><small>${esc(sub||'在线试听')}</small></span>
+  <button type="button" class="sp-btn" data-action="song-try" data-src="/api/music/stream?u=${encodeURIComponent(it.preview||'')}" aria-label="试听">${icon('play')}</button>
+ </div>`;
+}
+function renderSongPane(){
+ const pane=$('#song-pane');if(!pane)return;
+ if(state.songTab==='online'){
+  pane.innerHTML=`<div class="ss-search"><span class="ss-lens">${icon('search')}</span><input id="song-q" type="search" placeholder="搜歌名或歌手，例如：晚安" autocomplete="off" enterkeyhint="search" value="${esc(state.songQuery||'')}"></div>
+   <div id="song-results" class="song-picks"><p class="meta ss-tip">接的是 Apple 公开曲库，听到的是 30 秒试听片段。搜中文歌名或英文都行。</p></div>`;
+  const inp=$('#song-q');if(!inp)return;
+  inp.addEventListener('input',()=>{
+   state.songQuery=inp.value;
+   clearTimeout(renderSongPane.timer);
+   renderSongPane.timer=setTimeout(()=>runSongSearch(),480);
+  });
+  inp.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();runSongSearch();}});
+  if((state.songQuery||'').trim())runSongSearch();
+  setTimeout(()=>{try{inp.focus();}catch{}},60);
   return;
  }
- const rows=songs.map(r=>{
-  const b=r.body||{},m=songMedia(r);
-  return `<button type="button" class="song-pick" data-action="chat-song-send" data-id="${r.id}"><span class="sp-ico">♪</span><span class="sp-body"><b>${esc(b.title||'未命名')}</b><small>${esc(b.content||'')}</small></span>${m?'':`<i class="sp-warn">无音频</i>`}</button>`;
- }).join('');
- openModal('发一首歌',`<div class="song-picks">${rows}</div><p class="small-note">从共同歌单里挑一首，对方在聊天里就能直接播放。</p>`);
+ const songs=recordsOf('music').slice().sort((a,b)=>b.created-a.created);
+ if(!songs.length){
+  pane.innerHTML='<p class="meta ss-tip">共同歌单还空着。换成「在线搜歌」直接搜一首发出去，或者去歌单页添加你们自己的音频文件。</p>';
+  return;
+ }
+ pane.innerHTML=`<div class="song-picks">${songs.map(songListRow).join('')}</div><p class="small-note ss-note">点一首直接发出去，右边的小按钮只在本机试听。</p>`;
+}
+async function runSongSearch(){
+ const q=(state.songQuery||'').trim(),box=$('#song-results');if(!box)return;
+ if(!q){box.innerHTML='<p class="meta ss-tip">输入歌名或歌手，开始搜。</p>';return;}
+ const seq=++songSearchSeq;
+ box.innerHTML='<p class="meta ss-tip">正在搜…</p>';
+ try{
+  const r=await api('/music/search?q='+encodeURIComponent(q)+'&limit=20');
+  if(seq!==songSearchSeq)return;
+  state.songResults=r.items||[];
+  box.innerHTML=state.songResults.length
+   ?state.songResults.map(onlineSongRow).join('')
+   :`<p class="meta ss-tip">${esc(r.error||'没搜到，换个关键词试试。')}</p>`;
+ }catch(e){
+  if(seq===songSearchSeq)box.innerHTML=`<p class="meta ss-tip">${esc(e.message||'搜索失败，稍后再试')}</p>`;
+ }
 }
 async function sendSong(rid){
  const r=recordsOf('music').find(x=>x.id===rid);
@@ -970,6 +1134,37 @@ async function sendSong(rid){
    mid:m?m.id:''}});
   await refresh();scrollChat();toast('已分享这首');
  }catch(e){toast(e.message||'分享失败');}
+}
+async function sendOnlineSong(idx){
+ const it=(state.songResults||[])[idx];
+ if(!it||!it.preview)return;
+ closeModal();
+ try{
+  await sendChat({content:'',date:today(),media:[],song:{
+   title:String(it.title||'未命名').slice(0,120),
+   artist:String(it.artist||'').slice(0,200),
+   mid:'',src:it.preview,art:it.art||'',dur:it.dur||0}});
+  await refresh();scrollChat();toast('已分享这首');
+ }catch(e){toast(e.message||'分享失败');}
+}
+/* ── 从已上传的相册里挑图发出去（不再要求重新上传一遍） ────────────── */
+async function chatAlbumPick(){
+ let list=[];
+ try{list=await api('/media/images?limit=200');}catch{}
+ openModal('从相册选',`<div class="album-pick-head"><span>${list.length?`共 ${list.length} 张，点一张直接发出`:'相册里还没有照片'}</span><button type="button" class="button soft" id="album-pick-upload">从手机上传</button></div>
+  <div class="album-pick" id="album-pick">${list.length?albumTiles(list):'<p class="meta">先从手机传一张，之后的照片都能在这里点着发。</p>'}</div>`,{wide:true});
+ const box=$('#album-pick');
+ if(box)box.onclick=async e=>{
+  const b=e.target.closest('[data-mid]');if(!b)return;
+  const mid=b.dataset.mid;
+  closeModal();toast('正在发送照片…');
+  try{
+   await sendChat({content:'',date:today(),media:[mid]});
+   await refresh();scrollChat();
+  }catch(err){toast(err.message||'发送失败');}
+ };
+ const up=$('#album-pick-upload');
+ if(up)up.onclick=()=>{closeModal();$('#chat-file')?.click();};
 }
 /* 位置：浏览器定位拿经纬度，作为一条 location 消息发出去 */
 function chatLocate(){
@@ -3141,11 +3336,15 @@ async function act(action,id,el) {
   if(!p.hidden)setTimeout(scrollChat,60);
   return;}
  if(action==='chat-fn-close'){const p=$('#chat-fn');if(p)p.hidden=true;return;}
- if(action==='chat-pick'){const p=$('#chat-fn');if(p)p.hidden=true;(id==='camera'?$('#chat-shot'):$('#chat-file'))?.click();return;}
+ if(action==='chat-pick'){const p=$('#chat-fn');if(p)p.hidden=true;return id==='camera'?$('#chat-shot')?.click():chatAlbumPick();}
  if(action==='chat-voice'){const p=$('#chat-fn');if(p)p.hidden=true;return chatVoiceToggle();}
  if(action==='chat-locate')return chatLocate();
  if(action==='chat-watch'){const p=$('#chat-fn');if(p)p.hidden=true;return navigate('watch');}
  if(action==='chat-song'){const p=$('#chat-fn');if(p)p.hidden=true;return songPicker();}
+ if(action==='song-tab'){state.songTab=id;$$('.ss-tab').forEach(b=>b.classList.toggle('active',b.dataset.id===id));return renderSongPane();}
+ if(action==='song-toggle')return songToggle(el);
+ if(action==='song-try')return songTry(el);
+ if(action==='chat-song-online')return sendOnlineSong(Number(el.dataset.idx||0));
  if(action==='chat-song-send')return sendSong(id);
  if(action==='chat-song-golist'){closeModal();return navigate('together','music');}
  /* 实时通话需要 WebRTC + 信令，属于独立一轮的量，这里明说而不是假装点了没反应 */
@@ -3244,12 +3443,12 @@ document.addEventListener('touchend',e=>{
 document.addEventListener('click',async e=>{$$('.more-menu[open]').forEach(d=>{if(!d.contains(e.target))d.removeAttribute('open');});const nav=e.target.closest('[data-nav]'),el=e.target.closest('[data-action]');try{if(nav||el)e.target.closest('.account-menu')?.removeAttribute('open');if(nav)return await navigate(nav.dataset.nav);if(el)await act(el.dataset.action,el.dataset.id||'',el);}catch(err){toast(err.message);}});
 document.addEventListener('submit',async e=>{const isWatch=e.target.id==='watch-form';if(e.target.id!=='chat-form'&&!isWatch)return;e.preventDefault();const input=$(isWatch?'#watch-text':'#chat-text'),content=input.value.trim();if(!content)return;const btn=$('button[type=submit]',e.target);btn.disabled=true;try{const body={content,date:today(),media:[]};if(!isWatch&&state.chatReply)body.reply_to=state.chatReply;await sendChat(body);if(!isWatch)state.chatReply=null;input.value='';localStorage.removeItem('chat-text:'+state.me.user.id);
  /* 一起看页不能整页重渲染：视频是本机 objectURL，重渲染就把放映区清空了 */
- if(isWatch){await refresh(false);const log=$('#watch-log');if(log)log.innerHTML=chatRows();watchScroll();}
+ if(isWatch){await refresh(false);const log=$('#watch-log');if(log)log.innerHTML=chatRows();syncCompose();watchScroll();}
  else{await refresh();syncCompose();}
  }catch(err){toast(err.message);}finally{btn.disabled=false;}});
-document.addEventListener('input',e=>{if(e.target.id==='chat-text'){localStorage.setItem('chat-text:'+state.me.user.id,e.target.value);syncCompose();}if(e.target.id==='filter-q'){state.filters={...(state.filters||{}),q:e.target.value};clearTimeout(state.filterTimer);state.filterTimer=setTimeout(async()=>{const pos=$('#filter-q')?.selectionStart;try{await loadTimeline(true);renderPage();$('#filter-q')?.focus();$('#filter-q')?.setSelectionRange(pos,pos);}catch(err){toast(err.message);}},250);}});
+document.addEventListener('input',e=>{if(e.target.id==='chat-text'){localStorage.setItem('chat-text:'+state.me.user.id,e.target.value);syncCompose();}if(e.target.id==='watch-text'){syncCompose();}if(e.target.id==='filter-q'){state.filters={...(state.filters||{}),q:e.target.value};clearTimeout(state.filterTimer);state.filterTimer=setTimeout(async()=>{const pos=$('#filter-q')?.selectionStart;try{await loadTimeline(true);renderPage();$('#filter-q')?.focus();$('#filter-q')?.setSelectionRange(pos,pos);}catch(err){toast(err.message);}},250);}});
 document.addEventListener('change',e=>{const map={'filter-author':'author','filter-date':'date','filter-media':'media'};if(map[e.target.id]){state.filters={...(state.filters||{}),[map[e.target.id]]:e.target.value};state.timelineCursor=null;loadTimeline(true).then(renderPage).catch(err=>toast(err.message));}});
-document.addEventListener('keydown',e=>{if(e.key==='Escape'){const menu=$('.more-menu[open]');if(menu){menu.removeAttribute('open');$('summary',menu)?.focus();}}if(e.key==='Escape'&&$('.modal'))closeModal();if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing&&e.target?.id==='chat-text'){e.preventDefault();const form=$('#chat-form'),btn=form&&$('button[type=submit]',form);if(form&&btn&&!btn.disabled)form.requestSubmit();}if(e.key==='Tab'&&$('.modal')){const els=$$('button,input,textarea,select,a[href]',$('.modal')).filter(el=>!el.disabled),first=els[0],last=els.at(-1);if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}}});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){const menu=$('.more-menu[open]');if(menu){menu.removeAttribute('open');$('summary',menu)?.focus();}}if(e.key==='Escape'&&$('.modal'))closeModal();if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing&&(e.target?.id==='chat-text'||e.target?.id==='watch-text')){e.preventDefault();const form=e.target.form||$('#chat-form'),btn=form&&$('button[type=submit]',form);if(form&&btn&&!btn.disabled)form.requestSubmit();}if(e.key==='Tab'&&$('.modal')){const els=$$('button,input,textarea,select,a[href]',$('.modal')).filter(el=>!el.disabled),first=els[0],last=els.at(-1);if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}}});
 // —— Android APK 系统通知桥（浏览器/PWA 无 Capacitor 时自动跳过，零影响）——
 /* 原生环境识别不能只赌 window.Capacitor：APK 是「远程加载模式」（server.url 指向线上站），
    Capacitor 的桥接脚本只注入由它本地服务器提供的页面，远程页面里 window.Capacitor 常常是空的，
