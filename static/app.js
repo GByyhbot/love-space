@@ -2609,7 +2609,10 @@ function openModal(title,content,{wide=false,sheet=false,cleanup=null}={}) {
  enhanceNativeControls($('.modal'));
  modalCleanup=cleanup;document.body.style.overflow='hidden';setTimeout(()=>$('.modal input:not([type=checkbox]),.modal textarea,.modal button')?.focus(),50);
 }
-function closeModal(){if(modalCleanup){modalCleanup();modalCleanup=null;}$('#modal-root').innerHTML='';document.body.style.overflow='';focusReturn?.focus?.();}
+function closeModal(){
+ /* 弹窗里试听的那首歌：弹窗一关就停，别让"关掉界面的声音"继续响（气泡里的播放不受影响） */
+ if(songCur&&songCur.kind==='preview'){try{songAudio.pause();}catch{}songReset();}
+ if(modalCleanup){modalCleanup();modalCleanup=null;}$('#modal-root').innerHTML='';document.body.style.overflow='';focusReturn?.focus?.();}
 /* 全局搜索：在顶栏搜索图标或聊天页放大镜打开，对已加载的记录做标题+正文本地模糊匹配。
    不新拉后端接口——state.records 里已有非聊天记录（含私信）与最近 200 条聊天，够覆盖常见场景。
    scope='chat' 时只搜聊天，供聊天页内搜索用。 */
