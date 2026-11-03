@@ -15,7 +15,7 @@ from deploy import connect, run  # noqa: E402
 REMOTE = '/vol1/1000/LARJ'
 BUILD_DIR = '/vol1/1000/LARJ-patch-build'
 CANONICAL = '2126263229/love-space'
-VERSION = '1.7.14'
+VERSION = '1.7.15'
 
 # 本地 → 容器内路径映射
 IN_CONTAINER = {

@@ -82,6 +82,12 @@
   --toast-bg:var(--ink);
   --toast-ink:var(--bg);
   --viewer-bg:#0D0B10;
+  /* 气泡底色（对方那侧，白色卡片感）。自己那侧由 .mine 覆盖成 --soft。
+     ⚠️ 这两个变量在组件里被引用很久了，但从来没定义过——于是
+     `background:var(--bubble)` 是无效声明，被浏览器直接丢弃，
+     对方的气泡一直是没有底色的"裸字"。补在这里，夜间跟着 surface/line 走。 */
+  --bubble:var(--surface);
+  --bubble-line:var(--line-strong);
 
   /* —— 字号：12 级，覆盖全站。半像素（10.5/11.5/12.5…）已全部归并 ——
      2xs 角标 / xs 时间戳 / sm 说明 / md 行内操作 / lg 次要正文
@@ -897,12 +903,17 @@ body.watch-open.kb-open .watch-chat .chat-compose{padding-bottom:8px}
    压在浅色照片上就像一口脏水，压在深色照片上又分不出边界——同一个值不可能两头都对。
    改成「亮玻璃 + 深字」：白玻璃在任何亮度的照片上都是高对比，
    留一点半透明让照片透出来，沉浸感还在。 */
-.chat-panel.immersive .chat-bubble{background:rgba(255,255,255,.78);border-color:rgba(255,255,255,.55);color:#2B2029;backdrop-filter:blur(14px) saturate(1.12);-webkit-backdrop-filter:blur(14px) saturate(1.12);box-shadow:0 2px 12px rgba(24,16,26,.14)}
+/* 照片壁纸上的气泡：半透明白保留"能透出一点照片"的呼吸感，
+   但**不要 backdrop-filter** —— 14px 的模糊采样会溢出元素边界，
+   在圆角外侧糊出一圈灰雾；叠了气泡皮肤（border-image 的图边缘多半带羽化）
+   之后那圈雾直接从图的透明缝里透出来，看起来就是"气泡周围有一层模糊图层"。
+   半透明白本身就够柔了，模糊是多余的。 */
+.chat-panel.immersive .chat-bubble{background:rgba(255,255,255,.86);border-color:rgba(255,255,255,.62);color:#2B2029;box-shadow:0 2px 8px rgba(24,16,26,.12)}
 /* 自己的气泡用主色实心：亮玻璃在浅照片上边界偏弱，实色才有"这是我说的"那点分量。
    文字走 --on-primary，暗色主题下它自动变深，不会出现深字压深粉。 */
 /* 暗色主题的 --primary 是浅粉，原样铺在照片上会跳成一块糖果；
    叠一层 18% 黑把它压沉稳，色相仍由主题决定（不写死颜色）。 */
-.chat-panel.immersive .mine .chat-bubble{background-color:var(--primary);background-image:linear-gradient(rgba(0,0,0,.18),rgba(0,0,0,.18));border-color:rgba(255,255,255,.3);color:var(--on-primary);box-shadow:0 2px 12px rgba(24,16,26,.2)}
+.chat-panel.immersive .mine .chat-bubble{background-color:var(--primary);background-image:linear-gradient(rgba(0,0,0,.18),rgba(0,0,0,.18));border-color:rgba(255,255,255,.3);color:var(--on-primary);box-shadow:0 2px 8px rgba(24,16,26,.16)}
 /* 沉浸式下「撤回 / 记入时光」常驻会让每条消息下面都挂一排小字，很杂乱：
    桌面 hover、手机点一下消息才展开（.tap-ops 由 app.js 点击时切换）。 */
 .chat-panel.immersive .chat-line:not(.pending) .chat-time{opacity:0;transition:opacity .16s var(--speed)}
@@ -2434,6 +2445,11 @@ body.kb-open .pick-overlay{padding-bottom:0}
  border-image-source:var(--skin);border-image-slice:42 fill;
  border-image-width:16px;border-image-repeat:stretch;
  border-radius:0;box-shadow:none;padding:3px 7px;min-width:0;
+ /* 皮肤是整张图，不需要任何"玻璃"后处理。照片壁纸那套给气泡加过
+    backdrop-filter，不清掉的话 blur 会顺着矩形边界在气泡外糊一圈，
+    而气泡图的边缘多半带羽化，那圈雾正好从图外沿透出来——
+    看起来就是"气泡周围有一层模糊图层"。 */
+ backdrop-filter:none;-webkit-backdrop-filter:none;
  /* 字色必须写死：气泡图是浅色的，而夜间主题的 --ink 是浅灰，
     不写就成了"浅色字压在浅色图上"，整段看不见。深色字是默认值。 */
  color:#2B2029}
