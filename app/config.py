@@ -60,7 +60,7 @@ def _static_dir():
 # 自动反映新版本，App 内「检查更新」立刻能发现——不再依赖打 v* tag 才前进。
 # 旧行为（构建期注入 LOVE_APK_VERSION）保留为兜底：扫不到包时用它。
 def _scan_apk_version():
-    fallback = clean_version(_env('LOVE_APK_VERSION', ''), '1.6.6')
+    fallback = clean_version(_env('LOVE_APK_VERSION', ''), '1.6.7')
     best = ''
     try:
         for apk in sorted(_static_dir().glob('*.apk'), key=lambda p: p.stat().st_mtime):

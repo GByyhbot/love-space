@@ -21,14 +21,26 @@ import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 
+import java.net.InetAddress;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.net.InetAddress;
+import java.net.Inet6Address;
+import java.net.InetSocketAddress;
+import java.net.Socket;
 import java.net.URL;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import javax.net.ssl.HttpsURLConnection;
+import javax.net.ssl.SSLParameters;
+import javax.net.ssl.SSLSocket;
+import javax.net.ssl.SSLSocketFactory;
 
 import com.getcapacitor.Bridge;
 import com.getcapacitor.BridgeActivity;
@@ -628,6 +640,30 @@ public class MainActivity extends BridgeActivity {
 
     /** 并行探测全部线路，返回与 SPACE_URLS 对齐的延迟数组（不可达为 -1）。 */
     private long[] probeAll() {
+        // 先在**当前线程**把四个域名解析完（IPv6 优先排序），再交给各探测线程。
+        // 解析时临时切换 java.net.preferIPv6Addresses：Java 默认 IPv4 优先且**失败不
+        // 回退**，Lucky 直连是纯 IPv6 线路（A 记录指向运营商 CGNAT 共享地址，公网
+        // 无法入站），于是一直连那个永远不通的 IPv4 地址 → 判定「不可达」；而
+        // WebView/手机浏览器用 Happy Eyeballs（v4 超时立刻切 v6）所以能打开。
+        // 这里解析一次拿到「v6 在前、v4 在后」的地址列表，探测时按列表逐个尝试，
+        // 效果等同浏览器。解析只在这一个线程发生，不存在属性切换竞态。
+        final InetAddress[][] resolved = new InetAddress[SPACE_URLS.length][];
+        // 用稳定排序把 IPv6 排到 IPv4 前面，不去动 java.net.preferIPv6Addresses
+        // 这种 JVM 全局属性（它影响所有线程，WebView 内部也在用网络）。
+        for (int i = 0; i < SPACE_URLS.length; i++) {
+            try {
+                InetAddress[] addrs = InetAddress.getAllByName(new URL(SPACE_URLS[i]).getHost());
+                Arrays.sort(addrs, new Comparator<InetAddress>() {
+                    @Override public int compare(InetAddress a, InetAddress b) {
+                        return (a instanceof Inet6Address ? 0 : 1) - (b instanceof Inet6Address ? 0 : 1);
+                    }
+                });
+                resolved[i] = addrs;
+            } catch (Exception e) {
+                Log.i(TAG, "解析 " + SPACE_URLS[i] + " 失败: " + e);
+                resolved[i] = new InetAddress[0];
+            }
+        }
         final long[] lat = new long[SPACE_URLS.length];
         Arrays.fill(lat, -1);
         final CountDownLatch latch = new CountDownLatch(SPACE_URLS.length);
@@ -637,7 +673,7 @@ public class MainActivity extends BridgeActivity {
                 @Override
                 public void run() {
                     try {
-                        lat[idx] = probeLatency(SPACE_URLS[idx]);
+                        lat[idx] = probeLatency(SPACE_URLS[idx], resolved[idx]);
                     } catch (Throwable ignored) {
                     } finally {
                         latch.countDown();
@@ -659,41 +695,136 @@ public class MainActivity extends BridgeActivity {
     /**
      * 对单条线路发一次 GET /api/status，返回耗时毫秒；不可达返回 -1。
      *
-     * 两个坑都在这里踩过（1.6.6）：
-     * ① HttpsURLConnection 默认 UA 是 `Java/1.8.0_392`，Cloudflare 对它的
-     *    判定是恶意的，CF 隧道那条线路直接 403 —— 探测以为线路死了，其实
-     *    WebView（UA=LoveSpaceApp/…）访问完全正常。必须显式带 App 的 UA。
-     * ② 原来要求 2xx~3xx 才算通，于是 403/404 这种「TCP 通了、服务也应答了」
-     *    的情况被判成不可达。改成 <500 即认为线路可达，只有 5xx 与网络异常算死。
+     * 四个坑都在这里踩过：
+     * ① HttpsURLConnection 默认 UA 是 `Java/1.8.0_392`，Cloudflare 对它的判定是恶意的，
+     *    CF 隧道那条线路直接 403 —— 探测以为线路死了，其实 WebView（UA=LoveSpaceApp/…）
+     *    访问完全正常。必须显式带 App 的 UA。
+     * ② 原来要求 2xx~3xx 才算通，403/404 这种「TCP 通了、服务也应答了」被判成不可达。
+     *    改成 &lt;500 即认为线路可达，只有 5xx 与网络异常算死。
+     * ③ Java 连地址失败**不会回退**下一个地址：Lucky 直连是纯 IPv6 线路（A 记录指向
+     *    运营商 CGNAT 共享地址，公网无法入站），默认行为会一直连那个永远不通的 IPv4 →
+     *    判定「不可达」。这里按地址列表**逐个尝试**：IPv6 优先，不通就换 IPv4，
+     *    与手机浏览器的 Happy Eyeballs 等效。
+     * ④ HttpURLConnection 无法指定「连接哪个地址」（connect(InetAddress) 不存在），
+     *    所以改为原始 Socket + 手动 TLS：SNI 用真实域名（Lucky 只认域名 Host，
+     *    是 IP 会 307）、证书校验开启 endpoint identification，Host 头也用域名。
+     *
+     * @param addrs 预解析的地址列表（IPv6 在前），为空时回退到默认 DNS 行为。
      */
-    private long probeLatency(String base) {
-        HttpsURLConnection conn = null;
+    private long probeLatency(String base, InetAddress[] addrs) {
+        final String host;
+        final int portNum;
+        final String path;
         try {
-            URL url = new URL(new URL(base), "api/status");
-            conn = (HttpsURLConnection) url.openConnection();
-            conn.setConnectTimeout(PROBE_TIMEOUT_MS);
-            conn.setReadTimeout(PROBE_TIMEOUT_MS);
-            conn.setUseCaches(false);
-            conn.setRequestMethod("GET");
-            conn.setInstanceFollowRedirects(true);
-            // UA 必须是纯 ASCII：versionName 取不到时 appVersion() 会返回「未知」，
-            // 非 ISO-8859-1 的值会让 HttpURLConnection 直接抛 IllegalArgumentException。
-            String ver = appVersion();
-            if (ver == null || !ver.matches("[0-9.]+")) ver = "1.0";
-            conn.setRequestProperty("User-Agent", "LoveSpaceApp/" + ver + " (Android; LinkProbe)");
-            conn.setRequestProperty("Accept", "application/json");
-            conn.setRequestProperty("Cache-Control", "no-store");
-            long t0 = System.nanoTime();
-            int code = conn.getResponseCode();
-            long ms = (System.nanoTime() - t0) / 1_000_000L;
-            return (code > 0 && code < 500) ? ms : -1;
+            URL u = new URL(base);
+            host = u.getHost();
+            portNum = u.getPort() > 0 ? u.getPort() : 443;
+            path = new URL(u, "api/status").getFile();
         } catch (Exception e) {
-            Log.i(TAG, "探测 " + base + " 失败: " + e);
+            Log.i(TAG, "线路地址无效: " + base);
+            return -1;
+        }
+        // UA 必须是纯 ASCII：versionName 取不到时 appVersion() 会返回「未知」，
+        // 非 ISO-8859-1 的值会让请求行写出非法字节。
+        String ver = appVersion();
+        if (ver == null || !ver.matches("[0-9.]+")) ver = "1.0";
+        final String userAgent = "LoveSpaceApp/" + ver + " (Android; LinkProbe)";
+
+        for (InetAddress addr : addrs) {
+            long ms = probeOnce(host, portNum, path, userAgent, addr);
+            if (ms >= 0) return ms;
+        }
+        // 地址列表为空（解析失败）：按默认 DNS 行为试最后一次，尽量不误判
+        if (addrs.length == 0) {
+            HttpsURLConnection conn = null;
+            try {
+                URL url = new URL(new URL(base), "api/status");
+                conn = (HttpsURLConnection) url.openConnection();
+                conn.setConnectTimeout(PROBE_TIMEOUT_MS);
+                conn.setReadTimeout(PROBE_TIMEOUT_MS);
+                conn.setUseCaches(false);
+                conn.setRequestMethod("GET");
+                conn.setInstanceFollowRedirects(true);
+                conn.setRequestProperty("User-Agent", userAgent);
+                conn.setRequestProperty("Accept", "application/json");
+                conn.setRequestProperty("Cache-Control", "no-store");
+                long t0 = System.nanoTime();
+                int code = conn.getResponseCode();
+                long ms = (System.nanoTime() - t0) / 1_000_000L;
+                return (code > 0 && code < 500) ? ms : -1;
+            } catch (Exception e) {
+                Log.i(TAG, "探测 " + base + " 失败: " + e);
+                return -1;
+            } finally {
+                if (conn != null) {
+                    try { conn.disconnect(); } catch (Exception ignored) {}
+                }
+            }
+        }
+        return -1;
+    }
+
+    /** 对单个地址做一次 TLS + HTTP/1.1 GET，成功返回耗时毫秒，任何失败返回 -1。 */
+    private long probeOnce(String host, int port, String path, String userAgent, InetAddress addr) {
+        SSLSocket ssl = null;
+        try {
+            Socket raw = new Socket();
+            raw.connect(new InetSocketAddress(addr, port), PROBE_TIMEOUT_MS);
+            ssl = (SSLSocket) ((SSLSocketFactory) SSLSocketFactory.getDefault())
+                .createSocket(raw, host, port, true);
+            SSLParameters params = ssl.getSSLParameters();
+            params.setEndpointIdentificationAlgorithm("HTTPS"); // 证书主机名校验
+            ssl.setSSLParameters(params);
+            applySni(ssl, host); // SNIHostName 是 API 24+，低版本用反射，失败就无 SNI 直连
+            ssl.setSoTimeout(PROBE_TIMEOUT_MS);
+            ssl.startHandshake();
+            StringBuilder req = new StringBuilder();
+            req.append("GET ").append(path).append(" HTTP/1.1\r\n")
+               .append("Host: ").append(host).append(':').append(port).append("\r\n")
+               .append("User-Agent: ").append(userAgent).append("\r\n")
+               .append("Accept: application/json\r\n")
+               .append("Connection: close\r\n\r\n");
+            OutputStream os = ssl.getOutputStream();
+            os.write(req.toString().getBytes("ISO-8859-1"));
+            os.flush();
+            BufferedReader reader = new BufferedReader(
+                new InputStreamReader(ssl.getInputStream(), "ISO-8859-1"));
+            long t0 = System.nanoTime();
+            String status = reader.readLine();
+            long ms = (System.nanoTime() - t0) / 1_000_000L;
+            if (status != null) {
+                String[] parts = status.split(" ");
+                if (parts.length >= 2) {
+                    int code;
+                    try { code = Integer.parseInt(parts[1].trim()); }
+                    catch (NumberFormatException nfe) { code = -1; }
+                    if (code > 0 && code < 500) return ms;
+                    Log.i(TAG, "探测 " + host + "@" + addr.getHostAddress() + " 返回 " + code);
+                }
+            }
+            return -1;
+        } catch (Exception e) {
+            Log.i(TAG, "探测 " + host + "@" + addr.getHostAddress() + " 失败: " + e);
             return -1;
         } finally {
-            if (conn != null) {
-                try { conn.disconnect(); } catch (Exception ignored) {}
+            if (ssl != null) {
+                try { ssl.close(); } catch (Exception ignored) {}
             }
+        }
+    }
+
+    /** 给 TLS 加上 SNI。SNIHostName / setServerNames 是 API 24+ 才有，低版本走反射。 */
+    private static void applySni(SSLSocket socket, String host) {
+        try {
+            Class<?> sniClass = Class.forName("javax.net.ssl.SNIHostName");
+            Object name = sniClass.getConstructor(String.class).newInstance(host);
+            Class<?> nameClass = Class.forName("javax.net.ssl.SNIServerName");
+            SSLParameters params = socket.getSSLParameters();
+            params.getClass().getMethod("setServerNames", nameClass)
+                .invoke(params, Collections.singletonList(name));
+            socket.setSSLParameters(params);
+        } catch (Throwable ignored) {
+            // 无 SNI 直连：服务器默认 vhost 仍是该证书，不影响可达性判定
         }
     }
 
