@@ -32,12 +32,12 @@ const paths = {
  search:'M21 21l-4.35-4.35M10 18a8 8 0 1 1 0-16 8 8 0 0 1 0 16Z',
  grid:'M4 4h6v6H4V4Zm10 0h6v6h-6V4ZM4 14h6v6H4v-6Zm10 0h6v6h-6v-6Z',
  smile:'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18ZM9 10h.01M15 10h.01M8.5 15a4.6 4.6 0 0 0 7 0',
- camera:'M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1Zm8 2.5a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z',
+ camera:'M3 7h4l2-3h6l2 3h4v13H3V7Zm9 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z',
  phone:'M6 3h3l2 5-2 2a12 12 0 0 0 5 5l2-2 5 2v3a2 2 0 0 1-2 2A17 17 0 0 1 4 5a2 2 0 0 1 2-2Z',
  location:'M12 21s7-6.2 7-11a7 7 0 1 0-14 0c0 4.8 7 11 7 11Zm0-8a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z',
- gift:'M3 6h18v4H3V6Zm1 6h16v9H4v-9Zm7-6v15M8 6a2.5 2.5 0 1 1 4-2 2.5 2.5 0 1 1 4 2',
+ gift:'M4 4h16v16H4V4Zm0 0 8 7 8-7M12 11v9',
  transfer:'M4 8h13l-3-3M20 16H7l3 3',
- film:'M3 5h18v14H3V5Zm0 5h18M8 5v14M16 5v14',
+ film:'M3 5h18v14H3V5Zm7 3.2v7.6L16 12l-6-3.8Z',
  game:'M7 9h10a4 4 0 0 1 4 4v2a3 3 0 0 1-5 2l-1-1H9l-1 1a3 3 0 0 1-5-2v-2a4 4 0 0 1 4-4Zm0 3v3M5.5 12.5h3M16 12h.01M18 14h.01'
 };
 const icon = name => `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="${paths[name] || paths.heart}"/></svg>`;
@@ -800,11 +800,9 @@ function messagesPage() {
  const pinnedBar=pinned.length?`<button type="button" class="chat-pinned" data-action="chat-jump" data-id="${pinned[0].id}"><span class="cp-tag">📌 置顶</span><span class="cp-text">${esc((pinned[0].body.content||'一条附件').slice(0,42))}</span>${pinned.length>1?`<i>共 ${pinned.length} 条</i>`:''}</button>`:'';
  const searchBar=state.chatSearch?`<div class="chat-search-bar"><span>筛选「${esc(state.chatSearch)}」</span><button type="button" data-action="chat-search-clear">清除</button></div>`:'';
  const replyBar=state.chatReply?`<div class="chat-reply-bar"><i class="crb-mark" aria-hidden="true">↩</i><span>引用：${esc(state.chatReply.text||'一条消息')}</span><button type="button" class="icon-btn" data-action="chat-reply-cancel" aria-label="取消引用">${icon('close')}</button></div>`:'';
- /* ── 输入栏（参考微信/QQ 的形态）─────────────────────────────
-    左侧「功能」九宫格、中间胶囊输入框、右侧语音 / 表情 / 更多；
-    有文字时语音按钮让位给发送按钮（.has-text 控制）。 */
+ /* ── 输入栏：中间胶囊输入框，右侧语音 / 表情 / 更多 ──────────
+    有文字时语音按钮让位给发送按钮（form.has-text 控制）。 */
  const composeBar=`<form id="chat-form" class="chat-compose">
-  <button type="button" class="compose-ib" data-action="chat-fn" aria-label="更多功能" title="更多功能">${icon('grid')}</button>
   <div class="compose-field"><textarea id="chat-text" name="content" placeholder="发消息" rows="1" maxlength="20000" aria-label="聊天内容" autocomplete="off" enterkeyhint="send"></textarea></div>
   <button type="button" class="compose-ib compose-mic" data-action="chat-voice" aria-label="发语音" title="发语音">${icon('mic')}</button>
   <button type="button" class="compose-ib compose-emoji" data-action="sticker-panel" aria-label="表情" title="表情">${icon('smile')}</button>
