@@ -96,9 +96,47 @@ const recordsOf = kind => state.records.filter(r=>r.kind===kind);
 const uuid = () => crypto.randomUUID ? crypto.randomUUID() : ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g,c=>(c^crypto.getRandomValues(new Uint8Array(1))[0]&15>>c/4).toString(16));
 
 const DARK_KEY = 'love-dark-mode';
+const FONT_KEY = 'love-font-scale';
+/* 七套内置主题：`THEME_IDS` 是唯一白名单。renderShell 加 class、themeForm 出色卡、
+   themeMeta 查名字都走这一份——别再在页面里散落写死 theme-rose/peach/lavender，
+   以前就是那么漏的（新增主题时总有一处忘改，界面停在旧配色）。 */
+const THEME_IDS = ['rose','peach','lemon','mint','sky','lavender','cocoa'];
+const THEME_META = {
+ rose:{name:'草莓牛奶',desc:'莓果粉，最经典的那一版',light:['#953753','#F7EBEF','#FAF8F9'],dark:['#DA8BA3','#4F2E38','#231B1D']},
+ peach:{name:'蜜桃奶油',desc:'暖橘调，傍晚的光',light:['#975935','#F7EFEB','#FAF9F8'],dark:['#DCA789','#4F3A2E','#231E1B']},
+ lemon:{name:'柠檬挞',desc:'一点酸甜的黄油色',light:['#936E2F','#F8F3EA','#FAF9F8'],dark:['#DFBE86','#4F432E','#23201B']},
+ mint:{name:'薄荷气泡',desc:'清透的青绿',light:['#3A826D','#ECF6F3','#F8FAF9'],dark:['#91D4C0','#2E4F45','#1B2320']},
+ sky:{name:'海盐汽水',desc:'安稳的雾蓝',light:['#396993','#EBF1F7','#F8F9FA'],dark:['#8CB5D9','#2E404F','#1B1F23']},
+ lavender:{name:'香芋云朵',desc:'软软的薰衣草',light:['#644389','#F1ECF6','#F9F8FA'],dark:['#B094D1','#3D2E4F','#1E1B23']},
+ cocoa:{name:'焦糖可可',desc:'低饱和的暖棕，安静耐看',light:['#7C5D50','#F4F0EE','#F9F9F8'],dark:['#C8AA9D','#4F382E','#231D1B']}
+};
+const CUSTOM_FALLBACK = '#9A6B5A';
+/* 主题色卡上的三个色块：主色 / 柔和底 / 页面底。夜间取另一组——
+   否则夜里打开选择器会看到七块惨白，跟实际效果完全对不上。 */
+function themeMeta(id, customColor) {
+ const dark = document.documentElement.classList.contains('dark');
+ if (THEME_META[id]) {const m=THEME_META[id];return {id, name:m.name, desc:m.desc, swatch:dark?m.dark:m.light};}
+ const c = /^#[0-9a-fA-F]{6}$/.test(customColor||'') ? customColor : CUSTOM_FALLBACK;
+ return {id:'custom', name:'自定义', desc:'从你喜欢的颜色生成',
+  swatch:[c, shade(c, dark?-0.72:0.9), dark?shade(c,-0.94):shade(c,0.96)]};
+}
+/* 字号：只改 html[data-fs]，CSS 那边换 --fs-scale 一个乘数，12 级刻度自动等比放大 */
+function applyFontScale() {
+ const pref = localStorage.getItem(FONT_KEY) || 'std';
+ const root = document.documentElement;
+ if (pref === 'large' || pref === 'xl') root.dataset.fs = pref; else delete root.dataset.fs;
+}
+/* 手机浏览器的地址栏 / APK 状态栏颜色跟着主题走，别再写死一粉一黑 */
+function themeBgColor() {
+ const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
+ return /^#[0-9a-fA-F]{6}$/.test(bg) ? bg : (document.documentElement.classList.contains('dark') ? '#211a1e' : '#f8e9ef');
+}
+function syncMetaThemeColor() {
+ document.querySelector('meta[name="theme-color"]')?.setAttribute('content', themeBgColor());
+}
 // —— Android APK 状态栏适配：颜色跟随明暗主题（浏览器/PWA 无 Capacitor 时跳过）——
 const _SB=(window.Capacitor&&window.Capacitor.Plugins)?window.Capacitor.Plugins.StatusBar:null;
-async function syncStatusBar(){if(!_SB)return;try{const dark=document.documentElement.classList.contains('dark');await _SB.setOverlaysWebView({overlay:false});await _SB.setStyle({style:dark?'Dark':'Light'});await _SB.setBackgroundColor({color:dark?'#211a1e':'#f8e9ef'});}catch{}}
+async function syncStatusBar(){if(!_SB)return;try{const dark=document.documentElement.classList.contains('dark');await _SB.setOverlaysWebView({overlay:false});await _SB.setStyle({style:dark?'Dark':'Light'});await _SB.setBackgroundColor({color:themeBgColor()});}catch{}}
 /* APK 上让聊天页延伸到状态栏底下：其它页面内容不该被状态栏压住，所以只在
    「聊天页 + 照片壁纸」时才开 overlay，离开立刻恢复。浏览器/PWA 无此插件，自动跳过。 */
 let _sbOverlay = false;
@@ -118,8 +156,8 @@ function applyDarkMode() {
   const pref = localStorage.getItem(DARK_KEY) || 'auto';
   const dark = pref === 'on' || (pref === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches);
   document.documentElement.classList.toggle('dark', dark);
-  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', dark ? '#211a1e' : '#f8e9ef');
   refreshCustomColor();
+  syncMetaThemeColor();
   syncStatusBar();
 }
 window.matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', applyDarkMode);
@@ -131,11 +169,13 @@ function shade(hex, percent) {
   return '#' + [mix(r), mix(g), mix(b)].map(v => v.toString(16).padStart(2, '0')).join('');
 }
 const luminance = hex => {const n=parseInt(hex.slice(1),16);return ((n>>16)*299+((n>>8)&255)*587+(n&255)*114)/1000/255;};
+/* 十六进制 → "r,g,b"，写进 --primary-rgb 供 rgba(var(--primary-rgb), a) 用 */
+const hexToRgb = hex => {const n=parseInt(hex.slice(1),16);return `${n>>16},${(n>>8)&255},${n&255}`;};
 let currentCustom = null;
 function refreshCustomColor(){ if(currentCustom) applyCustomColor(currentCustom.theme, currentCustom.color); }
 function applyCustomColor(theme, color) {
   const root = document.documentElement;
-  ['--primary', '--primary-dark', '--soft', '--soft-strong', '--on-primary'].forEach(v => root.style.removeProperty(v));
+  ['--primary', '--primary-dark', '--primary-rgb', '--soft', '--soft-strong', '--on-primary'].forEach(v => root.style.removeProperty(v));
   currentCustom = theme === 'custom' && /^#[0-9a-fA-F]{6}$/.test(color) ? {theme, color} : null;
   if (!currentCustom) return;
   const dark = root.classList.contains('dark');
@@ -145,6 +185,7 @@ function applyCustomColor(theme, color) {
   if (lum > 0.82) primary = shade(color, -0.4);
   else if (lum < 0.14) primary = shade(color, 0.42);
   root.style.setProperty('--primary', primary);
+  root.style.setProperty('--primary-rgb', hexToRgb(primary));
   root.style.setProperty('--primary-dark', shade(primary, -0.18));
   root.style.setProperty('--on-primary', luminance(primary) > 0.62 ? '#2b1520' : '#ffffff');
   if (dark) {
@@ -232,14 +273,19 @@ function renderShell() {
  // 取代原先各页顶部那排 back 条（已移除），回到 together 根页。
  const toolsSub=state.page==='figure'||['dashboard','weekly','settings','channels','backups','linkcheck'].includes(state.page)||(state.page==='together'&&!!state.tab);
 /* 返回按钮已移至顶部 topbar（renderShell 内 has-back 分支注入），此处不再在侧边栏/底部 tab 栏注入 */
- const themeClass='theme-'+state.me.space.theme,motion=state.me.space.motion?'':'reduced-motion',root=document.documentElement;
- [themeClass,'theme-rose','theme-peach','theme-lavender','theme-custom','reduced-motion'].forEach(c=>root.classList.remove(c));
- root.classList.add(state.me.space.theme==='peach'||state.me.space.theme==='lavender'||state.me.space.theme==='custom'?themeClass:'theme-rose');
+/* 主题 / 动效 / 字号：class 与 data-fs 都从白名单推导，先全清再挂一个。
+   之前这里写着 theme-peach / theme-lavender 三选一的白名单，主题加了以后
+   theme-lemon 之类会落到 theme-rose 兜底——换了跟没换一样。 */
+ const themeNow=THEME_IDS.includes(state.me.space.theme)?state.me.space.theme:(state.me.space.theme==='custom'?'custom':'rose'),root=document.documentElement;
+ ['reduced-motion','theme-custom',...THEME_IDS.map(id=>'theme-'+id)].forEach(c=>root.classList.remove(c));
+ root.classList.add('theme-'+themeNow);
  if(!state.me.space.motion)root.classList.add('reduced-motion');
+ applyFontScale();
  document.body.className=state.page==='messages'?('chat-full'+(chatBgIsPhoto()?' chat-immersive':'')):(state.page==='watch'?'chat-full watch-open':(state.page==='together'&&state.tab==='calendar'?'cal-full':(state.page==='figure'?'figure-full':'')));
  /* className 是整体覆盖写的，会把 syncKeyboard 加的 kb-open 一起冲掉；键盘还开着就补回来 */
  if(parseFloat(document.documentElement.style.getPropertyValue('--kb-h'))>90)document.body.classList.add('kb-open');
  applyCustomColor(state.me.space.theme,state.me.space.custom_color);
+ syncMetaThemeColor();
  $('#app').innerHTML=`<div class="shell${state.page==='messages'?' chat-full':''}${state.page==='watch'?' chat-full watch-full':''}${state.page==='figure'?' figure-full':''}"><aside class="sidebar"><div class="brand"><img src="/static/icon.svg" alt=""><div><strong>恋爱空间</strong><small>LOVE, EVERY DAY</small></div></div><nav class="nav" aria-label="主要导航">${navHtml.join('')}</nav><div class="sidebar-bottom"><div class="little-note"><span>❀</span><br>把喜欢，写进每一天。<br>little things, lasting love</div><button class="profile-btn" data-nav="personal">${avatar(state.me.user.id)}<div><strong>${esc(state.me.user.name)}</strong><small>我的小角落 ${icon('arrow')}</small></div></button></div></aside><main class="main"><header class="topbar${toolsSub?' has-back':''}">${toolsSub?`<button class="nav-back topbar-back" data-action="tools-back" aria-label="回到我们">${icon('back')}</button>`:''}<span class="desktop-date">${new Date().toLocaleDateString('zh-CN',{timeZone:state.me.space.timezone,month:'long',day:'numeric',weekday:'long'})} · 今天也要好好相爱</span><div class="topbar-right"><span class="pill">${icon('lock')} 双人私密空间</span><button class="icon-btn" id="dark-toggle" data-action="toggle-dark" aria-label="切换深浅色">${icon(document.documentElement.classList.contains('dark')?'sun':'moon')}</button><button class="icon-btn" data-action="open-search" aria-label="搜索">${icon('search')}</button><button class="icon-btn" data-nav="messages" aria-label="私聊">${icon('chat')}${state.me.chat_unread&&state.page!=='messages'?`<span class="badge">${state.me.chat_unread>99?'99+':state.me.chat_unread}</span>`:''}</button><button class="icon-btn" data-nav="notices" aria-label="通知">${icon('bell')}${state.me.unread?`<span class="badge">${state.me.unread>99?'99+':state.me.unread}</span>`:''}</button><details class="more-menu account-menu"><summary class="mobile-profile" aria-label="打开账号菜单" title="账号菜单">${avatar(state.me.user.id)}</summary><div class="menu-pop account-popover"><div class="account-menu-heading"><strong>${esc(state.me.user.name)}</strong><small>我的账号</small></div><button data-action="profile">${icon('edit')} 账号资料</button><button data-nav="personal">${icon('lock')} 个人小角落</button><button data-nav="settings">${icon('gear')} 设置</button><button data-action="logout" class="danger account-logout">${icon('arrow')} 退出登录</button></div></details></div></header>${!state.online?'<div class="offline-banner">网络暂时断开，正在等待重连。未发送的文字会为你保留。</div>':''}<div id="page"></div><p class="footer-note">♡ 有你在，平凡的日子也闪闪发光。</p></main></div>`;
  renderPage();
  if(keepScroll>0)window.scrollTo({top:keepScroll});
@@ -584,7 +630,7 @@ function homePage() {
  const homeHeading=heading('我们的每一天','一半是生活，一半是你。','compose','记录此刻','edit').replace('page-heading','page-heading home-heading');
  return `${homeHeading}${heroCopy}${todayCard}${habitCard}${composeCta}${dailyQuoteBlock()}
  <div class="home-grid"><div class="home-main"><section><div class="section-heading"><h2>${icon('book')} 最近的小美好</h2><button class="link-btn" data-nav="timeline">所有时光 ${icon('arrow')}</button></div>${posts.length?posts.map(recordCard).join(''):`<div class="card">${empty('故事，从这一刻开始','一张照片、一句想说的话，都是值得收藏的小美好。','compose')}</div>`}</section>
- <section class="on-this-day" id="on-this-day"><div class="loading-heart" style="font-size:24px">♡</div><p class="meta meta-center">正在翻看这一天的回忆…</p></section>
+ <section class="on-this-day" id="on-this-day"><div class="loading-heart" style="font-size:var(--fs-xl)">♡</div><p class="meta meta-center">正在翻看这一天的回忆…</p></section>
  <section class="yearbook" id="yearbook"><h2>📖 今年的我们</h2><div class="yearbook-summary"><p>点开看看，这一年我们一起写下了什么。</p><span class="yearbook-toggle-row">${button('展开小年报','expand-yearbook','soft small','arrow')}</span></div></section></div>
  <aside class="home-aside"><div class="card mood-card"><div class="section-heading"><h2>☀ 今天的心情</h2><button class="link-btn" data-action="mood-history">回顾 →</button></div>${moodRows}${button('分享今天的心情','mood','soft')}</div>
  <div class="card anniversary-card">${anniversary?`<button type="button" class="anniversary-link" data-action="tool-anniversary" aria-label="最近纪念日：${esc(anniversary.body.title)}，${anniversary.days} 天后"><span class="tiny">${icon('calendar')} 下一个值得期待的日子<span class="tiny-go">${icon('arrow')}</span></span><h3>${esc(anniversary.body.title)}</h3><div class="countdown">${anniversary.days}<small>天后</small></div><p>${anniversary.due} · 别忘了给彼此一个拥抱</p></button>`:`<span class="tiny">${icon('calendar')} 下一个值得期待的日子</span><h3>留一个日子，给仪式感</h3><div class="countdown">♡</div>${button('添加纪念日','new-anniversary','small secondary')}`}</div>
@@ -2800,7 +2846,7 @@ function settingsPage() {
  const fmtSize=b=>b>=1073741824?(b/1073741824).toFixed(2)+' GB':(b/1048576).toFixed(1)+' MB';
  const isAdmin=!!state.me.user.admin;
  const storageStrip=isAdmin&&st?`<button class="storage-strip" data-nav="backups"><span class="storage-strip-icon">${icon('gear')}</span><span class="storage-strip-body"><strong>已用 ${fmtSize(st.total||0)}</strong><small>可用 ${fmtSize(st.disk_free||0)} · ${st.record_count||0} 条记录 · ${st.media_count||0} 个媒体文件</small></span><span class="storage-strip-more">存储占用与备份 ${icon('arrow')}</span></button>`:'';
- return `${heading('设置','管理空间、账号和数据。')}<div class="settings-grid"><section class="card"><h2>${icon('home')} 空间设置</h2><div class="setting-list"><button data-action="space">空间名称与相恋日期 ${icon('arrow')}</button>${state.me.users.length<2?`<button data-action="invite">邀请另一半 ${icon('arrow')}</button>`:''}<button data-nav="channels">通知渠道与提醒偏好 ${icon('arrow')}</button></div><p class="small-note">名称和日期是两个人共用的；通知渠道只影响你自己收到的提醒。</p></section><section class="card"><h2>${icon('image')} 外观与背景</h2><div class="setting-list"><button data-action="theme-form">主题与外观 ${icon('arrow')}</button><button data-action="home-bg">主页背景 ${icon('arrow')}</button><button data-action="chat-bg">聊天背景 ${icon('arrow')}</button><button data-action="chat-bubble">聊天气泡 ${icon('arrow')}</button></div><p class="small-note">主题色、主页封面、聊天壁纸和气泡皮肤各管一摊，改哪样只动哪样，不用整张表一起提交。夜间模式只记在这台设备上。</p></section><section class="card"><h2>${icon('gear')} 我的账号</h2><div class="setting-list"><button data-action="profile">头像、昵称与密码 ${icon('arrow')}</button><button data-action="logout">退出登录 ${icon('arrow')}</button></div></section><section class="card"><h2>${icon('chat')} 连接</h2><div class="setting-list"><button data-nav="linkcheck">链路检测与线路切换 ${icon('arrow')}</button></div><p class="small-note">平时 App 从哪条线路进来就用哪条，不会自动切换。进页面明显变慢、或某条线路连不上时，可以在这里测一遍响应速度并手动换一条——换过之后，下次打开会直接走新选的这条。</p></section><section class="card"><h2>${icon('download')} 数据管理</h2>${storageStrip}<div class="setting-list"><a href="/api/export" download>导出我有权查看的记录与原文件 ${icon('download')}</a><a href="/api/export/markdown" download>导出 Markdown 知识库（第二大脑） ${icon('download')}</a><a href="/api/export/ics" download>导出日历 .ics（纪念日与计划） ${icon('download')}</a>${state.me.user.admin?`<button data-nav="backups">完整备份与存储占用 ${icon('arrow')}</button>`:''}</div><p class="small-note">第二大脑是纯 Markdown 文件夹，可拖进 Obsidian / Logseq，也可直接给 AI 当长期记忆；只含你自己可见的内容，个人心愿只导出标题。私密日记按账号隔离，完整备份由服务器管理员管理。日历文件导进手机自带日历后，纪念日就能用系统提醒，比站内推送更稳。</p></section><section class="card"><h2>${icon('info')} 关于</h2><div class="setting-list"><div style="display:flex;align-items:center;gap:10px;padding:12px 0"><span class="stat-icon" style="font-size:28px">💕</span><div><h3 style="margin:0;font-size:15px">恋爱空间</h3><p class="meta" style="margin:2px 0 0">${v.version?((state.apkVersion?'APK v'+state.apkVersion+' · ':'')+'网页 v'+v.version+(state.apkLatest&&state.apkVersion&&newerVer(state.apkLatest,state.apkVersion)?' · <span style="color:#c0392b">可更新到 v'+state.apkLatest+'</span>':'')):'加载中…'}</p></div></div><button data-action="check-update">检查更新 ${icon('arrow')}</button><button data-action="copy-apk-link">复制 App 下载链接 ${icon('arrow')}</button></div><p class="small-note">网页功能自动更新；原生功能（如后台通知）需下载新版 APK，可在检查更新中获取，也可复制下载链接发给对方在手机浏览器打开。</p></section></div>`;
+ return `${heading('设置','管理空间、账号和数据。')}<div class="settings-grid"><section class="card"><h2>${icon('home')} 空间设置</h2><div class="setting-list"><button data-action="space">空间名称与相恋日期 ${icon('arrow')}</button>${state.me.users.length<2?`<button data-action="invite">邀请另一半 ${icon('arrow')}</button>`:''}<button data-nav="channels">通知渠道与提醒偏好 ${icon('arrow')}</button></div><p class="small-note">名称和日期是两个人共用的；通知渠道只影响你自己收到的提醒。</p></section><section class="card"><h2>${icon('image')} 外观与背景</h2><div class="setting-list"><button data-action="theme-form">主题与外观 ${icon('arrow')}</button><button data-action="home-bg">主页背景 ${icon('arrow')}</button><button data-action="chat-bg">聊天背景 ${icon('arrow')}</button><button data-action="chat-bubble">聊天气泡 ${icon('arrow')}</button></div><p class="small-note">主题色、主页封面、聊天壁纸和气泡皮肤各管一摊，改哪样只动哪样，不用整张表一起提交。夜间模式只记在这台设备上。</p></section><section class="card"><h2>${icon('gear')} 我的账号</h2><div class="setting-list"><button data-action="profile">头像、昵称与密码 ${icon('arrow')}</button><button data-action="logout">退出登录 ${icon('arrow')}</button></div></section><section class="card"><h2>${icon('chat')} 连接</h2><div class="setting-list"><button data-nav="linkcheck">链路检测与线路切换 ${icon('arrow')}</button></div><p class="small-note">平时 App 从哪条线路进来就用哪条，不会自动切换。进页面明显变慢、或某条线路连不上时，可以在这里测一遍响应速度并手动换一条——换过之后，下次打开会直接走新选的这条。</p></section><section class="card"><h2>${icon('download')} 数据管理</h2>${storageStrip}<div class="setting-list"><a href="/api/export" download>导出我有权查看的记录与原文件 ${icon('download')}</a><a href="/api/export/markdown" download>导出 Markdown 知识库（第二大脑） ${icon('download')}</a><a href="/api/export/ics" download>导出日历 .ics（纪念日与计划） ${icon('download')}</a>${state.me.user.admin?`<button data-nav="backups">完整备份与存储占用 ${icon('arrow')}</button>`:''}</div><p class="small-note">第二大脑是纯 Markdown 文件夹，可拖进 Obsidian / Logseq，也可直接给 AI 当长期记忆；只含你自己可见的内容，个人心愿只导出标题。私密日记按账号隔离，完整备份由服务器管理员管理。日历文件导进手机自带日历后，纪念日就能用系统提醒，比站内推送更稳。</p></section><section class="card"><h2>${icon('info')} 关于</h2><div class="setting-list"><div style="display:flex;align-items:center;gap:10px;padding:12px 0"><span class="stat-icon" style="font-size:var(--fs-h1)">💕</span><div><h3 style="margin:0;font-size:var(--fs-body)">恋爱空间</h3><p class="meta" style="margin:2px 0 0">${v.version?((state.apkVersion?'APK v'+state.apkVersion+' · ':'')+'网页 v'+v.version+(state.apkLatest&&state.apkVersion&&newerVer(state.apkLatest,state.apkVersion)?' · <span style="color:var(--danger)">可更新到 v'+state.apkLatest+'</span>':'')):'加载中…'}</p></div></div><button data-action="check-update">检查更新 ${icon('arrow')}</button><button data-action="copy-apk-link">复制 App 下载链接 ${icon('arrow')}</button></div><p class="small-note">网页功能自动更新；原生功能（如后台通知）需下载新版 APK，可在检查更新中获取，也可复制下载链接发给对方在手机浏览器打开。</p></section></div>`;
 }
 function personalPage() {
  const tab=state.tab||'diary',tabs=[['diary','私密日记'],['draft','草稿箱'],['surprise','定时惊喜'],['trash','回收站']];
@@ -2941,7 +2987,10 @@ function formatDateCn(v){
  if(!v)return '';
  const d=new Date(v+'T00:00:00');if(isNaN(d))return v;
  const wk=['周日','周一','周二','周三','周四','周五','周六'][d.getDay()],[y,m,day]=v.split('-');
- return `${y}年${Number(m)}月${Number(day)}日 · ${wk}`;
+ /* 当年的日期不写年份：双列表单里半栏只有 180px 左右，
+    「2026年11月4日 · 周三」会被折成两行，把整行撑高、跟右列错位。 */
+ if(Number(y)===new Date().getFullYear())return `${Number(m)}月${Number(day)}日 · ${wk}`;
+ return `${y}年${Number(m)}月${Number(day)}日`;
 }
 function miniCalHtml(month,selected){
  const [y,m]=month.split('-').map(Number);
@@ -3064,7 +3113,7 @@ function composer(kind='post',record=null,prefill={}) {
  const actualKind=record?.kind||kind;
  let commitId=saved.client_id||uuid();
  const persist=()=>{const form=$('#composer-form');if(!form)return;const vals=Object.fromEntries(new FormData(form));localStorage.setItem(key,JSON.stringify({...vals,media:media.map(m=>m.id),mediaObjects:media,client_id:commitId}));};
- openModal(actualKind==='chat'?'分享一个瞬间':record?'继续写我们的故事':kind==='diary'?'给自己的心里话':kind==='surprise'?'藏一份未来的惊喜':'记录此刻的小美好',`<form id="composer-form" class="modal-form">${actualKind!=='chat'?field('给这份回忆一个小标题（可选）','title',data.title||'','text','maxlength="200"'):''}<label>${actualKind==='diary'?'只有你能看见，放心写吧':'这一刻，想说些什么？'}<textarea name="content" maxlength="20000" placeholder="今天的小事，也值得认真收藏…">${esc(data.content||'')}</textarea></label>${actualKind!=='chat'?`<div class="form-row"><div class="pick-field"><span class="pick-label">事情发生的日期</span><button type="button" class="fake-field" id="date-pick-btn"></button><input type="hidden" name="date" value="${esc(data.date||today())}"><div class="fake-panel mini-cal" id="date-pick-box" hidden></div></div><div class="pick-field"><span class="pick-label">收进相册</span><button type="button" class="fake-field" id="album-pick-btn"></button><input type="hidden" name="album" value="${esc(data.album||state.album||'')}"><div class="fake-panel chip-list" id="album-chips" hidden data-placeholder="暂不分类"><button type="button" class="chip${(data.album||state.album||'')===''?' on':''}" data-value="">暂不分类</button>${recordsOf('album').map(a=>`<button type="button" class="chip${(data.album||state.album||'')===a.id?' on':''}" data-value="${esc(a.id)}">${esc(a.body.title)}</button>`).join('')}</div></div></div>`:''}${kind==='surprise'||actualKind==='surprise'?field('给 TA 看见的时间','publish_at',data.publish_at?localDateTime(data.publish_at):'','datetime-local','required'):''}<div class="upload-zone"><div class="upload-main"><label class="upload-tile"><span class="upload-ico">🖼️</span><b>照片 / 视频</b><small>选图或拍摄</small><input type="file" id="composer-files" accept="image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif,video/mp4,video/quicktime,video/webm" multiple></label><label class="upload-tile"><span class="upload-ico">🎵</span><b>语音</b><small>上传已有音频</small><input type="file" id="composer-audio" accept="audio/*"></label><button type="button" class="upload-tile" data-action="record-audio"><span class="upload-ico">🎙️</span><b>录音</b><small>现场说两句</small></button></div><p class="small-note">原文件会被保留 · 最多三十个附件，可调整顺序，也支持把文件拖进来</p></div><div class="upload-preview" id="upload-preview"></div><div class="switch-row"><span id="upload-progress" class="progress"></span></div><div class="form-error" role="alert"></div><p class="small-note">编辑内容自动暂存于当前浏览器。点击保存草稿，可同步到服务器。</p><div class="form-actions">${actualKind!=='chat'&&!record?.id?'<button class="button secondary" type="submit" name="mode" value="draft">保存草稿</button>':''}${draftKind?'<button class="button secondary" type="submit" name="mode" value="draft">继续存草稿</button>':''}<button class="button primary" type="submit" name="mode" value="${draftKind?'post':kind}">${actualKind==='chat'?'发送':kind==='diary'?'保存日记':kind==='surprise'?'藏好这份惊喜':record&&!draftKind?'保存修改':'发布到我们的时光'}</button></div></form>`,{cleanup:()=>{persist();closed=true;if(recording&&recording.state!=='inactive')recording.stop();stream?.getTracks().forEach(t=>t.stop());},sheet:actualKind==='post'||actualKind==='diary'||actualKind==='draft'||actualKind==='surprise'||actualKind==='chat'});
+ openModal(actualKind==='chat'?'分享一个瞬间':record?'继续写我们的故事':kind==='diary'?'给自己的心里话':kind==='surprise'?'藏一份未来的惊喜':'记录此刻的小美好',`<form id="composer-form" class="modal-form">${actualKind!=='chat'?field('给这份回忆一个小标题（可选）','title',data.title||'','text','maxlength="200"'):''}<label>${actualKind==='diary'?'只有你能看见，放心写吧':'这一刻，想说些什么？'}<textarea name="content" maxlength="20000" placeholder="今天的小事，也值得认真收藏…">${esc(data.content||'')}</textarea></label>${actualKind!=='chat'?`<div class="form-row"><div class="pick-field"><span class="pick-label">事情发生的日期</span><button type="button" class="fake-field" id="date-pick-btn"></button><input type="hidden" name="date" value="${esc(data.date||today())}"><div class="fake-panel mini-cal" id="date-pick-box" hidden></div></div><div class="pick-field"><span class="pick-label">收进相册</span><button type="button" class="fake-field" id="album-pick-btn"></button><input type="hidden" name="album" value="${esc(data.album||state.album||'')}"><div class="fake-panel chip-list" id="album-chips" hidden data-placeholder="暂不分类"><button type="button" class="chip${(data.album||state.album||'')===''?' on':''}" data-value="">暂不分类</button>${recordsOf('album').map(a=>`<button type="button" class="chip${(data.album||state.album||'')===a.id?' on':''}" data-value="${esc(a.id)}">${esc(a.body.title)}</button>`).join('')}</div></div></div>`:''}${kind==='surprise'||actualKind==='surprise'?field('给 TA 看见的时间','publish_at',data.publish_at?localDateTime(data.publish_at):'','datetime-local','required'):''}<div class="upload-zone"><div class="upload-main"><label class="upload-tile"><span class="upload-ico">🖼️</span><b>照片 / 视频</b><small>选图或拍摄</small><input type="file" id="composer-files" accept="image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif,video/mp4,video/quicktime,video/webm" multiple></label><label class="upload-tile"><span class="upload-ico">🎵</span><b>语音</b><small>上传已有音频</small><input type="file" id="composer-audio" accept="audio/*"></label><button type="button" class="upload-tile" data-action="record-audio"><span class="upload-ico">🎙️</span><b>录音</b><small>现场说两句</small></button></div><p class="small-note">原文件会被保留 · 最多三十个附件，可调整顺序，也支持把文件拖进来</p></div><div class="upload-preview" id="upload-preview"></div><div class="progress-slot"><span id="upload-progress" class="progress"></span></div><div class="form-error" role="alert"></div><p class="small-note">编辑内容自动暂存于当前浏览器。点击保存草稿，可同步到服务器。</p><div class="form-actions">${actualKind!=='chat'&&!record?.id?'<button class="button secondary" type="submit" name="mode" value="draft">保存草稿</button>':''}${draftKind?'<button class="button secondary" type="submit" name="mode" value="draft">继续存草稿</button>':''}<button class="button primary" type="submit" name="mode" value="${draftKind?'post':kind}">${actualKind==='chat'?'发送':kind==='diary'?'保存日记':kind==='surprise'?'藏好这份惊喜':record&&!draftKind?'保存修改':'发布到我们的时光'}</button></div></form>`,{cleanup:()=>{persist();closed=true;if(recording&&recording.state!=='inactive')recording.stop();stream?.getTracks().forEach(t=>t.stop());},sheet:actualKind==='post'||actualKind==='diary'||actualKind==='draft'||actualKind==='surprise'||actualKind==='chat'});
  const form=$('#composer-form'),progress=$('#upload-progress');
  /* 日期与相册分类：自绘面板，别再用系统 UI */
  wireDatePick(form,$('#date-pick-btn',form),$('[name=date]',form),$('#date-pick-box',form));
@@ -3120,15 +3169,77 @@ function spaceForm() {
  });
 }
 function themeForm() {
- const s=state.me.space,darkPref=localStorage.getItem(DARK_KEY)||'auto';
- simpleForm('主题与外观',`<div class="form-row">${selectField('主题色','theme',[['rose','草莓牛奶'],['peach','蜜桃奶油'],['lavender','香芋云朵'],['custom','自定义']],s.theme)}${selectField('夜间模式','dark',[['auto','跟随系统'],['on','始终开启'],['off','始终关闭']],darkPref)}</div><label>自定义颜色（主题选「自定义」时生效）<input type="color" name="custom_color" value="${s.custom_color||'#c6748a'}"></label><label class="switch-row">启用轻柔动效<input name="motion" type="checkbox" ${s.motion?'checked':''}></label><p class="small-note">夜间模式记在这台设备上，只影响你自己看到的界面；主题色是两个人共用的。</p>`,async(data,form)=>{
-  localStorage.setItem(DARK_KEY,data.dark);applyDarkMode();
-  let custom=data.custom_color||'';
-  if(data.theme!=='custom')custom='';
-  else if(!custom)custom=s.custom_color||'#c6748a';
-  await put('/space',{...s,theme:data.theme,custom_color:custom,motion:$('[name=motion]',form).checked});
-  applyCustomColor(data.theme,custom);
+ const s=state.me.space, root=document.documentElement;
+ const cur=THEME_IDS.includes(s.theme)?s.theme:(s.theme==='custom'?'custom':'rose');
+ const darkPref=localStorage.getItem(DARK_KEY)||'auto', oldDark=darkPref;
+ const fontPref=localStorage.getItem(FONT_KEY)||'std';
+ let pick=cur;
+ const ALL=THEME_IDS.concat(['custom']);
+ /* 选色卡先"就地预览"——主题是整站气质，光看一个小方块选不出来。
+     取消（关弹窗）时由 cleanup 把 class 与内联变量还原，不会留下半套配色。 */
+ const preview=(id)=>{
+  ALL.forEach(x=>root.classList.remove('theme-'+x));
+  root.classList.add('theme-'+id);
+  const color=id==='custom'?($('#theme-color')?.value||s.custom_color||'#9A6B5A'):'';
+  applyCustomColor(id,color);
+  syncMetaThemeColor();
+ };
+ const swatches=ALL.map(id=>{
+  const t=themeMeta(id,s.custom_color);
+  const on=id===cur;
+  return `<button type="button" class="theme-swatch${on?' on':''}" data-theme="${id}" aria-pressed="${on}">
+   <span class="ts-art" style="--sw-a:${t.swatch[0]};--sw-b:${t.swatch[1]};--sw-c:${t.swatch[2]}"><i></i><em></em><b></b></span>
+   <span class="ts-copy"><b>${esc(t.name)}</b><small>${esc(t.desc)}</small></span>
+   <span class="ts-tick" aria-hidden="true">${icon('check')}</span>
+  </button>`;
+ }).join('');
+ openModal('主题与外观',`<form class="modal-form" id="theme-form">
+  <div class="theme-field"><span class="pick-label">主题配色<span class="tf-note">两个人共用</span></span><div class="theme-grid" id="theme-grid">${swatches}</div></div>
+  <label id="theme-color-row" ${pick==='custom'?'':'hidden'}>自定义颜色<input type="color" id="theme-color" name="custom_color" value="${s.custom_color||'#9A6B5A'}"></label>
+  <div class="form-row">
+   ${selectField('夜间模式','dark',[['auto','跟随系统'],['on','始终开启'],['off','始终关闭']],darkPref)}
+   ${selectField('字号','font',[['std','标准'],['large','大一号'],['xl','特大']],fontPref)}
+  </div>
+  <label class="switch-row">启用轻柔动效<input name="motion" type="checkbox" ${s.motion?'checked':''}></label>
+  <p class="small-note">夜间模式与字号只记在这台设备上，只影响你自己看到的界面；主题配色是两个人共用的。选中的配色会立刻套用，取消即还原。</p>
+  <div class="form-error" role="alert"></div>
+  <div class="form-actions">${button('取消','close-modal')}<button class="button primary" type="submit">保存</button></div>
+ </form>`,{cleanup:()=>{ALL.forEach(x=>root.classList.remove('theme-'+x));root.classList.add('theme-'+cur);localStorage.setItem(DARK_KEY,oldDark);applyDarkMode();applyCustomColor(cur,s.custom_color||'');syncMetaThemeColor();}});
+ const grid=$('#theme-grid');
+ grid.onclick=e=>{
+  const b=e.target.closest('[data-theme]');if(!b)return;
+  pick=b.dataset.theme;
+  $$('.theme-swatch',grid).forEach(x=>{const on=x===b;x.classList.toggle('on',on);x.setAttribute('aria-pressed',on);});
+  const row=$('#theme-color-row');if(row)row.hidden=pick!=='custom';
+  preview(pick);
+ };
+ /* 夜间模式也做即时预览（含色卡明暗）：不然选完"始终开启"要等到保存才变色，
+     还以为没生效。取消时 cleanup 会把 DARK_KEY 恢复原值。 */
+ $('#theme-form').addEventListener('change',e=>{
+  if(e.target.name!=='dark')return;
+  localStorage.setItem(DARK_KEY,e.target.value);
+  applyDarkMode();
+  ALL.forEach(id=>{const b=$(`[data-theme="${id}"]`,grid);if(!b)return;const t=themeMeta(id,s.custom_color);
+   b.querySelector('.ts-art').style.cssText=`--sw-a:${t.swatch[0]};--sw-b:${t.swatch[1]};--sw-c:${t.swatch[2]}`;});
+  preview(pick);
  });
+ const colorIn=$('#theme-color');
+ if(colorIn)colorIn.oninput=()=>{if(pick==='custom')preview('custom');};
+ $('#theme-form').onsubmit=async e=>{
+  e.preventDefault();
+  const form=e.currentTarget,btn=$('button[type=submit]',form);
+  btn.disabled=true;
+  try{
+   const data=Object.fromEntries(new FormData(form));
+   localStorage.setItem(DARK_KEY,data.dark);
+   localStorage.setItem(FONT_KEY,data.font||'std');
+   applyDarkMode();applyFontScale();
+   let custom=pick==='custom'?(data.custom_color||s.custom_color||'#9A6B5A'):'';
+   await put('/space',{...s,theme:pick,custom_color:custom,motion:$('[name=motion]',form).checked});
+   closeModal();await refresh();toast('主题换好了，两个人都看得见');
+  }catch(err){$('.form-error',form).textContent=err.message;}
+  finally{btn.disabled=false;}
+ };
 }
 function homeBgForm() {
  const s=state.me.space;
