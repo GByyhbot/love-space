@@ -316,6 +316,24 @@ async def protection(request, call_next):
         # 注意带斜杠：清单接口 /api/bubbles 仍走下面的 no-store，
         # 否则新加的素材包在客户端永远看不见。
         result.headers['Cache-Control'] = 'private, max-age=31536000, immutable'
+    elif request.url.path == '/static/sw.js':
+        # sw.js 是版本入口：它的内容决定去拉哪一版 ?v= 资源，必须每次回源校验。
+        # 带不带 ?v= 都一律 no-cache——否则浏览器可能拿旧 SW 去配新资源，
+        # 出现"外壳换版了但 SW 还按上一版清单缓存"的错位。
+        result.headers['Cache-Control'] = 'no-cache'
+    elif request.url.path.startswith('/static/') and request.query_params.get('v'):
+        # 带 ?v= 的静态资源等于内容寻址：换版必换 v，可以放心一年强缓存，
+        # 二次进入不再为 app.js(400KB)/style.css(230KB) 发条件请求。
+        # 只对带 v 的请求生效——裸地址（没带版本）仍然不做长期缓存，免得发版后卡在旧文件。
+        # 前提由 tests/test_version_consistency.py 保证：index.html 的 ?v= 必须与
+        # sw.js VERSION 同号，漏升会在 CI 里直接挂掉，不会出现"永久钉死旧文件"。
+        if request.url.path.endswith('.apk'):
+            # APK 例外：它的 ?v= 用的是 APK_VERSION（自身版本号），但它是 3.5MB 的
+            # 下载物——万一同版本号重打包，一年 immutable 会把旧包钉死在浏览器/边缘缓存。
+            # 这里只要"变了立刻失效、没变就 304"，不值得为几 MB 冒发错包的风险。
+            result.headers['Cache-Control'] = 'no-cache'
+        else:
+            result.headers['Cache-Control'] = 'public, max-age=31536000, immutable'
     elif request.url.path.startswith(('/api/', '/media/')):
         result.headers['Cache-Control'] = 'no-store'
     elif request.url.path.startswith('/static/stickers/'):
