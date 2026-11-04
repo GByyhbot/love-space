@@ -40,9 +40,58 @@ def test_index_html_matches_sw_version():
 
 
 def test_sw_core_uses_version():
-    """预热清单 CORE 里的 style.css / app.js 也必须带当前版本号。"""
+    """预热清单 CORE 里的 style.css / JS bundle 也必须带当前版本号。"""
     version = sw_version()
     text = SW.read_text(encoding='utf-8')
-    assert f'/static/style.css?v=${{VERSION}}' in text
-    assert f'/static/app.js?v=${{VERSION}}' in text
+    assert '/static/style.css?v=${VERSION}' in text
+    # 自有 bundle 统一由 BUNDLES.map 拼 ?v=，不再逐个硬编码——
+    # 硬编码正是当年 CACHE 到 v67、CORE 还停在 v55 的原因。
+    assert '...BUNDLES.map((p) => `${p}?v=${VERSION}`)' in text, \
+        'CORE 里的 JS 必须由 BUNDLES 拼版本号，别退回逐个写死'
     assert f'v={version - 1}' not in text, 'CORE 里还残留着上一个版本号'
+
+
+# 第三方库不预热：hls.min.js 有 500KB+，只有进「一起看」才用得到，
+# 打进 CORE 会让首装多拉一倍体积。它靠 ?v= 走 HTTP 长缓存。
+THIRD_PARTY = {'/static/hls.min.js'}
+
+
+def index_scripts():
+    """index.html 实际加载的本站 JS。"""
+    html = INDEX.read_text(encoding='utf-8')
+    return re.findall(r'<script src="(/static/[^"?]+\.js)', html)
+
+
+def sw_bundles():
+    text = SW.read_text(encoding='utf-8')
+    m = re.search(r'^const BUNDLES = \[(.*?)\];', text, re.M | re.S)
+    assert m, 'sw.js 里找不到 `const BUNDLES = [...]`'
+    return set(re.findall(r"'(/static/[^']+)'", m.group(1)))
+
+
+def test_every_local_bundle_is_precached():
+    """index.html 加载的每个本站 JS 都必须在 sw.js 的 BUNDLES 里。
+
+    这条是给「拆文件」准备的：以后再把 app.js 拆成几个，只改 index.html
+    而忘了 sw.js，旧 worker 就永远拿不到新文件——表现是某块功能点了没反应，
+    而且刷新也不一定好，因为文件被 network-first 之外的规则从缓存喂了旧版本。
+    """
+    scripts = set(index_scripts())
+    bundles = sw_bundles()
+    missing = sorted(p for p in scripts - THIRD_PARTY if p not in bundles)
+    assert not missing, f'index.html 加载了 {missing}，但 sw.js 的 BUNDLES 里没有'
+    stale = sorted(bundles - scripts)
+    assert not stale, f'sw.js 的 BUNDLES 里有 {stale}，但 index.html 已经不再加载它'
+
+
+def test_watch_js_loads_before_app_js():
+    """watch.js 必须先于 app.js 执行。
+
+    app.js 末尾的 boot() 会调用 watch* 系列函数，而两者是 classic script、
+    共享全局词法作用域——顺序反了就是 ReferenceError，而且报在加载期，
+    整页白屏。defer 保证按文档顺序执行，所以只靠 index.html 的行序。
+    """
+    scripts = index_scripts()
+    assert '/static/watch.js' in scripts and '/static/app.js' in scripts
+    assert scripts.index('/static/watch.js') < scripts.index('/static/app.js'), \
+        'watch.js 必须排在 app.js 之前，否则 boot() 调 watch* 会 ReferenceError'

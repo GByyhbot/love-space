@@ -195,7 +195,30 @@ def run():
                     ok(reuse['total'] == baseline and reuse['same'] == baseline,
                        '刷新后附件节点原地复用', f"{reuse['same']}/{baseline}（当前 {reuse['total']} 个）")
 
-                    # ---- 7. 零运行时错误 ----
+                    # ---- 7. 拆分后跨文件全局可见（app.js ↔ watch.js）----
+                    # watch.js 是独立的 classic script，和 app.js 靠共享的全局词法作用域
+                    # 交换那 77 个 watch* 函数。拆错不会在加载时报错——函数引用是调用时
+                    # 才解析的——只会在用户点进「一起看」时 ReferenceError。所以这里
+                    # 既验函数可达，也真的把页面走一遍。
+                    nav = page.evaluate("""async () => {
+                        try { await navigate('watch'); return 'ok'; }
+                        catch (e) { return 'ERR ' + (e && e.message || e); }
+                    }""")
+                    ok(nav == 'ok', '能进「一起看」页面', nav)
+                    page.wait_for_timeout(800)
+                    globs = page.evaluate("""() => ({
+                        pull: typeof watchPull, pick: typeof watchPick,
+                        back: typeof wsBack, hls: typeof watchMountHls,
+                        sofa: typeof WATCH_SOFA, cfg: typeof WATCH_PICK,
+                        mounted: !!document.querySelector('.watch-page'),
+                    })""")
+                    ok(globs['mounted'], '一起看页面渲染出 .watch-page')
+                    cross = ['pull', 'pick', 'back', 'hls', 'sofa']
+                    ok(all(globs[k] != 'undefined' for k in cross) and globs['cfg'] == 'object',
+                       'watch.js 的全局对 app.js 可见',
+                       f"watchPull={globs['pull']} WATCH_PICK={globs['cfg']} WATCH_SOFA={globs['sofa']}")
+
+                    # ---- 8. 零运行时错误 ----
                     ok(not page_errors, '无 PAGEERROR', ' / '.join(page_errors[:3]))
                     ok(not console_errors, '无 console error', ' / '.join(console_errors[:3]))
 

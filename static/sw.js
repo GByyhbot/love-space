@@ -2,12 +2,16 @@
 /* 版本号必须与 index.html 里 style.css / app.js 的 ?v= 一致：URL 带版本参数可强制绕过一切旧缓存。
    写成常量再拼进 URL，是为了让 CORE 不可能再和 CACHE 脱钩——以前两处手写版本号，
    CACHE 已经到 v67 而 CORE 还停在 v55，预热进缓存的旧 CSS 会一直被命中。 */
-const VERSION = 218;
+const VERSION = 219;
 const CACHE = `love-space-v${VERSION}`;
 /* 首页封面单独一个命名空间：跨版本保留（内容由 URL 里的媒体 id 唯一决定），
    换封面时由下面 fetch 分支整桶顶替，所以永远不会攒下多张。 */
 const COVER_CACHE = 'love-space-cover-v1';
-const CORE = [`/static/style.css?v=${VERSION}`, `/static/app.js?v=${VERSION}`, '/static/icon.svg', '/static/icon-192.png', '/static/icon-512.png', '/static/apple-touch-icon.png', '/static/garden.svg', '/manifest.webmanifest', '/'];
+/* 自有的前端 bundle。加文件时两处都要动：CORE 预热 + 下面的 network-first 判定，
+   漏了 CORE 是旧 worker 拿不到新文件，漏了 network-first 是拿到上一版。
+   index.html 的 <script> 与这里由 tests/test_version_consistency.py 钉住。 */
+const BUNDLES = ['/static/app.js', '/static/watch.js'];
+const CORE = [`/static/style.css?v=${VERSION}`, ...BUNDLES.map((p) => `${p}?v=${VERSION}`), '/static/icon.svg', '/static/icon-192.png', '/static/icon-512.png', '/static/apple-touch-icon.png', '/static/garden.svg', '/manifest.webmanifest', '/'];
 
 self.addEventListener('install', (event) => {
   /* cache:'reload' 强制从网络拉取，防止 install 时读进 HTTP 层的旧响应。 */
@@ -85,7 +89,7 @@ self.addEventListener('fetch', (event) => {
 
   // The shell and main bundle must check the server first. A newly installed
   // worker can otherwise copy an older response from the previous worker's cache.
-  if (url.origin === self.location.origin && (req.mode === 'navigate' || url.pathname === '/static/app.js')) {
+  if (url.origin === self.location.origin && (req.mode === 'navigate' || BUNDLES.indexOf(url.pathname) !== -1)) {
     const isShell = url.pathname === '/' || url.pathname === '/index.html';
     // 子页面导航（iframe 里的 /pose-gallery/poses 等）不走缓存、也不写缓存：
     // 以前这里对**所有**导航都用 '/' 当 cache key，于是进过一次图库，首页的缓存条目
