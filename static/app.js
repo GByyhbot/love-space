@@ -4874,29 +4874,45 @@ function connectNtfy(){const topic=state.me?.ntfy_topic;
 /* 服务端事件合并：SSE 每 5s 一条心跳、ntfy 与 SSE 又是两条独立通道，
    点赞+评论+通知常常在同一瞬间到达。不做合并会把一轮变化放大成三四次
    「拉 4 个全量接口 + 整页 innerHTML 替换」，滚动位置和视频贴纸全被冲掉。 */
-let lastRev=null,eventTimer=null,pendingRev='',pendingFlags={refresh:false,watch:false};
+let lastRev=null,eventTimer=null,pendingRev='',pendingFlags={refresh:false,watch:false,chat:false,other:false};
 /* flags.refresh —— 整站数据变了，要重拉记录/聊天/照片；
-   flags.watch —— 一起看状态变了，只需要拉一次 /api/watch。
-   没有 revision 信息的通道（ntfy）不传 flags，按"强制刷新"处理。 */
+   flags.watch —— 一起看状态变了，只需要拉一次 /api/watch；
+   flags.chat / flags.other —— 变化落在哪一类，决定要不要走"只重拉聊天"的快速路径。
+   没有 revision 信息的通道（ntfy）不传 flags，按"强制整站刷新"处理。 */
 function scheduleServerEvent(rev,flags){
  pendingRev=(typeof rev==='string')?rev:'';  // ntfy 那条通道不带 revision，留空即强制刷新
- if(flags){pendingFlags.refresh=pendingFlags.refresh||!!flags.refresh;
-           pendingFlags.watch=pendingFlags.watch||!!flags.watch;}
- else pendingFlags.refresh=true;
+ if(flags){/* 逐项或：短窗口里排队的多条事件合并成一条。
+              other 用或方向是对的——只要有一条说"别的也变了"，就必须整站刷新，
+              宁可多拉一次也不能漏掉纪念日/相册的改动。 */
+           pendingFlags.refresh=pendingFlags.refresh||!!flags.refresh;
+           pendingFlags.watch=pendingFlags.watch||!!flags.watch;
+           pendingFlags.chat=pendingFlags.chat||!!flags.chat;
+           pendingFlags.other=pendingFlags.other||!!flags.other;}
+ else pendingFlags.refresh=pendingFlags.chat=pendingFlags.other=true;
  clearTimeout(eventTimer);
  eventTimer=setTimeout(async()=>{
   const rev=pendingRev;pendingRev='';
-  const flags=pendingFlags;pendingFlags={refresh:false,watch:false};
+  const flags=pendingFlags;pendingFlags={refresh:false,watch:false,chat:false,other:false};
   if(rev&&rev===lastRev&&!flags.watch)return;  // 数据没变，这一轮可以直接跳过
   // 无论 handleServerEvent 成功与否都要记下 rev：以前写在 try 里，一旦 refreshData 抛错
   // lastRev 就永远停在旧值，于是每次心跳都被当成"数据变了"，整页 5 秒重绘一次。
   try{await handleServerEvent(flags);}catch{}finally{if(rev)lastRev=rev;}
  },500);
 }
+/* 只有聊天变了时的快速刷新：只拉聊天窗口 + 通知。
+   对方每发一条消息都会触发一轮刷新，而聊天占全部记录的 88%。走整站刷新的话，
+   每句话都要搬 1000 条非聊天记录 + 整本相册 + /me；这里压成两个小请求。
+   其它类型（纪念日、账本、相册、空间设置）一个字节都不用重拉。 */
+async function refreshChatOnly(){
+ const [chats,notices]=await Promise.all([api('/records?kind=chat&limit=200'),api('/notices')]);
+ state.records=[...state.records.filter(r=>r.kind!=='chat'),...chats];
+ state.notices=notices;
+ syncNativePush();
+}
 async function handleServerEvent(flags){
  if(!state.me)return;
  if(refreshing){state.pendingRefresh=true;return;}
- flags=flags||{refresh:true,watch:true};
+ flags=flags||{refresh:true,watch:true,chat:true,other:true};
  try{
   /* 一起看状态变了：只拉一次 /api/watch。对方拖了进度条、切了片，我这边立刻跟上，
      但记录、聊天、照片一个都不用重拉 —— 这是"事件触发式同步"省下来的大头。 */
@@ -4904,7 +4920,10 @@ async function handleServerEvent(flags){
   if(!flags.refresh)return;   // 只有一起看变了：整站数据没动，不必重拉也不必重绘
   const oldNotice=state.notices[0]?.id||null;
   const focused=document.activeElement,canRender=!$('.modal')&&!$('.more-menu[open]')&&!['INPUT','TEXTAREA','SELECT'].includes(focused?.tagName);
-  await refresh(false);
+  /* 变化只落在聊天上才走快速路径；只要"其它"也变了（哪怕同时还有聊天），
+     一律退回整站刷新——宁可多拉一次，也不能漏掉纪念日/相册的改动。 */
+  const chatOnly=flags.chat&&flags.other===false;
+  if(chatOnly)await refreshChatOnly();else await refresh(false);
   if(state.page==='messages'&&$('#chat-log')){const log=$('#chat-log'),atBottom=log.scrollHeight-log.scrollTop-log.clientHeight<100;paintChat(log);if(atBottom)scrollChat();state.me.chat_unread=0;post('/notices/read?event=chat').catch(()=>{});}
   else if(state.page==='watch'&&$('#watch-log')){const log=$('#watch-log'),atBottom=log.scrollHeight-log.scrollTop-log.clientHeight<80;paintChat(log,true);if(atBottom)watchScroll();state.me.chat_unread=0;post('/notices/read?event=chat').catch(()=>{});}
   else if(canRender)renderShell();
@@ -4912,7 +4931,7 @@ async function handleServerEvent(flags){
  }catch{}
 }
 let sseRetry=0;
-function connectEvents(){clearTimeout(state.sseTimer);state.stream?.close();const es=new EventSource('/api/events');state.stream=es;es.onopen=()=>{sseRetry=0;};es.onmessage=e=>{let rev='',flags={refresh:true,watch:false};try{const d=JSON.parse(e.data||'{}');rev=d.rev||'';/* 老服务端没有 refresh 字段，等于"整站都变了"，按兼容处理 */flags={refresh:d.refresh===undefined?true:!!d.refresh,watch:!!d.watch};}catch{}scheduleServerEvent(rev,flags);};/* 断线兜底：浏览器只自动重连“可恢复”断线（readyState=CONNECTING）；致命断流（401/代理掐断）进 CLOSED 后永不自愈 → 指数退避手动重建，1s 起步、30s 封顶，连上即清零 */
+function connectEvents(){clearTimeout(state.sseTimer);state.stream?.close();const es=new EventSource('/api/events');state.stream=es;es.onopen=()=>{sseRetry=0;};es.onmessage=e=>{let rev='',flags={refresh:true,watch:false,chat:true,other:true};try{const d=JSON.parse(e.data||'{}');rev=d.rev||'';/* 老服务端没有这些字段，等于"整站都变了"，按兼容处理 */flags={refresh:d.refresh===undefined?true:!!d.refresh,watch:!!d.watch,chat:d.chat===undefined?true:!!d.chat,other:d.other===undefined?true:!!d.other};}catch{}scheduleServerEvent(rev,flags);};/* 断线兜底：浏览器只自动重连“可恢复”断线（readyState=CONNECTING）；致命断流（401/代理掐断）进 CLOSED 后永不自愈 → 指数退避手动重建，1s 起步、30s 封顶，连上即清零 */
 es.onerror=()=>{if(es.readyState!==EventSource.CLOSED)return;state.stream=null;clearTimeout(state.sseTimer);sseRetry=sseRetry?Math.min(sseRetry*2,30):1;state.sseTimer=setTimeout(()=>{if(state.me)connectEvents();},sseRetry*1000);};}
 /* 回前台：SSE 可能已被系统挂死（尤其安卓 WebView 后台冻结）→ 死流重建 + 立即补刷一轮，兜住后台错过的消息 */
 document.addEventListener('visibilitychange',()=>{if(document.hidden||!state.me)return;syncNativePush();if(!state.stream||state.stream.readyState===EventSource.CLOSED)connectEvents();if(!ntfyWs||ntfyWs.readyState!==WebSocket.OPEN)connectNtfy();handleServerEvent();});

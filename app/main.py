@@ -2268,9 +2268,12 @@ def delete_read_notices(user=Depends(current_user)):
 def _sse_probe(token: str, user_id: str, check_session: bool):
     """SSE 心跳探针：同步 sqlite 查询，必须放到线程里执行。
 
-    返回 (revision, private_revision, unread, watch_revision)；会话失效返回 None。
+    返回 (revision, private_revision, unread, watch_revision, chat_revision,
+    other_revision)；会话失效返回 None。
     watch_revision 是「一起看状态」的独立计数器：它变了只意味着对方改了播放状态，
     客户端据此只拉一次 /api/watch，不必把整站数据重拉一遍。
+    chat_revision / other_revision 是「刷新的颗粒度」：聊天变了只重拉聊天窗口，
+    别为了一句话把 1000 条非聊天记录和整本相册都搬一遍。
     """
     with connect() as c:
         # session 校验不必每轮都做：这个流只推"该刷新了"，不含任何数据，
@@ -2278,29 +2281,50 @@ def _sse_probe(token: str, user_id: str, check_session: bool):
         if check_session and not c.execute(
                 'SELECT 1 FROM sessions WHERE token=? AND expires>?', (token, now())).fetchone():
             return None
-        # 一次查询拿四样东西。revision 由触发器维护，是 O(1)，
+        # 一次查询拿六样东西。revision 由触发器维护，是 O(1)，
         # 与库里有多少年的记录无关。
         row = c.execute(
             "SELECT (SELECT value FROM app_state WHERE key='content_revision'),"
             "       (SELECT value FROM user_revisions WHERE user_id=:u),"
             "       (SELECT count(*) FROM notices WHERE user_id=:u AND seen=0),"
-            "       (SELECT value FROM app_state WHERE key='watch_revision')",
+            "       (SELECT value FROM app_state WHERE key='watch_revision'),"
+            "       (SELECT value FROM app_state WHERE key='chat_revision'),"
+            "       (SELECT value FROM app_state WHERE key='other_revision')",
             {'u': user_id}).fetchone()
-        return (row[0], row[1] or 0, row[2], row[3] or 0)
+        return (row[0], row[1] or 0, row[2], row[3] or 0, row[4] or 0, row[5] or 0)
 
 
-def _sse_payload(revision, private_revision, unread, watch_revision, previous):
+def _sse_payload(revision, private_revision, unread, watch_revision, previous,
+                 chat_revision=0, other_revision=0):
     """这一轮 SSE 该推什么。
 
     refresh —— 整站数据变了（记录/聊天/照片），客户端要重拉一遍；
-    watch —— 一起看状态变了，客户端只要拉一次 /api/watch。
-    以前这两种变化混在一起推：对方动一下播放状态，我这边就得把整站数据重拉一遍。
+    watch —— 一起看状态变了，客户端只要拉一次 /api/watch；
+    chat / other —— 变化具体落在哪一类：
+      chat=True 且 other=False 时，客户端只重拉聊天窗口就行（对方发了条消息的场景，
+      占全部刷新的绝大多数）；其它组合一律退回整站刷新，宁可多拉不许漏。
+    以前这些变化混在一起推：对方动一下播放状态，我这边就得把整站数据重拉一遍。
     """
-    prev_rev, prev_priv, prev_unread, prev_watch = previous.split(':')
-    changed = (revision != int(prev_rev)) or (private_revision != int(prev_priv)) \
-        or (unread != int(prev_unread))
-    changed_watch = watch_revision != int(prev_watch)
-    return {'refresh': changed, 'watch': changed_watch, 'unread': unread}
+    parts = (previous or '').split(':')
+
+    def prev(index):
+        try:
+            return int(parts[index])
+        except (IndexError, ValueError):
+            return -1
+
+    changed = (revision != prev(0)) or (private_revision != prev(1)) \
+        or (unread != prev(2))
+    changed_watch = watch_revision != prev(3)
+    if len(parts) < 6:
+        # 签名只有四段（升级瞬间的旧连接）：拿不到分类计数就当作两类都变了，
+        # 让客户端走整站刷新——兼容优先，不能因为缺字段就把变化漏过去。
+        chat = other = True
+    else:
+        chat = chat_revision != prev(4)
+        other = other_revision != prev(5)
+    return {'refresh': changed, 'watch': changed_watch, 'unread': unread,
+            'chat': chat, 'other': other}
 
 
 @app.get('/api/events')
@@ -2320,8 +2344,9 @@ async def events(request: Request, user=Depends(current_user)):
             probe = await asyncio.to_thread(_sse_probe, token, user['id'], rounds % 10 == 0)
             if probe is None:
                 break
-            revision, private_revision, unread, watch_revision = probe
-            signature = f'{revision}:{private_revision}:{unread}:{watch_revision}'
+            revision, private_revision, unread, watch_revision, chat_revision, other_revision = probe
+            signature = (f'{revision}:{private_revision}:{unread}:{watch_revision}'
+                         f':{chat_revision}:{other_revision}')
             if previous is None:
                 # 首轮只建立基线，不推 data：EventSource 断线重连很常见（代理空闲超时、
                 # 切前后台），每建一次连接就推一条，客户端会当成「数据变了」整页重绘，
@@ -2332,7 +2357,8 @@ async def events(request: Request, user=Depends(current_user)):
             elif signature != previous:
                 # 把「整站数据变了」和「一起看状态变了」分开报：
                 # 前者让客户端重拉记录/聊天/照片，后者只让对方拉一次 /api/watch。
-                payload = _sse_payload(revision, private_revision, unread, watch_revision, previous)
+                payload = _sse_payload(revision, private_revision, unread, watch_revision,
+                                       previous, chat_revision, other_revision)
                 payload['rev'] = signature
                 yield 'data: ' + dumps(payload) + '\n\n'
                 previous = signature

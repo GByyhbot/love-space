@@ -140,6 +140,13 @@ def init():
         # 一起看状态单独一个计数器：变了只让另一半拉一次 /api/watch，
         # 不必把记录/聊天/照片整站重拉一遍（content_revision 是"整站数据变了"）。
         c.execute("INSERT OR IGNORE INTO app_state(key,value) VALUES ('watch_revision',0)")
+        # 刷新的颗粒度：内容变了不等于"整站都变了"。
+        # chat_revision 只统计 kind='chat'，other_revision 统计聊天以外的共享记录。
+        # 对方每发一条消息都要触发一轮刷新，而聊天占全部记录的 88%——不分开的话，
+        # 每来一句话客户端都要重拉 1000 条非聊天记录 + 整本相册。
+        # content_revision 的语义保持不变（仍然涵盖一切），老客户端继续按整站刷新。
+        c.execute("INSERT OR IGNORE INTO app_state(key,value) VALUES ('chat_revision',0)")
+        c.execute("INSERT OR IGNORE INTO app_state(key,value) VALUES ('other_revision',0)")
         # Additive columns must exist before triggers reference them.
         if 'media_id' not in {r[1] for r in c.execute('PRAGMA table_info(import_messages)')}:
             c.execute("ALTER TABLE import_messages ADD COLUMN media_id TEXT NOT NULL DEFAULT ''")
@@ -180,6 +187,28 @@ def init():
           WHEN OLD.kind IN ('diary','draft','surprise')
           BEGIN INSERT INTO user_revisions(user_id,value) VALUES (OLD.author,1)
             ON CONFLICT(user_id) DO UPDATE SET value=value+1; END;
+        -- 颗粒度拆分：聊天单独计数。这几条只加在 records 上（聊天就是 records 的一种），
+        -- 每次写入只多一次 O(1) 的 app_state 自增，代价可以忽略。
+        -- 私密类型（diary/draft/surprise）不算 other：它们走 user_revisions，对另一半不可见。
+        CREATE TRIGGER IF NOT EXISTS revision_records_chat_insert AFTER INSERT ON records
+          WHEN NEW.kind='chat'
+          BEGIN UPDATE app_state SET value=value+1 WHERE key='chat_revision'; END;
+        CREATE TRIGGER IF NOT EXISTS revision_records_chat_update AFTER UPDATE ON records
+          WHEN NEW.kind='chat' OR OLD.kind='chat'
+          BEGIN UPDATE app_state SET value=value+1 WHERE key='chat_revision'; END;
+        CREATE TRIGGER IF NOT EXISTS revision_records_chat_delete AFTER DELETE ON records
+          WHEN OLD.kind='chat'
+          BEGIN UPDATE app_state SET value=value+1 WHERE key='chat_revision'; END;
+        CREATE TRIGGER IF NOT EXISTS revision_records_other_insert AFTER INSERT ON records
+          WHEN NEW.kind NOT IN ('chat','diary','draft','surprise')
+          BEGIN UPDATE app_state SET value=value+1 WHERE key='other_revision'; END;
+        CREATE TRIGGER IF NOT EXISTS revision_records_other_update AFTER UPDATE ON records
+          WHEN (NEW.kind NOT IN ('chat','diary','draft','surprise'))
+            OR (OLD.kind NOT IN ('chat','diary','draft','surprise'))
+          BEGIN UPDATE app_state SET value=value+1 WHERE key='other_revision'; END;
+        CREATE TRIGGER IF NOT EXISTS revision_records_other_delete AFTER DELETE ON records
+          WHEN OLD.kind NOT IN ('chat','diary','draft','surprise')
+          BEGIN UPDATE app_state SET value=value+1 WHERE key='other_revision'; END;
         CREATE TRIGGER IF NOT EXISTS revision_media_insert_private AFTER INSERT ON media
           BEGIN INSERT INTO user_revisions(user_id,value) VALUES (NEW.owner,1)
             ON CONFLICT(user_id) DO UPDATE SET value=value+1; END;
