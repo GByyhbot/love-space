@@ -20,3 +20,45 @@ jobs:
         run: python -m py_compile app/*.py
       - name: 运行测试
         run: python -m pytest -q
+
+  # 后端有 pytest 兜着，前端此前是零覆盖：app.js 里 40 万字符的任何一次改动，
+  # 只有人点开页面才知道有没有炸。这个 job 只覆盖最贵的那几条路径
+  # （见 tests/e2e/smoke.py 顶部），跑一次约 40 秒。
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+      - name: 安装 Python 依赖
+        run: pip install -r requirements-dev.txt
+      - name: 缓存 Playwright 浏览器
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: pw-${{ runner.os }}-${{ hashFiles('requirements-dev.txt') }}
+      - name: 安装 chromium
+        run: python -m playwright install --with-deps chromium
+      - name: 前端冒烟
+        # 服务和脚本必须放在同一个 step 里：跨 step 的后台进程不可靠，
+        # 用 trap 保证脚本跑完（或挂掉）后一定把 uvicorn 收掉。
+        run: |
+          export DATA_DIR="$(mktemp -d)"
+          export RUN_WORKER=false
+          python -m uvicorn app.main:app --host 127.0.0.1 --port 8321 --log-level warning &
+          SERVER=$!
+          trap "kill $SERVER 2>/dev/null || true" EXIT
+          for i in $(seq 1 60); do
+            curl -sf http://127.0.0.1:8321/api/status >/dev/null && break
+            sleep 1
+          done
+          python tests/e2e/smoke.py
+      - name: 失败时留下现场
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-failure
+          path: test-results/
+          if-no-files-found: ignore
