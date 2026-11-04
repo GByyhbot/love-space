@@ -887,12 +887,19 @@ function chatSkin(){
  return typeof v==='string'?v:'';
 }
 function chatSkinFg(){return (state.me?.space?.chat_bubble_fg||'dark')==='light'?'light':'dark';}
+/* 皮肤素材是网上收的整图，"装饰/尾巴"画在左边还是右边看作作者，三个包也不统一。
+   所以给一个左右互换开关；库里没这个键的老空间按"对调"起步——
+   素材多数画成了右侧样式，原图给"我"那侧才顺眼。 */
+function chatSkinSwap(){return state.me?.space?.chat_bubble_swap!==false;}
 function chatSkinAttrs(){
  const skin=chatSkin();
  if(!skin)return {cls:'',style:''};
  const mirror=skin.replace(/\.png$/,'-r.png');
+ /* CSS 里 --skin 是左侧（对方）、--skin-r 是右侧（我）。
+     互换时把两张图对调即可，不用另生成素材。 */
+ const swap=chatSkinSwap(), left=swap?mirror:skin, right=swap?skin:mirror;
  return {cls:' skin-on'+(chatSkinFg()==='light'?' skin-light':''),
-         style:` style="--skin:url('/api/bubbles/${esc(skin)}');--skin-r:url('/api/bubbles/${esc(mirror)}')"`};
+         style:` style="--skin:url('/api/bubbles/${esc(left)}');--skin-r:url('/api/bubbles/${esc(right)}')"`};
 }
 
 function messagesPage() {
@@ -1298,11 +1305,11 @@ async function sendAlbumPick(){
    内容拉伸，所以这里只管"挑哪一张"。两件事特意没做成即点即生效：
    ① 图底深浅差得远，深字压在紫气泡上根本看不见，得让人配着预览选字色；
    ② 一组的图有一千多张，全塞进 DOM 会卡，所以滚到底再画下一批。 */
-let bpGroups=[],bpPack='',bpPick='',bpFg='dark',bpShown=0;
+let bpGroups=[],bpPack='',bpPick='',bpFg='dark',bpSwap=true,bpShown=0;
 const BP_PAGE=90;
 async function bubblePicker(){
  focusReturn=document.activeElement;
- bpPick=chatSkin();bpFg=chatSkinFg();bpShown=0;bpGroups=[];
+ bpPick=chatSkin();bpFg=chatSkinFg();bpSwap=chatSkinSwap();bpShown=0;bpGroups=[];
  const cur=bpPick?bpPick.split('/')[0]:'';
  $('#modal-root').innerHTML=`<div class="pick-overlay" id="bp-overlay"><section class="pick-sheet bp-sheet" role="dialog" aria-modal="true" aria-labelledby="bp-title">
   <header class="ps-head"><div><b id="bp-title">聊天气泡</b><small id="bp-count">正在读素材…</small></div><button type="button" class="icon-btn" data-action="close-modal" aria-label="关闭">${icon('close')}</button></header>
@@ -1311,6 +1318,7 @@ async function bubblePicker(){
   <div class="bp-grid" id="bp-grid"><p class="meta">正在加载…</p></div>
   <div class="ps-foot">
    <div class="bp-fg"><span>字色</span><button type="button" data-fg="dark">深色字</button><button type="button" data-fg="light">浅色字</button><i>气泡图有深有浅，按这张图选</i></div>
+   <label class="bp-swap"><input type="checkbox" id="bp-swap"${bpSwap?' checked':''}><span>左右互换</span><i>气泡的装饰朝哪边，看着别扭就勾一下</i></label>
    <div class="ps-row"><button type="button" class="button soft" id="bp-none">不用皮肤</button><button type="button" class="button primary" id="bp-apply">使用这个</button></div>
   </div>
  </section></div>`;
@@ -1325,6 +1333,7 @@ async function bubblePicker(){
   if(fg){bpFg=fg.dataset.fg;syncBubblePick();}
  };
  $('#bp-none').onclick=()=>{bpPick='';syncBubblePick();};
+ $('#bp-swap').onchange=e=>{bpSwap=e.target.checked;syncBubblePick();};
  $('#bp-apply').onclick=applyBubblePick;
  let data={groups:[]};
  try{data=await api('/bubbles');}catch(e){toast(e.message||'气泡素材读不出来');}
@@ -1375,7 +1384,10 @@ function syncBubblePick(){
  const pv=$('#bp-preview');
  if(pv){
   const on=!!bpPick,cls=(on?' skinned':'')+(bpFg==='light'?' light':'');
-  const style=on?` style="--skin:url('/api/bubbles/${esc(bpPick)}');--skin-r:url('/api/bubbles/${esc(bpPick.replace(/\.png$/,'-r.png'))}')"`:'';
+  /* 预览必须跟聊天页用同一套左右规则，否则"预览看着对、进去反了" */
+  const mirror=on?bpPick.replace(/\.png$/,'-r.png'):'';
+  const left=bpSwap?mirror:bpPick, right=bpSwap?bpPick:mirror;
+  const style=on?` style="--skin:url('/api/bubbles/${esc(left)}');--skin-r:url('/api/bubbles/${esc(right)}')"`:'';
   pv.innerHTML=`<div class="bp-preview-row"><div class="bp-bubble${cls}"${style}>今天下班去买菜，回来给你做番茄牛腩，路上有点堵</div></div>`
    +`<div class="bp-preview-row mine"><div class="bp-bubble mine${cls}"${style}>好呀，路上慢点</div></div>`;
  }
@@ -1387,7 +1399,7 @@ async function applyBubblePick(){
  const s=state.me.space||{},btn=$('#bp-apply');
  if(btn)btn.disabled=true;
  try{
-  await put('/space',{...s,chat_bubble:bpPick||'',chat_bubble_fg:bpFg});
+  await put('/space',{...s,chat_bubble:bpPick||'',chat_bubble_fg:bpFg,chat_bubble_swap:bpSwap});
   await refresh();closeModal();
   toast(bpPick?'气泡换好了，两个人都看得见':'已换回默认气泡');
  }catch(e){toast(e.message||'保存失败');}

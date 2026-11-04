@@ -147,3 +147,29 @@ def test_no_skin_dir_is_empty_not_error(client_a):
                 f.unlink()
             p.rmdir()
     assert client_a.get('/api/bubbles', headers=HEADERS).json()['groups'] == []
+
+
+def test_swap_defaults_to_on(client_a):
+    """左右互换：库里还没这个键时按"对调"起步。
+
+    素材是网上收的整图，装饰画在左边还是右边全看作者（三个包并不统一），
+    没法靠一张图自动判断，所以默认对调——大多数人下载到的都是右侧样式的气泡。
+    """
+    assert space_of(client_a).get('chat_bubble_swap') is not False
+
+
+def test_swap_roundtrip(client_a):
+    assert save_space(client_a, chat_bubble='p1/1000.png', chat_bubble_swap=False).status_code == 200
+    assert space_of(client_a)['chat_bubble_swap'] is False
+    assert save_space(client_a, chat_bubble_swap=True).status_code == 200
+    assert space_of(client_a)['chat_bubble_swap'] is True
+
+
+def test_old_client_keeps_swap(client_a):
+    """旧版 APK 保存空间设置时不带这个字段，不能把对方调好的方向重置掉。"""
+    save_space(client_a, chat_bubble_swap=False)
+    space = space_of(client_a)
+    space.pop('chat_bubble_swap', None)      # 模拟旧客户端：整个字段都不带
+    r = client_a.put('/api/space', headers=HEADERS, json=space)
+    assert r.status_code == 200, r.text
+    assert space_of(client_a)['chat_bubble_swap'] is False

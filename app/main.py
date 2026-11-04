@@ -777,6 +777,10 @@ class Space(BaseModel):
     chat_bubble: str | None = Field(default=None, max_length=80)
     # 皮肤上的字色：气泡图的底色深浅不一，白字/深字只能由人选一次。
     chat_bubble_fg: str | None = Field(default=None, max_length=8)
+    # 气泡皮肤的左右镜像要不要对调。素材是网上收的整图，"装饰/尾巴"画在左边还是
+    # 右边全看作者，而且三个包并不统一（p1 多朝右、p2 多朝左），没法靠一张图判断。
+    # 于是留一个开关：默认对调（原图给"我"那侧），不合适一键换回来。
+    chat_bubble_swap: bool | None = None
 
 
 # 内置壁纸预设（前端 CSS 里同名实现）；'photo' 表示用自己上传的照片，'' 表示默认无壁纸
@@ -865,6 +869,10 @@ def space(body: Space, user=Depends(current_user)):
             data['chat_bubble'] = old.get('chat_bubble') or ''
         if data.get('chat_bubble_fg') is None:
             data['chat_bubble_fg'] = old.get('chat_bubble_fg') or 'dark'
+        # 左右互换：库里还没有这个键的老空间按"对调"起步（素材多数画成了右侧样式，
+        # 原图给"我"才顺眼），用户自己点过开关就以库里的为准
+        if data.get('chat_bubble_swap') is None:
+            data['chat_bubble_swap'] = bool(old.get('chat_bubble_swap', True))
         # 旧客户端保存空间设置时不会带 cover_pos，此时保留主人已经调好的构图
         data['cover_pos'] = clean_cover_pos(
             body.cover_pos if body.cover_pos is not None else old.get('cover_pos'))

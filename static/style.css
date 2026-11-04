@@ -2422,6 +2422,10 @@ body.kb-open .pick-overlay{padding-bottom:0}
 .bp-fg button{height:28px;padding:0 12px;border-radius:999px;border:1px solid var(--line-strong);background:var(--surface);color:var(--ink-2);font:inherit;font-size:var(--fs-sm);font-weight:600;line-height:1;cursor:pointer;transition:background var(--speed),border-color var(--speed)}
 .bp-fg button.on{background:var(--primary);border-color:var(--primary);color:var(--on-primary)}
 .bp-fg i{font-style:normal;font-size:var(--fs-xs);color:var(--muted);margin-left:2px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* 左右互换：素材朝向不统一，给个一键对调的勾选框，跟字色同一行的节奏 */
+.bp-swap{display:flex;align-items:center;gap:7px;padding:0 2px 8px;font-size:var(--fs-sm);color:var(--ink-2);cursor:pointer}
+.bp-swap input{width:18px;height:18px;flex:none;margin:0;accent-color:var(--primary);cursor:pointer}
+.bp-swap i{font-style:normal;font-size:var(--fs-xs);color:var(--muted);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
 /* ── 聊天气泡皮肤：真正贴在消息上的那套规则 ────────────────────────
    素材是 128×112 的整图：四角画了装饰，只有中间是平的，所以不能整图缩放
