@@ -350,7 +350,13 @@ label{display:grid;gap:6px;font-size:var(--fs-md);color:var(--muted);font-weight
   font-size:var(--fs-lg);color:var(--ink);padding:12px 14px;border:1px solid var(--line);
   border-radius:var(--radius-s);background:var(--soft);cursor:pointer}
 .switch-row span{display:grid;gap:3px;min-width:0}
-.switch-row input[type=checkbox]{width:22px;height:22px;flex:none;margin:0;accent-color:var(--primary);cursor:pointer}
+/* 真正的开关（iOS 风格）：关=描边灰、开=主色实心，白点滑动。老 WebView 不认
+   appearance:none 时仍会回落到默认勾选框，不影响可用性。 */
+.switch-row input[type=checkbox]{appearance:none;-webkit-appearance:none;position:relative;width:44px;height:26px;flex:none;margin:0;border-radius:var(--radius-pill);background:var(--line-strong);cursor:pointer;transition:background var(--speed);}
+.switch-row input[type=checkbox]::before{content:'';position:absolute;left:3px;top:3px;width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.18);transition:transform var(--speed);}
+.switch-row input[type=checkbox]:checked{background:var(--primary);border-color:var(--primary)}
+.switch-row input[type=checkbox]:checked::before{transform:translateX(18px)}
+.switch-row input[type=checkbox]:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
 .switch-row input[type=checkbox]:disabled{cursor:not-allowed;opacity:.6}
 .answer-box{padding:13px 15px;background:var(--soft);border-radius:var(--radius-s);
   font-size:var(--fs-lg);line-height:var(--lh-base);margin-top:10px;white-space:pre-wrap;overflow-wrap:anywhere}

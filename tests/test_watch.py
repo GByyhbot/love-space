@@ -204,6 +204,27 @@ def test_watch_invite_strips_extra_fields(client_a):
     assert r.json()['body']['watch_invite'] == {'v': 1}
 
 
+def test_watch_invite_idempotent_by_client_id(client_a):
+    """重复点「一起看 / 重新发起」不能刷屏：同一作者同一 client_id 只留一条。
+
+    这是修复「消息重复发送」的关键服务端保障——前端每次误触都会用同一个
+    确定性 client_id，后端命中 author+client_id 直接返回已存在记录，不再插入。"""
+    cid = 'watch-invite-fixed-' + db.uid()
+    body = {'content': '邀请你一起看视频', 'watch_invite': {'v': 1}}
+    r1 = client_a.post('/api/records', headers=HEADERS,
+                       json={'kind': 'chat', 'body': body, 'client_id': cid})
+    r2 = client_a.post('/api/records', headers=HEADERS,
+                       json={'kind': 'chat', 'body': body, 'client_id': cid})
+    assert r1.status_code == 200, r1.text
+    assert r2.status_code == 200, r2.text
+    # 第二次提交返回的是同一条记录，而不是新插一条
+    assert r1.json()['id'] == r2.json()['id']
+    # 数据库里 chat 记录只多了一条
+    with connect() as c:
+        n = c.execute("SELECT count(*) FROM records WHERE client_id=?", (cid,)).fetchone()[0]
+    assert n == 1
+
+
 def test_watch_invite_rejects_bad_payload(client_a):
     for bad in ({'v': 2}, '一起看', None, [1], 1):
         r = post_chat(client_a, {'content': 'x', 'watch_invite': bad})

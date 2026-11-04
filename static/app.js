@@ -4359,20 +4359,37 @@ async function sendChat(body,clientId=uuid()) {
 /* 点「一起看」时给对方留一张邀请卡。它只是一条普通 chat 记录，服务端
    create_record() 会自动 db.notice() + nudge_worker()，对方哪怕没开着页面也能
    从 SSE / Web Push / 第三方渠道收到「TA 邀请你一起看视频」。
-   60 秒内重复进页面不再刷屏；点自己那张卡的「重新发起」用 force=true 破例。 */
+
+   防重复有三道闸门，层层兜底：
+   ① 内存级 watchInvitePending —— 同一次点击连击、并发重入直接短路；
+   ② 前端时间节流 —— 同一作者 60 秒内无论点「一起看」还是点卡片「重新发起」都不再发；
+   ③ 服务端幂等 —— 邀请卡用**确定性 client_id**（watch-invite-<作者id>-<当天>），
+      同一天内重复提交，后端 create_record() 命中 author+client_id 直接返回已存在记录，
+      绝不会堆出第二条。之前每次都生成新 uuid，导致后端幂等形同虚设，这是刷屏根因。 */
 const WATCH_INVITE_KEY='love-watch-invite-at';
 let watchInvitePending=false;
-async function sendWatchInvite(force=false){
+/* 邀请卡的稳定 client_id：按作者 + 当天去重，跨天自然允许再发一次。 */
+function watchInviteClientId(){
+ return 'watch-invite-'+state.me.user.id+'-'+today();
+}
+async function sendWatchInvite(){
  if(watchInvitePending)return false;
+ if(!state.me)return false;
  const last=Number(localStorage.getItem(WATCH_INVITE_KEY)||0);
- if(!force&&Date.now()-last<60000)return false;
+ if(Date.now()-last<60000){
+  /* 刚邀请过：不再发，但给个明确反馈，别让用户以为点了没反应 */
+  toast('刚刚已经邀请过 TA 啦，点上面的卡片就能进一起看');
+  return false;
+ }
  watchInvitePending=true;
  try{
-  await sendChat({content:'邀请你一起看视频',watch_invite:{v:1}});
+  /* 传入确定性 client_id，让后端幂等去重真正生效 */
+  await sendChat({content:'邀请你一起看视频',watch_invite:{v:1}},watchInviteClientId());
   localStorage.setItem(WATCH_INVITE_KEY,String(Date.now()));
   try{await refresh(false);}catch{}
   const wl=$('#watch-log');if(wl){wl.innerHTML=chatRows(true);watchScroll();}
   const cl=$('#chat-log');if(cl){cl.innerHTML=chatRows();scrollChat();}
+  toast('已邀请 TA 一起看视频');
   return true;
  }catch(e){toast(e.message||'邀请没发出去');return false;}
  finally{watchInvitePending=false;}
@@ -4522,8 +4539,10 @@ async function act(action,id,el) {
   return openMap(lat,lng,'我们的位置');
  }
  if(action==='chat-watch'){const p=$('#chat-fn');if(p)p.hidden=true;sendWatchInvite();return navigate('watch');}
- /* 邀请卡：自己那侧是「重新发起」，对方那侧点一下直接进放映室 */
- if(action==='chat-watch-invite'){const p=$('#chat-fn');if(p)p.hidden=true;if(el&&el.dataset.mine==='1')sendWatchInvite(true);return navigate('watch');}
+ /* 邀请卡：自己那侧是「重新发起」，对方那侧点一下直接进放映室。
+    点自己的卡也用普通节流（不再 force 破例）——60 秒内重复点只导航不再发；
+    即使真过了 60 秒再点，确定性 client_id 也在后端兜底，一天只留一条。 */
+ if(action==='chat-watch-invite'){const p=$('#chat-fn');if(p)p.hidden=true;if(el&&el.dataset.mine==='1')sendWatchInvite();return navigate('watch');}
  if(action==='chat-song'){const p=$('#chat-fn');if(p)p.hidden=true;return songPicker();}
  if(action==='song-tab'){state.songTab=id;$$('.ss-tab').forEach(b=>b.classList.toggle('active',b.dataset.id===id));return renderSongPane();}
  if(action==='song-toggle')return songToggle(el);
