@@ -10,8 +10,33 @@ from fastapi.testclient import TestClient
 
 from app import db
 from app.main import app
+from app.db import connect
 
 HEADERS = {'X-Love-Space': '1'}
+
+
+def make_video(owner, name='海街日记.mp4'):
+    """造一个「两人都看得见」的视频：挂在一条共享动态上，过得了 media_visible。"""
+    mid = db.uid()
+    created = db.now()
+    folder = db.media_dir('video/mp4', created)
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / (mid + '.mp4')).write_bytes(b'\x00' * 64)
+    with connect() as c:
+        c.execute('INSERT INTO media(id,owner,name,mime,size,ext,created,attached,status)'
+                  ' VALUES (?,?,?,?,?,?,?,?,?)',
+                  (mid, owner, name, 'video/mp4', 64, '.mp4', created, 1, 'done'))
+    return mid
+
+
+def watch_notices(client, keyword=''):
+    return [n for n in client.get('/api/notices', headers=HEADERS).json()
+            if n['event'] == 'watch' and keyword in (n['title'] or '')]
+
+
+def pause_all(client):
+    """前面的用例可能把状态留在「播放中」，开播通知只在 停→播 的跨越时发，先归零。"""
+    client.put('/api/watch', headers=HEADERS, json={'playing': False})
 
 
 def test_watch_starts_empty(client_a):
@@ -92,3 +117,54 @@ def test_video_list_is_visible_only(client_a):
 def test_watch_requires_session():
     with TestClient(app, base_url='https://testserver', headers=HEADERS) as anon:
         assert anon.get('/api/watch').status_code == 401
+
+
+def test_start_playing_notifies_partner(client_a, client_b):
+    """开播那一刻给另一半留一条提醒：点通知能直接进一起看，不用自己找。"""
+    me = client_a.get('/api/me', headers=HEADERS).json()
+    mid = make_video(me['user']['id'])
+    client_a.post('/api/records', headers=HEADERS,
+                  json={'kind': 'post', 'body': {'title': '周末看的片', 'content': '存着', 'media': [mid]}})
+    before = len(watch_notices(client_b, '海街日记'))
+    pause_all(client_a)
+    r = client_a.put('/api/watch', headers=HEADERS,
+                     json={'media': mid, 'title': '海街日记', 'position': 0,
+                           'duration': 300, 'playing': True})
+    assert r.status_code == 200, r.text
+    after = watch_notices(client_b, '海街日记')
+    assert len(after) == before + 1
+    # 标题带上是谁在看，否则两个人共用一条状态时读不出主语
+    assert after[0]['title'].startswith('小兔')
+    assert '海街日记' in after[0]['title']
+    # 通知没有 record_id（它不是某条记录），前端靠 event 判断给「去看」按钮
+    assert not after[0]['record_id']
+
+
+def test_actor_gets_no_own_notice(client_a):
+    me = client_a.get('/api/me', headers=HEADERS).json()
+    mid = make_video(me['user']['id'], '独自看的.mp4')
+    client_a.put('/api/watch', headers=HEADERS,
+                 json={'media': mid, 'title': '独自看的', 'playing': True})
+    assert not watch_notices(client_a, '独自看的')
+
+
+def test_pause_resume_does_not_spam(client_a, client_b):
+    """同一部片在 6 小时窗口内反复暂停续播只提醒一次，别把通知中心刷满。"""
+    me = client_a.get('/api/me', headers=HEADERS).json()
+    mid = make_video(me['user']['id'], '反复续播.mp4')
+    pause_all(client_a)
+    client_a.put('/api/watch', headers=HEADERS,
+                 json={'media': mid, 'title': '反复续播', 'playing': True})
+    first = len(watch_notices(client_b, '反复续播'))
+    for _ in range(3):
+        client_a.put('/api/watch', headers=HEADERS, json={'playing': False})
+        client_a.put('/api/watch', headers=HEADERS, json={'playing': True})
+    assert len(watch_notices(client_b, '反复续播')) == first
+
+
+def test_local_file_start_does_not_notify(client_a, client_b):
+    """选的本机文件另一半打不开，提醒了也看不了，所以不带 media 就不发通知。"""
+    before = len(watch_notices(client_b, '本机文件'))
+    client_a.put('/api/watch', headers=HEADERS,
+                 json={'title': '本机文件', 'playing': True})
+    assert len(watch_notices(client_b, '本机文件')) == before

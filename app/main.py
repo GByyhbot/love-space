@@ -916,12 +916,21 @@ def put_watch(body: WatchState, user=Depends(current_user)):
             if not db.media_visible(c, data['media'], user['id']):
                 raise HTTPException(404, '这个视频不能一起看')
     with connect() as c:
-        st = dict(db.setting(c, 'watch', {}) or {})
+        old = dict(db.setting(c, 'watch', {}) or {})
+        st = dict(old)
         st.update(data)
         st['by'] = user['id']
         st['updated'] = db.now()
         db.set_setting(c, 'watch', st)
-        c.commit()
+        # 从「没在播」变成「正在播」，且手上有片源 → 告诉另一半。
+        # 只在"开播"这一刻发，暂停/拖动进度不打扰；dedupe 按片源 + 6 小时窗口，
+        # 同一部片反复暂停续播不会刷屏，隔天再看还能再提醒一次。
+        if st.get('playing') and not old.get('playing') and st.get('media'):
+            name = (st.get('title') or '').strip() or '一部片'
+            who = (user.get('name') or 'TA').strip() or 'TA'
+            db.notice(c, 'watch', f'{who}开始看《{name}》了，点这里一起看',
+                      actor=user['id'],
+                      dedupe=f'watch:{st["media"]}:{int(db.now() // 21600)}')
     return get_watch(user)
 
 
@@ -2480,7 +2489,8 @@ def test_webpush(user=Depends(current_user)):
 
 
 CHANNEL_KINDS = {'smtp', 'bark', 'serverchan', 'pushplus', 'wecom', 'webhook', 'telegram', 'dingtalk', 'feishu', 'ntfy'}
-EVENTS = {'chat', 'comment', 'note', 'activity', 'anniversary', 'wish', 'surprise', 'habit', 'backup', 'storage', 'system', 'period'}
+EVENTS = {'chat', 'comment', 'note', 'activity', 'anniversary', 'wish', 'surprise', 'habit',
+          'backup', 'storage', 'system', 'period', 'watch'}
 
 
 class ChannelInput(BaseModel):
