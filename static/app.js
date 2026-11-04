@@ -807,6 +807,46 @@ function chatRows(quiet) {
   ?`<p class="watch-chat-empty">${icon('chat')}<span>边看边聊，想说什么就说</span></p>`
   :empty('今天，有什么想对 TA 说？','说说日常，也说说想念。'));
 }
+/* 聊天列表的增量重绘：按 id 原地对账，只动真正变了的行。
+   以前每个刷新点都写 `log.innerHTML = chatRows()`，整段重建会把每一行的
+   <img>/<video> 一起销毁重造——200 条消息里的图全部重新解码、正在循环的贴纸
+   从头播、滚动位置也跟着跳，附件还要全部重新走一遍网络。
+   这里按 id 对账：内容没变的行一个节点都不碰（位置也对得上就 continue），
+   只有真的变了才插入新节点。**不要**改成"先摘进 frag 再整体塞回"——
+   <video> 被摘下再挂回会重新解析 poster，等于白拿一次网络请求。 */
+function chatRowKey(node) {
+ if (node.id && node.id.indexOf('msg-') === 0) return node.id;
+ if (node.classList && node.classList.contains('chat-day')) return 'day:' + node.textContent;
+ return null; /* 「尚未发送」这类临时行没有稳定 id：直接重建，它不含图片，代价可忽略 */
+}
+function paintChat(log, quiet) {
+ if (!log) return;
+ /* 必须用 <template> 解析，不能用游离的 <div>：div 里解析出来的 <video poster="…">
+    会立刻开始预取封面、<img> 也会开始下载——每重绘一次就凭空多出一整屏媒体请求
+    （实测 8 个视频 = 8 次 /media?poster=true）。template.content 是惰性的，
+    解析完一个请求都不发，节点搬进文档才激活。 */
+ const tpl = document.createElement('template');
+ tpl.innerHTML = chatRows(quiet);
+ const prev = new Map();
+ for (const node of Array.prototype.slice.call(log.children)) {
+  const k = chatRowKey(node);
+  if (k && !prev.has(k)) prev.set(k, node);
+ }
+ const want = [];
+ for (const node of Array.prototype.slice.call(tpl.content.children)) {
+  const k = chatRowKey(node);
+  const old = k && prev.get(k);
+  if (old && old.outerHTML === node.outerHTML) { prev.delete(k); want.push(old); }
+  else want.push(node);
+ }
+ /* 逐个就位：已经在正确位置的行直接跳过（不摘不挂，附件不重新请求） */
+ for (let i = 0; i < want.length; i++) {
+  if (log.children[i] === want[i]) continue;
+  log.insertBefore(want[i], log.children[i] || null);
+ }
+ /* 多出来的行（撤回、搜索过滤后消失）从尾部删掉 */
+ while (log.children.length > want.length) log.removeChild(log.lastChild);
+}
 /* 聊天壁纸：预设用 CSS 渐变/纹理，'photo' 用自己上传的照片。
    dim 是压在图上的遮罩强度（百分比）——它存在的意义只有一个：保证气泡文字在任何底图上都读得清。
    壁纸写在 space 设置里（/api/space → db.setting('space')），所以是**两个人共用一份**：
@@ -4365,7 +4405,7 @@ function channelForm() {
 
 async function sendChat(body,clientId=uuid()) {
  const pending=pendingChats();if(!pending.some(p=>p.client_id===clientId)){pending.push({client_id:clientId,body});setPending(pending);}
- try {await post('/records',{kind:'chat',body,client_id:clientId});setPending(pendingChats().filter(p=>p.client_id!==clientId));}catch(e){if($('#chat-log')){$('#chat-log').innerHTML=chatRows();scrollChat();}throw e;}
+ try {await post('/records',{kind:'chat',body,client_id:clientId});setPending(pendingChats().filter(p=>p.client_id!==clientId));}catch(e){paintChat($('#chat-log'));scrollChat();throw e;}
 }
 
 /* 点「一起看」时给对方留一张邀请卡。它只是一条普通 chat 记录，服务端
@@ -4399,8 +4439,8 @@ async function sendWatchInvite(){
   await sendChat({content:'邀请你一起看视频',watch_invite:{v:1}},watchInviteClientId());
   localStorage.setItem(WATCH_INVITE_KEY,String(Date.now()));
   try{await refresh(false);}catch{}
-  const wl=$('#watch-log');if(wl){wl.innerHTML=chatRows(true);watchScroll();}
-  const cl=$('#chat-log');if(cl){cl.innerHTML=chatRows();scrollChat();}
+  const wl=$('#watch-log');if(wl){paintChat(wl,true);watchScroll();}
+  const cl=$('#chat-log');if(cl){paintChat(cl);scrollChat();}
   toast('已邀请 TA 一起看视频');
   return true;
  }catch(e){toast(e.message||'邀请没发出去');return false;}
@@ -4705,7 +4745,7 @@ document.addEventListener('touchend',e=>{
 document.addEventListener('click',async e=>{$$('.more-menu[open]').forEach(d=>{if(!d.contains(e.target))d.removeAttribute('open');});const nav=e.target.closest('[data-nav]'),el=e.target.closest('[data-action]');try{if(nav||el)e.target.closest('.account-menu')?.removeAttribute('open');if(nav)return await navigate(nav.dataset.nav);if(el)await act(el.dataset.action,el.dataset.id||'',el);}catch(err){toast(err.message);}});
 document.addEventListener('submit',async e=>{const isWatch=e.target.id==='watch-form';if(e.target.id!=='chat-form'&&!isWatch)return;e.preventDefault();const input=$(isWatch?'#watch-text':'#chat-text'),content=input.value.trim();if(!content)return;const btn=$('button[type=submit]',e.target);btn.disabled=true;try{const body={content,date:today(),media:[]};if(!isWatch&&state.chatReply)body.reply_to=state.chatReply;await sendChat(body);if(!isWatch)state.chatReply=null;input.value='';localStorage.removeItem('chat-text:'+state.me.user.id);
  /* 一起看页不能整页重渲染：视频是本机 objectURL，重渲染就把放映区清空了 */
- if(isWatch){await refresh(false);const log=$('#watch-log');if(log)log.innerHTML=chatRows(true);syncCompose();watchScroll();}
+ if(isWatch){await refresh(false);const log=$('#watch-log');if(log)paintChat(log,true);syncCompose();watchScroll();}
  else{await refresh();syncCompose();}
  }catch(err){toast(err.message);}finally{btn.disabled=false;}});
 document.addEventListener('input',e=>{if(e.target.id==='chat-text'){localStorage.setItem('chat-text:'+state.me.user.id,e.target.value);syncCompose();}if(e.target.id==='watch-text'){syncCompose();}if(e.target.id==='filter-q'){state.filters={...(state.filters||{}),q:e.target.value};clearTimeout(state.filterTimer);state.filterTimer=setTimeout(async()=>{const pos=$('#filter-q')?.selectionStart;try{await loadTimeline(true);renderPage();$('#filter-q')?.focus();$('#filter-q')?.setSelectionRange(pos,pos);}catch(err){toast(err.message);}},250);}});
@@ -4865,8 +4905,8 @@ async function handleServerEvent(flags){
   const oldNotice=state.notices[0]?.id||null;
   const focused=document.activeElement,canRender=!$('.modal')&&!$('.more-menu[open]')&&!['INPUT','TEXTAREA','SELECT'].includes(focused?.tagName);
   await refresh(false);
-  if(state.page==='messages'&&$('#chat-log')){const log=$('#chat-log'),atBottom=log.scrollHeight-log.scrollTop-log.clientHeight<100;log.innerHTML=chatRows();if(atBottom)scrollChat();state.me.chat_unread=0;post('/notices/read?event=chat').catch(()=>{});}
-  else if(state.page==='watch'&&$('#watch-log')){const log=$('#watch-log'),atBottom=log.scrollHeight-log.scrollTop-log.clientHeight<80;log.innerHTML=chatRows(true);if(atBottom)watchScroll();state.me.chat_unread=0;post('/notices/read?event=chat').catch(()=>{});}
+  if(state.page==='messages'&&$('#chat-log')){const log=$('#chat-log'),atBottom=log.scrollHeight-log.scrollTop-log.clientHeight<100;paintChat(log);if(atBottom)scrollChat();state.me.chat_unread=0;post('/notices/read?event=chat').catch(()=>{});}
+  else if(state.page==='watch'&&$('#watch-log')){const log=$('#watch-log'),atBottom=log.scrollHeight-log.scrollTop-log.clientHeight<80;paintChat(log,true);if(atBottom)watchScroll();state.me.chat_unread=0;post('/notices/read?event=chat').catch(()=>{});}
   else if(canRender)renderShell();
   /* 系统弹窗/锁屏通知已停用：手机端通知改由第三方渠道（企业微信等）+ 浏览器 Web Push 送达；在聊天页停留时消息即时标记已读，后端不再推送 */
  }catch{}

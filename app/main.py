@@ -27,6 +27,7 @@ from PIL import Image
 from pydantic import BaseModel, Field
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.gzip import GZipMiddleware
+from starlette.staticfiles import NotModifiedResponse
 
 from . import db
 from . import dramas
@@ -300,14 +301,15 @@ async def protection(request, call_next):
         result.headers['Content-Security-Policy'] = f"default-src 'self'; img-src 'self' blob: data: https:; media-src 'self' blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; frame-src 'self'; {connect_src}; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
     if public_url.startswith('https://') and not local_access:
         result.headers['Strict-Transport-Security'] = 'max-age=31536000'
-    if request.url.path.startswith('/media/') and request.query_params.get('role') == 'cover':
-        # 首页封面单独放行缓存。三个约束缺一不可：
-        #   ① 不能是 no-store —— Cache API 的 put() 会直接拒绝带 no-store 的响应，
-        #      Service Worker 那条 cache-first 就永远存不进去；
+    if request.url.path.startswith('/media/'):
+        # 附件统一「可以存、但每次使用都要校验」。三条约束缺一不可：
+        #   ① 不能是 no-store —— 浏览器连存都不存，就永远发不出条件请求，
+        #      每刷一次聊天就把整屏图片从 NAS 经隧道重下一遍（200 条消息轻松几十 MB）；
         #   ② 必须 private —— 这是两个人的照片，绝不能进 Cloudflare 之类的共享缓存；
-        #   ③ max-age=0 + must-revalidate —— SW 没接管时（首次访问/旧 WebView）退化成 304，
-        #      靠 ETag 校验，不会重传整张图。
-        # 只有封面走这条路，相册/聊天里的图仍然 no-store：它们量太大，也不该长期躺在设备上。
+        #   ③ max-age=0 + must-revalidate —— 存下来但立刻过期，每次靠 ETag 校验。
+        # FileResponse 自带 ETag/Last-Modified 并处理 If-None-Match，所以「没变」
+        # 的响应只有几百字节的 304，而不是几 MB 的原图。
+        # 封面（role=cover）本来就是这个策略，这里统一到全部附件，逻辑只剩一条。
         result.headers['Cache-Control'] = 'private, max-age=0, must-revalidate'
     elif request.url.path.startswith('/api/bubbles/'):
         # 聊天气泡皮肤图：文件名即内容（发上去就不再改），一张只有几 KB，
@@ -334,7 +336,8 @@ async def protection(request, call_next):
             result.headers['Cache-Control'] = 'no-cache'
         else:
             result.headers['Cache-Control'] = 'public, max-age=31536000, immutable'
-    elif request.url.path.startswith(('/api/', '/media/')):
+    elif request.url.path.startswith('/api/'):
+        # 接口响应一律不进缓存：里面有对方刚发的东西，也可能随登录账号变化。
         result.headers['Cache-Control'] = 'no-store'
     elif request.url.path.startswith('/static/stickers/'):
         # 贴纸文件内容不变，按内容寻址永久缓存，二次加载走本地缓存
@@ -1921,7 +1924,7 @@ def upload(request: Request, file: UploadFile = File(...), user=Depends(current_
 
 
 @app.get('/media/{mid}')
-def media(mid: str, preview: bool = False, poster: bool = False, download: bool = False, user=Depends(current_user)):
+def media(mid: str, request: Request, preview: bool = False, poster: bool = False, download: bool = False, user=Depends(current_user)):
     with connect() as c:
         if not db.media_visible(c, mid, user['id']):
             raise HTTPException(404, '附件不存在')
@@ -1942,9 +1945,27 @@ def media(mid: str, preview: bool = False, poster: bool = False, download: bool 
         mime_type = 'audio/mp4'
     else:
         mime_type = row['mime']
-    return FileResponse(path, media_type=mime_type,
-                        filename=row['name'] if download else None,
-                        content_disposition_type='attachment' if download else 'inline')
+    response = FileResponse(path, media_type=mime_type,
+                            filename=row['name'] if download else None,
+                            content_disposition_type='attachment' if download else 'inline')
+    return _conditional(response, request, path)
+
+
+def _conditional(response: FileResponse, request: Request, path: Path):
+    """给 FileResponse 补上条件请求（If-None-Match / If-Modified-Since）→ 304。
+
+    Starlette 把「要不要回 304」的逻辑写在 StaticFiles 里，FileResponse 自己不做：
+    浏览器老老实实带着 If-None-Match 回来，服务端还是把整张图重发一遍。
+    附件动辄几 MB，而中间件给 /media/ 的策略是 must-revalidate（每次都要校验），
+    不补这一步就等于每刷一次聊天都把整屏图片重下一遍，缓存头写得再好也白搭。
+    这里复用 Starlette 自己的判断函数（它的方法体只用参数、不碰 self），
+    免得手写 ETag 比较逻辑，将来跟上游语义分叉。
+    """
+    response.set_stat_headers(path.stat())
+    if StaticFiles.is_not_modified(None, response.headers, request.headers):
+        # 304 只带 etag/last-modified/cache-control 这些缓存相关头，不带响应体
+        return NotModifiedResponse(response.headers)
+    return response
 
 
 @app.get('/api/photos')
