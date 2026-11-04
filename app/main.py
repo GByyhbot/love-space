@@ -882,6 +882,49 @@ def space(body: Space, user=Depends(current_user)):
     return {'ok': True}
 
 
+class WatchState(BaseModel):
+    """一起看的播放状态：两个人共用同一条时间轴。
+
+    `position` / `playing` 记的是「最后一次操作时」的快照，真实位置由 GET 时按
+    `updated` 往后推算（正在播就加上流逝时间）。这样客户端不必和服务端对时钟，
+    时区不同、手机时间不准都不会把进度算歪。
+    """
+    title: str | None = Field(default=None, max_length=120)
+    media: str | None = Field(default=None, max_length=64)
+    position: float | None = None
+    duration: float | None = None
+    playing: bool | None = None
+
+
+@app.get('/api/watch')
+def get_watch(user=Depends(current_user)):
+    with connect() as c:
+        st = dict(db.setting(c, 'watch', {}) or {})
+    if st.get('playing'):
+        elapsed = max(0.0, db.now() - float(st.get('updated') or 0))
+        st['position'] = min(float(st.get('position') or 0) + elapsed,
+                             float(st.get('duration') or 0) or 1e9)
+    return st
+
+
+@app.put('/api/watch')
+def put_watch(body: WatchState, user=Depends(current_user)):
+    data = body.model_dump(exclude_none=True)
+    # 片源必须是这个人看得见的媒体：私密日记里的视频不该被拉进一起看
+    if data.get('media'):
+        with connect() as c:
+            if not db.media_visible(c, data['media'], user['id']):
+                raise HTTPException(404, '这个视频不能一起看')
+    with connect() as c:
+        st = dict(db.setting(c, 'watch', {}) or {})
+        st.update(data)
+        st['by'] = user['id']
+        st['updated'] = db.now()
+        db.set_setting(c, 'watch', st)
+        c.commit()
+    return get_watch(user)
+
+
 class RecordInput(BaseModel):
     kind: str
     body: dict
@@ -1717,6 +1760,28 @@ def media_images(limit: int = 200, user=Depends(current_user)):
         for row in rows:
             if row['owner'] == user['id'] or db.media_visible(c, row['id'], user['id']):
                 out.append({'id': row['id'], 'name': row['name'], 'created': row['created']})
+                if len(out) >= limit:
+                    break
+    return out
+
+
+@app.get('/api/media/videos')
+def media_videos(limit: int = 60, user=Depends(current_user)):
+    """一起看选片用：我能看见的视频，最近上传的排在前面。
+
+    片源必须是服务器上的媒体，「一起看」才谈得上同步 —— 各自打开本机文件的话，
+    两边是不是同一部片、时长对不对得上，前端无从判断。走 media 则天然同源。
+    """
+    limit = max(1, min(200, limit))
+    with connect() as c:
+        rows = c.execute(
+            "SELECT id,name,owner,created,status FROM media WHERE mime LIKE 'video/%' "
+            "ORDER BY created DESC LIMIT ?", (limit * 4,)).fetchall()
+        out = []
+        for row in rows:
+            if row['owner'] == user['id'] or db.media_visible(c, row['id'], user['id']):
+                out.append({'id': row['id'], 'name': row['name'],
+                            'created': row['created'], 'status': row['status']})
                 if len(out) >= limit:
                     break
     return out

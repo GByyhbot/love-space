@@ -213,7 +213,7 @@ async function boot() {
   if (!state.me) return renderAuth(status,invite);
   history.replaceState(null,'',location.pathname+location.hash);
   state.page=location.hash.slice(1).split('/')[0] || 'home';
-  if (!['home','timeline','albums','messages','together','personal','settings','notices','channels','backups','imports','importdetail','dashboard','weekly','figure','linkcheck'].includes(state.page)) state.page='home';
+  if (!['home','timeline','albums','messages','together','personal','settings','notices','channels','backups','imports','importdetail','dashboard','weekly','figure','linkcheck','watch'].includes(state.page)) state.page='home';
   await refreshData(); if(state.page==='timeline')await loadTimeline(true); renderShell(); connectEvents(); connectNtfy(); syncNativePush(); startKeepAlive();
  } catch(e) {$('#app').innerHTML=empty('暂时无法连接空间',e.message,'reload','重新连接');}
 }
@@ -313,6 +313,7 @@ function renderPage() {
  if(state.page==='watch'){
   const wt=$('#watch-text');
   if(wt)wt.addEventListener('focus',()=>setTimeout(()=>{try{wt.scrollIntoView({block:'end'});}catch{}},300));
+  startWatchSync();
   watchScroll();
  }
  if(state.page==='importdetail') initImportLog();
@@ -659,6 +660,10 @@ document.addEventListener('click',e=>{
  if(audio.paused){document.querySelectorAll('.voice-chip.playing audio').forEach(a=>{if(a!==audio)a.pause();});audio.play().catch(()=>toast('语音播放失败，请稍后再试'));}
  else audio.pause();
 });
+document.addEventListener('click',e=>{
+ const it=e.target.closest('[data-watch-media]');if(!it)return;
+ watchChooseMedia(it.dataset.watchMedia,it.dataset.watchTitle||'');
+});
 ['loadedmetadata','durationchange','play','pause','ended'].forEach(ev=>document.addEventListener(ev,e=>{
  const t=e.target;if(!t||!t.classList||!t.classList.contains('voice-audio'))return;
  const chip=t.closest('.voice-chip');if(!chip)return;
@@ -935,27 +940,42 @@ function messagesPage() {
 }
 function scrollChat(){const log=$('#chat-log');if(log)log.scrollTop=log.scrollHeight;}
 
-/* ── 一起看（框架版，竖屏上下分屏）──────────────────────────
-   上半：放映区（本机放一个视频，谁选的片源谁看得见；真正同步播放要等信令/时间轴对齐）
-   下半：聊天区，复用同一套消息渲染，边看边说
-   之所以先做框架：同步播放要处理片源合法性、双方缓冲对齐、进度心跳，属于独立一轮的量。 */
-let watchObjectUrl=null;
+/* ── 一起看（竖屏上下分屏，带进度同步）────────────────────────
+   上半放映区、下半聊天区。
+
+   同步只传「时间轴」，不传画面。之所以能这样，是因为片源来自服务器媒体
+   `/media/<id>`：两个人拿到的是同一个文件，时长一致，对齐才有意义。
+   （选本机文件也留着，但那只是"各自打开同一部片"，客户端无法验证是不是同一部。）
+
+   · 谁操作（播放 / 暂停 / 拖动）谁立刻 PUT 一次快照；
+   · 另一方每 2.5 秒拉一次 `/api/watch`，发现 updated 变了就跟进：
+     位置差超过 1.5 秒就 seek，播放状态不一致就 play/pause；
+   · 服务端 GET 时按 updated 把 position 往后推算，所以"一直在播"不需要心跳包，
+     客户端也不用和服务端对时钟（手机时间不准、时区不同都算不错）；
+   · 首次进页面只定位不自动出声 —— 浏览器禁止无手势自动播放，强行 play 会被拦；
+     昨天看到一半的进度今天进来自动响起来也不合适，所以给一个「点一下继续」。 */
+let watchObjectUrl=null, watchTimer=null, watchLastUpdated=0, watchApplying=false, watchFirstPoll=true;
+
+function watchVideo(){return $('#watch-video');}
+function watchHasSrc(){const v=watchVideo();return !!(v&&v.getAttribute('src'));}
+
 function watchPage(){
  const chats=chatRows();
  return `<section class="watch-page">
   <header class="watch-head">
    <button class="icon-btn" data-action="watch-back" aria-label="返回聊天">${icon('back')}</button>
-   <div><h3>一起看</h3><small>边看边聊 · 同步播放还在路上</small></div>
+   <div><h3>一起看</h3><small id="watch-sub">边看边聊 · 选一部一起看</small></div>
    <button class="button soft small" data-action="watch-pick">${icon('film')} 选片源</button>
   </header>
   <div class="watch-stage" id="watch-stage">
    <video id="watch-video" class="watch-video" playsinline controls hidden></video>
    <div class="watch-empty" id="watch-empty">
     <span class="we-emoji">🎬</span>
-    <b>还没有片源</b>
-    <small>先在下面选一部本地视频，两个人各自打开同一部就能对着看</small>
+    <b id="watch-empty-title">还没有片源</b>
+    <small id="watch-empty-hint">从相册视频里挑一部，两个人看的是同一个文件，进度自动对齐</small>
     <button class="button primary small" data-action="watch-pick">选择视频</button>
    </div>
+   <button type="button" class="watch-join" id="watch-join" data-action="watch-join" hidden>点一下继续播放</button>
   </div>
   <div class="watch-chat">
    <div class="watch-log" id="watch-log" aria-live="polite">${chats}</div>
@@ -968,18 +988,149 @@ function watchPage(){
  </section>`;
 }
 function watchScroll(){const log=$('#watch-log');if(log)log.scrollTop=log.scrollHeight;}
-/* 选本地视频：只在本机播放，不上传（片源可能很大，也不该进你们的备份） */
-function watchPick(){
+
+/* 把状态画到头部副标题和空状态上。片源没挂上时，这里就是唯一告诉
+   "TA 选了哪部" 的地方，否则对方只会看到一句"还没有片源"。 */
+function watchRenderStatus(st){
+ st=st||{};
+ const sub=$('#watch-sub'), t=$('#watch-empty-title'), h=$('#watch-empty-hint');
+ if(sub){
+  sub.textContent=st.title
+   ? `${st.playing?'一起看着':'暂停中'} · ${st.title}`
+   : '边看边聊 · 选一部一起看';
+ }
+ if(t&&!watchHasSrc()){
+  const mine=st.by===state.me.user.id;
+  t.textContent=st.title?`${mine?'你':(st.by?person(st.by).name:'TA')}选了《${st.title}》`:'还没有片源';
+  h.textContent=st.title?'片源在下面，点播放就能一起开始':'从相册视频里挑一部，两个人看的是同一个文件，进度自动对齐';
+ }
+}
+
+function watchSetSource(opts){
+ const v=watchVideo();if(!v)return;
+ if(watchObjectUrl){URL.revokeObjectURL(watchObjectUrl);watchObjectUrl=null;}
+ if(opts.media){
+  v.dataset.media=opts.media;
+  v.src='/media/'+opts.media;
+ }else{
+  delete v.dataset.media;
+  watchObjectUrl=URL.createObjectURL(opts.file);
+  v.src=watchObjectUrl;
+ }
+ v.hidden=false;
+ const empty=$('#watch-empty');if(empty)empty.hidden=true;
+}
+
+async function watchPush(){
+ const v=watchVideo();if(!v||!v.getAttribute('src'))return;
+ const body={position:v.currentTime,playing:!v.paused};
+ if(Number.isFinite(v.duration))body.duration=v.duration;
+ try{
+  const cur=await api('/watch',{method:'PUT',body:JSON.stringify(body)});
+  state.watch=cur;watchLastUpdated=Number(cur.updated)||0;
+  watchRenderStatus(cur);
+ }catch{}
+}
+
+function watchBindVideo(){
+ const v=watchVideo();if(!v)return;
+ const push=()=>{if(!watchApplying)watchPush();};
+ /* 用属性赋值而不是 addEventListener：整块 DOM 每次换页都会重画，
+    属性赋值天然覆盖上一次的绑定，不会越绑越多。 */
+ v.onplay=push;v.onpause=push;v.onseeked=push;
+}
+
+function showWatchJoin(){const b=$('#watch-join');if(b)b.hidden=false;}
+function hideWatchJoin(){const b=$('#watch-join');if(b)b.hidden=true;}
+
+function watchJoin(){
+ const v=watchVideo();if(!v)return;
+ hideWatchJoin();
+ v.play().catch(()=>showWatchJoin());
+}
+
+async function watchPoll(){
+ if(state.page!=='watch'){stopWatchSync();return;}
+ let st;try{st=await api('/watch');}catch{return;}
+ state.watch=st;
+ watchRenderStatus(st);
+ const v=watchVideo();if(!v)return;
+ if(st.media&&!v.getAttribute('src'))watchSetSource({media:st.media});
+ if(!v.getAttribute('src'))return;
+
+ const upd=Number(st.updated)||0;
+ const pos=Math.max(0,Number(st.position)||0);
+
+ if(watchFirstPoll){
+  watchFirstPoll=false;watchLastUpdated=upd;
+  if(pos>0.5){watchApplying=true;try{v.currentTime=pos;}catch{}setTimeout(()=>{watchApplying=false;},800);}
+  if(st.playing)showWatchJoin();
+  return;
+ }
+ if(upd<=watchLastUpdated)return;
+ watchLastUpdated=upd;
+ if(st.by===state.me.user.id)return;   // 自己刚上报的快照，别自己跟自己
+ watchApplying=true;
+ try{
+  /* 播放中容忍 1.5 秒：频繁 seek 会打断解码，画面一顿一顿的，而人对 1.5 秒内的
+     不同步几乎无感。暂停时就该停在同一帧，收紧到 0.5 秒 —— 这时候 seek 没有卡顿成本。 */
+  const tol=st.playing?1.5:0.5;
+  if(Math.abs(v.currentTime-pos)>tol){try{v.currentTime=pos;}catch{}}
+  if(st.playing&&v.paused){try{await v.play();hideWatchJoin();}catch{showWatchJoin();}}
+  else if(!st.playing&&!v.paused)v.pause();
+ }finally{
+  setTimeout(()=>{watchApplying=false;},800);
+ }
+}
+
+function startWatchSync(){
+ stopWatchSync();
+ if(state.page!=='watch')return;
+ watchFirstPoll=true;
+ watchBindVideo();
+ watchRenderStatus(state.watch||{});
+ watchPoll();
+ watchTimer=setInterval(watchPoll,2500);
+}
+function stopWatchSync(){if(watchTimer){clearInterval(watchTimer);watchTimer=null;}}
+
+/* 选片源：优先从相册视频挑（同源，能真同步）；本机文件留作退路 */
+async function watchPick(){
+ let vids=[];
+ try{vids=await api('/media/videos');}catch(e){vids=[];}
+ const items=vids.length?vids.map(v=>`<button type="button" class="ws-item" data-watch-media="${esc(v.id)}" data-watch-title="${esc(v.name.replace(/\.[^.]+$/,''))}">
+   <span class="ws-thumb" style="background-image:url('/media/${esc(v.id)}?poster=1')"></span>
+   <span class="ws-meta"><b>${esc(v.name.replace(/\.[^.]+$/,''))}</b><small>${new Date(v.created*1000).toLocaleDateString('zh-CN',{timeZone:state.me.space.timezone})}</small></span>
+  </button>`).join(''):'<p class="meta">相册里还没有视频。可以先用「本机文件」，两个人各自打开同一部，进度也会同步。</p>';
+ openModal('选一部一起看',`<div class="ws-list" id="ws-list">${items}</div>
+  <div class="form-actions"><button type="button" class="button soft" data-action="watch-pick-local">从本机选文件</button><button type="button" class="button" data-action="close-modal">取消</button></div>`);
+}
+
+async function watchChooseMedia(id,title){
+ closeModal();
+ watchSetSource({media:id});
+ watchRenderStatus({...(state.watch||{}),title,media:id});
+ try{
+  const cur=await api('/watch',{method:'PUT',body:JSON.stringify({media:id,title,position:0,duration:0,playing:false})});
+  state.watch=cur;watchLastUpdated=Number(cur.updated)||0;watchFirstPoll=false;
+  watchRenderStatus(cur);
+  toast('选好了，点播放就一起开始');
+ }catch(e){toast(e.message||'选片失败');}
+}
+
+function watchPickLocal(){
  const input=$('#watch-file');if(!input)return;
  input.value='';
  input.onchange=()=>{
   const f=input.files&&input.files[0];if(!f)return;
-  const v=$('#watch-video'),empty=$('#watch-empty');
-  if(watchObjectUrl)URL.revokeObjectURL(watchObjectUrl);
-  watchObjectUrl=URL.createObjectURL(f);
-  v.src=watchObjectUrl;v.hidden=false;
-  if(empty)empty.hidden=true;
-  v.play().catch(()=>{});
+  watchSetSource({file:f});
+  /* 本机片源不上传，只把片名告诉对方；media 传空串把服务器上的片源清掉，
+     免得对方那边还挂着一部你以为已经换掉的片子。 */
+  const title=f.name.replace(/\.[^.]+$/,'');
+  api('/watch',{method:'PUT',body:JSON.stringify({media:'',title,position:0,duration:0,playing:false})})
+   .then(cur=>{state.watch=cur;watchLastUpdated=Number(cur.updated)||0;watchFirstPoll=false;watchRenderStatus(cur);})
+   .catch(()=>{});
+  try{watchVideo()?.play().catch(()=>{});}catch{}
  };
  input.click();
 }
@@ -3710,6 +3861,8 @@ async function act(action,id,el) {
  if(action==='chat-call')return toast('实时通话还没接（要 WebRTC + 信令服务），先用语音说两句');
  if(action==='watch-back')return goBack('messages');
  if(action==='watch-pick')return watchPick();
+ if(action==='watch-pick-local')return watchPickLocal();
+ if(action==='watch-join')return watchJoin();
  if(action==='chat-bg')return chatBgForm();
  if(action==='chat-to-draft')return composer('post',null,{...r.body,mediaObjects:r.media});
  if(action==='retry-chat'){const p=pendingChats().find(p=>p.client_id===id);if(p){await sendChat(p.body,p.client_id);await refresh();}return;}
