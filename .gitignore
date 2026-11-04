@@ -15,6 +15,11 @@ probe_out/
 secrets/
 备份密码-请妥善保存.txt
 
+# ---- 本地临时目录：调试脚本、验证截图、开发用的登录 cookie ----
+# .tmp/devcookie.txt 是一条真实有效的会话 token，误提交等于把登录态公开
+.tmp/
+output/
+
 # ---- 二进制：只保留对外下载的那份 APK ----
 *.apk
 !static/lovespace.apk

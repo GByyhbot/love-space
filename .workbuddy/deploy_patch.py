@@ -86,6 +86,19 @@ code, _, _ = run(c, f'docker image inspect {tag} >/dev/null 2>&1', sudo=True, ti
 if code != 0:
     sys.exit(f'构建结束后找不到镜像 {tag}，中止')
 
+# 3.5 预检：先试着"建"一次容器，不启动。
+# 补丁镜像一层层往上叠，累计到 overlay2 的层数上限时，docker build 会成功、
+# 直到 create 容器才抛 `max depth exceeded`。那一步在写 .env 之后，等于把 .env
+# 指向一个永远起不来的 tag（1.7.16 就这么翻的车）。提前 create 一次，问题在
+# 动 .env 之前就暴露，容器继续跑原镜像。
+print('预检：试建容器…')
+run(c, 'docker rm -f love-space-probe >/dev/null 2>&1; true', sudo=True, timeout=30)
+code, out, err = run(c, f'docker create --name love-space-probe {tag} true', sudo=True, timeout=120)
+run(c, 'docker rm -f love-space-probe >/dev/null 2>&1; true', sudo=True, timeout=30)
+if code != 0:
+    hint = '（多半是镜像层数到上限了，用 docker export/import 打平）' if 'max depth' in (err + out) else ''
+    sys.exit(f'新镜像建不出容器，已中止，.env 未改动{hint}：{(err or out).strip()[:300]}')
+
 # 4. md5 校验
 paths = ' '.join(IN_CONTAINER[f] for f in files)
 code, out, _ = run(c, f'docker run --rm --entrypoint md5sum {tag} {paths}', sudo=True, timeout=120)
@@ -101,20 +114,46 @@ else:
     print('✅ 镜像内容 = 本地文件')
 
 # 5. 写 .env + 重启容器
-run(c, f'cd {REMOTE} && touch .env && grep -v "^LOVE_IMAGE=" .env > .env.new 2>/dev/null; '
-       f'echo "LOVE_IMAGE={tag}" >> .env.new && mv .env.new .env && chmod 600 .env',
-    sudo=True, timeout=60)
-print('.env 固定镜像 →', tag)
-code, out, err = run(c, f'cd {REMOTE} && set -o pipefail && LOVE_IMAGE={tag} '
-                        f'docker compose up -d --force-recreate --no-build 2>&1 | tail -3',
-                     sudo=True, timeout=300)
+# ⚠️ 这一步是"改全局状态"，失败必须把 .env 改回去：否则容器还在跑旧镜像，
+# 而 .env 指向新 tag，下次任何 compose 操作都会拿它去起容器 —— 起不来就整站下线。
+def write_env(img):
+    return run(c, f'cd {REMOTE} && touch .env && grep -v "^LOVE_IMAGE=" .env > .env.new 2>/dev/null; '
+                  f'echo "LOVE_IMAGE={img}" >> .env.new && mv .env.new .env && chmod 600 .env',
+               sudo=True, timeout=60)
+
+
+def switch_to(img):
+    write_env(img)
+    print('.env 固定镜像 →', img)
+    return run(c, f'cd {REMOTE} && set -o pipefail && LOVE_IMAGE={img} '
+                  f'docker compose up -d --force-recreate --no-build 2>&1 | tail -3',
+               sudo=True, timeout=300)
+
+
+def running_image():
+    _, out, _ = run(c, 'docker ps --format "{{.Image}}" --filter name=love-space', sudo=True, timeout=30)
+    return (out or '').strip()
+
+
+def rollback(reason):
+    print(f'❌ {reason}')
+    print(f'↩️ 回滚 .env → {base} 并重建容器')
+    code, out, err = switch_to(base)
+    print(out or err)
+    now = running_image()
+    if code != 0 or base not in now:
+        sys.exit(f'回滚也没成功，需要人工处理：.env 现在是 {base}，容器跑的是 {now or "无"}')
+    sys.exit(f'部署失败已回滚，站点仍跑原镜像：{reason}')
+
+
+code, out, err = switch_to(tag)
 print(out or err)
 if code != 0:
-    sys.exit('容器重启失败')
-# 起来了才算数：compose 拉不到镜像时照样会打印 Started
-code, out, _ = run(c, 'docker ps --format "{{.Image}}" --filter name=love-space', sudo=True, timeout=30)
-if tag not in (out or ''):
-    sys.exit(f'容器没在跑目标镜像（当前：{(out or "").strip() or "无"}）')
+    rollback('容器重启失败')
+# 起来了才算数：compose 会先打印 Started，真失败要到 ps 里才看得出来
+now = running_image()
+if tag not in now:
+    rollback(f'容器没在跑目标镜像（当前：{now or "无"}）')
 
 # 6. 清理构建目录
 run(c, f'rm -rf {BUILD_DIR}', sudo=True, timeout=30)
