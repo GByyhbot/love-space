@@ -29,6 +29,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.gzip import GZipMiddleware
 
 from . import db
+from . import dramas
 from . import importers
 from . import period
 from .config import APK_VERSION, BUILD_ID, WEB_VERSION, SPACE_ROUTES, route_origins
@@ -294,7 +295,9 @@ async def protection(request, call_next):
         )
     else:
         # frame-src 仅 'self'：figure 页的姿势参考 iframe 现为同源 /pose-gallery/
-        result.headers['Content-Security-Policy'] = f"default-src 'self'; img-src 'self' blob: data:; media-src 'self' blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; frame-src 'self'; {connect_src}; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+        # img-src 放通 https：短剧列表的海报在第三方图床（gimg0.baidu.com 等），
+        # 经本站转发会把 40 张缩略图也算进隧道流量，直接让浏览器去取更快也更省。
+        result.headers['Content-Security-Policy'] = f"default-src 'self'; img-src 'self' blob: data: https:; media-src 'self' blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; frame-src 'self'; {connect_src}; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
     if public_url.startswith('https://') and not local_access:
         result.headers['Strict-Transport-Security'] = 'max-age=31536000'
     if request.url.path.startswith('/media/') and request.query_params.get('role') == 'cover':
@@ -891,6 +894,10 @@ class WatchState(BaseModel):
     """
     title: str | None = Field(default=None, max_length=120)
     media: str | None = Field(default=None, max_length=64)
+    # 红果短剧：只存剧 id 和集号，直链由服务端现换（签名约 24 小时过期，
+    # 落库或下发都会在隔天变成一张打不开的地址）。
+    drama_id: str | None = Field(default=None, max_length=32)
+    drama_ep: int | None = None
     position: float | None = None
     duration: float | None = None
     playing: bool | None = None
@@ -915,23 +922,91 @@ def put_watch(body: WatchState, user=Depends(current_user)):
         with connect() as c:
             if not db.media_visible(c, data['media'], user['id']):
                 raise HTTPException(404, '这个视频不能一起看')
+    # 短剧的剧 id 会拼进上游 URL，这里就卡成纯数字
+    if data.get('drama_id'):
+        if not dramas.ITEM_RE.match(data['drama_id']):
+            raise HTTPException(400, '这部剧的编号不对')
+        ep = int(data.get('drama_ep') or 1)
+        if not 1 <= ep <= dramas.EPISODE_MAX:
+            raise HTTPException(400, '集数超出范围')
     with connect() as c:
         old = dict(db.setting(c, 'watch', {}) or {})
         st = dict(old)
         st.update(data)
+        # 换了片源就把另一条来源清干净：否则前端不知道该听 media 还是 drama_id，
+        # 两边的播放器会各播各的。
+        if data.get('drama_id'):
+            st['media'] = ''
+        elif data.get('media'):
+            st['drama_id'] = ''
+            st['drama_ep'] = 0
         st['by'] = user['id']
         st['updated'] = db.now()
         db.set_setting(c, 'watch', st)
         # 从「没在播」变成「正在播」，且手上有片源 → 告诉另一半。
         # 只在"开播"这一刻发，暂停/拖动进度不打扰；dedupe 按片源 + 6 小时窗口，
         # 同一部片反复暂停续播不会刷屏，隔天再看还能再提醒一次。
-        if st.get('playing') and not old.get('playing') and st.get('media'):
+        source = st.get('drama_id') or st.get('media')
+        if st.get('playing') and not old.get('playing') and source:
             name = (st.get('title') or '').strip() or '一部片'
+            if st.get('drama_id') and st.get('drama_ep'):
+                name = f'{name} 第{int(st["drama_ep"])}集'
             who = (user.get('name') or 'TA').strip() or 'TA'
             db.notice(c, 'watch', f'{who}开始看《{name}》了，点这里一起看',
                       actor=user['id'],
-                      dedupe=f'watch:{st["media"]}:{int(db.now() // 21600)}')
+                      dedupe=f'watch:{source}:{int(db.now() // 21600)}')
     return get_watch(user)
+
+
+# ── 红果短剧：内容来自 NAS 上的 Capy Backend（:8788） ──────────────────
+# 客户端只认剧 id + 集号，直链一律由这里现换：签名地址带 exp，落库隔天就废；
+# 而 8788 只有内网入口，外网手机既连不上、HTTPS 页面也不能直接播 http 视频。
+@app.get('/api/dramas')
+async def drama_list(category: str = 'short', page: int = 1,
+                     q: str = '', rank: str = '', user=Depends(current_user)):
+    try:
+        items = await dramas.list_items(category, page, q, rank)
+    except dramas.DramaError as exc:
+        raise HTTPException(exc.status, str(exc))
+    return {'items': items, 'page': page}
+
+
+@app.get('/api/dramas/{item_id}')
+async def drama_detail(item_id: str, user=Depends(current_user)):
+    try:
+        return await dramas.detail(item_id)
+    except dramas.DramaError as exc:
+        raise HTTPException(exc.status, str(exc))
+
+
+@app.get('/api/dramas/{item_id}/stream/{episode}')
+async def drama_stream(item_id: str, episode: int, request: Request,
+                       user=Depends(current_user)):
+    try:
+        upstream, client = await dramas.proxy(item_id, episode,
+                                             request.headers.get('range', ''))
+    except dramas.DramaError as exc:
+        raise HTTPException(exc.status, str(exc))
+
+    headers = {'Cache-Control': 'private, max-age=0, must-revalidate'}
+    # 拖动进度全靠这几个头原样透传：少一个 Content-Range，浏览器就会当成整段重下
+    for name in ('content-range', 'accept-ranges', 'content-length'):
+        value = upstream.headers.get(name)
+        if value:
+            headers[name] = value
+    # 上游是 video/mp4，这里不猜，直接沿用；缺省按 mp4
+    media_type = upstream.headers.get('content-type') or 'video/mp4'
+
+    async def relay():
+        try:
+            async for chunk in upstream.aiter_bytes(64 * 1024):
+                yield chunk
+        finally:
+            await upstream.aclose()
+            await client.aclose()
+
+    return StreamingResponse(relay(), status_code=upstream.status_code,
+                             media_type=media_type, headers=headers)
 
 
 class RecordInput(BaseModel):

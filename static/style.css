@@ -878,6 +878,36 @@ html.is-native-app .watch-head{padding-top:8px}
 .ws-meta{min-width:0;display:flex;flex-direction:column;gap:2px}
 .ws-meta b{font-size:var(--fs-sm);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ws-meta small{font-size:var(--fs-xs);color:var(--ink-2)}
+/* 短剧那一栏：海报是竖版 3:4，跟相册视频的 16:9 缩略图不是一回事 */
+.ws-poster{flex:none;width:54px;height:72px;border-radius:10px;background-color:var(--soft);
+ background-size:cover;background-position:center;border:1px solid var(--line)}
+.ws-go{flex:none;color:var(--muted);display:inline-flex}
+.ws-go .icon{width:15px;height:15px}
+.ws-tabs{display:flex;gap:5px;padding:3px;margin:-4px 0 12px;background:var(--soft);border-radius:12px}
+.ws-tab{flex:1;min-height:34px;border-radius:9px;font-size:var(--fs-md);font-weight:600;color:var(--muted);cursor:pointer}
+.ws-tab.on{background:var(--surface);color:var(--ink);box-shadow:var(--shadow-sm)}
+.ws-toolbar{display:flex;align-items:center;gap:7px;margin-bottom:10px}
+.ws-chip{min-height:32px;padding:0 13px;border-radius:999px;border:1px solid var(--line);
+ font-size:var(--fs-sm);color:var(--ink-2);cursor:pointer}
+.ws-chip.on{background:var(--soft);border-color:var(--line-strong);color:var(--ink);font-weight:600}
+.ws-search{margin-left:auto;display:inline-flex;align-items:center;gap:5px;min-height:32px;
+ padding:0 12px;border-radius:999px;border:1px solid var(--line);font-size:var(--fs-sm);
+ color:var(--muted);max-width:56%;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;cursor:pointer}
+.ws-search .icon{width:14px;height:14px}
+.ws-detail-head{display:flex;gap:12px;align-items:flex-start;margin-bottom:10px}
+.ws-detail-meta{min-width:0;display:flex;flex-direction:column;gap:4px}
+.ws-detail-meta b{font-size:var(--fs-lead);line-height:1.3}
+.ws-detail-meta small{font-size:var(--fs-xs);color:var(--muted)}
+.ws-detail-meta .link-btn{align-self:flex-start;margin-top:2px}
+.ws-desc{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;
+ margin:0 0 10px;font-size:var(--fs-sm);line-height:1.6;color:var(--ink-2)}
+/* 列表是可滚动的，底部按钮不铺个底色会像"压在卡片上" */
+.ws-actions{background:var(--surface);border-top:1px solid var(--line);padding-top:10px}
+.ws-eps{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px;
+ max-height:min(48dvh,400px);overflow-y:auto;padding:2px}
+.ws-ep{min-height:40px;border-radius:10px;border:1px solid var(--line);background:var(--surface);
+ font-size:var(--fs-md);font-weight:600;color:var(--ink);cursor:pointer}
+.ws-ep:active{background:var(--hover)}
 .watch-chat{flex:1 1 52%;min-height:0;display:flex;flex-direction:column;background:var(--surface);border-top:1px solid var(--line)}
 /* 横过来拿手机：竖着分屏只剩 300 多 px 高，画面被压成一条。改成左右两栏，
    画面吃满剩余宽度，聊天栏固定 300px。高度交给 flex，别让 JS 写死 px。 */

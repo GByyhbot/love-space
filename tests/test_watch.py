@@ -40,9 +40,13 @@ def pause_all(client):
 
 
 def test_watch_starts_empty(client_a):
+    """先归零再断言：整个会话共用一个临时库，别的用例（比如短剧）会留下片源。"""
+    client_a.put('/api/watch', headers=HEADERS,
+                 json={'title': '', 'media': '', 'drama_id': '', 'playing': False})
     st = client_a.get('/api/watch', headers=HEADERS).json()
     assert not st.get('title')
     assert not st.get('media')
+    assert not st.get('drama_id')
     assert not st.get('playing')
 
 
