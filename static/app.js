@@ -3430,7 +3430,7 @@ function periodForm(record=null, presetDay=null){
  const chips=PERIOD_SYMPTOMS.map(s=>`<button type="button" class="sym-chip${chosen.has(s)?' on':''}" data-name="${s}" aria-pressed="${chosen.has(s)}">${s}</button>`).join('');
  // 老数据里 flow 是「少/中/多」，换成最近的档位显示，不至于打开就是空白
  const flowVal=typeof b.flow==='number'?b.flow:({'少':2,'中':3,'多':4}[b.flow]||'');
- openModal(record?'编辑这次经期':'记录这次经期',`<form class="modal-form" id="period-form"><label>这次经期开始于<input name="start" type="date" required maxlength="10" value="${esc(b.start||presetDay||today())}"></label><div class="form-row"><label>经期几天<input name="length" type="number" min="1" max="15" value="${b.length??d.length}"></label><label>周期几天<input name="cycle" type="number" min="15" max="60" value="${b.cycle??d.cycle}"></label></div>${selectField('整体经量','flow',[['','不记'],...Object.entries(PERIOD_FLOW)],flowVal)}<label>身体的感受（可多选）</label><div class="sym-chips">${chips}</div><label>想说的话（可选）<textarea name="content" maxlength="20000" placeholder="这次特别难受，或者想让他知道的…">${esc(b.content||'')}</textarea></label><p class="small-note">周期默认按历史记录的平均值填好，也可以手动改。数据加密保存，两个人一起维护同一条周期。</p>${formError()}${modalActions()}</form>`);
+ openModal(record?'编辑这次经期':'记录这次经期',`<form class="modal-form" id="period-form">${field('这次经期开始于','start',b.start||presetDay||today(),'date','required')}<div class="form-row">${field('经期几天','length',b.length??d.length,'number','min="1" max="15"')}${field('周期几天','cycle',b.cycle??d.cycle,'number','min="15" max="60"')}</div>${selectField('整体经量','flow',[['','不记'],...Object.entries(PERIOD_FLOW)],flowVal)}<label>身体的感受（可多选）</label><div class="sym-chips">${chips}</div><label>想说的话（可选）<textarea name="content" maxlength="20000" placeholder="这次特别难受，或者想让他知道的…">${esc(b.content||'')}</textarea></label><p class="small-note">周期默认按历史记录的平均值填好，也可以手动改。数据加密保存，两个人一起维护同一条周期。</p>${formError()}${modalActions()}</form>`);
  $('#period-form').onclick=e=>{const chip=e.target.closest('.sym-chip');if(!chip)return;chip.classList.toggle('on');chip.setAttribute('aria-pressed',String(chip.classList.contains('on')));};
  $('#period-form').onsubmit=async e=>{
   e.preventDefault();const form=e.currentTarget,submit=$('button[type=submit]',form);
@@ -3691,6 +3691,11 @@ function openModal(title,content,{wide=false,sheet=false,cleanup=null}={}) {
  const closeIco = cinema?icon('back'):icon('close');
  $('#modal-root').innerHTML=`<div class="modal-overlay${sheet?' sheet':''}${cinema?' cinema':''}"><section class="modal ${wide?'wide':''}${sheet?' sheet':''}${viewer?' viewer':''}${cinema?' cinema':''}" role="dialog" aria-modal="true" aria-labelledby="modal-title"><header class="modal-header"><h2 id="modal-title">${esc(title)}</h2><button class="icon-btn" data-action="${cinema?'ws-back':'close-modal'}" aria-label="${cinema?'返回':'关闭'}">${closeIco}</button></header>${content}</section></div>`;
  enhanceNativeControls($('.modal'));
+ /* 点遮罩空白处关闭：选片浮层（pick-overlay）一直是这个交互，普通弹窗之前只能点右上角叉。
+    影院层（全屏片源浏览）例外——误触一下就丢掉选片进度太坑，必须点返回箭头。
+    viewer（看图/看视频）也不做：点画面两侧的黑边容易误关，关它有右上角叉。 */
+ const ov=$('.modal-overlay');
+ if(ov&&!cinema&&!viewer)ov.addEventListener('click',e=>{if(e.target===ov)closeModal();});
  modalCleanup=cleanup;document.body.style.overflow='hidden';setTimeout(()=>$('.modal input:not([type=checkbox]),.modal textarea,.modal button')?.focus(),50);
 }
 function closeModal(){
