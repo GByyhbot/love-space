@@ -1157,8 +1157,15 @@ def clean_body(c, kind, data, user_id, previous=None):
                  'category', 'done', 'emoji', 'target', 'completion_post', 'sticker', 'amount',
                  'start', 'cycle', 'length', 'flow', 'symptoms',
                  'color', 'pain', 'sex', 'mood', 'weight', 'discharge', 'temp',
-                 'reply_to', 'pinned', 'location', 'song'}
+                 'reply_to', 'pinned', 'location', 'song', 'watch_invite'}
     body = {k: v for k, v in data.items() if k in permitted}
+    if 'watch_invite' in body:
+        # 一起看邀请卡片：文案与图标全部由前端按主题画，服务端只认一个版本号，
+        # 免得 body 变成任意 HTML / 任意跳转地址的载体。
+        invite = body['watch_invite']
+        if not isinstance(invite, dict) or invite.get('v') != 1:
+            raise HTTPException(422, '邀请卡片格式不正确')
+        body['watch_invite'] = {'v': 1}
     if 'location' in body:
         # 聊天里的「位置」消息：只存经纬度，地名让客户端去地图里显示，
         # 免得把第三方逆地理编码服务写进数据层。
@@ -1542,7 +1549,10 @@ def create_record(body: RecordInput, user=Depends(current_user)):
                    timestamp if body.kind not in db.PRIVATE else None, body.client_id))
         if body.kind not in db.PRIVATE:
             event = 'chat' if body.kind == 'chat' else ('note' if body.kind == 'note' else 'activity')
-            title = '收到一条新消息' if body.kind == 'chat' else '你们的空间有了新记录'
+            title = '你们的空间有了新记录'
+            if body.kind == 'chat':
+                title = ('TA 邀请你一起看视频，快来' if cleaned.get('watch_invite')
+                         else '收到一条新消息')
             db.notice(c, event, title, rid, user['id'])
             # 新通知已入队：立即唤醒后台投递循环，推送不再等下一个轮询周期
             nudge_worker()

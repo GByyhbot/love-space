@@ -60,7 +60,7 @@ def _static_dir():
 # 自动反映新版本，App 内「检查更新」立刻能发现——不再依赖打 v* tag 才前进。
 # 旧行为（构建期注入 LOVE_APK_VERSION）保留为兜底：扫不到包时用它。
 def _scan_apk_version():
-    fallback = clean_version(_env('LOVE_APK_VERSION', ''), '1.6.9')
+    fallback = clean_version(_env('LOVE_APK_VERSION', ''), '1.6.10')
     best = ''
     try:
         for apk in sorted(_static_dir().glob('*.apk'), key=lambda p: p.stat().st_mtime):
@@ -83,17 +83,20 @@ def _scan_apk_version():
 APK_VERSION = _scan_apk_version()
 
 
-# 内外网可达的四条线路。以前这份清单分别硬编码在前端 app.js 和安卓
+# 内外网可达的线路。以前这份清单分别硬编码在前端 app.js 和安卓
 # MainActivity 里，改一条要改三处、还容易漏；现在服务端持有权威版本：
 #   ① CSP 的 connect-src 直接由它生成 —— 少了任何一个 origin，浏览器
 #      发起的跨域探测都会被 CSP 挡掉，页面就会显示「只有本网址可达」；
 #   ② /api/routes 把它发给前端，前端不再自己抄一份。
-# 顺序有意义：index 0 是安卓的默认入口。
+# 顺序有意义：index 0 是安卓的默认入口，公网 HTTPS 必须排最前。
+# 末尾的「内网直连」是明文纯 IP，只在家里局域网可用；浏览器从 HTTPS 页面
+# 探测它会被 mixed-content 拦成不可达（正常），App 原生探测支持 http 才能测到。
 SPACE_ROUTES = (
     ('Cloudflare 隧道', 'https://love.yangyuhui.xyz/'),
     ('节点小宝', 'https://love-space.iepose.cn/'),
     ('腾讯云 CloudBase', 'https://love.350921.xyz/'),
     ('Lucky 直连', 'https://love-space.yangyuhui.xyz:4019/'),
+    ('内网直连', 'http://192.168.31.95:1314/'),
 )
 
 

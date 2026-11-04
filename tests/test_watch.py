@@ -172,3 +172,54 @@ def test_local_file_start_does_not_notify(client_a, client_b):
     client_a.put('/api/watch', headers=HEADERS,
                  json={'title': '本机文件', 'playing': True})
     assert len(watch_notices(client_b, '本机文件')) == before
+
+
+# ---- 一起看邀请卡片（聊天里 point「一起看」时自动发的那条）--------------------
+def invite_notices(client, record_id):
+    return [n for n in client.get('/api/notices', headers=HEADERS).json()
+            if n.get('record_id') == record_id]
+
+
+def post_chat(client, body):
+    return client.post('/api/records', headers=HEADERS,
+                       json={'kind': 'chat', 'body': body, 'client_id': db.uid()})
+
+
+def test_watch_invite_card_roundtrip(client_a, client_b):
+    """卡片只存一个版本号，对方收到的是明确的「邀请」而不是泛泛的新消息。"""
+    r = post_chat(client_a, {'content': '邀请你一起看视频', 'watch_invite': {'v': 1}})
+    assert r.status_code == 200, r.text
+    rec = r.json()
+    assert rec['body']['watch_invite'] == {'v': 1}
+    notes = invite_notices(client_b, rec['id'])
+    assert notes and notes[0]['title'] == 'TA 邀请你一起看视频，快来'
+
+
+def test_watch_invite_strips_extra_fields(client_a):
+    """body 不能变成任意 URL / HTML 的跳板：多余字段一律洗掉，只留 {v:1}。"""
+    r = post_chat(client_a, {'content': 'x', 'watch_invite': {
+        'v': 1, 'url': 'http://evil.example', 'html': '<script>alert(1)</script>'}})
+    assert r.status_code == 200, r.text
+    assert r.json()['body']['watch_invite'] == {'v': 1}
+
+
+def test_watch_invite_rejects_bad_payload(client_a):
+    for bad in ({'v': 2}, '一起看', None, [1], 1):
+        r = post_chat(client_a, {'content': 'x', 'watch_invite': bad})
+        assert r.status_code == 422, (bad, r.text)
+
+
+def test_plain_chat_notice_unchanged(client_a, client_b):
+    r = post_chat(client_a, {'content': '普通一句话'})
+    assert r.status_code == 200, r.text
+    notes = invite_notices(client_b, r.json()['id'])
+    assert notes and notes[0]['title'] == '收到一条新消息'
+
+
+def test_lan_route_is_exposed(client_a):
+    """内网纯 IP 线路排在最后：它不能用 https，但 /api/routes 与 CSP 都得带上。"""
+    routes = client_a.get('/api/routes', headers=HEADERS).json()['routes']
+    assert routes[0]['url'].startswith('https://')
+    assert routes[-1]['url'] == 'http://192.168.31.95:1314/'
+    csp = client_a.get('/', headers=HEADERS).headers['content-security-policy']
+    assert 'http://192.168.31.95:1314' in csp

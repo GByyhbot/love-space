@@ -755,6 +755,14 @@ function chatTimeLabel(ts,last){
  if(d.toDateString()===new Date(n.getTime()-864e5).toDateString())return '昨天 '+hm;
  return (d.getFullYear()===n.getFullYear()?'':d.getFullYear()+'年')+(d.getMonth()+1)+'月'+d.getDate()+'日 '+hm;
 }
+/* 一起看邀请卡的两种朝向：自己发的写「点击重新发起」，对方发的写「点一下，一起看」。
+   卡片自己就是整条气泡（不套 .chat-bubble），主色实底跟七套主题走。 */
+/* 参考图里是实心沙发剪影，通用 icon() 是纯描边，画出来像小汽车；
+   这里用几个圆角矩形直接拼：两块靠背 + 一体座垫 + 两只脚。 */
+const WATCH_SOFA=`<svg class="cw-sofa" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="7" height="6" rx="2"/><rect x="13" y="5" width="7" height="6" rx="2"/><rect x="2" y="11" width="20" height="7" rx="2.5"/><rect x="5" y="18" width="2" height="2" rx="1"/><rect x="17" y="18" width="2" height="2" rx="1"/></svg>`;
+function watchInviteCard(mine,attrs=''){
+ return `<button type="button" class="chat-watch-invite" data-action="chat-watch-invite" data-mine="${mine?1:0}" ${attrs} aria-label="一起看视频"><span class="cw-ico">${WATCH_SOFA}</span><span class="cw-body"><b>一起看视频</b><small>${mine?'点击重新发起':'点一下，一起看'}</small></span></button>`;
+}
 function chatRows(quiet) {
  /* 页内搜索只筛已加载的最近 200 条：聊天会无限增长，全量搜索得走后端，
     这里的定位是"刚聊过的东西翻不到了"，够用又不加接口。 */
@@ -781,10 +789,14 @@ function chatRows(quiet) {
      src 是在线搜来的 30 秒试听地址（走同源 /api/music/stream 转发）。两个都有就优先本地文件。 */
   const song=r.body.song&&r.body.song.title?r.body.song:null;
   const songCard=song?songCardMarkup(song):'';
-  const inner=songCard?`<div class="chat-bubble song">${quote}${songCard}</div>`:locCard?`<div class="chat-bubble loc">${quote}${locCard}</div>`:sticker?`<div class="chat-sticker${sticker.endsWith('.webm')?' video':''}">${sticker.endsWith('.webm')?`<video src="${esc(sticker)}" autoplay loop muted playsinline></video>`:`<img src="${esc(sticker)}" alt="贴纸" loading="lazy">`}</div>`:`<div class="chat-bubble${voiceOnly?' voice':''}${r.body.pinned?' pinned':''}">${quote}<span style="white-space:pre-wrap">${esc(r.body.content)}</span>${mediaMarkup(r.media)}</div>`;
+  /* 一起看邀请卡：body.watch_invite={v:1}，文案和图标全在前端按主题画。
+     自己那侧点一下是「重新发起」，对方那侧点一下是「加入」，别让两边互发刷屏。 */
+  const invite=r.body.watch_invite&&r.body.watch_invite.v===1;
+  const inviteCard=invite?watchInviteCard(mine,`data-id="${r.id}"`):'';
+  const inner=inviteCard?inviteCard:songCard?`<div class="chat-bubble song">${quote}${songCard}</div>`:locCard?`<div class="chat-bubble loc">${quote}${locCard}</div>`:sticker?`<div class="chat-sticker${sticker.endsWith('.webm')?' video':''}">${sticker.endsWith('.webm')?`<video src="${esc(sticker)}" autoplay loop muted playsinline></video>`:`<img src="${esc(sticker)}" alt="贴纸" loading="lazy">`}</div>`:`<div class="chat-bubble${voiceOnly?' voice':''}${r.body.pinned?' pinned':''}">${quote}<span style="white-space:pre-wrap">${esc(r.body.content)}</span>${mediaMarkup(r.media)}</div>`;
   return `${tl?`<div class="chat-day">${tl}</div>`:''}<div class="chat-line ${mine?'mine':''}" id="msg-${r.id}">${avatar(r.author)}<div>${inner}${ops?`<div class="chat-time">${ops}</div>`:''}</div></div>`;
  }).join('');
- const pend=pending.map(p=>`<div class="chat-line mine pending">${avatar(state.me.user.id)}<div><div class="chat-bubble">${esc(p.body.content||'一个附件')}</div><div class="chat-time">尚未发送 <button data-action="retry-chat" data-id="${p.client_id}">点击重试</button></div></div></div>`).join('');
+ const pend=pending.map(p=>`<div class="chat-line mine pending">${avatar(state.me.user.id)}<div>${p.body.watch_invite?watchInviteCard(true):`<div class="chat-bubble">${esc(p.body.content||'一个附件')}</div>`}<div class="chat-time">尚未发送 <button data-action="retry-chat" data-id="${p.client_id}">点击重试</button></div></div></div>`).join('');
  if(q&&!chats.length)return `<div class="chat-no-match">最近 200 条里没有「${esc(state.chatSearch)}」，试试清掉筛选。</div>`;
  return rows+pend||(quiet
   ?`<p class="watch-chat-empty">${icon('chat')}<span>边看边聊，想说什么就说</span></p>`
@@ -3445,7 +3457,8 @@ let BROWSER_ROUTES=[
  {name:'Cloudflare 隧道',url:'https://love.yangyuhui.xyz/'},
  {name:'节点小宝',url:'https://love-space.iepose.cn/'},
  {name:'腾讯云 CloudBase',url:'https://love.350921.xyz/'},
- {name:'Lucky 直连',url:'https://love-space.yangyuhui.xyz:4019/'}];
+ {name:'Lucky 直连',url:'https://love-space.yangyuhui.xyz:4019/'},
+ {name:'内网直连',url:'http://192.168.31.95:1314/'}];
 /* 服务端才是线路清单的权威来源（app/config.py: SPACE_ROUTES）。
    拿到就覆盖本地这份兜底清单，省得改一处漏两处。 */
 async function loadRoutes(){
@@ -4285,6 +4298,28 @@ async function sendChat(body,clientId=uuid()) {
  try {await post('/records',{kind:'chat',body,client_id:clientId});setPending(pendingChats().filter(p=>p.client_id!==clientId));}catch(e){if($('#chat-log')){$('#chat-log').innerHTML=chatRows();scrollChat();}throw e;}
 }
 
+/* 点「一起看」时给对方留一张邀请卡。它只是一条普通 chat 记录，服务端
+   create_record() 会自动 db.notice() + nudge_worker()，对方哪怕没开着页面也能
+   从 SSE / Web Push / 第三方渠道收到「TA 邀请你一起看视频」。
+   60 秒内重复进页面不再刷屏；点自己那张卡的「重新发起」用 force=true 破例。 */
+const WATCH_INVITE_KEY='love-watch-invite-at';
+let watchInvitePending=false;
+async function sendWatchInvite(force=false){
+ if(watchInvitePending)return false;
+ const last=Number(localStorage.getItem(WATCH_INVITE_KEY)||0);
+ if(!force&&Date.now()-last<60000)return false;
+ watchInvitePending=true;
+ try{
+  await sendChat({content:'邀请你一起看视频',watch_invite:{v:1}});
+  localStorage.setItem(WATCH_INVITE_KEY,String(Date.now()));
+  try{await refresh(false);}catch{}
+  const wl=$('#watch-log');if(wl){wl.innerHTML=chatRows(true);watchScroll();}
+  const cl=$('#chat-log');if(cl){cl.innerHTML=chatRows();scrollChat();}
+  return true;
+ }catch(e){toast(e.message||'邀请没发出去');return false;}
+ finally{watchInvitePending=false;}
+}
+
 async function act(action,id,el) {
  const r=state.records.find(x=>x.id===id);
  if(action==='reload')return boot();
@@ -4428,7 +4463,9 @@ async function act(action,id,el) {
   if(!isFinite(lat)||!isFinite(lng))return toast('这条位置信息不完整');
   return openMap(lat,lng,'我们的位置');
  }
- if(action==='chat-watch'){const p=$('#chat-fn');if(p)p.hidden=true;return navigate('watch');}
+ if(action==='chat-watch'){const p=$('#chat-fn');if(p)p.hidden=true;sendWatchInvite();return navigate('watch');}
+ /* 邀请卡：自己那侧是「重新发起」，对方那侧点一下直接进放映室 */
+ if(action==='chat-watch-invite'){const p=$('#chat-fn');if(p)p.hidden=true;if(el&&el.dataset.mine==='1')sendWatchInvite(true);return navigate('watch');}
  if(action==='chat-song'){const p=$('#chat-fn');if(p)p.hidden=true;return songPicker();}
  if(action==='song-tab'){state.songTab=id;$$('.ss-tab').forEach(b=>b.classList.toggle('active',b.dataset.id===id));return renderSongPane();}
  if(action==='song-toggle')return songToggle(el);

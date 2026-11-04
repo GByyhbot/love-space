@@ -21,13 +21,13 @@ import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 
-import java.net.InetAddress;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.InetAddress;
 import java.net.Inet6Address;
 import java.net.InetSocketAddress;
+import java.net.HttpURLConnection;
 import java.net.Socket;
 import java.net.URL;
 import java.util.Arrays;
@@ -37,7 +37,6 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
-import javax.net.ssl.HttpsURLConnection;
 import javax.net.ssl.SSLParameters;
 import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
@@ -54,7 +53,9 @@ public class MainActivity extends BridgeActivity {
         "https://love.yangyuhui.xyz/",
         "https://love-space.iepose.cn/",
         "https://love.350921.xyz/",
-        "https://love-space.yangyuhui.xyz:4019/"
+        "https://love-space.yangyuhui.xyz:4019/",
+        // 明文纯 IP，只在家里局域网可达。探测与 cookie 都按 scheme 走（不能对 http 用 TLS）。
+        "http://192.168.31.95:1314/"
     };
     private static final String SPACE_URL = SPACE_URLS[0];
     /* 与 SPACE_URLS 一一对应的展示名，设置页「链路检测」用。 */
@@ -62,7 +63,8 @@ public class MainActivity extends BridgeActivity {
         "Cloudflare 隧道",
         "节点小宝",
         "腾讯云 CloudBase",
-        "Lucky 直连"
+        "Lucky 直连",
+        "内网直连"
     };
     private static final String OFFLINE_PAGE = "file:///android_asset/lovespace-offline.html";
     private static final String PREFS = "lovespace_prefs";
@@ -666,7 +668,7 @@ public class MainActivity extends BridgeActivity {
 
     /** 并行探测全部线路，返回与 SPACE_URLS 对齐的延迟数组（不可达为 -1）。 */
     private long[] probeAll() {
-        // 先在**当前线程**把四个域名解析完（IPv6 优先排序），再交给各探测线程。
+        // 先在**当前线程**把各条线路的域名/IP 解析完（IPv6 优先排序），再交给各探测线程。
         // 解析时临时切换 java.net.preferIPv6Addresses：Java 默认 IPv4 优先且**失败不
         // 回退**，Lucky 直连是纯 IPv6 线路（A 记录指向运营商 CGNAT 共享地址，公网
         // 无法入站），于是一直连那个永远不通的 IPv4 地址 → 判定「不可达」；而
@@ -722,7 +724,7 @@ public class MainActivity extends BridgeActivity {
      * 对单条线路发一次 GET /api/status，返回耗时毫秒；不可达返回 -1。
      *
      * 四个坑都在这里踩过：
-     * ① HttpsURLConnection 默认 UA 是 `Java/1.8.0_392`，Cloudflare 对它的判定是恶意的，
+     * ① URLConnection 默认 UA 是 `Java/1.8.0_392`，Cloudflare 对它的判定是恶意的，
      *    CF 隧道那条线路直接 403 —— 探测以为线路死了，其实 WebView（UA=LoveSpaceApp/…）
      *    访问完全正常。必须显式带 App 的 UA。
      * ② 原来要求 2xx~3xx 才算通，403/404 这种「TCP 通了、服务也应答了」被判成不可达。
@@ -741,10 +743,14 @@ public class MainActivity extends BridgeActivity {
         final String host;
         final int portNum;
         final String path;
+        final boolean secure;
         try {
             URL u = new URL(base);
             host = u.getHost();
-            portNum = u.getPort() > 0 ? u.getPort() : 443;
+            secure = "https".equalsIgnoreCase(u.getProtocol());
+            // 默认端口按协议取：http=80、https=443。以前一律写 443，
+            // 内网明文线路（:1314 已显式带端口）以外的 http 地址会连错端口。
+            portNum = u.getPort() > 0 ? u.getPort() : (secure ? 443 : 80);
             path = new URL(u, "api/status").getFile();
         } catch (Exception e) {
             Log.i(TAG, "线路地址无效: " + base);
@@ -757,15 +763,15 @@ public class MainActivity extends BridgeActivity {
         final String userAgent = "LoveSpaceApp/" + ver + " (Android; LinkProbe)";
 
         for (InetAddress addr : addrs) {
-            long ms = probeOnce(host, portNum, path, userAgent, addr);
+            long ms = probeOnce(host, portNum, path, userAgent, addr, secure);
             if (ms >= 0) return ms;
         }
         // 地址列表为空（解析失败）：按默认 DNS 行为试最后一次，尽量不误判
         if (addrs.length == 0) {
-            HttpsURLConnection conn = null;
+            HttpURLConnection conn = null;
             try {
                 URL url = new URL(new URL(base), "api/status");
-                conn = (HttpsURLConnection) url.openConnection();
+                conn = (HttpURLConnection) url.openConnection();
                 conn.setConnectTimeout(PROBE_TIMEOUT_MS);
                 conn.setReadTimeout(PROBE_TIMEOUT_MS);
                 conn.setUseCaches(false);
@@ -790,31 +796,39 @@ public class MainActivity extends BridgeActivity {
         return -1;
     }
 
-    /** 对单个地址做一次 TLS + HTTP/1.1 GET，成功返回耗时毫秒，任何失败返回 -1。 */
-    private long probeOnce(String host, int port, String path, String userAgent, InetAddress addr) {
-        SSLSocket ssl = null;
+    /** 对单个地址做一次（可选 TLS）+ HTTP/1.1 GET，成功返回耗时毫秒，任何失败返回 -1。
+     *  http 的明文线路（内网直连）不能套 SSLSocket，否则握手直接失败、被判成不可达。 */
+    private long probeOnce(String host, int port, String path, String userAgent,
+                           InetAddress addr, boolean secure) {
+        Socket sock = null;
         try {
             Socket raw = new Socket();
             raw.connect(new InetSocketAddress(addr, port), PROBE_TIMEOUT_MS);
-            ssl = (SSLSocket) ((SSLSocketFactory) SSLSocketFactory.getDefault())
-                .createSocket(raw, host, port, true);
-            SSLParameters params = ssl.getSSLParameters();
-            params.setEndpointIdentificationAlgorithm("HTTPS"); // 证书主机名校验
-            ssl.setSSLParameters(params);
-            applySni(ssl, host); // SNIHostName 是 API 24+，低版本用反射，失败就无 SNI 直连
-            ssl.setSoTimeout(PROBE_TIMEOUT_MS);
-            ssl.startHandshake();
+            sock = raw;
+            if (secure) {
+                SSLSocket ssl = (SSLSocket) ((SSLSocketFactory) SSLSocketFactory.getDefault())
+                    .createSocket(raw, host, port, true);
+                SSLParameters params = ssl.getSSLParameters();
+                params.setEndpointIdentificationAlgorithm("HTTPS"); // 证书主机名校验
+                ssl.setSSLParameters(params);
+                applySni(ssl, host); // SNIHostName 是 API 24+，低版本用反射，失败就无 SNI 直连
+                ssl.setSoTimeout(PROBE_TIMEOUT_MS);
+                ssl.startHandshake();
+                sock = ssl;
+            } else {
+                raw.setSoTimeout(PROBE_TIMEOUT_MS);
+            }
             StringBuilder req = new StringBuilder();
             req.append("GET ").append(path).append(" HTTP/1.1\r\n")
                .append("Host: ").append(host).append(':').append(port).append("\r\n")
                .append("User-Agent: ").append(userAgent).append("\r\n")
                .append("Accept: application/json\r\n")
                .append("Connection: close\r\n\r\n");
-            OutputStream os = ssl.getOutputStream();
+            OutputStream os = sock.getOutputStream();
             os.write(req.toString().getBytes("ISO-8859-1"));
             os.flush();
             BufferedReader reader = new BufferedReader(
-                new InputStreamReader(ssl.getInputStream(), "ISO-8859-1"));
+                new InputStreamReader(sock.getInputStream(), "ISO-8859-1"));
             long t0 = System.nanoTime();
             String status = reader.readLine();
             long ms = (System.nanoTime() - t0) / 1_000_000L;
@@ -833,8 +847,8 @@ public class MainActivity extends BridgeActivity {
             Log.i(TAG, "探测 " + host + "@" + addr.getHostAddress() + " 失败: " + e);
             return -1;
         } finally {
-            if (ssl != null) {
-                try { ssl.close(); } catch (Exception ignored) {}
+            if (sock != null) {
+                try { sock.close(); } catch (Exception ignored) {}
             }
         }
     }
@@ -899,8 +913,11 @@ public class MainActivity extends BridgeActivity {
         for (String u : SPACE_URLS) {
             try {
                 URL url = new URL(u);
-                String base = "https://" + url.getHost() + (url.getPort() > 0 ? ":" + url.getPort() : "") + "/";
-                cm.setCookie(base, SESSION_COOKIE + "=; Path=/; Max-Age=0; Secure");
+                boolean secure = "https".equalsIgnoreCase(url.getProtocol());
+                String base = url.getProtocol() + "://" + url.getHost()
+                    + (url.getPort() > 0 ? ":" + url.getPort() : "") + "/";
+                cm.setCookie(base, SESSION_COOKIE + "=; Path=/; Max-Age=0"
+                    + (secure ? "; Secure" : ""));
             } catch (Exception ignored) {}
         }
         cm.flush();
@@ -909,8 +926,13 @@ public class MainActivity extends BridgeActivity {
     private void seedCookie(CookieManager cm, String url, String token) {
         try {
             URL u = new URL(url);
-            String base = "https://" + u.getHost() + (u.getPort() > 0 ? ":" + u.getPort() : "") + "/";
-            cm.setCookie(base, SESSION_COOKIE + "=" + token + "; Path=/; Max-Age=2592000; Secure; HttpOnly; SameSite=Lax");
+            // 明文内网线路不能写死 https:// + Secure：CookieManager 会把它种到
+            // 另一个域，切过去照样是未登录。http 线路也不该带 Secure 属性。
+            boolean secure = "https".equalsIgnoreCase(u.getProtocol());
+            String base = u.getProtocol() + "://" + u.getHost()
+                + (u.getPort() > 0 ? ":" + u.getPort() : "") + "/";
+            cm.setCookie(base, SESSION_COOKIE + "=" + token + "; Path=/; Max-Age=2592000"
+                + (secure ? "; Secure" : "") + "; HttpOnly; SameSite=Lax");
         } catch (Exception ignored) {}
     }
 

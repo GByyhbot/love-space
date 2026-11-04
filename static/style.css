@@ -2972,3 +2972,27 @@ body.kb-open .pick-overlay{padding-bottom:0}
  .ws-rail-card{flex:0 0 88px;width:88px}
  .ws-home-sec .ws-section{margin:8px 0 6px}
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   一起看邀请卡（v212）
+   整张卡就是那条气泡，不套 .chat-bubble：主色实底 + 圆形沙发 + 两行白字，
+   跟参考图一致；颜色全走 --primary / --on-primary / --primary-rgb，
+   七套主题、夜间、自定义主色都自动跟随。左右只换圆角方向。
+   ═══════════════════════════════════════════════════════════════ */
+.chat-watch-invite{display:flex;align-items:center;gap:12px;text-align:left;
+ padding:12px 16px;min-width:198px;max-width:272px;box-sizing:border-box;
+ border:0;border-radius:18px 18px 18px 6px;
+ background:var(--primary);color:var(--on-primary);font:inherit;font-weight:600;
+ box-shadow:0 3px 12px rgba(var(--primary-rgb),.24);cursor:pointer;
+ transition:transform var(--speed)}
+.chat-line.mine .chat-watch-invite{border-radius:18px 6px 18px 18px}
+.chat-watch-invite:active{transform:scale(.97)}
+.chat-watch-invite .cw-ico{width:44px;height:44px;flex:none;display:grid;place-items:center;
+ border-radius:50%;background:rgba(0,0,0,.16);color:inherit}
+.chat-watch-invite .cw-ico .cw-sofa{width:26px;height:26px;display:block;
+ fill:currentColor;stroke:none}
+.chat-watch-invite .cw-body{display:flex;flex-direction:column;gap:2px;
+ line-height:1.35;min-width:0;flex:1}
+.chat-watch-invite .cw-body b{font-size:var(--fs-h3);font-weight:700;white-space:nowrap}
+.chat-watch-invite .cw-body small{font-size:var(--fs-lead);opacity:.86;white-space:nowrap}
+.chat-line.pending .chat-watch-invite{opacity:.7}
