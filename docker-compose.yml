@@ -6,6 +6,11 @@ services:
     # 想在 NAS 上编译（GitHub/CI 不可用时的应急），见 .workbuddy/deploy_sync.py --local。
     image: ${LOVE_IMAGE:-2126263229/love-space:latest}
     container_name: love-space
+    # 非 root 运行。镜像里已写 USER，这里再指定一次是为了让"补丁镜像"（叠层打出来的
+    # 那种不带 USER 指令）也同样降权 —— compose 的 user 优先级高于镜像的 USER。
+    # 1000:1001 对齐 NAS 上的普通用户 Yyh154019:Users，数据卷里的文件主人能直接改；
+    # 别写成 1000:1000，那是 Administrators 组。
+    user: "${LOVE_UID:-1000}:${LOVE_GID:-1001}"
     restart: unless-stopped
     # 日志不设上限时 json-file 会一直长，跑几个月能把 /var/lib/docker 撑爆
     logging:
@@ -39,6 +44,8 @@ services:
     environment:
       TZ: Asia/Shanghai
       DATA_DIR: /data
+      # 根文件系统只读、HOME 不能落在不存在且不可写的地方，否则缓存类库会炸
+      HOME: /tmp
       # 公网访问地址（用于来源校验与通知跳转）
       PUBLIC_URL: ${PUBLIC_URL:-https://love-space.iepose.cn}
       # 会话 Cookie 是否带 Secure：默认 true（https 才发）。内网明文 http 访问时
