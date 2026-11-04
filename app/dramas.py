@@ -6,11 +6,16 @@
     /api/v1/providers/<源>/browse?category=…&page=1
     /api/v1/providers/<源>/search?q=…&page=1
     /api/v1/providers/<源>/items/<id>      → seasons[].episodes[].streamUrl
-    /api/v1/stream/<签名>                   → 206 + video/mp4，支持 Range
+    /api/v1/stream/<签名>                   → video/mp4（红果）或 HLS m3u8（多数其它源）
 
 所以这里不写死任何一家：服务地址由主人自己加，能用哪些源由主人自己勾。
 上游的 `hongguo.js` 之类只是 Capy 宿主的适配器（依赖 `Widget.*` 运行时），不是播放器，
 前端完全不需要它 —— 只认本站的 `/api/dramas/…`。
+
+**只有红果吐 mp4，其余多数是 HLS**。浏览器原生 <video> 播不了 m3u8（mpv 这类自带
+解复用内核的才行），所以这层还要把播放列表里的分片/密钥/子列表 URI 改写成走本站的
+签名代理，再交给前端的 hls.js 用 MSE 播。改写后的地址带 HMAC 签名，客户端无法伪造
+成任意 URL —— 否则这个「分片代理」就成了一台人形 SSRF。
 
 三个约束决定了这层必须留在服务端：
 
@@ -22,17 +27,22 @@
    免得这个接口变成一台人形代理。
 """
 import asyncio
+import base64
+import hashlib
+import hmac
 import ipaddress
+import json
 import logging
 import os
 import re
 import threading
 import time
-from urllib.parse import quote, urlsplit
+from urllib.parse import quote, urljoin, urlsplit
 
 import httpx
 
 from . import db
+from .security import secret_key
 
 log = logging.getLogger('love.space')
 
@@ -44,8 +54,10 @@ DEFAULT_ENABLED = [f'{DEFAULT_SERVICE_ID}:hongguo']
 
 SETTING_KEY = 'drama_sources'
 
-# 上游是拿 id 拼路径的，几个标识都必须卡死，否则「../」能拐到别的接口去
-ITEM_RE = re.compile(r'^\d{1,32}$')
+# 上游是拿 id 拼路径的，几个标识都必须卡死，否则「../」能拐到别的接口去。
+# 内容 id 各家花式不同：红果是纯数字，Jable 是 miab-678，蜜桃是 video@@…@@missav。
+# 所以放开字母与 _@.:-，但仍不许斜杠、百分号、空格，也单独拦住「..」。
+ITEM_RE = re.compile(r'^[A-Za-z0-9_@.:-]{1,160}$')
 SID_RE = re.compile(r'^[a-z0-9]{1,16}$')
 PROVIDER_RE = re.compile(r'^[A-Za-z0-9_-]{1,32}$')
 EPISODE_MAX = 2000
@@ -56,11 +68,21 @@ DETAIL_TTL = 300
 PROVIDERS_TTL = 300
 # 一台服务最多等这么久；主人加的地址可能是台关着的机器
 PROBE_TIMEOUT = 3.0
+# 分片代理的签名有效期：一集通常几分钟，留足余量又不至于永久有效
+PART_TTL = 6 * 3600
+PART_PATH = '/api/drama-part?t='
+PURPOSE_HLS_PART = b'love-space:hls-part:v1'
+# 有些 CDN 会看 UA / Referer，不给就是 403
+HLS_UA = ('Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 '
+          '(KHTML, like Gecko) Chrome/120.0 Mobile Safari/537.36')
+MAX_PLAYLIST = 2 * 1024 * 1024
 
 _core = {}          # (base, provider, item_id) -> (expire_ts, detail)
 _providers = {}     # base -> (expire_ts, [provider])
+_stream_probe = {}  # (base, provider, item_id, ep) -> (expire_ts, url, is_hls)
 _lock = threading.Lock()
 _transport = None   # 测试注入 httpx.MockTransport
+_part_key_cache = None
 
 
 class DramaError(Exception):
@@ -91,6 +113,158 @@ async def _get_json(base, path):
         return r.json()
     except Exception:
         raise DramaError('片源服务返回了非 JSON 内容')
+
+
+async def _get_abs_json(url):
+    """resolveUrl 给的是绝对地址（不在 base/path 这套里），单独走一次。"""
+    try:
+        async with _client() as c:
+            r = await c.get(url)
+    except Exception as exc:
+        log.warning('drama resolve failed: %s %s', urlsplit(url).path, exc)
+        raise DramaError('片源地址解析不出来')
+    if r.status_code >= 400:
+        raise DramaError('片源地址解析不出来')
+    try:
+        return r.json()
+    except Exception:
+        raise DramaError('片源地址返回了非 JSON 内容')
+
+
+async def _get_text(url, limit=MAX_PLAYLIST):
+    """播放列表是文本，整段取回（有上限，别让上游塞个 GB 进来）。
+
+    返回 (文本, 最终地址)：Capy 的 /api/v1/stream/<签名> 会重定向到源站真正的
+    m3u8。相对分片（enc.key / a0.ts / video0.jpeg）必须以**重定向后**的地址
+    为基准补全，按 Capy 的地址算会全部指到内网去，密钥和分片直接 401/404。
+    """
+    client = _client(timeout=httpx.Timeout(20.0, connect=8.0),
+                     headers={'User-Agent': HLS_UA})
+    try:
+        r = await client.get(url)
+        if r.status_code >= 400:
+            raise DramaError('播放列表取不到')
+        return r.content[:limit].decode('utf-8', 'ignore'), str(r.url)
+    except DramaError:
+        raise
+    except Exception as exc:
+        log.warning('drama playlist failed: %s %s', urlsplit(url).path, exc)
+        raise DramaError('播放列表取不到')
+    finally:
+        await client.aclose()
+
+
+# ── HLS 分片代理 ────────────────────────────────────────────────────────
+def _part_key():
+    """按用途派生一把签名钥匙；每次分片都去读 secret.key 太浪费，缓存住。"""
+    global _part_key_cache
+    if _part_key_cache is None:
+        _part_key_cache = hmac.new(secret_key(), PURPOSE_HLS_PART,
+                                   hashlib.sha256).digest()
+    return _part_key_cache
+
+
+def _b64(raw):
+    return base64.urlsafe_b64encode(raw).rstrip(b'=').decode()
+
+
+def _unb64(text):
+    return base64.urlsafe_b64decode(text + '=' * (-len(text) % 4))
+
+
+def sign_part(url, referer=''):
+    """把一条分片地址签成短 token；客户端改不动，也不能自己造新地址。
+
+    这里不做「任意 URL 代理」：token 只能由服务端从上游播放列表里读出来后签发，
+    攻击者拿不到密钥就拼不出合法 token，SSRF 的口子才算真的堵上。
+    """
+    body = json.dumps({'u': url, 'r': referer,
+                       'x': int(time.time()) + PART_TTL},
+                      separators=(',', ':')).encode()
+    payload = _b64(body)
+    sig = _b64(hmac.new(_part_key(), payload.encode(), hashlib.sha256).digest()[:12])
+    return payload + '.' + sig
+
+
+def verify_part(token):
+    try:
+        payload, sig = str(token or '').split('.', 1)
+        want = hmac.new(_part_key(), payload.encode(), hashlib.sha256).digest()[:12]
+        if not hmac.compare_digest(want, _unb64(sig)):
+            return None
+        data = json.loads(_unb64(payload))
+        if int(data['x']) < int(time.time()):
+            return None
+        url = str(data['u'])
+        parts = urlsplit(url)
+        # 再兜一层：只放行 http(s)、不带账号密码、有主机名
+        if parts.scheme not in ('http', 'https') or not parts.hostname or parts.username:
+            return None
+        return url, str(data.get('r') or '')
+    except Exception:
+        return None
+
+
+_URI_ATTR = re.compile(r'(URI=")([^"]+)(")', re.IGNORECASE)
+
+
+def _origin(url):
+    parts = urlsplit(url)
+    return f'{parts.scheme}://{parts.netloc}/' if parts.scheme and parts.netloc else ''
+
+
+def _part_link(uri, playlist_url, referer):
+    """相对 URI 按播放列表地址补全，再换成经本站的签名地址。"""
+    absolute = urljoin(playlist_url, uri)
+    parts = urlsplit(absolute)
+    if parts.scheme not in ('http', 'https') or not parts.hostname or parts.username:
+        raise DramaError('播放列表里有不认识的地址')
+    return PART_PATH + quote(sign_part(absolute, referer), safe='')
+
+
+def rewrite_playlist(text, playlist_url):
+    """逐行改写 m3u8：分片行、子列表行，以及 KEY/MAP 等属性里的 URI="…"。"""
+    referer = _origin(playlist_url)
+    out = []
+    for raw in text.splitlines():
+        line = raw.strip()
+        if line.startswith('#'):
+            if 'URI="' in line or 'uri="' in line:
+                line = _URI_ATTR.sub(
+                    lambda m: m.group(1) + _part_link(m.group(2), playlist_url, referer) + m.group(3),
+                    line)
+            out.append(line)
+        elif line:
+            out.append(_part_link(line, playlist_url, referer))
+        else:
+            out.append('')
+    return '\n'.join(out) + '\n'
+
+
+async def part_proxy(token, range_header=''):
+    """按签名取一片。返回 (upstream, client)，调用方负责关。"""
+    info = verify_part(token)
+    if not info:
+        raise DramaError('播放地址已失效，重新选一次集', 403)
+    url, referer = info
+    headers = {'User-Agent': HLS_UA}
+    if referer:
+        headers['Referer'] = referer
+    if range_header:
+        headers['Range'] = range_header
+    client = _client(timeout=httpx.Timeout(60.0, connect=10.0), headers=headers)
+    try:
+        request = client.build_request('GET', url)
+        upstream = await client.send(request, stream=True)
+    except Exception as exc:
+        await client.aclose()
+        log.warning('drama part failed: %s %s', urlsplit(url).netloc, exc)
+        raise DramaError('这一片暂时取不到')
+    if upstream.status_code >= 400 and upstream.status_code != 416:
+        await upstream.aclose()
+        await client.aclose()
+        raise DramaError('这一片暂时取不到')
+    return upstream, client
 
 
 # ── 配置：服务实例 + 启用哪些组件 ────────────────────────────────────────
@@ -346,16 +520,33 @@ async def list_items(base, provider, category='', page=1, keyword='', rank=''):
 
 def _parse_detail(item_id, payload):
     episodes = []
-    for season in payload.get('seasons') or []:
+    seasons = payload.get('seasons') or []
+    if not isinstance(seasons, list):
+        seasons = []
+    for season in seasons:
+        if not isinstance(season, dict):
+            continue
         for ep in season.get('episodes') or []:
-            url = ep.get('streamUrl') or ep.get('videoUrl') or ''
-            number = int(ep.get('episodeNumber') or ep.get('episode') or len(episodes) + 1)
-            if not url:
+            if not isinstance(ep, dict):
+                continue
+            # 各家给播放地址的字段名不一样：红果/Jable 用 streamUrl，剧果这类的
+            # 剧集只有 mediaUrl + resolveUrl（要再解析一次才拿得到 videoUrl）。
+            url = ep.get('streamUrl') or ep.get('videoUrl') or ep.get('mediaUrl') or ''
+            resolve = ep.get('resolveUrl') or ''
+            if not url and not resolve:
+                continue
+            raw = ep.get('episodeNumber') or ep.get('episode') or len(episodes) + 1
+            try:
+                number = int(raw)
+            except (TypeError, ValueError):
+                number = len(episodes) + 1
+            if number < 1 or number > EPISODE_MAX:
                 continue
             episodes.append({
                 'n': number,
-                'title': (ep.get('title') or f'第{number}集').strip(),
-                'url': url,
+                'title': str(ep.get('title') or f'第{number}集').strip(),
+                'url': str(url),
+                'resolve': str(resolve),
             })
     if not episodes:
         raise DramaError('这个内容还没有可播的剧集', 404)
@@ -369,15 +560,18 @@ def _parse_detail(item_id, payload):
 
 
 async def _detail(base, provider, item_id):
-    if not ITEM_RE.match(str(item_id or '')):
+    item_id = str(item_id or '')
+    if not ITEM_RE.match(item_id) or '..' in item_id:
         raise DramaError('内容编号不对', 400)
-    key = (base, provider, str(item_id))
+    key = (base, provider, item_id)
     now = time.time()
     with _lock:
         hit = _core.get(key)
     if hit and hit[0] > now:
         return hit[1]
-    payload = await _get_json(base, f'/api/v1/providers/{provider}/items/{item_id}')
+    # id 里可能带 @ / : 之类，拼进路径前先编码
+    payload = await _get_json(
+        base, f'/api/v1/providers/{provider}/items/{quote(item_id, safe="")}')
     data = _parse_detail(item_id, payload)
     with _lock:
         _core[key] = (now + DETAIL_TTL, data)
@@ -402,16 +596,82 @@ async def detail(base, provider, item_id):
 async def stream_url(base, provider, item_id, episode):
     """按剧集号换一条当次有效的直链；过期了就自然命中缓存刷新。"""
     data = await _detail(base, provider, item_id)
-    episode = int(episode or 1)
-    for ep in data['episodes']:
-        if ep['n'] == episode:
-            return ep['url']
+    try:
+        episode = int(episode or 1)
+    except (TypeError, ValueError):
+        raise DramaError('集数不对', 400)
+    ep = next((e for e in data['episodes'] if e['n'] == episode), None)
     # 集号对不上（比如上游改过编号）时退到按序号取，总比整页报错强
-    if 1 <= episode <= len(data['episodes']):
+    if ep is None and 1 <= episode <= len(data['episodes']):
         log.warning('drama %s/%s episode %s not found, fallback #%s',
                     provider, item_id, episode, episode)
-        return data['episodes'][episode - 1]['url']
-    raise DramaError('没有这一集', 404)
+        ep = data['episodes'][episode - 1]
+    if ep is None:
+        raise DramaError('没有这一集', 404)
+    if ep['url']:
+        return ep['url']
+    if ep['resolve']:
+        payload = await _get_abs_json(ep['resolve'])
+        url = payload.get('videoUrl') or payload.get('url') or payload.get('streamUrl') or ''
+        if not url:
+            raise DramaError('这个片源解析不出播放地址')
+        # 回填进详情缓存，同一集反复拖动/换回时不必再解析一次
+        ep['url'] = str(url)
+        return ep['url']
+    raise DramaError('这一集没有播放地址', 404)
+
+
+async def probe_stream(base, provider, item_id, episode):
+    """只读开头几十字节判断这一集是 mp4 还是 HLS，别把整个视频拉进内存。"""
+    url = await stream_url(base, provider, item_id, episode)
+    key = (base, provider, str(item_id), int(episode))
+    now = time.time()
+    with _lock:
+        hit = _stream_probe.get(key)
+        if hit and hit[0] > now and hit[1] == url:
+            return hit[2]
+    client = _client(timeout=httpx.Timeout(12.0, connect=8.0),
+                     headers={'User-Agent': HLS_UA, 'Range': 'bytes=0-64'})
+    try:
+        request = client.build_request('GET', url)
+        upstream = await client.send(request, stream=True)
+        head = b''
+        async for chunk in upstream.aiter_bytes(128):
+            head = chunk[:128]
+            break
+        if upstream.status_code >= 400:
+            await upstream.aclose()
+            raise DramaError('这一集暂时播不了')
+        ct = (upstream.headers.get('content-type') or '').lower()
+        is_hls = ('mpegurl' in ct or 'm3u8' in ct
+                  or head.lstrip().startswith(b'#EXTM3U'))
+        await upstream.aclose()
+    except DramaError:
+        raise
+    except Exception as exc:
+        log.warning('drama probe failed: %s/%s %s', provider, item_id, exc)
+        raise DramaError('这一集暂时播不了')
+    finally:
+        await client.aclose()
+    with _lock:
+        _stream_probe[key] = (now + DETAIL_TTL, url, is_hls)
+        for stale in [k for k, v in _stream_probe.items() if v[0] <= now]:
+            _stream_probe.pop(stale, None)
+    return is_hls
+
+
+async def hls_playlist(base, provider, item_id, episode):
+    """取回 m3u8 并把里面每条 URI 换成经本站的签名地址。
+
+    不改写的话：相对路径会被浏览器解析到本站（404）、Capy 内网地址手机连不上、
+    带防盗链的 CDN 直接 403 —— 三种都表现为「点了没反应」。
+    """
+    url = await stream_url(base, provider, item_id, episode)
+    text, final_url = await _get_text(url)
+    if not text.lstrip().startswith('#EXTM3U'):
+        raise DramaError('这个片源返回的不是播放列表')
+    # base 与 Referer 都用重定向后那个源站地址
+    return rewrite_playlist(text, final_url)
 
 
 async def proxy(base, provider, item_id, episode, range_header=''):
@@ -421,7 +681,7 @@ async def proxy(base, provider, item_id, episode, range_header=''):
     """
     url = await stream_url(base, provider, item_id, episode)
     client = _client(timeout=httpx.Timeout(60.0, connect=10.0),
-                     headers={'User-Agent': 'LoveSpace/1.0'})
+                     headers={'User-Agent': HLS_UA})
     headers = {}
     if range_header:
         headers['Range'] = range_header

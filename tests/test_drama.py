@@ -3,6 +3,9 @@
 上游是 NAS 上的 happy-capy 那类「组件聚合器」（:8788），一台服务代理十几个内容源。
 测试里用 httpx.MockTransport 顶替它，不碰真实网络 —— CI 上没有那个服务。
 """
+import re
+from urllib.parse import quote, unquote
+
 import pytest
 import httpx
 
@@ -46,6 +49,8 @@ def clean_state():
         c.execute("DELETE FROM settings WHERE key IN ('drama_sources', 'watch')")
     dramas._core.clear()
     dramas._providers.clear()
+    dramas._stream_probe.clear()
+    dramas._part_key_cache = None
     yield
 
 
@@ -282,12 +287,25 @@ def test_switching_back_to_album_clears_drama(client_a, upstream):
     assert not st.get('drama_provider')
 
 
-@pytest.mark.parametrize('bad', ['abc', '../admin', '1/2'])
+@pytest.mark.parametrize('bad', ['../admin', '1/2', '..', 'a b', 'a%2Fb', 'x' * 161])
 def test_bad_drama_id_rejected(client_a, upstream, bad):
-    """内容 id 会拼进上游 URL，必须是纯数字，否则能拐到别的接口去。"""
+    """内容 id 会拼进上游 URL：不许斜杠、空格、.. 和百分号，也不许长到离谱。"""
     r = client_a.put('/api/watch', headers=HEADERS,
                      json={'drama_id': bad, 'drama_ep': 1})
-    assert r.status_code == 400
+    # 超长那条会被 Pydantic 的 max_length 先拦成 422，同样算「拒绝」
+    assert r.status_code in (400, 422)
+
+
+@pytest.mark.parametrize('good', ['miab-678', 'video@@fc2-ppv-5003075@@missav',
+                                  '05bc37555886f920'])
+def test_non_numeric_ids_are_accepted(client_a, upstream, good):
+    """Jable / 蜜桃 / LissAV 的 id 都不是纯数字，以前一律 400 打不开。"""
+    r = client_a.put('/api/watch', headers=HEADERS,
+                     json={'drama_id': good, 'drama_ep': 1})
+    assert r.status_code == 200, r.text
+    # 拼进路径前要编码，@ 不能被当成路径的一部分
+    r = client_a.get(f'{BASE}/{good}', headers=HEADERS)
+    assert r.status_code == 200, r.text
 
 
 def test_episode_out_of_range(client_a, upstream):
@@ -304,3 +322,189 @@ def test_upstream_down_gives_502(client_a, monkeypatch):
     r = client_a.get(BASE, headers=HEADERS)
     assert r.status_code == 502
     assert '连不上' in r.text
+
+
+# ── HLS：播放列表改写、签名分片、类型探测 ────────────────────────────────
+# 只有红果吐 mp4，别的源大多是 m3u8。分片里有绝对 CDN 地址、相对路径、
+# AES-128 密钥，三种都必须换成经本站的签名地址，浏览器才不会 404/跨域/403。
+HLS_PLAYLIST_URL = 'http://u/api/v1/stream/hls'
+HLS_TEXT = '''#EXTM3U
+#EXT-X-VERSION:3
+#EXT-X-TARGETDURATION:10
+#EXT-X-KEY:METHOD=AES-128,URI="https://cdn/key.bin"
+#EXTINF:10.0,
+https://cdn/seg0.ts
+#EXTINF:10.0,
+/relative/seg1.ts
+#EXT-X-ENDLIST
+'''
+
+
+@pytest.fixture
+def hls_upstream(monkeypatch):
+    state = {'hits': []}
+
+    def handler(request):
+        path = request.url.path
+        state['hits'].append(str(request.url))
+        if path == '/api/v1/providers':
+            return httpx.Response(200, json=PROVIDERS)
+        if '/items/' in path:
+            return httpx.Response(200, json={'title': 'HLS片', 'seasons': [{'episodes': [
+                {'episodeNumber': 1, 'title': '第1集', 'streamUrl': HLS_PLAYLIST_URL}]}]})
+        if path == '/api/v1/stream/hls':
+            return httpx.Response(200, content=HLS_TEXT.encode(),
+                                  headers={'content-type': 'application/vnd.apple.mpegurl'})
+        if path.endswith('.ts') or path.endswith('.bin'):
+            return httpx.Response(206, content=b'TS' * 16,
+                                  headers={'content-type': 'video/mp2t',
+                                           'content-range': 'bytes 0-31/32'})
+        return httpx.Response(404, json={'detail': 'nope'})
+
+    monkeypatch.setattr(dramas, '_transport', httpx.MockTransport(handler))
+    return state
+
+
+def _tokens(line):
+    return [dramas.verify_part(unquote(m)) for m in
+            re.findall(r'/api/drama-part\?t=([^"\s]+)', line)]
+
+
+def test_rewrite_playlist_sends_every_uri_through_signed_proxy():
+    lines = dramas.rewrite_playlist(HLS_TEXT, HLS_PLAYLIST_URL).splitlines()
+    assert lines[0] == '#EXTM3U'
+    # KEY 属性里的 URI 也要改写，否则 AES 密钥直连 CDN 会跨域失败
+    key = next(l for l in lines if 'EXT-X-KEY' in l)
+    assert _tokens(key) == [('https://cdn/key.bin', 'http://u/')]
+    segs = [l for l in lines if l.startswith('/api/drama-part')]
+    assert len(segs) == 2
+    assert [t[0] for t in _tokens(' '.join(segs))] == [
+        'https://cdn/seg0.ts', 'http://u/relative/seg1.ts']
+    # 原始直链一条都不能漏给浏览器
+    assert 'https://cdn/seg0.ts' not in '\n'.join(lines)
+
+
+def test_relative_uris_resolve_against_redirected_source():
+    """Capy 会 302 到源站 m3u8；enc.key / a0.ts 这类相对 URI 得按源站目录补全，
+       按 Capy 的内网转发地址算会全部指到 /api/v1/stream/ 下，密钥和分片直接 401。"""
+    text = ('#EXTM3U\n#EXT-X-KEY:METHOD=AES-128,URI="enc.key"\n'
+            '#EXTINF:10,\na0.ts\n#EXT-X-ENDLIST\n')
+    out = dramas.rewrite_playlist(text, 'https://cdn.example/play/index.m3u8')
+    found = _tokens(out)
+    assert [u for u, _ in found] == [
+        'https://cdn.example/play/enc.key', 'https://cdn.example/play/a0.ts']
+    assert all(ref == 'https://cdn.example/' for _, ref in found)
+
+
+def test_stream_follows_redirect_before_rewriting(client_a, monkeypatch):
+    def handler(request):
+        path = request.url.path
+        if '/items/' in path:
+            return httpx.Response(200, json={'title': '重定向片', 'seasons': [{'episodes': [
+                {'episodeNumber': 1, 'title': '第1集',
+                 'streamUrl': HLS_PLAYLIST_URL}]}]})
+        if path == '/api/v1/stream/hls':
+            return httpx.Response(302, headers={'location': 'https://cdn.example/play/index.m3u8'})
+        if path == '/play/index.m3u8':
+            return httpx.Response(200, content=b'#EXTM3U\n#EXTINF:10,\na0.ts\n#EXT-X-ENDLIST\n',
+                                  headers={'content-type': 'application/vnd.apple.mpegurl'})
+        return httpx.Response(404, json={'detail': 'nope'})
+
+    monkeypatch.setattr(dramas, '_transport', httpx.MockTransport(handler))
+    r = client_a.get(f'{BASE}/{ITEM_ID}/stream/1', headers=HEADERS)
+    assert r.status_code == 200, r.text
+    assert _tokens(r.text)[0] == ('https://cdn.example/play/a0.ts', 'https://cdn.example/')
+
+
+def test_part_token_cannot_be_forged_or_reused_forever(monkeypatch):
+    token = dramas.sign_part('http://u/a.ts', 'http://u/')
+    assert dramas.verify_part(token) == ('http://u/a.ts', 'http://u/')
+    assert dramas.verify_part(token + 'x') is None
+    assert dramas.verify_part('') is None
+    assert dramas.verify_part(dramas.sign_part('file:///etc/passwd')) is None
+    real_time = dramas.time.time()
+    monkeypatch.setattr(dramas.time, 'time', lambda: real_time + dramas.PART_TTL + 10)
+    assert dramas.verify_part(token) is None
+
+
+def test_source_reports_hls(client_a, hls_upstream):
+    r = client_a.get(f'{BASE}/{ITEM_ID}/source/1', headers=HEADERS)
+    assert r.status_code == 200, r.text
+    assert r.json() == {'type': 'hls'}
+
+
+def test_source_reports_mp4(client_a, upstream):
+    r = client_a.get(f'{BASE}/{ITEM_ID}/source/2', headers=HEADERS)
+    assert r.status_code == 200, r.text
+    assert r.json() == {'type': 'mp4'}
+
+
+def test_stream_returns_rewritten_playlist(client_a, hls_upstream):
+    r = client_a.get(f'{BASE}/{ITEM_ID}/stream/1', headers=HEADERS)
+    assert r.status_code == 200, r.text
+    assert r.headers['x-love-stream'] == 'hls'
+    assert r.headers['content-type'].startswith('application/vnd.apple.mpegurl')
+    assert '/api/drama-part?t=' in r.text
+    assert 'https://cdn/seg0.ts' not in r.text
+
+
+def test_part_proxies_segment_and_rejects_bad_token(client_a, hls_upstream):
+    token = dramas.sign_part('https://cdn/seg0.ts', 'http://u/')
+    r = client_a.get('/api/drama-part?t=' + quote(token, safe=''), headers=HEADERS)
+    assert r.status_code == 206, r.text
+    assert r.content == b'TS' * 16
+    assert client_a.get('/api/drama-part?t=garbage', headers=HEADERS).status_code == 403
+    assert client_a.get('/api/drama-part', headers=HEADERS).status_code == 403
+
+
+def test_part_requires_login():
+    from fastapi.testclient import TestClient
+    with TestClient(app, base_url='https://testserver', headers=HEADERS) as anon:
+        assert anon.get('/api/drama-part?t=whatever').status_code == 401
+        assert anon.get(f'{BASE}/{ITEM_ID}/source/1').status_code == 401
+
+
+@pytest.fixture
+def resolve_only_upstream(monkeypatch):
+    """剧果那类：剧集里没有 streamUrl，只有 resolveUrl（解析后才给 videoUrl）。"""
+
+    def handler(request):
+        path = request.url.path
+        if '/items/' in path:
+            return httpx.Response(200, json={'title': '剧果片', 'seasons': [{'episodes': [
+                {'episodeNumber': 1, 'title': '第1集',
+                 'resolveUrl': 'http://u/api/v1/playback/r'}]}]})
+        if path == '/api/v1/playback/r':
+            return httpx.Response(200, json={'videoUrl': HLS_PLAYLIST_URL})
+        if path == '/api/v1/stream/hls':
+            return httpx.Response(200, content=HLS_TEXT.encode(),
+                                  headers={'content-type': 'application/vnd.apple.mpegurl'})
+        return httpx.Response(404, json={'detail': 'nope'})
+
+    monkeypatch.setattr(dramas, '_transport', httpx.MockTransport(handler))
+
+
+def test_resolve_only_episode_is_listed_and_playable(client_a, resolve_only_upstream):
+    r = client_a.get(f'{BASE}/{ITEM_ID}', headers=HEADERS)
+    assert r.status_code == 200, r.text
+    assert [e['n'] for e in r.json()['episodes']] == [1]
+    assert 'playback' not in r.text          # 直链依旧不下发
+    r = client_a.get(f'{BASE}/{ITEM_ID}/source/1', headers=HEADERS)
+    assert r.status_code == 200, r.text
+    assert r.json() == {'type': 'hls'}
+
+
+def test_media_url_episode_is_not_dropped(client_a, resolve_only_upstream, monkeypatch):
+    """只有 mediaUrl、没有 resolveUrl 时也要能列出剧集，不能再报「没有可播的剧集」。"""
+    def handler(request):
+        if '/items/' in request.url.path:
+            return httpx.Response(200, json={'title': '剧果片', 'seasons': [{'episodes': [
+                {'episodeNumber': 1, 'title': '第1集',
+                 'mediaUrl': HLS_PLAYLIST_URL}]}]})
+        return httpx.Response(200, content=HLS_TEXT.encode(),
+                              headers={'content-type': 'application/vnd.apple.mpegurl'})
+
+    monkeypatch.setattr(dramas, '_transport', httpx.MockTransport(handler))
+    r = client_a.get(f'{BASE}/{ITEM_ID}', headers=HEADERS)
+    assert r.status_code == 200, r.text
+    assert [e['n'] for e in r.json()['episodes']] == [1]

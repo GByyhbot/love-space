@@ -898,7 +898,7 @@ class WatchState(BaseModel):
     # （签名地址约 24 小时过期，落库或下发都会在隔天变成一张打不开的地址）。
     drama_src: str | None = Field(default=None, max_length=16)
     drama_provider: str | None = Field(default=None, max_length=32)
-    drama_id: str | None = Field(default=None, max_length=32)
+    drama_id: str | None = Field(default=None, max_length=160)
     drama_ep: int | None = None
     position: float | None = None
     duration: float | None = None
@@ -928,7 +928,7 @@ def put_watch(body: WatchState, user=Depends(current_user)):
         with connect() as c:
             if not db.media_visible(c, data['media'], user['id']):
                 raise HTTPException(404, '这个视频不能一起看')
-    # 在线片源：服务/组件都要在启用清单里，内容 id 会拼进上游 URL 所以卡成纯数字
+    # 在线片源：服务/组件都要在启用清单里，内容 id 会拼进上游 URL，不许带斜杠/空格/..
     if data.get('drama_id'):
         sid, pid = data.get('drama_src') or '', data.get('drama_provider') or ''
         with connect() as c:
@@ -939,7 +939,7 @@ def put_watch(body: WatchState, user=Depends(current_user)):
             except dramas.DramaError as exc:
                 raise HTTPException(exc.status, str(exc))
         data['drama_src'], data['drama_provider'] = sid, pid
-        if not dramas.ITEM_RE.match(data['drama_id']):
+        if '..' in data['drama_id'] or not dramas.ITEM_RE.match(data['drama_id']):
             raise HTTPException(400, '这个内容的编号不对')
         ep = int(data.get('drama_ep') or 1)
         if not 1 <= ep <= dramas.EPISODE_MAX:
@@ -1052,12 +1052,32 @@ async def drama_detail(sid: str, provider: str, item_id: str,
         raise HTTPException(exc.status, str(exc))
 
 
+@app.get('/api/dramas/{sid}/{provider}/{item_id}/source/{episode}')
+async def drama_source(sid: str, provider: str, item_id: str, episode: int,
+                       user=Depends(current_user)):
+    """选集时先问一句这一集是 mp4 还是 HLS，前端才知道该用 <video> 还是 hls.js。"""
+    with connect() as c:
+        svc = _drama_svc(c, sid, provider)
+    try:
+        is_hls = await dramas.probe_stream(svc['base'], provider, item_id, episode)
+    except dramas.DramaError as exc:
+        raise HTTPException(exc.status, str(exc))
+    return {'type': 'hls' if is_hls else 'mp4'}
+
+
 @app.get('/api/dramas/{sid}/{provider}/{item_id}/stream/{episode}')
 async def drama_stream(sid: str, provider: str, item_id: str, episode: int,
                        request: Request, user=Depends(current_user)):
     with connect() as c:
         svc = _drama_svc(c, sid, provider)
     try:
+        # HLS 不走字节转发：浏览器要的是一份「分片地址已经改写成同源」的播放列表，
+        # 真正的分片由 /api/drama-part 单独代理。
+        if await dramas.probe_stream(svc['base'], provider, item_id, episode):
+            text = await dramas.hls_playlist(svc['base'], provider, item_id, episode)
+            return Response(text, media_type='application/vnd.apple.mpegurl',
+                            headers={'Cache-Control': 'private, max-age=0, must-revalidate',
+                                     'X-Love-Stream': 'hls'})
         upstream, client = await dramas.proxy(svc['base'], provider, item_id, episode,
                                               request.headers.get('range', ''))
     except dramas.DramaError as exc:
@@ -1071,6 +1091,33 @@ async def drama_stream(sid: str, provider: str, item_id: str, episode: int,
             headers[name] = value
     # 上游是 video/mp4，这里不猜，直接沿用；缺省按 mp4
     media_type = upstream.headers.get('content-type') or 'video/mp4'
+
+    async def relay():
+        try:
+            async for chunk in upstream.aiter_bytes(64 * 1024):
+                yield chunk
+        finally:
+            await upstream.aclose()
+            await client.aclose()
+
+    return StreamingResponse(relay(), status_code=upstream.status_code,
+                             media_type=media_type, headers=headers)
+
+
+@app.get('/api/drama-part')
+async def drama_part(request: Request, t: str = '', user=Depends(current_user)):
+    """HLS 分片 / 密钥 / 子列表的统一出口。t 是服务端签发的，客户端造不出来。"""
+    try:
+        upstream, client = await dramas.part_proxy(t, request.headers.get('range', ''))
+    except dramas.DramaError as exc:
+        raise HTTPException(exc.status, str(exc))
+
+    headers = {'Cache-Control': 'private, max-age=3600'}
+    for name in ('content-range', 'accept-ranges', 'content-length'):
+        value = upstream.headers.get(name)
+        if value:
+            headers[name] = value
+    media_type = upstream.headers.get('content-type') or 'application/octet-stream'
 
     async def relay():
         try:

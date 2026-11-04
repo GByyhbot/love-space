@@ -959,7 +959,32 @@ function scrollChat(){const log=$('#chat-log');if(log)log.scrollTop=log.scrollHe
 let watchObjectUrl=null, watchTimer=null, watchLastUpdated=0, watchApplying=false, watchFirstPoll=true;
 
 function watchVideo(){return $('#watch-video');}
-function watchHasSrc(){const v=watchVideo();return !!(v&&v.getAttribute('src'));}
+/* hls.js 挂在 video 上时元素本身没有 src 属性（画面走 MSE 的 blob），
+   光看 getAttribute('src') 会误判成「没有片源」，播放状态也就不上报了。 */
+let watchHls=null,watchLoadingSrc=false,watchSrcSeq=0;
+function watchHasSrc(){
+ const v=watchVideo();
+ return !!(v&&(v.getAttribute('src')||watchHls||watchLoadingSrc));
+}
+function watchDestroyHls(){
+ if(watchHls){try{watchHls.destroy();}catch{}watchHls=null;}
+}
+/* HLS 片源：能跑 MSE 的内核交给 hls.js；Safari 这类原生就认 m3u8 的，
+   直接把改写后的播放列表塞给 <video>。老内核两种都不支持的会给明确提示。 */
+function watchMountHls(v,url){
+ watchDestroyHls();
+ if(typeof Hls==='undefined'||!Hls.isSupported()){v.src=url;return;}
+ const hls=new Hls({enableWorker:false,maxBufferLength:15,backBufferLength:15});
+ watchHls=hls;
+ hls.on(Hls.Events.MEDIA_ATTACHED,()=>hls.loadSource(url));
+ hls.on(Hls.Events.ERROR,(evt,data)=>{
+  if(!data||!data.fatal)return;
+  toast(data.type===Hls.ErrorTypes.NETWORK_ERROR
+   ?'片源网络出错，换个组件或重新选一次集'
+   :'这个片源当前浏览器播不了，换个组件看看');
+ });
+ hls.attachMedia(v);
+}
 
 function watchPage(){
  const chats=chatRows(true);
@@ -1017,26 +1042,47 @@ function watchRenderStatus(st){
 }
 
 /* 片源有三种：相册媒体、在线片源某一集、本机文件。srcKey 记「当前挂的是哪一版」，
-   轮询时比对它就能发现对方换了片或换了集，不用去 string 比 src（在线片源的地址每次都带新签名）。 */
-function watchSetSource(opts){
+   轮询时比对它就能发现对方换了片或换了集，不用去 string 比 src（在线片源的地址每次都带新签名）。
+   在线片源还分 mp4 / HLS：先问后端这一集是什么格式，再决定用 <video> 还是 hls.js。 */
+async function watchSetSource(opts){
  const v=watchVideo();if(!v)return;
- if(watchObjectUrl){URL.revokeObjectURL(watchObjectUrl);watchObjectUrl=null;}
- if(opts.media){
-  v.dataset.srcKey='m:'+opts.media;
-  v.src='/media/'+opts.media;
- }else if(opts.drama){
-  const d=opts.drama;
-  v.dataset.srcKey=`d:${d.src}:${d.prov}:${d.id}:${d.ep}`;
-  v.src=`/api/dramas/${encodeURIComponent(d.src)}/${encodeURIComponent(d.prov)}/`+
-        `${encodeURIComponent(d.id)}/stream/${d.ep}`;
- }else{
-  v.dataset.srcKey='local';
-  watchObjectUrl=URL.createObjectURL(opts.file);
-  v.src=watchObjectUrl;
+ const seq=++watchSrcSeq;
+ /* 换源会触发 emptied/pause，别让这些事件把「暂停了」的假状态推给对方 */
+ watchLoadingSrc=true;
+ try{
+  watchDestroyHls();
+  if(watchObjectUrl){URL.revokeObjectURL(watchObjectUrl);watchObjectUrl=null;}
+  v.removeAttribute('src');v.load();   // readyState 归零，轮询挂的 loadedmetadata 才会命中新源
+  v.hidden=false;
+  const empty=$('#watch-empty');if(empty)empty.hidden=true;
+  if(opts.media){
+   v.dataset.srcKey='m:'+opts.media;
+   v.src='/media/'+opts.media;
+  }else if(opts.drama){
+   const d=opts.drama;
+   const key=`d:${d.src}:${d.prov}:${d.id}:${d.ep}`;
+   v.dataset.srcKey=key;
+   const path=`/dramas/${encodeURIComponent(d.src)}/${encodeURIComponent(d.prov)}/`+
+              `${encodeURIComponent(d.id)}`;
+   const url=`/api${path}/stream/${d.ep}`;
+   let type='mp4';
+   try{
+    const info=await api(`${path}/source/${d.ep}`);
+    type=(info&&info.type)||'mp4';
+   }catch(e){toast(e.message||'这一集暂时打不开');}
+   /* 等探测这会儿里对方可能又换了片，别把旧结果挂到新 srcKey 上 */
+   const cur=watchVideo();
+   if(!cur||cur.dataset.srcKey!==key||seq!==watchSrcSeq)return;
+   if(type==='hls')watchMountHls(cur,url);else cur.src=url;
+  }else{
+   v.dataset.srcKey='local';
+   watchObjectUrl=URL.createObjectURL(opts.file);
+   v.src=watchObjectUrl;
+  }
+  watchFitStage();
+ }finally{
+  setTimeout(()=>{if(seq===watchSrcSeq)watchLoadingSrc=false;},60);
  }
- v.hidden=false;
- const empty=$('#watch-empty');if(empty)empty.hidden=true;
- watchFitStage();
 }
 
 /* 播放区高度跟着视频自身比例走。固定五五分屏时，横屏片子在 48% 高的框里用 contain
@@ -1062,7 +1108,8 @@ function watchFitStage(){
 }
 
 async function watchPush(){
- const v=watchVideo();if(!v||!v.getAttribute('src'))return;
+ const v=watchVideo();
+ if(!v||(!v.getAttribute('src')&&!watchHls)||watchLoadingSrc)return;
  const body={position:v.currentTime,playing:!v.paused};
  if(Number.isFinite(v.duration))body.duration=v.duration;
  try{
@@ -1105,20 +1152,21 @@ async function watchPoll(){
   ?`d:${st.drama_src||''}:${st.drama_provider||''}:${st.drama_id}:${st.drama_ep||1}`
   :(st.media?`m:${st.media}`:'');
  if(want&&v.dataset.srcKey!==want){
+  /* 提前压住回写：换源会清空 video，那串 emptied/pause 不该被当成「TA 暂停了」 */
+  watchApplying=true;
   if(st.drama_id)watchSetSource({drama:{src:st.drama_src,prov:st.drama_provider,
    id:st.drama_id,ep:st.drama_ep||1}});
   else watchSetSource({media:st.media});
   /* 换源后这一轮就到此为止：位置按服务端的来，再从下一条快照开始正常同步，
      否则同一个 updated 会被应用两次、跟当前这次 seek 打架。 */
   watchLastUpdated=Number(st.updated)||0;
-  watchApplying=true;
   const seek=()=>{try{v.currentTime=Math.max(0,Number(st.position)||0);}catch{}};
   if(v.readyState>=1)seek();else v.addEventListener('loadedmetadata',seek,{once:true});
   setTimeout(()=>{watchApplying=false;},800);
   if(st.playing)v.play().then(hideWatchJoin).catch(()=>showWatchJoin());
   return;
  }
- if(!v.getAttribute('src'))return;
+ if(!watchHasSrc())return;
 
  const upd=Number(st.updated)||0;
  const pos=Math.max(0,Number(st.position)||0);
@@ -1157,6 +1205,9 @@ function startWatchSync(){
  window.addEventListener('orientationchange',watchFitStage);
 }
 function stopWatchSync(){
+ /* 离开「一起看」后整块 DOM 会被替换，但 hls.js 还 attach 在旧 <video> 的 JS 引用上，
+    不 destroy 就会在后台继续拉分片烧流量（最多等下一轮 2.5s 轮询走到这里）。 */
+ if(state.page!=='watch')watchDestroyHls();
  if(watchTimer){clearInterval(watchTimer);watchTimer=null;}
  window.removeEventListener('resize',watchFitStage);
  window.removeEventListener('orientationchange',watchFitStage);
