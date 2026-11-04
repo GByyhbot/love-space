@@ -869,11 +869,11 @@ html.is-native-app .watch-head{padding-top:8px}
 /* 选片源面板：左缩略图右文字，竖排列表 */
 .ws-list{display:flex;flex-direction:column;gap:8px;max-height:min(56dvh,460px);overflow-y:auto;margin:-4px -2px 4px;padding:2px}
 .ws-item{display:flex;align-items:center;gap:12px;width:100%;padding:8px;border:1px solid var(--line);
- border-radius:var(--r-md);background:var(--surface);cursor:pointer;text-align:left;font:inherit;color:inherit}
+ border-radius:var(--radius-s);background:var(--surface);cursor:pointer;text-align:left;font:inherit;color:inherit}
 .ws-item:active{background:var(--hover)}
 /* 缩略图用背景图而不是 <img>：视频可能还没抽帧（poster 404），<img> 会显示破图图标，
    背景图加载失败就什么都不画，正好露出下面这层黑底。 */
-.ws-thumb{flex:none;width:72px;height:48px;border-radius:var(--r-sm);overflow:hidden;
+.ws-thumb{flex:none;width:72px;height:48px;border-radius:var(--radius-xs);overflow:hidden;
  background-color:#0B090C;background-size:cover;background-position:center}
 .ws-meta{min-width:0;display:flex;flex-direction:column;gap:2px}
 .ws-meta b{font-size:var(--fs-sm);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -885,7 +885,7 @@ html.is-native-app .watch-head{padding-top:8px}
 .ws-go .icon{width:15px;height:15px}
 .ws-tabs{display:flex;gap:5px;padding:3px;margin:-4px 0 12px;background:var(--soft);border-radius:12px}
 .ws-tab{flex:1;min-height:34px;border-radius:9px;font-size:var(--fs-md);font-weight:600;color:var(--muted);cursor:pointer}
-.ws-tab.on{background:var(--surface);color:var(--ink);box-shadow:var(--shadow-sm)}
+.ws-tab.on{background:var(--surface);color:var(--ink);box-shadow:var(--shadow-xs)}
 .ws-toolbar{display:flex;align-items:center;gap:7px;margin-bottom:10px}
 .ws-chip{min-height:32px;padding:0 13px;border-radius:999px;border:1px solid var(--line);
  font-size:var(--fs-sm);color:var(--ink-2);cursor:pointer}
@@ -2596,3 +2596,133 @@ body.kb-open .pick-overlay{padding-bottom:0}
 .chat-panel.skin-on.skin-light .chat-bubble .cs-cover{background:rgba(255,255,255,.22);color:#fff}
 .chat-panel.skin-on.skin-light .chat-bubble .cs-track{background:rgba(255,255,255,.3)}
 .chat-panel.skin-on.skin-light .chat-bubble .cs-track i{background:#fff}
+
+/* ═══════════════════════════════════════════════════════════════
+   一起看 · 视觉精细打磨（v209）
+   只补层次与节奏：播放区高度仍由 watchFitStage() 按视频比例算，
+   [hidden] 与 HLS / MSE 挂载一律不碰。全部走 :root 已有令牌，
+   七套主题 + 夜间自动跟随。
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── 顶栏：一条灰线太薄，改成有轻微纵深感的「放映厅门牌」 ── */
+.watch-head{
+  padding-bottom:9px;border-bottom:0;
+  background:linear-gradient(180deg,var(--surface) 0%,var(--bg) 100%);
+  box-shadow:0 1px 0 var(--line),0 8px 20px -18px rgba(var(--shadow-rgb),.7);
+}
+.watch-head h3{font-weight:var(--fw-bold)}
+.watch-head small{color:var(--muted)}
+.watch-head .icon-btn{background:var(--surface);border:1px solid var(--line-strong);box-shadow:var(--shadow-xs)}
+.watch-head .button.soft{background:var(--soft-strong);color:var(--primary-dark);border-color:var(--line-strong)}
+.watch-head .button.soft:hover{background:var(--soft)}
+
+/* ── 空态：柔光底 + 双环图标 + 两枚小标签，别再是一块纯色空白 ── */
+.watch-empty{
+  gap:8px;
+  background:radial-gradient(115% 62% at 50% 40%,rgba(var(--primary-rgb),.075) 0%,transparent 72%),var(--bg);
+}
+:root.dark .watch-empty{
+  background:radial-gradient(115% 62% at 50% 40%,rgba(var(--primary-rgb),.13) 0%,transparent 72%),var(--bg);
+}
+.watch-empty .we-art{position:relative;width:78px;height:78px;display:grid;place-items:center;margin-bottom:5px}
+.watch-empty .we-art .we-ring{position:absolute;left:0;right:0;top:0;bottom:0;border-radius:50%;
+  border:1px solid rgba(var(--primary-rgb),.20)}
+.watch-empty .we-art .we-ring::after{content:'';position:absolute;
+  left:-9px;right:-9px;top:-9px;bottom:-9px;border-radius:50%;
+  border:1px dashed rgba(var(--primary-rgb),.13)}
+.watch-empty .we-icon{
+  background:var(--surface);border-color:rgba(var(--primary-rgb),.22);
+  box-shadow:0 6px 18px -10px rgba(var(--primary-rgb),.55)
+}
+.watch-empty b{font-weight:var(--fw-bold);letter-spacing:.01em}
+.watch-empty small{max-width:300px}
+.watch-empty .button{box-shadow:0 8px 20px -12px rgba(var(--primary-rgb),.8)}
+.we-tips{display:flex;flex-wrap:wrap;justify-content:center;gap:7px;margin-top:6px}
+.we-tips span{padding:4px 10px;border-radius:var(--radius-pill);
+  border:1px solid var(--line);background:var(--surface);
+  font-size:var(--fs-xs);color:var(--muted)}
+
+/* ── 播放区 / 聊天区之间：一条有信息的状态带，替代原来那条硬切线 ── */
+.watch-chat{border-top-color:var(--line-strong);
+  box-shadow:0 -8px 24px -22px rgba(var(--shadow-rgb),.65)}
+.watch-now{flex:none;display:flex;align-items:center;gap:9px;padding:8px 14px;
+  background:var(--soft);border-bottom:1px solid var(--line)}
+.wn-badge{flex:none;width:30px;height:30px;border-radius:50%;display:grid;place-items:center;
+  background:var(--surface);color:var(--primary);border:1px solid var(--line-strong)}
+.wn-badge .icon{width:16px;height:16px}
+.wn-badge.live{background:var(--primary);color:var(--on-primary);border-color:var(--primary)}
+.wn-text{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+.wn-text b{font-size:var(--fs-sm);font-weight:var(--fw-bold);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wn-text small{font-size:var(--fs-xs);color:var(--muted)}
+.wn-tag{flex:none;padding:4px 9px;border-radius:var(--radius-pill);
+  background:rgba(var(--primary-rgb),.10);color:var(--primary-dark);font-size:var(--fs-xs)}
+:root.dark .watch-now{background:var(--raised)}
+
+/* ── 聊天空态：给它一个图标，别再是孤零零一行灰字 ── */
+.watch-chat-empty{margin:auto;display:flex;flex-direction:column;align-items:center;gap:9px;
+  padding:20px;text-align:center;color:var(--muted);font-size:var(--fs-md)}
+.watch-chat-empty .icon{width:26px;height:26px;color:var(--primary);opacity:.6}
+
+/* ── 选片弹窗：分段控件 / 列表 / chips 的层次 ── */
+.ws-tabs{padding:4px;border-radius:var(--radius-s);
+  box-shadow:inset 0 1px 3px rgba(var(--shadow-rgb),.06)}
+.ws-tab{min-height:36px;border-radius:var(--radius-xs);font-weight:var(--fw-medium)}
+.ws-tab.on{color:var(--primary-dark);font-weight:var(--fw-bold);
+  box-shadow:var(--shadow-xs),0 1px 2px rgba(var(--shadow-rgb),.05)}
+.ws-item{padding:9px;gap:11px;box-shadow:var(--shadow-xs);
+  transition:transform var(--speed) var(--ease),box-shadow var(--speed) var(--ease),background var(--speed) var(--ease)}
+.ws-item:hover{border-color:var(--line-strong);box-shadow:var(--shadow)}
+.ws-item:active{transform:scale(.985);background:var(--soft)}
+.ws-thumb{position:relative;background-color:var(--ink);
+  box-shadow:inset 0 0 0 1px rgba(var(--shadow-rgb),.12)}
+/* 相册里的视频常常没有 poster，纯黑方块像坏图；叠一个播放三角当统一占位 */
+.ws-thumb::after{content:'';position:absolute;left:50%;top:50%;
+  width:0;height:0;border-left:10px solid var(--on-primary);
+  border-top:6px solid transparent;border-bottom:6px solid transparent;
+  transform:translate(-42%,-50%);opacity:.9}
+.ws-poster{width:58px;height:78px;border-radius:var(--radius-xs);
+  box-shadow:var(--shadow-xs);border-color:var(--line-strong)}
+.ws-meta{gap:3px}
+.ws-meta b{font-weight:var(--fw-semibold)}
+.ws-meta small{color:var(--muted)}
+.ws-go{color:var(--primary)}
+.ws-chip{background:var(--surface);border-color:var(--line);box-shadow:var(--btn-lift)}
+.ws-chip.on{background:rgba(var(--primary-rgb),.10);
+  border-color:rgba(var(--primary-rgb),.32);color:var(--primary-dark);font-weight:var(--fw-bold)}
+.ws-search,.ws-manage{background:var(--surface);border-color:var(--line-strong);box-shadow:var(--btn-lift)}
+.ws-search:hover,.ws-manage:hover{background:var(--soft);color:var(--primary-dark)}
+.ws-tool-tip{color:var(--ink-2)}
+.ws-srcs{padding:2px 0 5px}
+.ws-actions{margin-top:12px;padding-top:12px;border-top:1px solid var(--line);background:var(--surface)}
+.ws-detail-head{margin-bottom:12px}
+.ws-detail-meta b{font-weight:var(--fw-bold)}
+.ws-desc{color:var(--ink-2);line-height:var(--lh-loose)}
+.ws-eps{gap:7px}
+.ws-ep{background:var(--raised);border-color:var(--line);color:var(--ink-2);
+  box-shadow:var(--btn-lift);font-weight:var(--fw-medium)}
+.ws-ep:hover{border-color:rgba(var(--primary-rgb),.32);color:var(--primary-dark)}
+.ws-ep.on{background:var(--primary);border-color:var(--primary);
+  color:var(--on-primary);font-weight:var(--fw-bold);
+  box-shadow:0 6px 16px -10px rgba(var(--primary-rgb),.9)}
+
+/* ── 组件管理：服务卡与勾选行拉开层次 ── */
+.src-manage{gap:11px}
+.src-svc{border-radius:var(--radius-s);box-shadow:var(--shadow-xs);padding:11px 12px}
+.src-svc-head{padding-bottom:8px;margin-bottom:8px;border-bottom:1px solid var(--line)}
+.src-svc-head b{font-weight:var(--fw-bold)}
+.src-dot.on{box-shadow:0 0 0 3px rgba(var(--primary-rgb),.16)}
+.src-toggle{display:inline-flex;align-items:center;gap:5px;color:var(--primary-dark);font-weight:var(--fw-medium)}
+.src-row{border-radius:var(--radius-xs)}
+.src-row:hover{background:var(--hover)}
+.src-row.on{background:rgba(var(--primary-rgb),.09);
+  border-color:rgba(var(--primary-rgb),.26)}
+.src-row.on .src-tick{background:var(--primary);border-color:var(--primary);color:var(--on-primary)}
+.src-row small{color:var(--muted)}
+
+/* ── 横屏：基础层把聊天栏改成左右分栏，这里的描边要跟着换方向 ── */
+@media (orientation:landscape) and (max-height:560px){
+ .watch-chat{border-top:0;border-left:1px solid var(--line-strong);
+  box-shadow:-8px 0 24px -22px rgba(var(--shadow-rgb),.65)}
+ .watch-now{padding:6px 12px}
+}

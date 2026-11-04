@@ -787,7 +787,7 @@ function chatRows(quiet) {
  const pend=pending.map(p=>`<div class="chat-line mine pending">${avatar(state.me.user.id)}<div><div class="chat-bubble">${esc(p.body.content||'一个附件')}</div><div class="chat-time">尚未发送 <button data-action="retry-chat" data-id="${p.client_id}">点击重试</button></div></div></div>`).join('');
  if(q&&!chats.length)return `<div class="chat-no-match">最近 200 条里没有「${esc(state.chatSearch)}」，试试清掉筛选。</div>`;
  return rows+pend||(quiet
-  ?`<p class="watch-chat-empty">边看边聊，想说什么就说</p>`
+  ?`<p class="watch-chat-empty">${icon('chat')}<span>边看边聊，想说什么就说</span></p>`
   :empty('今天，有什么想对 TA 说？','说说日常，也说说想念。'));
 }
 /* 聊天壁纸：预设用 CSS 渐变/纹理，'photo' 用自己上传的照片。
@@ -997,14 +997,16 @@ function watchPage(){
   <div class="watch-stage" id="watch-stage">
    <video id="watch-video" class="watch-video" playsinline controls hidden></video>
    <div class="watch-empty" id="watch-empty">
-    <span class="we-icon">${icon('film')}</span>
+    <div class="we-art"><span class="we-ring"></span><span class="we-icon">${icon('film')}</span></div>
     <b id="watch-empty-title">还没有片源</b>
     <small id="watch-empty-hint">从相册里挑一段视频，两个人看的是同一个文件，进度自动对齐</small>
     <button class="button primary small" data-action="watch-pick">从相册选视频</button>
+    <div class="we-tips"><span>进度自动对齐</span><span>随时换片</span></div>
    </div>
    <button type="button" class="watch-join" id="watch-join" data-action="watch-join" hidden>点一下继续播放</button>
   </div>
   <div class="watch-chat">
+   <div class="watch-now" id="watch-now" hidden></div>
    <div class="watch-log" id="watch-log" aria-live="polite">${chats}</div>
    <form id="watch-form" class="chat-compose">
     <div class="compose-field"><textarea id="watch-text" rows="1" maxlength="20000" placeholder="边看边说" aria-label="聊天内容" autocomplete="off" enterkeyhint="send"></textarea></div>
@@ -1033,6 +1035,17 @@ function watchRenderStatus(st){
  if(sub){
   sub.textContent=st.title?`${st.playing?'一起看着':'暂停中'} · ${name}`:'边看边聊 · 选一部一起看';
   sub.classList.toggle('live',!!(st.title&&st.playing));
+ }
+ /* 播放区和聊天区之间给一条「正在看」的状态带：有片源时两栏不再靠一条细线硬切，
+    也能一眼看到对方是播着还是暂停了。内容不变就不重绘，避免 2.5s 轮询闪一下。 */
+ const now=$('#watch-now');
+ if(now){
+  const label=st.title?`${watchName(st.title)||'一段视频'}${st.drama_id&&st.drama_ep?` · 第${st.drama_ep}集`:''}`:'';
+  const html=label?`<span class="wn-badge${st.playing?' live':''}">${icon('film')}</span>
+   <span class="wn-text"><b>${esc(label)}</b><small>${st.playing?'两个人正在看，进度自动对齐':'暂停中，点播放就能一起继续'}</small></span>
+   <span class="wn-tag">${st.playing?'同步中':'已暂停'}</span>`:'';
+  if(now.innerHTML!==html)now.innerHTML=html;
+  now.hidden=!label;
  }
  if(t&&!watchHasSrc()){
   const mine=st.by===state.me.user.id;
@@ -1307,7 +1320,10 @@ function watchPickBody(){
 }
 
 function watchEpisodesBody(d){
- const eps=d.episodes.map(e=>`<button type="button" class="ws-ep" data-action="watch-drama-ep"
+ /* 正在看的那一集高亮出来：state.watch 由 watchPoll() 每轮维护 */
+ const cur=(state&&state.watch)||{};
+ const curEp=String(cur.drama_id||'')===String(d.id)?Number(cur.drama_ep)||0:0;
+ const eps=d.episodes.map(e=>`<button type="button" class="ws-ep${curEp===Number(e.n)?' on':''}" data-action="watch-drama-ep"
    data-id="${esc(d.id)}" data-ep="${e.n}">${e.n}</button>`).join('');
  return `<div class="ws-detail-head">
    <span class="ws-poster" style="background-image:url('${esc(d.poster)}')"></span>
@@ -1318,7 +1334,8 @@ function watchEpisodesBody(d){
    </div>
   </div>
   ${d.description?`<p class="ws-desc">${esc(d.description)}</p>`:''}
-  <div class="ws-eps">${eps}</div>`;
+  <div class="ws-eps">${eps}</div>
+  <div class="form-actions ws-actions">${button('取消','close-modal')}</div>`;
 }
 
 async function watchLoadDramas(){
