@@ -1016,8 +1016,8 @@ function watchRenderStatus(st){
  }
 }
 
-/* 片源有三种：相册媒体、红果短剧某集、本机文件。srcKey 记「当前挂的是哪一版」，
-   轮询时比对它就能发现对方换了片或换了集，不用去 string 比 src（短剧的地址每次都带新签名）。 */
+/* 片源有三种：相册媒体、在线片源某一集、本机文件。srcKey 记「当前挂的是哪一版」，
+   轮询时比对它就能发现对方换了片或换了集，不用去 string 比 src（在线片源的地址每次都带新签名）。 */
 function watchSetSource(opts){
  const v=watchVideo();if(!v)return;
  if(watchObjectUrl){URL.revokeObjectURL(watchObjectUrl);watchObjectUrl=null;}
@@ -1025,8 +1025,10 @@ function watchSetSource(opts){
   v.dataset.srcKey='m:'+opts.media;
   v.src='/media/'+opts.media;
  }else if(opts.drama){
-  v.dataset.srcKey='d:'+opts.drama.id+':'+opts.drama.ep;
-  v.src=`/api/dramas/${encodeURIComponent(opts.drama.id)}/stream/${opts.drama.ep}`;
+  const d=opts.drama;
+  v.dataset.srcKey=`d:${d.src}:${d.prov}:${d.id}:${d.ep}`;
+  v.src=`/api/dramas/${encodeURIComponent(d.src)}/${encodeURIComponent(d.prov)}/`+
+        `${encodeURIComponent(d.id)}/stream/${d.ep}`;
  }else{
   v.dataset.srcKey='local';
   watchObjectUrl=URL.createObjectURL(opts.file);
@@ -1097,11 +1099,14 @@ async function watchPoll(){
  state.watch=st;
  watchRenderStatus(st);
  const v=watchVideo();if(!v)return;
- /* 对方换了片（或短剧换了一集）就跟过去；本机文件是我自己选的，服务端没有 media，
+ /* 对方换了片（或换了一集/换了个组件）就跟过去；本机文件是我自己选的，服务端没有 media，
     这时 want 为空，保持原样别把本地视频顶掉。 */
- const want=st.drama_id?`d:${st.drama_id}:${st.drama_ep||1}`:(st.media?`m:${st.media}`:'');
+ const want=st.drama_id
+  ?`d:${st.drama_src||''}:${st.drama_provider||''}:${st.drama_id}:${st.drama_ep||1}`
+  :(st.media?`m:${st.media}`:'');
  if(want&&v.dataset.srcKey!==want){
-  if(st.drama_id)watchSetSource({drama:{id:st.drama_id,ep:st.drama_ep||1}});
+  if(st.drama_id)watchSetSource({drama:{src:st.drama_src,prov:st.drama_provider,
+   id:st.drama_id,ep:st.drama_ep||1}});
   else watchSetSource({media:st.media});
   /* 换源后这一轮就到此为止：位置按服务端的来，再从下一条快照开始正常同步，
      否则同一个 updated 会被应用两次、跟当前这次 seek 打架。 */
@@ -1157,14 +1162,48 @@ function stopWatchSync(){
  window.removeEventListener('orientationchange',watchFitStage);
 }
 
-/* 选片源：相册视频（同源，能真同步）/ 红果短剧（走本站代理）/ 本机文件（退路）。
-   短剧那栏的数据全在后端，前端只认剧 id 和集号 —— 直链带签名、二十来小时就过期，
-   交给服务端每次现换。 */
-const WATCH_PICK={tab:'album',cat:'short',page:1,q:'',videos:[],dramas:[],detail:null,loading:false};
+/* 选片源：相册视频（同源，能真同步）/ 在线片源（走本站代理）/ 本机文件（退路）。
+   在线片源是「服务 + 组件」两级：服务是 happy-capy 这类组件聚合器的地址，主人自己加；
+   组件是那台服务代理的内容源，主人自己勾。前端只认「服务/组件/内容 id/集号」——
+   直链带签名、二十来小时就过期，交给服务端每次现换。 */
+const WATCH_PICK={tab:'album',svc:'',prov:'',cat:'',page:1,q:'',
+ videos:[],dramas:[],detail:null,catalog:null,openSvc:'',loading:false,error:''};
+
+/* 已启用的组件，摊平成一维，方便做切换条 */
+function watchGroups(){
+ const out=[];
+ ((WATCH_PICK.catalog||{}).services||[]).forEach(s=>{
+  (s.providers||[]).forEach(p=>{if(p.enabled)out.push({
+   svc:s.id,svcName:s.name,prov:p.id,title:p.title,cats:p.categories||[],online:s.online,error:s.error||''});});
+ });
+ return out;
+}
+
+function watchGroup(){
+ const list=watchGroups();
+ return list.find(g=>g.svc===WATCH_PICK.svc&&g.prov===WATCH_PICK.prov)||list[0]||null;
+}
+
+function watchEnabledKeys(){
+ const out=[];
+ ((WATCH_PICK.catalog||{}).services||[]).forEach(s=>
+  (s.providers||[]).forEach(p=>{if(p.enabled)out.push(s.id+':'+p.id);}));
+ return out;
+}
+
+async function watchCatalog(refresh){
+ try{return await api('/drama-sources'+(refresh?'?refresh=1':''));}catch{return null;}
+}
 
 async function watchPick(){
- WATCH_PICK.tab='album';WATCH_PICK.page=1;WATCH_PICK.q='';WATCH_PICK.cat='short';WATCH_PICK.detail=null;
- try{WATCH_PICK.videos=await api('/media/videos');}catch{WATCH_PICK.videos=[];}
+ const p=WATCH_PICK;
+ p.tab='album';p.page=1;p.q='';p.cat='';p.detail=null;
+ p.svc='';p.prov='';
+ try{p.videos=await api('/media/videos');}catch{p.videos=[];}
+ openModal('选一部一起看',watchPickBody());
+ p.catalog=await watchCatalog();
+ const g=watchGroup();
+ if(g){p.svc=g.svc;p.prov=g.prov;}
  openModal('选一部一起看',watchPickBody());
 }
 
@@ -1172,7 +1211,7 @@ function watchPickBody(){
  const p=WATCH_PICK;
  const tabs=`<div class="ws-tabs">
    <button type="button" class="ws-tab${p.tab==='album'?' on':''}" data-action="watch-tab" data-id="album">相册视频</button>
-   <button type="button" class="ws-tab${p.tab==='drama'?' on':''}" data-action="watch-tab" data-id="drama">红果短剧</button>
+   <button type="button" class="ws-tab${p.tab==='drama'?' on':''}" data-action="watch-tab" data-id="drama">在线片源</button>
   </div>`;
  if(p.tab==='album'){
   const items=p.videos.length?p.videos.map(v=>{
@@ -1185,16 +1224,33 @@ function watchPickBody(){
    <div class="form-actions ws-actions">${button('从本机选文件','watch-pick-local','soft')}${button('取消','close-modal')}</div>`;
  }
  if(p.detail)return tabs+watchEpisodesBody(p.detail);
+ const groups=watchGroups();
+ const g=watchGroup();
+ const manage=`<button type="button" class="ws-manage" data-action="watch-sources">${icon('gear')}组件</button>`;
+ if(!groups.length){
+  const hint=p.catalog===null?'正在读取片源服务…':'还没有启用任何组件。点「组件」把想要的勾上，或者加一台新的服务地址。';
+  return tabs+`<div class="ws-toolbar"><span class="ws-tool-tip">${esc(hint)}</span>${manage}</div>
+   <div class="ws-list">${p.catalog===null?'<p class="meta">稍等…</p>':''}</div>
+   <div class="form-actions ws-actions">${button('取消','close-modal')}</div>`;
+ }
+ const srcs=`<div class="ws-srcs">`+groups.map(x=>{
+  const on=g&&x.svc===g.svc&&x.prov===g.prov;
+  /* 多台服务时把服务名带上，否则两个组件重名就分不清 */
+  const label=((WATCH_PICK.catalog||{}).services||[]).length>1?`${x.svcName} · ${x.title}`:x.title;
+  return `<button type="button" class="ws-chip${on?' on':''}" data-action="watch-src"
+   data-id="${esc(x.svc)}" data-prov="${esc(x.prov)}">${esc(label)}</button>`;
+ }).join('')+`</div>`;
+ const cats=(g?g.cats:[]).map(c=>`<button type="button" class="ws-chip${p.cat===c.id?' on':''}"
+   data-action="watch-cat" data-id="${esc(c.id)}">${esc(c.title)}</button>`).join('');
  const list=p.loading?'<p class="meta">正在找…</p>':(p.dramas.length?p.dramas.map(d=>`
    <button type="button" class="ws-item" data-action="watch-drama" data-id="${esc(d.id)}">
     <span class="ws-poster" style="background-image:url('${esc(d.poster)}')"></span>
     <span class="ws-meta"><b>${esc(d.title)}</b><small>${esc(d.remark||'点开选集')}</small></span>
     <span class="ws-go">${icon('arrow')}</span>
-   </button>`).join(''):'<p class="meta">没找到。换个关键词试试，或者切到「漫剧」。</p>');
- return tabs+`<div class="ws-toolbar">
-   <button type="button" class="ws-chip${p.cat==='short'?' on':''}" data-action="watch-cat" data-id="short">短剧</button>
-   <button type="button" class="ws-chip${p.cat==='comic'?' on':''}" data-action="watch-cat" data-id="comic">漫剧</button>
-   <button type="button" class="ws-search" data-action="watch-search">${icon('search')}${p.q?esc(p.q):'搜剧名'}</button>
+   </button>`).join(''):`<p class="meta">${p.error?esc(p.error)+'。<br>':''}换个关键词，或者切到别的分类/组件看看。</p>`);
+ return tabs+srcs+`<div class="ws-toolbar"><div class="ws-cats">${cats}</div>
+   <button type="button" class="ws-search" data-action="watch-search">${icon('search')}${p.q?esc(p.q):'搜片名'}</button>
+   ${manage}
   </div><div class="ws-list">${list}</div>
   <div class="form-actions ws-actions">${button('换一批','watch-more','soft')}${button('取消','close-modal')}</div>`;
 }
@@ -1206,7 +1262,7 @@ function watchEpisodesBody(d){
    <span class="ws-poster" style="background-image:url('${esc(d.poster)}')"></span>
    <div class="ws-detail-meta">
     <b>${esc(d.title)}</b>
-    <small>共 ${d.episodes.length} 集 · 点一集就开始</small>
+    <small>${d.episodes.length>1?`共 ${d.episodes.length} 集 · 点一集就开始`:'点一下就开始'}</small>
     <button type="button" class="link-btn" data-action="watch-drama-back">${icon('back')} 换个剧</button>
    </div>
   </div>
@@ -1216,26 +1272,39 @@ function watchEpisodesBody(d){
 
 async function watchLoadDramas(){
  const p=WATCH_PICK;
- p.loading=true;openModal('选一部一起看',watchPickBody());
- const query=`?category=${encodeURIComponent(p.cat)}&page=${p.page}${p.q?'&q='+encodeURIComponent(p.q):''}`;
+ if(!p.catalog)p.catalog=await watchCatalog();
+ const g=watchGroup();
+ if(!g)return openModal('选一部一起看',watchPickBody());
+ /* 上游的 browse 必须带分类，空着会 404；没选过就默认第一个 */
+ p.cat=p.cat||((g.cats[0]||{}).id||'');
+ p.loading=true;p.error='';openModal('选一部一起看',watchPickBody());
+ const query=`?category=${encodeURIComponent(p.cat||'')}&page=${p.page}${p.q?'&q='+encodeURIComponent(p.q):''}`;
  try{
-  const res=await api('/dramas'+query);
+  const res=await api(`/dramas/${encodeURIComponent(g.svc)}/${encodeURIComponent(g.prov)}`+query);
   p.dramas=(res&&res.items)||[];
- }catch(e){p.dramas=[];toast(e.message||'短剧列表没拉到');}
- p.loading=false;openModal('选一部一起看',watchPickBody());
+ }catch(e){
+  /* 自己加的组件上游说挂就挂，得让主人知道是源站的事，不是我们没搜到 */
+  p.dramas=[];p.error=e.message||'片源列表没拉到';toast(p.error);
+ }
+ p.loading=false;
+ /* 等数据这一会儿里，主人可能已经切到「组件管理」去了，这时别再把选片弹窗盖回去 */
+ if(!document.querySelector('.src-manage'))openModal('选一部一起看',watchPickBody());
 }
 
 async function watchDramaDetail(id){
+ const g=watchGroup();
+ if(!g)return;
  WATCH_PICK.loading=true;openModal('选一部一起看',watchPickBody());
  try{
-  WATCH_PICK.detail=await api('/dramas/'+encodeURIComponent(id));
- }catch(e){WATCH_PICK.detail=null;toast(e.message||'这部剧打不开');}
- WATCH_PICK.loading=false;openModal('选一部一起看',watchPickBody());
+  WATCH_PICK.detail=await api(`/dramas/${encodeURIComponent(g.svc)}/${encodeURIComponent(g.prov)}/${encodeURIComponent(id)}`);
+ }catch(e){WATCH_PICK.detail=null;toast(e.message||'这个打不开');}
+ WATCH_PICK.loading=false;
+ if(!document.querySelector('.src-manage'))openModal('选一部一起看',watchPickBody());
 }
 
 function watchSearchForm(){
- openModal('搜一部短剧',`<form class="modal-form" id="ws-search-form">
-   <label>剧名或演员<input name="q" required maxlength="40" autocomplete="off" value="${esc(WATCH_PICK.q||'')}" placeholder="例如：少夫人来自东北"></label>
+ openModal('搜一部片',`<form class="modal-form" id="ws-search-form">
+   <label>片名、演员或关键词<input name="q" required maxlength="40" autocomplete="off" value="${esc(WATCH_PICK.q||'')}" placeholder="例如：少夫人来自东北"></label>
    <div class="form-error" role="alert"></div>
    <div class="form-actions">${button('取消','close-modal')}<button class="button primary" type="submit">搜一下</button></div>
   </form>`);
@@ -1248,28 +1317,134 @@ function watchSearchForm(){
  };
 }
 
-async function watchChooseDrama(id,ep){
+async function watchChooseDrama(id,ep,g){
+ g=g||watchGroup();
+ if(!g)return;
  const d=WATCH_PICK.detail||{};
- const title=d.title||'短剧';
+ const title=d.title||'一段视频';
+ const many=(d.episodes||[]).length>1;
  closeModal();
- watchSetSource({drama:{id,ep}});
- watchRenderStatus({...(state.watch||{}),title,drama_id:id,drama_ep:ep,media:''});
+ watchSetSource({drama:{src:g.svc,prov:g.prov,id,ep}});
+ watchRenderStatus({...(state.watch||{}),title,drama_src:g.svc,drama_provider:g.prov,
+  drama_id:id,drama_ep:ep,media:''});
  try{
   const cur=await api('/watch',{method:'PUT',body:JSON.stringify({
-    drama_id:id,drama_ep:Number(ep),media:'',title,position:0,duration:0,playing:false})});
+    drama_src:g.svc,drama_provider:g.prov,drama_id:id,drama_ep:Number(ep),media:'',
+    title,position:0,duration:0,playing:false})});
   state.watch=cur;watchLastUpdated=Number(cur.updated)||0;watchFirstPoll=false;
   watchRenderStatus(cur);
-  toast(`第 ${ep} 集，点播放就一起看`);
+  toast(many?`第 ${ep} 集，点播放就一起看`:'选好了，点播放就一起开始');
  }catch(e){toast(e.message||'选片失败');}
 }
 
-/* 短剧一集两三分钟，播完自动接下一集；改的是服务端状态，另一半也会跟过来 */
+/* 一集就几分钟，播完自动接下一集；改的是服务端状态，另一半也会跟过来 */
 function watchNextEpisode(){
  const st=state.watch||{};
  if(!st.drama_id||watchApplying)return;
  const next=Number(st.drama_ep||1)+1;
  if(next>2000)return;
- watchChooseDrama(st.drama_id,next);
+ watchChooseDrama(st.drama_id,next,{svc:st.drama_src,prov:st.drama_provider});
+}
+
+/* ── 组件管理：加服务、勾组件 ─────────────────────────────────────── */
+function watchSourcesBody(){
+ const cat=WATCH_PICK.catalog||{services:[]};
+ const many=(cat.services||[]).length>1;
+ /* 一台服务可能代理十几个组件，全展开的话第二台服务要滚很久才看得到 ——
+    默认只展开一台，其余的先把「已勾几个」写在折叠条上。 */
+ const openSvc=WATCH_PICK.openSvc||((cat.services||[])[0]||{}).id||'';
+ const rows=(cat.services||[]).map(s=>{
+  const provs=(s.providers||[]);
+  const on=provs.filter(p=>p.enabled).length;
+  const open=s.id===openSvc;
+  const body=provs.length?provs.map(p=>`<button type="button" class="src-row${p.enabled?' on':''}"
+    data-action="watch-src-toggle" data-id="${esc(s.id)}" data-prov="${esc(p.id)}">
+    <span class="src-tick">${p.enabled?icon('check'):''}</span>
+    <span class="src-name">${esc(p.title)}</span>
+    <small>${(p.categories||[]).length?esc((p.categories||[]).slice(0,3).map(c=>c.title).join(' / ')):''}</small>
+   </button>`).join(''):`<p class="meta">${esc(s.error||'这台服务没有可用的组件')}</p>`;
+  const toggle=provs.length?`<button type="button" class="src-toggle" data-action="watch-svc-open" data-id="${esc(s.id)}">
+    已勾 ${on} 个 · ${open?'收起':`展开 ${provs.length} 个组件`}</button>`:'';
+  return `<div class="src-svc${open?' open':''}">
+    <div class="src-svc-head">
+     <b>${esc(s.name)}</b><span class="src-dot${s.online?' on':''}"></span>
+     <small>${esc(s.base)}</small>
+     <button type="button" class="link-btn" data-action="watch-src-del" data-id="${esc(s.id)}">移除</button>
+    </div>
+    ${toggle}
+    <div class="src-list"${open?'':' hidden'}>${body}</div>
+   </div>`;
+ }).join('');
+ return `<p class="ws-tool-tip">勾上的组件才会出现在选片里。${many?'':'可以再加一台别的服务地址。'}</p>
+  <div class="src-manage">${rows||'<p class="meta">还没有服务。</p>'}</div>
+  <div class="form-actions ws-actions">${button('添加服务','watch-src-add','soft')}${button('完成','watch-src-done')}</div>`;
+}
+
+function watchSources(){
+ openModal('片源组件',watchSourcesBody());
+}
+
+async function watchToggleSource(sid,prov){
+ const cat=WATCH_PICK.catalog||{services:[]};
+ const s=(cat.services||[]).find(x=>x.id===sid);
+ const p=s&&(s.providers||[]).find(x=>x.id===prov);
+ if(!p)return;
+ p.enabled=!p.enabled;
+ try{
+  await api('/drama-sources/enabled',{method:'PUT',body:JSON.stringify({enabled:watchEnabledKeys()})});
+ }catch(e){
+  p.enabled=!p.enabled;
+  toast(e.message||'改不了');
+ }
+ /* 当前选中的组件可能刚被关掉，回落到第一个还开着的 */
+ const g=watchGroup();
+ WATCH_PICK.svc=g?g.svc:'';WATCH_PICK.prov=g?g.prov:'';
+ openModal('片源组件',watchSourcesBody());
+}
+
+function watchAddSourceForm(){
+ openModal('添加片源服务',`<form class="modal-form" id="ws-src-form">
+   <label>名字<input name="name" maxlength="24" autocomplete="off" placeholder="随便起，例如「家里那台」"></label>
+   <label>服务地址<input name="base" required maxlength="200" autocomplete="off" inputmode="url"
+     placeholder="http://192.168.31.95:8788"></label>
+   <p class="meta" style="margin:0">填 happy-capy 这类组件服务的根地址，保存后会自动去读它的组件清单。</p>
+   <div class="form-error" role="alert"></div>
+   <div class="form-actions">${button('取消','watch-src-back')}<button class="button primary" type="submit">保存</button></div>
+  </form>`);
+ $('#ws-src-form').onsubmit=async e=>{
+  e.preventDefault();
+  /* 先把表单节点抓在手上：await 之后事件对象的 currentTarget 会被置空，
+     出错时就再也找不到那个 .form-error 了（这里踩过一次）。 */
+  const form=e.currentTarget;
+  const fd=new FormData(form);
+  const base=String(fd.get('base')||'').trim();
+  const name=String(fd.get('name')||'').trim();
+  if(!base)return;
+  try{
+   /* 记住加之前有哪几台，好让新加的那台自动展开 ——
+      否则主人加完一台还得自己往下滚去找它。 */
+   const before=new Set(((WATCH_PICK.catalog||{}).services||[]).map(s=>s.id));
+   await api('/drama-sources',{method:'POST',body:JSON.stringify({name,base})});
+   WATCH_PICK.catalog=await watchCatalog(true);
+   const fresh=((WATCH_PICK.catalog||{}).services||[]).find(s=>!before.has(s.id));
+   if(fresh)WATCH_PICK.openSvc=fresh.id;
+   toast('加上了，勾上想要的组件就能看');
+   openModal('片源组件',watchSourcesBody());
+  }catch(err){
+   const box=form.querySelector('.form-error');
+   if(box)box.textContent=err.message||'加不上';
+  }
+ };
+}
+
+async function watchDropSource(sid){
+ try{
+  await api('/drama-sources/'+encodeURIComponent(sid),{method:'DELETE'});
+  WATCH_PICK.catalog=await watchCatalog(true);
+  const g=watchGroup();
+  WATCH_PICK.svc=g?g.svc:'';WATCH_PICK.prov=g?g.prov:'';
+  openModal('片源组件',watchSourcesBody());
+ }catch(e){toast(e.message||'删不掉');}
 }
 
 async function watchChooseMedia(id,title){
@@ -4036,7 +4211,25 @@ async function act(action,id,el) {
   if(id==='drama'&&!WATCH_PICK.dramas.length)return watchLoadDramas();
   return openModal('选一部一起看',watchPickBody());
  }
- if(action==='watch-cat'){WATCH_PICK.cat=id||'short';WATCH_PICK.page=1;WATCH_PICK.q='';return watchLoadDramas();}
+ if(action==='watch-src'){
+  WATCH_PICK.svc=id||'';WATCH_PICK.prov=el.dataset.prov||'';
+  WATCH_PICK.cat='';WATCH_PICK.page=1;WATCH_PICK.q='';WATCH_PICK.detail=null;
+  return watchLoadDramas();
+ }
+ if(action==='watch-sources')return watchSources();
+ if(action==='watch-svc-open'){
+  WATCH_PICK.openSvc=(WATCH_PICK.openSvc===id)?'':id;
+  return openModal('片源组件',watchSourcesBody());
+ }
+ if(action==='watch-src-toggle')return watchToggleSource(id,el.dataset.prov||'');
+ if(action==='watch-src-add')return watchAddSourceForm();
+ if(action==='watch-src-del')return watchDropSource(id);
+ if(action==='watch-src-back')return watchSources();
+ if(action==='watch-src-done'){
+  WATCH_PICK.dramas=[];WATCH_PICK.cat='';WATCH_PICK.page=1;
+  return WATCH_PICK.tab==='drama'?watchLoadDramas():openModal('选一部一起看',watchPickBody());
+ }
+ if(action==='watch-cat'){WATCH_PICK.cat=id||'';WATCH_PICK.page=1;WATCH_PICK.q='';return watchLoadDramas();}
  if(action==='watch-more'){WATCH_PICK.page=(WATCH_PICK.page||1)+1;return watchLoadDramas();}
  if(action==='watch-search')return watchSearchForm();
  if(action==='watch-drama')return watchDramaDetail(id);

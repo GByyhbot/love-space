@@ -894,8 +894,10 @@ class WatchState(BaseModel):
     """
     title: str | None = Field(default=None, max_length=120)
     media: str | None = Field(default=None, max_length=64)
-    # 红果短剧：只存剧 id 和集号，直链由服务端现换（签名约 24 小时过期，
-    # 落库或下发都会在隔天变成一张打不开的地址）。
+    # 在线片源：只存「哪台服务 / 哪个组件 / 内容 id / 第几集」，直链由服务端现换
+    # （签名地址约 24 小时过期，落库或下发都会在隔天变成一张打不开的地址）。
+    drama_src: str | None = Field(default=None, max_length=16)
+    drama_provider: str | None = Field(default=None, max_length=32)
     drama_id: str | None = Field(default=None, max_length=32)
     drama_ep: int | None = None
     position: float | None = None
@@ -907,6 +909,10 @@ class WatchState(BaseModel):
 def get_watch(user=Depends(current_user)):
     with connect() as c:
         st = dict(db.setting(c, 'watch', {}) or {})
+        # 存量数据：1.7.21 之前只有剧 id，没有「哪台服务 / 哪个组件」，
+        # 就地补成第一个启用的组合，免得老的两端一直卡在「片源找不到」。
+        if st.get('drama_id') and not st.get('drama_src'):
+            st['drama_src'], st['drama_provider'] = dramas.first_enabled(c)
     if st.get('playing'):
         elapsed = max(0.0, db.now() - float(st.get('updated') or 0))
         st['position'] = min(float(st.get('position') or 0) + elapsed,
@@ -922,10 +928,19 @@ def put_watch(body: WatchState, user=Depends(current_user)):
         with connect() as c:
             if not db.media_visible(c, data['media'], user['id']):
                 raise HTTPException(404, '这个视频不能一起看')
-    # 短剧的剧 id 会拼进上游 URL，这里就卡成纯数字
+    # 在线片源：服务/组件都要在启用清单里，内容 id 会拼进上游 URL 所以卡成纯数字
     if data.get('drama_id'):
+        sid, pid = data.get('drama_src') or '', data.get('drama_provider') or ''
+        with connect() as c:
+            if not sid or not pid:
+                sid, pid = dramas.first_enabled(c)
+            try:
+                dramas.resolve(c, sid, pid or None)
+            except dramas.DramaError as exc:
+                raise HTTPException(exc.status, str(exc))
+        data['drama_src'], data['drama_provider'] = sid, pid
         if not dramas.ITEM_RE.match(data['drama_id']):
-            raise HTTPException(400, '这部剧的编号不对')
+            raise HTTPException(400, '这个内容的编号不对')
         ep = int(data.get('drama_ep') or 1)
         if not 1 <= ep <= dramas.EPISODE_MAX:
             raise HTTPException(400, '集数超出范围')
@@ -938,7 +953,8 @@ def put_watch(body: WatchState, user=Depends(current_user)):
         if data.get('drama_id'):
             st['media'] = ''
         elif data.get('media'):
-            st['drama_id'] = ''
+            for key in ('drama_src', 'drama_provider', 'drama_id'):
+                st[key] = ''
             st['drama_ep'] = 0
         st['by'] = user['id']
         st['updated'] = db.now()
@@ -958,33 +974,92 @@ def put_watch(body: WatchState, user=Depends(current_user)):
     return get_watch(user)
 
 
-# ── 红果短剧：内容来自 NAS 上的 Capy Backend（:8788） ──────────────────
-# 客户端只认剧 id + 集号，直链一律由这里现换：签名地址带 exp，落库隔天就废；
-# 而 8788 只有内网入口，外网手机既连不上、HTTPS 页面也不能直接播 http 视频。
-@app.get('/api/dramas')
-async def drama_list(category: str = 'short', page: int = 1,
-                     q: str = '', rank: str = '', user=Depends(current_user)):
+# ── 在线片源：主人自己加服务、自己勾组件 ────────────────────────────────
+# 上游是 happy-capy 那类"组件聚合器"：一台服务代理着十几个内容源，接口形状一致。
+# 客户端只认「服务 / 组件 / 内容 id / 集号」，直链一律由这里现换 —— 签名地址带 exp，
+# 落库隔天就废；而服务只有内网入口，外网手机连不上，HTTPS 页面也不能直接播 http 视频。
+class DramaServiceIn(BaseModel):
+    name: str = Field(default='', max_length=24)
+    base: str = Field(default='', max_length=200)
+
+
+class DramaEnabledIn(BaseModel):
+    enabled: list[str] = []
+
+
+def _drama_svc(c, sid, provider=None):
+    """把「服务/组件是否可用」的检查收成一处，省得每个路由都抄一遍 try。"""
     try:
-        items = await dramas.list_items(category, page, q, rank)
+        return dramas.resolve(c, sid, provider)
+    except dramas.DramaError as exc:
+        raise HTTPException(exc.status, str(exc))
+
+
+@app.get('/api/drama-sources')
+async def drama_sources(refresh: bool = False, user=Depends(current_user)):
+    """管理界面用：每台服务在不在线 + 它代理哪些组件 + 哪些已勾上。"""
+    with connect() as c:
+        return await dramas.catalog(c, refresh)
+
+
+@app.post('/api/drama-sources')
+def add_drama_source(body: DramaServiceIn, user=Depends(current_user)):
+    with connect() as c:
+        try:
+            dramas.add_service(c, body.name, body.base)
+        except dramas.DramaError as exc:
+            raise HTTPException(exc.status, str(exc))
+    return {'ok': True}
+
+
+@app.put('/api/drama-sources/enabled')
+def set_drama_enabled(body: DramaEnabledIn, user=Depends(current_user)):
+    with connect() as c:
+        dramas.set_enabled(c, body.enabled)
+    return {'ok': True}
+
+
+@app.delete('/api/drama-sources/{sid}')
+def drop_drama_source(sid: str, user=Depends(current_user)):
+    with connect() as c:
+        try:
+            dramas.remove_service(c, sid)
+        except dramas.DramaError as exc:
+            raise HTTPException(exc.status, str(exc))
+    return {'ok': True}
+
+
+@app.get('/api/dramas/{sid}/{provider}')
+async def drama_list(sid: str, provider: str, category: str = '', page: int = 1,
+                     q: str = '', rank: str = '', user=Depends(current_user)):
+    with connect() as c:
+        svc = _drama_svc(c, sid, provider)
+    try:
+        items = await dramas.list_items(svc['base'], provider, category, page, q, rank)
     except dramas.DramaError as exc:
         raise HTTPException(exc.status, str(exc))
     return {'items': items, 'page': page}
 
 
-@app.get('/api/dramas/{item_id}')
-async def drama_detail(item_id: str, user=Depends(current_user)):
+@app.get('/api/dramas/{sid}/{provider}/{item_id}')
+async def drama_detail(sid: str, provider: str, item_id: str,
+                       user=Depends(current_user)):
+    with connect() as c:
+        svc = _drama_svc(c, sid, provider)
     try:
-        return await dramas.detail(item_id)
+        return await dramas.detail(svc['base'], provider, item_id)
     except dramas.DramaError as exc:
         raise HTTPException(exc.status, str(exc))
 
 
-@app.get('/api/dramas/{item_id}/stream/{episode}')
-async def drama_stream(item_id: str, episode: int, request: Request,
-                       user=Depends(current_user)):
+@app.get('/api/dramas/{sid}/{provider}/{item_id}/stream/{episode}')
+async def drama_stream(sid: str, provider: str, item_id: str, episode: int,
+                       request: Request, user=Depends(current_user)):
+    with connect() as c:
+        svc = _drama_svc(c, sid, provider)
     try:
-        upstream, client = await dramas.proxy(item_id, episode,
-                                             request.headers.get('range', ''))
+        upstream, client = await dramas.proxy(svc['base'], provider, item_id, episode,
+                                              request.headers.get('range', ''))
     except dramas.DramaError as exc:
         raise HTTPException(exc.status, str(exc))
 

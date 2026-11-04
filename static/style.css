@@ -908,6 +908,44 @@ html.is-native-app .watch-head{padding-top:8px}
 .ws-ep{min-height:40px;border-radius:10px;border:1px solid var(--line);background:var(--surface);
  font-size:var(--fs-md);font-weight:600;color:var(--ink);cursor:pointer}
 .ws-ep:active{background:var(--hover)}
+/* 组件切换条：一台服务可能代理十几个源，十几个分类也可能有一堆，
+   两条都横着滚 —— 一换行就把下面的列表挤出弹窗，还得滚半天才看到片单。 */
+.ws-srcs{display:flex;gap:7px;margin:-2px 0 9px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none}
+.ws-srcs::-webkit-scrollbar{display:none}
+.ws-srcs .ws-chip{flex:none;white-space:nowrap}
+.ws-toolbar{flex-wrap:nowrap}
+.ws-cats{display:flex;align-items:center;gap:7px;flex:1;min-width:0;overflow-x:auto;scrollbar-width:none}
+.ws-cats::-webkit-scrollbar{display:none}
+.ws-cats .ws-chip{flex:none;white-space:nowrap}
+.ws-search{flex:none;margin-left:0}
+.ws-manage{flex:none;display:inline-flex;align-items:center;gap:4px;min-height:32px;padding:0 11px;
+ border-radius:999px;border:1px solid var(--line);font-size:var(--fs-sm);color:var(--ink-2);cursor:pointer}
+.ws-manage .icon{width:14px;height:14px}
+.ws-tool-tip{margin:0 0 10px;font-size:var(--fs-sm);line-height:1.6;color:var(--muted)}
+/* 组件管理：每台服务一张小卡，卡里一行一个可点的组件 */
+.src-manage{display:flex;flex-direction:column;gap:12px;max-height:min(52dvh,440px);overflow-y:auto;padding-right:2px}
+.src-svc{border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:var(--surface)}
+.src-svc-head{display:flex;align-items:center;gap:7px;margin-bottom:6px;flex-wrap:wrap}
+.src-svc-head b{font-size:var(--fs-md)}
+.src-svc-head small{font-size:var(--fs-xs);color:var(--muted);word-break:break-all}
+.src-svc-head .link-btn{margin-left:auto;color:var(--muted)}
+.src-dot{flex:none;width:7px;height:7px;border-radius:50%;background:var(--line-strong)}
+.src-dot.on{background:var(--primary)}
+.src-list{display:flex;flex-direction:column;gap:3px}
+.src-toggle{margin:2px 0 4px;padding:3px 0;border:0;background:none;text-align:left;
+ font-size:var(--fs-xs);color:var(--muted);cursor:pointer}
+.src-toggle:active{color:var(--ink-2)}
+.src-row{display:flex;align-items:center;gap:9px;min-height:42px;padding:0 8px;border-radius:9px;
+ border:1px solid transparent;text-align:left;cursor:pointer;font-size:var(--fs-md);color:var(--ink)}
+.src-row:active{background:var(--hover)}
+.src-row.on{background:var(--soft);border-color:var(--line)}
+.src-tick{flex:none;width:20px;height:20px;border-radius:6px;border:1px solid var(--line-strong);
+ display:inline-flex;align-items:center;justify-content:center;color:var(--primary)}
+.src-tick .icon{width:13px;height:13px}
+.src-row.on .src-tick{background:var(--soft);border-color:var(--primary)}
+.src-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.src-row small{flex:none;max-width:46%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+ font-size:var(--fs-xs);color:var(--muted)}
 .watch-chat{flex:1 1 52%;min-height:0;display:flex;flex-direction:column;background:var(--surface);border-top:1px solid var(--line)}
 /* 横过来拿手机：竖着分屏只剩 300 多 px 高，画面被压成一条。改成左右两栏，
    画面吃满剩余宽度，聊天栏固定 300px。高度交给 flex，别让 JS 写死 px。 */
