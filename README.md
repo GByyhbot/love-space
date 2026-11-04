@@ -99,8 +99,12 @@ APK 是 Capacitor 原生壳（远程加载线上站点，所以网页改版不�
 
 | 触发 | 结果 |
 | --- | --- |
-| 打 `v*` tag | 构建正式包 → 自动发布到 GitHub Release（附 APK，versionName 取自 tag，versionCode 取日期 YYYYMMDD） |
+| 打 `v*` tag | 构建正式包 → 自动发布到 GitHub Release（附 APK，versionName 取自 tag，**versionCode 沿用 `build.gradle`**） |
 | 改 `android-app/**` 或手动触发 | 只构建并留 workflow artifact，不发布 |
+
+> **`versionCode` 只能升不能降**。安卓装过 `20261113` 之后，任何更小的包都会被系统拒绝安装，用户看到的现象是「检查更新→下载完成→装不上」。所以发版时只改 `android-app/android/app/build.gradle` 里的 `versionCode`（`versionName` 与 `capacitor.config.json` 的 `LoveSpaceApp/<版本>` UA 必须同号），CI 不再自行按日期推算。
+>
+> `scripts/check_apk_version.py` 在流水线里拦三次：checkout 后（源配置三处同号 + 不低于站内基线包）、tag 覆盖版本号后、构建产物落地后（`aapt2` 读真实 `versionCode`）。手动跑法：`python scripts/check_apk_version.py [--apk static/lovespace.apk] [--strict]`。
 
 签名密钥通过仓库 secrets 注入，不入库：
 

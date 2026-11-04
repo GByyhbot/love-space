@@ -23,6 +23,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: 校验 APK 版本号（构建前，最早拦）
+        # 这里拦的是「不可逆」的错误：versionCode 只能升不能降，装过 20261113 之后
+        # 任何更小的包都会被安卓拒绝，用户表现为「点了检查更新，下完却装不上」。
+        # 同时校验 build.gradle ↔ capacitor UA ↔ 站内基线包内部 UA 三处同号。
+        # 放在 npm ci / gradle 之前，是因为它只读文件，挂了几秒就能出结果。
+        run: python scripts/check_apk_version.py --strict
+
       - name: 校验签名 secrets
         id: guard
         env:
@@ -101,6 +108,9 @@ jobs:
           sed -i -E "s#LoveSpaceApp/[0-9.]+#LoveSpaceApp/$VERSION#" capacitor.config.json android/app/src/main/assets/capacitor.config.json
           grep -n "appendUserAgent" capacitor.config.json android/app/src/main/assets/capacitor.config.json
           grep -nE "versionCode|versionName" android/app/build.gradle | head -3
+          # sed 之后的版本号再校一遍：万一 tag 里的版本名和递增后的 versionCode 对不上，
+          # 现在报错比等用户装不上再查要便宜得多。
+          cd .. && python scripts/check_apk_version.py --strict
 
       - name: 构建 release APK
         working-directory: android-app/android
@@ -110,14 +120,16 @@ jobs:
           ./gradlew assembleRelease --console=plain
 
       - name: 校验产物
-        working-directory: android-app
+        # 除了签名，还要证明「装出来的包」跟「源码里的版本号」是同一个版本：
+        # gradle 缓存命中、sed 没生效、cap sync 覆盖错文件，都会让产物悄悄退回旧版本，
+        # 而 Release 页面上的版本号看起来一切正常。
         run: |
           set -euo pipefail
-          APK=android/app/build/outputs/apk/release/app-release.apk
+          APK=android-app/android/app/build/outputs/apk/release/app-release.apk
           ls -lh "$APK"
-          BT="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)"
-          "$BT/aapt2" dump badging "$APK" | grep -E "^package|^targetSdkVersion" || true
+          python scripts/check_apk_version.py --strict --apk "$APK"
           if [ "${{ steps.guard.outputs.signed }}" = "true" ]; then
+            BT="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)"
             "$BT/apksigner" verify --print-certs "$APK" | head -3
           fi
 

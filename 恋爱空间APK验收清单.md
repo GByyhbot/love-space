@@ -3,6 +3,8 @@
 **使用说明**：本清单在真机上逐项执行。执行前先填写：验收日期、机型/Android 版本、APK 构建号（包名 cn.iepose.lovespace，debug 签名）。
 **测试准备**：手机可正常访问 https://love-space.iepose.cn；备好测试素材（照片 1/4/9 张各测一次、1-3 分钟短视频、文本）；iPhone 一方（PWA）在线配合。
 
+> **版本号规则（现行，覆盖早期按日期取值的做法）**：`versionCode` 手工维护、只升不降，改 `android-app/android/app/build.gradle` 一处；`versionName` 与 `capacitor.config.json` 的 `LoveSpaceApp/<版本>` UA 必须同号；CI 只按 tag 覆盖 `versionName`，不再推算 `versionCode`。三处一致性由 `scripts/check_apk_version.py --strict` 在构建前、tag 覆盖后、产物落地后各校验一次。下文第三节「versionCode 20261025」与第四节 v1.2.5 记录为历史事实，不随规则变更回填。
+
 ---
 
 ## 一、验收清单
