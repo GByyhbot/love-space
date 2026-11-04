@@ -959,6 +959,11 @@ def put_watch(body: WatchState, user=Depends(current_user)):
         st['by'] = user['id']
         st['updated'] = db.now()
         db.set_setting(c, 'watch', st)
+        # 一起看状态变了 → 推进独立的 watch_revision。另一端的 SSE 收到信号才来
+        # 拉一次 /api/watch（事件触发式同步）。不复用 content_revision：那是
+        # "整站数据变了"，会把记录、聊天、照片全部重拉一遍。
+        c.execute("INSERT INTO app_state(key,value) VALUES ('watch_revision',1) "
+                  "ON CONFLICT(key) DO UPDATE SET value=value+1")
         # 从「没在播」变成「正在播」，且手上有片源 → 告诉另一半。
         # 只在"开播"这一刻发，暂停/拖动进度不打扰；dedupe 按片源 + 6 小时窗口，
         # 同一部片反复暂停续播不会刷屏，隔天再看还能再提醒一次。
@@ -2224,7 +2229,9 @@ def delete_read_notices(user=Depends(current_user)):
 def _sse_probe(token: str, user_id: str, check_session: bool):
     """SSE 心跳探针：同步 sqlite 查询，必须放到线程里执行。
 
-    返回 (revision, private_revision, unread)；会话失效返回 None。
+    返回 (revision, private_revision, unread, watch_revision)；会话失效返回 None。
+    watch_revision 是「一起看状态」的独立计数器：它变了只意味着对方改了播放状态，
+    客户端据此只拉一次 /api/watch，不必把整站数据重拉一遍。
     """
     with connect() as c:
         # session 校验不必每轮都做：这个流只推"该刷新了"，不含任何数据，
@@ -2232,14 +2239,29 @@ def _sse_probe(token: str, user_id: str, check_session: bool):
         if check_session and not c.execute(
                 'SELECT 1 FROM sessions WHERE token=? AND expires>?', (token, now())).fetchone():
             return None
-        # 一次查询拿三样东西。revision 由触发器维护，是 O(1)，
+        # 一次查询拿四样东西。revision 由触发器维护，是 O(1)，
         # 与库里有多少年的记录无关。
         row = c.execute(
             "SELECT (SELECT value FROM app_state WHERE key='content_revision'),"
             "       (SELECT value FROM user_revisions WHERE user_id=:u),"
-            "       (SELECT count(*) FROM notices WHERE user_id=:u AND seen=0)",
+            "       (SELECT count(*) FROM notices WHERE user_id=:u AND seen=0),"
+            "       (SELECT value FROM app_state WHERE key='watch_revision')",
             {'u': user_id}).fetchone()
-        return (row[0], row[1] or 0, row[2])
+        return (row[0], row[1] or 0, row[2], row[3] or 0)
+
+
+def _sse_payload(revision, private_revision, unread, watch_revision, previous):
+    """这一轮 SSE 该推什么。
+
+    refresh —— 整站数据变了（记录/聊天/照片），客户端要重拉一遍；
+    watch —— 一起看状态变了，客户端只要拉一次 /api/watch。
+    以前这两种变化混在一起推：对方动一下播放状态，我这边就得把整站数据重拉一遍。
+    """
+    prev_rev, prev_priv, prev_unread, prev_watch = previous.split(':')
+    changed = (revision != int(prev_rev)) or (private_revision != int(prev_priv)) \
+        or (unread != int(prev_unread))
+    changed_watch = watch_revision != int(prev_watch)
+    return {'refresh': changed, 'watch': changed_watch, 'unread': unread}
 
 
 @app.get('/api/events')
@@ -2259,8 +2281,8 @@ async def events(request: Request, user=Depends(current_user)):
             probe = await asyncio.to_thread(_sse_probe, token, user['id'], rounds % 10 == 0)
             if probe is None:
                 break
-            revision, private_revision, unread = probe
-            signature = f'{revision}:{private_revision}:{unread}'
+            revision, private_revision, unread, watch_revision = probe
+            signature = f'{revision}:{private_revision}:{unread}:{watch_revision}'
             if previous is None:
                 # 首轮只建立基线，不推 data：EventSource 断线重连很常见（代理空闲超时、
                 # 切前后台），每建一次连接就推一条，客户端会当成「数据变了」整页重绘，
@@ -2269,8 +2291,11 @@ async def events(request: Request, user=Depends(current_user)):
                 previous = signature
                 yield ': ready\n\n'
             elif signature != previous:
-                # 带上 revision：客户端据此判断"数据到底变没变"，避免每次心跳都整页重渲染
-                yield 'data: ' + dumps({'refresh': True, 'unread': unread, 'rev': signature}) + '\n\n'
+                # 把「整站数据变了」和「一起看状态变了」分开报：
+                # 前者让客户端重拉记录/聊天/照片，后者只让对方拉一次 /api/watch。
+                payload = _sse_payload(revision, private_revision, unread, watch_revision, previous)
+                payload['rev'] = signature
+                yield 'data: ' + dumps(payload) + '\n\n'
                 previous = signature
             else:
                 yield ': heartbeat\n\n'

@@ -2996,3 +2996,18 @@ body.kb-open .pick-overlay{padding-bottom:0}
 .chat-watch-invite .cw-body b{font-size:var(--fs-h3);font-weight:700;white-space:nowrap}
 .chat-watch-invite .cw-body small{font-size:var(--fs-lead);opacity:.86;white-space:nowrap}
 .chat-line.pending .chat-watch-invite{opacity:.7}
+
+/* ═══════════════════════════════════════════════════════════════
+   一起看 · 事件触发式同步（v213）
+   取消实时进度校正之后，状态带上给一个「对齐」按钮：对方在操作时出现，
+   点一下就把进度拉到 TA 的位置。颜色全走令牌，七主题/夜间自动跟随。
+   ═══════════════════════════════════════════════════════════════ */
+.wn-sync{flex:none;display:inline-flex;align-items:center;gap:4px;
+ padding:4px 10px;border-radius:var(--radius-pill);
+ border:1px solid var(--line);background:var(--surface);color:var(--ink-2);
+ font:inherit;font-size:var(--fs-xs);font-weight:var(--fw-medium);
+ cursor:pointer;white-space:nowrap}
+.wn-sync:hover{background:var(--raised);color:var(--ink)}
+.wn-sync:active{transform:scale(.97)}
+.wn-sync .icon{width:13px;height:13px}
+:root.dark .wn-sync{background:var(--raised);color:var(--ink-2)}

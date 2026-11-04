@@ -961,14 +961,25 @@ function scrollChat(){const log=$('#chat-log');if(log)log.scrollTop=log.scrollHe
    `/media/<id>`：两个人拿到的是同一个文件，时长一致，对齐才有意义。
    （选本机文件也留着，但那只是"各自打开同一部片"，客户端无法验证是不是同一部。）
 
-   · 谁操作（播放 / 暂停 / 拖动）谁立刻 PUT 一次快照；
-   · 另一方每 2.5 秒拉一次 `/api/watch`，发现 updated 变了就跟进：
-     位置差超过 1.5 秒就 seek，播放状态不一致就 play/pause；
-   · 服务端 GET 时按 updated 把 position 往后推算，所以"一直在播"不需要心跳包，
-     客户端也不用和服务端对时钟（手机时间不准、时区不同都算不错）；
+   · 同步是**事件触发**的，不是实时轮询：只有「用户主动做了」才上报 ——
+     拖进度条、点播放/暂停、选片/切集/换组件。播放过程中一个字节都不发，
+     对方那侧也没有轮询在跑（以前每 2.5 秒拉一次 /api/watch，手机上很费电费流量）。
+   · 对方靠 SSE 收到「一起看状态变了」的信号，才来拉一次 `/api/watch`；
+     服务端按 updated 把 position 往后推算，所以拉到的就是当下的进度。
+   · 程序性动作（换源、跟对方对齐）不会当成用户操作推回去，
+     否则两边会对着推、形成死循环。
+   · 代价：不再有持续的进度校正，长时间播放两边会慢慢漂移；
+     状态带上留了「对齐」按钮，拖一下进度条或点一下就能拉齐。
    · 首次进页面只定位不自动出声 —— 浏览器禁止无手势自动播放，强行 play 会被拦；
      昨天看到一半的进度今天进来自动响起来也不合适，所以给一个「点一下继续」。 */
 let watchObjectUrl=null, watchTimer=null, watchLastUpdated=0, watchApplying=false, watchFirstPoll=true;
+/* 上报闸门：把「用户主动做的」和「程序自己做的」分开。
+   watchMuteUntil —— 程序性动作的静音窗口（换源、跟对方对齐）；
+   watchSeekTarget —— 程序性 seek 的目标位置，用来精确识别"这次 seek 不是用户拖的"；
+   watchExpectKey —— 本端刚选的片源，等它挂上期间别被自己触发的同步事件重复换源。 */
+let watchMuteUntil=0, watchSeekTarget=null, watchPushTimer=null, watchPushPending=false, watchExpectKey='';
+function watchMute(ms){watchMuteUntil=Math.max(watchMuteUntil,Date.now()+(ms||1000));}
+function watchMuted(){return Date.now()<watchMuteUntil;}
 
 function watchVideo(){return $('#watch-video');}
 /* hls.js 挂在 video 上时元素本身没有 src 属性（画面走 MSE 的 blob），
@@ -1053,9 +1064,15 @@ function watchRenderStatus(st){
  const now=$('#watch-now');
  if(now){
   const label=st.title?`${watchName(st.title)||'一段视频'}${st.drama_id&&st.drama_ep?` · 第${st.drama_ep}集`:''}`:'';
+  /* 状态带：不再有持续的进度校正，所以文案不说"进度自动对齐"。
+     对方在操作时给一个「对齐」按钮 —— 长时间播放会慢慢漂移，点一下就拉齐。 */
+  const mine=!st.by||st.by===state.me.user.id;
+  const tip=st.playing?(mine?'正在看 · 你一操作就同步给 TA':'TA 在看 · 你一操作就跟上')
+                      :'暂停中，点播放就能一起继续';
   const html=label?`<span class="wn-badge${st.playing?' live':''}">${icon('film')}</span>
-   <span class="wn-text"><b>${esc(label)}</b><small>${st.playing?'两个人正在看，进度自动对齐':'暂停中，点播放就能一起继续'}</small></span>
-   <span class="wn-tag">${st.playing?'同步中':'已暂停'}</span>`:'';
+   <span class="wn-text"><b>${esc(label)}</b><small>${tip}</small></span>
+   ${(!mine&&label)?`<button type="button" class="wn-sync" data-action="watch-align" title="把进度拉到 TA 的位置">${icon('arrow')}对齐</button>`:''}
+   <span class="wn-tag">${st.playing?'在播':'已暂停'}</span>`:'';
   if(now.innerHTML!==html)now.innerHTML=html;
   now.hidden=!label;
  }
@@ -1072,6 +1089,9 @@ function watchRenderStatus(st){
 async function watchSetSource(opts){
  const v=watchVideo();if(!v)return;
  const seq=++watchSrcSeq;
+ /* 换源会触发 emptied/pause/loadedmetadata 一串事件，还会把 currentTime 归零。
+    静音这一小段时间，别把「换片」误报成「TA 暂停了」或者「进度归零了」。 */
+ watchMute(1400);
  /* 换源会触发 emptied/pause，别让这些事件把「暂停了」的假状态推给对方 */
  watchLoadingSrc=true;
  try{
@@ -1144,12 +1164,35 @@ async function watchPush(){
  }catch{}
 }
 
+/* 唯一的上报入口：只有「用户主动做了」才允许推给对方。
+   reason='play' | 'pause' | 'seek'。
+   两道闸门：
+     ① watchMuted() —— 程序性动作的静音窗口（换源、跟对方对齐）；
+     ② watchSeekTarget —— 程序性 seek 的目标位置；命中就说明这次 seek 不是用户拖的。
+   拖进度条时浏览器可能连着抛好几次 seeked，400ms 内合并成一条，别把请求刷成一片。 */
+function watchReport(reason){
+ if(watchApplying||watchMuted())return;
+ if(reason==='seek'&&watchSeekTarget!=null){
+  const v=watchVideo();
+  const same=v&&Math.abs((Number(v.currentTime)||0)-watchSeekTarget)<0.4;
+  watchSeekTarget=null;
+  if(same)return;
+ }
+ if(watchPushTimer){watchPushPending=true;return;}
+ watchPush();
+ watchPushTimer=setTimeout(()=>{
+  watchPushTimer=null;
+  if(watchPushPending){watchPushPending=false;watchPush();}
+ },400);
+}
+
 function watchBindVideo(){
  const v=watchVideo();if(!v)return;
- const push=()=>{if(!watchApplying)watchPush();};
  /* 用属性赋值而不是 addEventListener：整块 DOM 每次换页都会重画，
     属性赋值天然覆盖上一次的绑定，不会越绑越多。 */
- v.onplay=push;v.onpause=push;v.onseeked=push;
+ v.onplay=()=>watchReport('play');
+ v.onpause=()=>watchReport('pause');
+ v.onseeked=()=>watchReport('seek');
  /* 短剧一集只有两三分钟，播完自己接下一集，不用每次都回去点 */
  v.onended=()=>{if(!watchApplying)watchNextEpisode();};
  /* 元数据到手才知道片子的实际比例，这时再定高度 */
@@ -1165,20 +1208,25 @@ function watchJoin(){
  v.play().catch(()=>showWatchJoin());
 }
 
-async function watchPoll(){
+/* 拉一次服务端状态并对齐过来。
+   触发时机只有四种：① 进入页面 ② SSE 通知「一起看状态变了」
+   ③ 低频兜底轮询 ④ 手动点「对齐」。没有事件的时候一个请求都不发。
+   force=true 时不看 updated，硬对齐一次（手动对齐按钮用）。 */
+async function watchPull(force){
  if(state.page!=='watch'){stopWatchSync();return;}
  let st;try{st=await api('/watch');}catch{return;}
  state.watch=st;
  watchRenderStatus(st);
  const v=watchVideo();if(!v)return;
- /* 对方换了片（或换了一集/换了个组件）就跟过去；本机文件是我自己选的，服务端没有 media，
-    这时 want 为空，保持原样别把本地视频顶掉。 */
+ /* 对方换了片（或换了一集/换了个组件）就跟过去；本机文件是我自己选的，服务端没有 media,
+    这时 want 为空，保持原样别把本地视频顶掉。
+    want===watchExpectKey：本端刚点的片还在挂载途中，别被自己触发的同步再换一次源。 */
  const want=st.drama_id
   ?`d:${st.drama_src||''}:${st.drama_provider||''}:${st.drama_id}:${st.drama_ep||1}`
   :(st.media?`m:${st.media}`:'');
- if(want&&v.dataset.srcKey!==want){
+ if(want&&v.dataset.srcKey!==want&&want!==watchExpectKey){
   /* 提前压住回写：换源会清空 video，那串 emptied/pause 不该被当成「TA 暂停了」 */
-  watchApplying=true;
+  watchApplying=true;watchMute(1600);
   if(st.drama_id)watchSetSource({drama:{src:st.drama_src,prov:st.drama_provider,
    id:st.drama_id,ep:st.drama_ep||1}});
   else watchSetSource({media:st.media});
@@ -1198,19 +1246,20 @@ async function watchPoll(){
 
  if(watchFirstPoll){
   watchFirstPoll=false;watchLastUpdated=upd;
-  if(pos>0.5){watchApplying=true;try{v.currentTime=pos;}catch{}setTimeout(()=>{watchApplying=false;},800);}
+  if(pos>0.5){watchApplying=true;watchSeekTarget=pos;watchMute(900);
+   try{v.currentTime=pos;}catch{}setTimeout(()=>{watchApplying=false;},800);}
   if(st.playing)showWatchJoin();
   return;
  }
- if(upd<=watchLastUpdated)return;
+ if(!force&&upd<=watchLastUpdated)return;
  watchLastUpdated=upd;
  if(st.by===state.me.user.id)return;   // 自己刚上报的快照，别自己跟自己
- watchApplying=true;
+ watchApplying=true;watchMute(900);
  try{
   /* 播放中容忍 1.5 秒：频繁 seek 会打断解码，画面一顿一顿的，而人对 1.5 秒内的
      不同步几乎无感。暂停时就该停在同一帧，收紧到 0.5 秒 —— 这时候 seek 没有卡顿成本。 */
   const tol=st.playing?1.5:0.5;
-  if(Math.abs(v.currentTime-pos)>tol){try{v.currentTime=pos;}catch{}}
+  if(Math.abs(v.currentTime-pos)>tol){watchSeekTarget=pos;try{v.currentTime=pos;}catch{}}
   if(st.playing&&v.paused){try{await v.play();hideWatchJoin();}catch{showWatchJoin();}}
   else if(!st.playing&&!v.paused)v.pause();
  }finally{
@@ -1222,16 +1271,20 @@ function startWatchSync(){
  stopWatchSync();
  if(state.page!=='watch')return;
  watchFirstPoll=true;
+ watchExpectKey='';
  watchBindVideo();
  watchRenderStatus(state.watch||{});
- watchPoll();
- watchTimer=setInterval(watchPoll,2500);
+ watchPull();
+ /* 兜底轮询：以前每 2.5 秒拉一次（实时同步），现在降到 15 秒，只负责在
+    SSE 断线或事件漏了的时候把状态收敛回来。同步主通道是 SSE 的状态变更事件，
+    没有事件时这一条也不会白发。 */
+ watchTimer=setInterval(()=>watchPull(),15000);
  window.addEventListener('resize',watchFitStage);
  window.addEventListener('orientationchange',watchFitStage);
 }
 function stopWatchSync(){
  /* 离开「一起看」后整块 DOM 会被替换，但 hls.js 还 attach 在旧 <video> 的 JS 引用上，
-    不 destroy 就会在后台继续拉分片烧流量（最多等下一轮 2.5s 轮询走到这里）。 */
+    不 destroy 就会在后台继续拉分片烧流量（最多等下一轮轮询走到这里）。 */
  if(state.page!=='watch')watchDestroyHls();
  if(watchTimer){clearInterval(watchTimer);watchTimer=null;}
  window.removeEventListener('resize',watchFitStage);
@@ -1508,7 +1561,7 @@ async function watchOpenSource(sid,prov){
 }
 
 function watchEpisodesBody(d){
- /* 正在看的那一集高亮出来：state.watch 由 watchPoll() 每轮维护 */
+ /* 正在看的那一集高亮出来：state.watch 由 watchPull() 维护 */
  const cur=(state&&state.watch)||{};
  const curEp=String(cur.drama_id||'')===String(d.id)?Number(cur.drama_ep)||0:0;
  const eps=d.episodes.map(e=>`<button type="button" class="ws-ep${curEp===Number(e.n)?' on':''}" data-action="watch-drama-ep"
@@ -1587,6 +1640,9 @@ async function watchChooseDrama(id,ep,g){
  const many=(d.episodes||[]).length>1;
  watchRecentSave({id,title,poster:d.poster||''},g,ep);
  closeModal();
+ /* 记下本端刚点的片源：SSE 事件会在几百毫秒后回来，那时源可能还没挂上，
+    用它避免把自己触发的同步再换一次源。 */
+ watchExpectKey=`d:${g.svc}:${g.prov}:${id}:${ep}`;
  watchSetSource({drama:{src:g.svc,prov:g.prov,id,ep}});
  watchRenderStatus({...(state.watch||{}),title,drama_src:g.svc,drama_provider:g.prov,
   drama_id:id,drama_ep:ep,media:''});
@@ -1693,6 +1749,7 @@ async function watchDropSource(sid){
 
 async function watchChooseMedia(id,title){
  closeModal();
+ watchExpectKey='m:'+id;
  watchSetSource({media:id});
  watchRenderStatus({...(state.watch||{}),title,media:id});
  try{
@@ -1707,8 +1764,9 @@ function watchPickLocal(){
  const input=$('#watch-file');if(!input)return;
  input.value='';
  input.onchange=()=>{
-  const f=input.files&&input.files[0];if(!f)return;
-  watchSetSource({file:f});
+   const f=input.files&&input.files[0];if(!f)return;
+   watchExpectKey='local';
+   watchSetSource({file:f});
   /* 本机片源不上传，只把片名告诉对方；媒体和短剧都传空，把服务器上的片源清掉，
      免得对方那边还挂着一部你以为已经换掉的片子。 */
   const title=watchName(f.name)||'本机视频';
@@ -4479,6 +4537,9 @@ async function act(action,id,el) {
  if(action==='watch-pick')return watchPick();
  if(action==='watch-pick-local')return watchPickLocal();
  if(action==='watch-join')return watchJoin();
+ /* 手动对齐：拉一次服务端状态并硬对齐（无视 updated 判断）。
+    取消了实时进度校正后，长时间播放两边会漂移，靠这个按钮一键拉齐。 */
+ if(action==='watch-align')return watchPull(true);
  if(action==='ws-back')return wsBack();
  if(action==='watch-tab'){
   WATCH_PICK.tab=id||'album';
@@ -4742,21 +4803,45 @@ function connectNtfy(){const topic=state.me?.ntfy_topic;
 /* 服务端事件合并：SSE 每 5s 一条心跳、ntfy 与 SSE 又是两条独立通道，
    点赞+评论+通知常常在同一瞬间到达。不做合并会把一轮变化放大成三四次
    「拉 4 个全量接口 + 整页 innerHTML 替换」，滚动位置和视频贴纸全被冲掉。 */
-let lastRev=null,eventTimer=null,pendingRev='';
-function scheduleServerEvent(rev){
+let lastRev=null,eventTimer=null,pendingRev='',pendingFlags={refresh:false,watch:false};
+/* flags.refresh —— 整站数据变了，要重拉记录/聊天/照片；
+   flags.watch —— 一起看状态变了，只需要拉一次 /api/watch。
+   没有 revision 信息的通道（ntfy）不传 flags，按"强制刷新"处理。 */
+function scheduleServerEvent(rev,flags){
  pendingRev=(typeof rev==='string')?rev:'';  // ntfy 那条通道不带 revision，留空即强制刷新
+ if(flags){pendingFlags.refresh=pendingFlags.refresh||!!flags.refresh;
+           pendingFlags.watch=pendingFlags.watch||!!flags.watch;}
+ else pendingFlags.refresh=true;
  clearTimeout(eventTimer);
  eventTimer=setTimeout(async()=>{
   const rev=pendingRev;pendingRev='';
-  if(rev&&rev===lastRev)return;  // 数据没变，这一轮可以直接跳过
+  const flags=pendingFlags;pendingFlags={refresh:false,watch:false};
+  if(rev&&rev===lastRev&&!flags.watch)return;  // 数据没变，这一轮可以直接跳过
   // 无论 handleServerEvent 成功与否都要记下 rev：以前写在 try 里，一旦 refreshData 抛错
   // lastRev 就永远停在旧值，于是每次心跳都被当成"数据变了"，整页 5 秒重绘一次。
-  try{await handleServerEvent();}catch{}finally{if(rev)lastRev=rev;}
+  try{await handleServerEvent(flags);}catch{}finally{if(rev)lastRev=rev;}
  },500);
 }
-async function handleServerEvent(){if(!state.me)return;if(refreshing){state.pendingRefresh=true;return;}try{const oldNotice=state.notices[0]?.id||null;const focused=document.activeElement,canRender=!$('.modal')&&!$('.more-menu[open]')&&!['INPUT','TEXTAREA','SELECT'].includes(focused?.tagName);await refresh(false);if(state.page==='messages'&&$('#chat-log')){const log=$('#chat-log'),atBottom=log.scrollHeight-log.scrollTop-log.clientHeight<100;log.innerHTML=chatRows();if(atBottom)scrollChat();state.me.chat_unread=0;post('/notices/read?event=chat').catch(()=>{});}else if(state.page==='watch'&&$('#watch-log')){const log=$('#watch-log'),atBottom=log.scrollHeight-log.scrollTop-log.clientHeight<80;log.innerHTML=chatRows(true);if(atBottom)watchScroll();state.me.chat_unread=0;post('/notices/read?event=chat').catch(()=>{});}else if(canRender)renderShell();/* 系统弹窗/锁屏通知已停用：手机端通知改由第三方渠道（企业微信等）+ 浏览器 Web Push 送达；在聊天页停留时消息即时标记已读，后端不再推送 */}catch{};}
+async function handleServerEvent(flags){
+ if(!state.me)return;
+ if(refreshing){state.pendingRefresh=true;return;}
+ flags=flags||{refresh:true,watch:true};
+ try{
+  /* 一起看状态变了：只拉一次 /api/watch。对方拖了进度条、切了片，我这边立刻跟上，
+     但记录、聊天、照片一个都不用重拉 —— 这是"事件触发式同步"省下来的大头。 */
+  if(flags.watch&&state.page==='watch')await watchPull();
+  if(!flags.refresh)return;   // 只有一起看变了：整站数据没动，不必重拉也不必重绘
+  const oldNotice=state.notices[0]?.id||null;
+  const focused=document.activeElement,canRender=!$('.modal')&&!$('.more-menu[open]')&&!['INPUT','TEXTAREA','SELECT'].includes(focused?.tagName);
+  await refresh(false);
+  if(state.page==='messages'&&$('#chat-log')){const log=$('#chat-log'),atBottom=log.scrollHeight-log.scrollTop-log.clientHeight<100;log.innerHTML=chatRows();if(atBottom)scrollChat();state.me.chat_unread=0;post('/notices/read?event=chat').catch(()=>{});}
+  else if(state.page==='watch'&&$('#watch-log')){const log=$('#watch-log'),atBottom=log.scrollHeight-log.scrollTop-log.clientHeight<80;log.innerHTML=chatRows(true);if(atBottom)watchScroll();state.me.chat_unread=0;post('/notices/read?event=chat').catch(()=>{});}
+  else if(canRender)renderShell();
+  /* 系统弹窗/锁屏通知已停用：手机端通知改由第三方渠道（企业微信等）+ 浏览器 Web Push 送达；在聊天页停留时消息即时标记已读，后端不再推送 */
+ }catch{}
+}
 let sseRetry=0;
-function connectEvents(){clearTimeout(state.sseTimer);state.stream?.close();const es=new EventSource('/api/events');state.stream=es;es.onopen=()=>{sseRetry=0;};es.onmessage=e=>{let rev='';try{rev=(JSON.parse(e.data||'{}').rev)||'';}catch{}scheduleServerEvent(rev);};/* 断线兜底：浏览器只自动重连“可恢复”断线（readyState=CONNECTING）；致命断流（401/代理掐断）进 CLOSED 后永不自愈 → 指数退避手动重建，1s 起步、30s 封顶，连上即清零 */
+function connectEvents(){clearTimeout(state.sseTimer);state.stream?.close();const es=new EventSource('/api/events');state.stream=es;es.onopen=()=>{sseRetry=0;};es.onmessage=e=>{let rev='',flags={refresh:true,watch:false};try{const d=JSON.parse(e.data||'{}');rev=d.rev||'';/* 老服务端没有 refresh 字段，等于"整站都变了"，按兼容处理 */flags={refresh:d.refresh===undefined?true:!!d.refresh,watch:!!d.watch};}catch{}scheduleServerEvent(rev,flags);};/* 断线兜底：浏览器只自动重连“可恢复”断线（readyState=CONNECTING）；致命断流（401/代理掐断）进 CLOSED 后永不自愈 → 指数退避手动重建，1s 起步、30s 封顶，连上即清零 */
 es.onerror=()=>{if(es.readyState!==EventSource.CLOSED)return;state.stream=null;clearTimeout(state.sseTimer);sseRetry=sseRetry?Math.min(sseRetry*2,30):1;state.sseTimer=setTimeout(()=>{if(state.me)connectEvents();},sseRetry*1000);};}
 /* 回前台：SSE 可能已被系统挂死（尤其安卓 WebView 后台冻结）→ 死流重建 + 立即补刷一轮，兜住后台错过的消息 */
 document.addEventListener('visibilitychange',()=>{if(document.hidden||!state.me)return;syncNativePush();if(!state.stream||state.stream.readyState===EventSource.CLOSED)connectEvents();if(!ntfyWs||ntfyWs.readyState!==WebSocket.OPEN)connectNtfy();handleServerEvent();});

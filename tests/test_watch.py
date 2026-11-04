@@ -6,6 +6,8 @@
 ② `by` 记谁操作的，客户端据此忽略自己刚上报的快照，避免自激；
 ③ 片源必须是这个人看得见的媒体，私密日记里的视频不能拉进一起看。
 """
+import json
+
 from fastapi.testclient import TestClient
 
 from app import db
@@ -13,7 +15,6 @@ from app.main import app
 from app.db import connect
 
 HEADERS = {'X-Love-Space': '1'}
-
 
 def make_video(owner, name='海街日记.mp4'):
     """造一个「两人都看得见」的视频：挂在一条共享动态上，过得了 media_visible。"""
@@ -223,3 +224,71 @@ def test_lan_route_is_exposed(client_a):
     assert routes[-1]['url'] == 'http://192.168.31.95:1314/'
     csp = client_a.get('/', headers=HEADERS).headers['content-security-policy']
     assert 'http://192.168.31.95:1314' in csp
+
+
+# ---- 事件触发式同步（1.7.28）------------------------------------------------
+def watch_revision():
+    with connect() as c:
+        row = c.execute("SELECT value FROM app_state WHERE key='watch_revision'").fetchone()
+    return row[0] if row else None
+
+
+def content_revision():
+    with connect() as c:
+        row = c.execute("SELECT value FROM app_state WHERE key='content_revision'").fetchone()
+    return row[0] if row else None
+
+
+def test_watch_write_does_not_touch_content_revision(client_a):
+    """写一起看状态不许推进 content_revision。
+
+    together 看状态存在 settings 表的 'watch' 键里，而 settings 有全表 revision 触发器。
+    触发器不排除 'watch' 的话，对方拖一下进度条就会收到 refresh 标记，
+    把记录/聊天/照片整站重拉一遍 —— 「事件触发式同步」省下来的带宽全吐回去。
+    """
+    before = content_revision()
+    client_a.put('/api/watch', headers=HEADERS, json={'playing': False, 'position': 3})
+    assert content_revision() == before, '写 /api/watch 不该推进整站 revision'
+    # 其余 settings 键照旧推进（背景、片源清单这些变了别人得看见）
+    with connect() as c:
+        c.execute("INSERT INTO settings(key,value) VALUES ('probe_revision',?) "
+                  "ON CONFLICT(key) DO UPDATE SET value=excluded.value", (json.dumps(1),))
+    assert content_revision() == before + 1
+    with connect() as c:
+        c.execute("DELETE FROM settings WHERE key='probe_revision'")
+
+
+def test_watch_revision_only_moves_on_write(client_a):
+    """watch_revision 是「一起看状态变了」的独立计数器：写才动，读不动。
+
+    对方只在这个计数器变化时（SSE 推 watch 标记）才来拉一次 /api/watch，
+    所以读绝对不能推进它 —— 否则会变成每 5 秒互相拉一次的老样子。
+    """
+    before = watch_revision()
+    assert before is not None, 'watch_revision 没初始化'
+    client_a.get('/api/watch', headers=HEADERS)
+    assert watch_revision() == before
+    client_a.put('/api/watch', headers=HEADERS, json={'playing': False, 'position': 0})
+    assert watch_revision() == before + 1
+
+
+def test_sse_payload_separates_watch_from_refresh():
+    """SSE 的推送内容判定：一起看变了只推 watch，不推 refresh。
+
+    混在一起推的话，对方动一下播放状态，我这边就得把记录/聊天/照片整站重拉一遍，
+    「事件触发式同步」省下来的开销会全吐回去。
+    """
+    from app.main import _sse_payload
+    prev = '7:0:0:3'
+    # 只有一起看变了
+    p = _sse_payload(7, 0, 0, 4, prev)
+    assert p['watch'] is True and p['refresh'] is False, p
+    # 整站变了（记录/聊天）
+    p = _sse_payload(8, 0, 0, 4, prev)
+    assert p['refresh'] is True and p['watch'] is True, p
+    # 只是未读数变了
+    p = _sse_payload(7, 0, 2, 3, prev)
+    assert p['refresh'] is True and p['watch'] is False, p
+    # 什么都没变
+    p = _sse_payload(7, 0, 0, 3, prev)
+    assert p['refresh'] is False and p['watch'] is False, p
