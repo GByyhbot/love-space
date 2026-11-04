@@ -755,7 +755,7 @@ function chatTimeLabel(ts,last){
  if(d.toDateString()===new Date(n.getTime()-864e5).toDateString())return '昨天 '+hm;
  return (d.getFullYear()===n.getFullYear()?'':d.getFullYear()+'年')+(d.getMonth()+1)+'月'+d.getDate()+'日 '+hm;
 }
-function chatRows() {
+function chatRows(quiet) {
  /* 页内搜索只筛已加载的最近 200 条：聊天会无限增长，全量搜索得走后端，
     这里的定位是"刚聊过的东西翻不到了"，够用又不加接口。 */
  const q=(state.chatSearch||'').trim().toLowerCase();
@@ -786,7 +786,9 @@ function chatRows() {
  }).join('');
  const pend=pending.map(p=>`<div class="chat-line mine pending">${avatar(state.me.user.id)}<div><div class="chat-bubble">${esc(p.body.content||'一个附件')}</div><div class="chat-time">尚未发送 <button data-action="retry-chat" data-id="${p.client_id}">点击重试</button></div></div></div>`).join('');
  if(q&&!chats.length)return `<div class="chat-no-match">最近 200 条里没有「${esc(state.chatSearch)}」，试试清掉筛选。</div>`;
- return rows+pend||empty('今天，有什么想对 TA 说？','说说日常，也说说想念。');
+ return rows+pend||(quiet
+  ?`<p class="watch-chat-empty">边看边聊，想说什么就说</p>`
+  :empty('今天，有什么想对 TA 说？','说说日常，也说说想念。'));
 }
 /* 聊天壁纸：预设用 CSS 渐变/纹理，'photo' 用自己上传的照片。
    dim 是压在图上的遮罩强度（百分比）——它存在的意义只有一个：保证气泡文字在任何底图上都读得清。
@@ -960,7 +962,7 @@ function watchVideo(){return $('#watch-video');}
 function watchHasSrc(){const v=watchVideo();return !!(v&&v.getAttribute('src'));}
 
 function watchPage(){
- const chats=chatRows();
+ const chats=chatRows(true);
  return `<section class="watch-page">
   <header class="watch-head">
    <button class="icon-btn" data-action="watch-back" aria-label="返回聊天">${icon('back')}</button>
@@ -970,10 +972,10 @@ function watchPage(){
   <div class="watch-stage" id="watch-stage">
    <video id="watch-video" class="watch-video" playsinline controls hidden></video>
    <div class="watch-empty" id="watch-empty">
-    <span class="we-emoji">🎬</span>
+    <span class="we-icon">${icon('film')}</span>
     <b id="watch-empty-title">还没有片源</b>
-    <small id="watch-empty-hint">从相册视频里挑一部，两个人看的是同一个文件，进度自动对齐</small>
-    <button class="button primary small" data-action="watch-pick">选择视频</button>
+    <small id="watch-empty-hint">从相册里挑一段视频，两个人看的是同一个文件，进度自动对齐</small>
+    <button class="button primary small" data-action="watch-pick">从相册选视频</button>
    </div>
    <button type="button" class="watch-join" id="watch-join" data-action="watch-join" hidden>点一下继续播放</button>
   </div>
@@ -991,18 +993,25 @@ function watchScroll(){const log=$('#watch-log');if(log)log.scrollTop=log.scroll
 
 /* 把状态画到头部副标题和空状态上。片源没挂上时，这里就是唯一告诉
    "TA 选了哪部" 的地方，否则对方只会看到一句"还没有片源"。 */
+/* 相册导出的文件名常常就是一串数字（1000028599.mp4），直接当片名摆出来既难看、
+   也分不清是哪一段，一律改成中性叫法 —— 列表里靠下面的日期区分。 */
+function watchName(raw){
+ const n=String(raw||'').replace(/\.[^.]+$/,'').trim();
+ return /^[\d\s._-]*$/.test(n)?'':n;
+}
+
 function watchRenderStatus(st){
  st=st||{};
  const sub=$('#watch-sub'), t=$('#watch-empty-title'), h=$('#watch-empty-hint');
+ const name=watchName(st.title)||'一段视频';
  if(sub){
-  sub.textContent=st.title
-   ? `${st.playing?'一起看着':'暂停中'} · ${st.title}`
-   : '边看边聊 · 选一部一起看';
+  sub.textContent=st.title?`${st.playing?'一起看着':'暂停中'} · ${name}`:'边看边聊 · 选一部一起看';
+  sub.classList.toggle('live',!!(st.title&&st.playing));
  }
  if(t&&!watchHasSrc()){
   const mine=st.by===state.me.user.id;
-  t.textContent=st.title?`${mine?'你':(st.by?person(st.by).name:'TA')}选了《${st.title}》`:'还没有片源';
-  h.textContent=st.title?'片源在下面，点播放就能一起开始':'从相册视频里挑一部，两个人看的是同一个文件，进度自动对齐';
+  t.textContent=st.title?`${mine?'你':(st.by?person(st.by).name:'TA')}选了《${name}》`:'还没有片源';
+  h.textContent=st.title?'片源已经就位，点播放就能一起开始':'从相册里挑一段视频，两个人看的是同一个文件，进度自动对齐';
  }
 }
 
@@ -1098,10 +1107,12 @@ function stopWatchSync(){if(watchTimer){clearInterval(watchTimer);watchTimer=nul
 async function watchPick(){
  let vids=[];
  try{vids=await api('/media/videos');}catch(e){vids=[];}
- const items=vids.length?vids.map(v=>`<button type="button" class="ws-item" data-watch-media="${esc(v.id)}" data-watch-title="${esc(v.name.replace(/\.[^.]+$/,''))}">
+ const items=vids.length?vids.map(v=>{
+   const name=watchName(v.name)||'相册视频';
+   return `<button type="button" class="ws-item" data-watch-media="${esc(v.id)}" data-watch-title="${esc(name)}">
    <span class="ws-thumb" style="background-image:url('/media/${esc(v.id)}?poster=1')"></span>
-   <span class="ws-meta"><b>${esc(v.name.replace(/\.[^.]+$/,''))}</b><small>${new Date(v.created*1000).toLocaleDateString('zh-CN',{timeZone:state.me.space.timezone})}</small></span>
-  </button>`).join(''):'<p class="meta">相册里还没有视频。可以先用「本机文件」，两个人各自打开同一部，进度也会同步。</p>';
+   <span class="ws-meta"><b>${esc(name)}</b><small>${new Date(v.created*1000).toLocaleDateString('zh-CN',{timeZone:state.me.space.timezone})}</small></span>
+  </button>`;}).join(''):'<p class="meta">相册里还没有视频。可以先用「本机文件」，两个人各自打开同一部，进度也会同步。</p>';
  openModal('选一部一起看',`<div class="ws-list" id="ws-list">${items}</div>
   <div class="form-actions"><button type="button" class="button soft" data-action="watch-pick-local">从本机选文件</button><button type="button" class="button" data-action="close-modal">取消</button></div>`);
 }
@@ -1126,7 +1137,7 @@ function watchPickLocal(){
   watchSetSource({file:f});
   /* 本机片源不上传，只把片名告诉对方；media 传空串把服务器上的片源清掉，
      免得对方那边还挂着一部你以为已经换掉的片子。 */
-  const title=f.name.replace(/\.[^.]+$/,'');
+  const title=watchName(f.name)||'本机视频';
   api('/watch',{method:'PUT',body:JSON.stringify({media:'',title,position:0,duration:0,playing:false})})
    .then(cur=>{state.watch=cur;watchLastUpdated=Number(cur.updated)||0;watchFirstPoll=false;watchRenderStatus(cur);})
    .catch(()=>{});
@@ -3957,7 +3968,7 @@ document.addEventListener('touchend',e=>{
 document.addEventListener('click',async e=>{$$('.more-menu[open]').forEach(d=>{if(!d.contains(e.target))d.removeAttribute('open');});const nav=e.target.closest('[data-nav]'),el=e.target.closest('[data-action]');try{if(nav||el)e.target.closest('.account-menu')?.removeAttribute('open');if(nav)return await navigate(nav.dataset.nav);if(el)await act(el.dataset.action,el.dataset.id||'',el);}catch(err){toast(err.message);}});
 document.addEventListener('submit',async e=>{const isWatch=e.target.id==='watch-form';if(e.target.id!=='chat-form'&&!isWatch)return;e.preventDefault();const input=$(isWatch?'#watch-text':'#chat-text'),content=input.value.trim();if(!content)return;const btn=$('button[type=submit]',e.target);btn.disabled=true;try{const body={content,date:today(),media:[]};if(!isWatch&&state.chatReply)body.reply_to=state.chatReply;await sendChat(body);if(!isWatch)state.chatReply=null;input.value='';localStorage.removeItem('chat-text:'+state.me.user.id);
  /* 一起看页不能整页重渲染：视频是本机 objectURL，重渲染就把放映区清空了 */
- if(isWatch){await refresh(false);const log=$('#watch-log');if(log)log.innerHTML=chatRows();syncCompose();watchScroll();}
+ if(isWatch){await refresh(false);const log=$('#watch-log');if(log)log.innerHTML=chatRows(true);syncCompose();watchScroll();}
  else{await refresh();syncCompose();}
  }catch(err){toast(err.message);}finally{btn.disabled=false;}});
 document.addEventListener('input',e=>{if(e.target.id==='chat-text'){localStorage.setItem('chat-text:'+state.me.user.id,e.target.value);syncCompose();}if(e.target.id==='watch-text'){syncCompose();}if(e.target.id==='filter-q'){state.filters={...(state.filters||{}),q:e.target.value};clearTimeout(state.filterTimer);state.filterTimer=setTimeout(async()=>{const pos=$('#filter-q')?.selectionStart;try{await loadTimeline(true);renderPage();$('#filter-q')?.focus();$('#filter-q')?.setSelectionRange(pos,pos);}catch(err){toast(err.message);}},250);}});
@@ -4098,7 +4109,7 @@ function scheduleServerEvent(rev){
   try{await handleServerEvent();}catch{}finally{if(rev)lastRev=rev;}
  },500);
 }
-async function handleServerEvent(){if(!state.me)return;if(refreshing){state.pendingRefresh=true;return;}try{const oldNotice=state.notices[0]?.id||null;const focused=document.activeElement,canRender=!$('.modal')&&!$('.more-menu[open]')&&!['INPUT','TEXTAREA','SELECT'].includes(focused?.tagName);await refresh(false);if(state.page==='messages'&&$('#chat-log')){const log=$('#chat-log'),atBottom=log.scrollHeight-log.scrollTop-log.clientHeight<100;log.innerHTML=chatRows();if(atBottom)scrollChat();state.me.chat_unread=0;post('/notices/read?event=chat').catch(()=>{});}else if(state.page==='watch'&&$('#watch-log')){const log=$('#watch-log'),atBottom=log.scrollHeight-log.scrollTop-log.clientHeight<80;log.innerHTML=chatRows();if(atBottom)watchScroll();state.me.chat_unread=0;post('/notices/read?event=chat').catch(()=>{});}else if(canRender)renderShell();/* 系统弹窗/锁屏通知已停用：手机端通知改由第三方渠道（企业微信等）+ 浏览器 Web Push 送达；在聊天页停留时消息即时标记已读，后端不再推送 */}catch{};}
+async function handleServerEvent(){if(!state.me)return;if(refreshing){state.pendingRefresh=true;return;}try{const oldNotice=state.notices[0]?.id||null;const focused=document.activeElement,canRender=!$('.modal')&&!$('.more-menu[open]')&&!['INPUT','TEXTAREA','SELECT'].includes(focused?.tagName);await refresh(false);if(state.page==='messages'&&$('#chat-log')){const log=$('#chat-log'),atBottom=log.scrollHeight-log.scrollTop-log.clientHeight<100;log.innerHTML=chatRows();if(atBottom)scrollChat();state.me.chat_unread=0;post('/notices/read?event=chat').catch(()=>{});}else if(state.page==='watch'&&$('#watch-log')){const log=$('#watch-log'),atBottom=log.scrollHeight-log.scrollTop-log.clientHeight<80;log.innerHTML=chatRows(true);if(atBottom)watchScroll();state.me.chat_unread=0;post('/notices/read?event=chat').catch(()=>{});}else if(canRender)renderShell();/* 系统弹窗/锁屏通知已停用：手机端通知改由第三方渠道（企业微信等）+ 浏览器 Web Push 送达；在聊天页停留时消息即时标记已读，后端不再推送 */}catch{};}
 let sseRetry=0;
 function connectEvents(){clearTimeout(state.sseTimer);state.stream?.close();const es=new EventSource('/api/events');state.stream=es;es.onopen=()=>{sseRetry=0;};es.onmessage=e=>{let rev='';try{rev=(JSON.parse(e.data||'{}').rev)||'';}catch{}scheduleServerEvent(rev);};/* 断线兜底：浏览器只自动重连“可恢复”断线（readyState=CONNECTING）；致命断流（401/代理掐断）进 CLOSED 后永不自愈 → 指数退避手动重建，1s 起步、30s 封顶，连上即清零 */
 es.onerror=()=>{if(es.readyState!==EventSource.CLOSED)return;state.stream=null;clearTimeout(state.sseTimer);sseRetry=sseRetry?Math.min(sseRetry*2,30):1;state.sseTimer=setTimeout(()=>{if(state.me)connectEvents();},sseRetry*1000);};}
