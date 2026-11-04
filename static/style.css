@@ -2921,3 +2921,54 @@ body.kb-open .pick-overlay{padding-bottom:0}
  .ws-section{margin:10px 0 8px}
  .ws-cinema .ws-tabs{margin:8px 0}
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   片源层级（v211）：在线片源主页面 = 组件卡；点进去 = 组件分类分区首页
+   ═══════════════════════════════════════════════════════════════ */
+/* 组件卡改成容器，里面两个平级按钮：主体进片源，右侧小图标管开/关。
+   button 里不能嵌 button，所以外层是 div，视觉仍是一整张卡。 */
+.src-card-main{flex:1;min-width:0;display:flex;align-items:center;gap:10px;
+  padding:0;border:0;background:none;color:inherit;font:inherit;
+  text-align:left;cursor:pointer}
+.src-card-go{flex:none;display:inline-flex;align-items:center;justify-content:center;
+  width:28px;height:28px;padding:0;border:0;border-radius:50%;
+  background:none;color:var(--ws-mut);cursor:pointer;
+  transition:background var(--speed) var(--ease),color var(--speed) var(--ease)}
+.src-card-go:hover{background:rgba(255,255,255,.08);color:var(--ws-ink)}
+.src-card.on .src-card-go{color:var(--primary)}
+.src-card-go .icon{width:15px;height:15px}
+
+/* 组件首页：整页滚动，每个分类一行横滑海报，右上是搜索、分区右侧是 › */
+.ws-home{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;
+  padding:0 0 16px;scrollbar-width:none}
+.ws-home::-webkit-scrollbar{display:none}
+.ws-home-head{display:flex;justify-content:flex-end;padding:10px 0 0}
+.ws-home-head .ws-search{max-width:52%}
+.ws-home-sec{margin:0 0 6px}
+.ws-home-sec .ws-section{margin:14px 0 10px}
+.ws-home-sec .ws-section-more{width:28px;height:28px;justify-content:center;
+  border-radius:50%;background:var(--ws-card);color:var(--ws-ink2)}
+.ws-home-sec .ws-section-more .icon{width:15px;height:15px;opacity:1}
+.ws-rail{display:flex;gap:10px;flex-wrap:nowrap;overflow-x:auto;
+  padding-bottom:4px;scrollbar-width:none}
+.ws-rail::-webkit-scrollbar{display:none}
+.ws-rail-card{flex:0 0 108px;width:108px;display:flex;flex-direction:column;
+  gap:7px;min-width:0;padding:0;border:0;background:none;
+  text-align:left;color:inherit;font:inherit;cursor:pointer}
+.ws-rail-card .ws-card-poster{padding-top:133%}
+.ws-rail-card:active .ws-card-poster{transform:scale(.97)}
+.ws-rail-card .ws-card-title{font-size:var(--fs-sm)}
+.ws-rail-empty{margin:0;padding:14px 0;color:var(--ws-mut);font-size:var(--fs-sm)}
+.ws-home-all{display:flex;align-items:center;justify-content:center;gap:6px;
+  width:100%;margin:14px 0 0;padding:12px;border:1px solid var(--ws-line);
+  border-radius:12px;background:var(--ws-card);color:var(--ws-ink2);
+  font:inherit;font-size:var(--fs-sm);cursor:pointer}
+.ws-home-all .icon{width:14px;height:14px}
+.ws-home-all:hover{background:var(--ws-elev);color:var(--ws-ink)}
+
+@media (orientation:landscape) and (max-height:560px){
+ /* 矮屏整页滚，别让 ws-home 再独占一段高度 */
+ .ws-cinema .ws-home{flex:0 0 auto;overflow:visible;max-height:none}
+ .ws-rail-card{flex:0 0 88px;width:88px}
+ .ws-home-sec .ws-section{margin:8px 0 6px}
+}
