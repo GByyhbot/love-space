@@ -1028,6 +1028,25 @@ function watchSetSource(opts){
  }
  v.hidden=false;
  const empty=$('#watch-empty');if(empty)empty.hidden=true;
+ watchFitStage();
+}
+
+/* 播放区高度跟着视频自身比例走。固定五五分屏时，横屏片子在 48% 高的框里用 contain
+   缩放，上下会各留一整条黑边，看着像播放器没加载好。这里按 videoWidth/videoHeight
+   算出真实高度，只保留一条上限：别让长片把下面的聊天区挤没。
+   横过来拿手机时走左右分栏（见 style.css），高度由 flex 撑满，不再写死。 */
+const WATCH_SIDE_BY_SIDE='(orientation:landscape) and (max-height:560px)';
+function watchFitStage(){
+ const v=watchVideo(),st=$('#watch-stage');if(!st)return;
+ const w=st.clientWidth;
+ const vw=v&&v.videoWidth,vh=v&&v.videoHeight;
+ /* 没片源或元数据还没到：清掉内联高度，交回 CSS 的默认分屏 */
+ if(!w||!vw||!vh){st.style.height='';return;}
+ if(window.matchMedia&&window.matchMedia(WATCH_SIDE_BY_SIDE).matches){st.style.height='';return;}
+ const box=$('#page');
+ const pageH=(box&&box.clientHeight)||window.innerHeight;
+ const h=Math.round(w*vh/vw);
+ st.style.height=Math.max(96,Math.min(h,Math.round(pageH*0.62)))+'px';
 }
 
 async function watchPush(){
@@ -1047,6 +1066,8 @@ function watchBindVideo(){
  /* 用属性赋值而不是 addEventListener：整块 DOM 每次换页都会重画，
     属性赋值天然覆盖上一次的绑定，不会越绑越多。 */
  v.onplay=push;v.onpause=push;v.onseeked=push;
+ /* 元数据到手才知道片子的实际比例，这时再定高度 */
+ v.onloadedmetadata=()=>watchFitStage();
 }
 
 function showWatchJoin(){const b=$('#watch-join');if(b)b.hidden=false;}
@@ -1100,8 +1121,14 @@ function startWatchSync(){
  watchRenderStatus(state.watch||{});
  watchPoll();
  watchTimer=setInterval(watchPoll,2500);
+ window.addEventListener('resize',watchFitStage);
+ window.addEventListener('orientationchange',watchFitStage);
 }
-function stopWatchSync(){if(watchTimer){clearInterval(watchTimer);watchTimer=null;}}
+function stopWatchSync(){
+ if(watchTimer){clearInterval(watchTimer);watchTimer=null;}
+ window.removeEventListener('resize',watchFitStage);
+ window.removeEventListener('orientationchange',watchFitStage);
+}
 
 /* 选片源：优先从相册视频挑（同源，能真同步）；本机文件留作退路 */
 async function watchPick(){
