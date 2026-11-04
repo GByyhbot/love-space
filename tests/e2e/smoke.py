@@ -218,7 +218,30 @@ def run():
                        'watch.js 的全局对 app.js 可见',
                        f"watchPull={globs['pull']} WATCH_PICK={globs['cfg']} WATCH_SOFA={globs['sofa']}")
 
-                    # ---- 8. 零运行时错误 ----
+                    # ---- 8. 生理期页（period.js 拆出后的可见性）----
+                    # 同 watch 的理由：period.js 也是独立 classic script，函数引用在调用时
+                    # 才解析，加载失败不会在首屏暴露，只会在点进「我们 → 生理期」时白屏。
+                    per = page.evaluate("""async () => {
+                        // navigate(page, tab) 会把 state.tab 重置成参数，所以 tab 必须当参数传，
+                        // 先写 state.tab 再 navigate 是无效的。
+                        try { await navigate('together', 'period'); }
+                        catch (e) { return 'ERR ' + (e && e.message || e); }
+                        return {
+                            // 注意：不要断言 .cycle-hero —— 它只在「已有经期记录」时才渲染，
+                            // 干净库里走的是「开始记录」那个分支。.period-top-card 是无条件的。
+                            card: !!document.querySelector('.period-top-card'),
+                            days: typeof periodData, grid: typeof periodMonthGrid,
+                            save: typeof periodSaveDay, form: typeof periodForm,
+                        };
+                    }""")
+                    ok(isinstance(per, dict) and per['card'],
+                       '生理期页渲染出 .period-top-card（period.js 已生效）', str(per))
+                    if isinstance(per, dict):
+                        ok(all(per[k] != 'undefined' for k in ('days', 'grid', 'save', 'form')),
+                           'period.js 的全局对 app.js 可见',
+                           f"periodData={per['days']} periodSaveDay={per['save']}")
+
+                    # ---- 9. 零运行时错误 ----
                     ok(not page_errors, '无 PAGEERROR', ' / '.join(page_errors[:3]))
                     ok(not console_errors, '无 console error', ' / '.join(console_errors[:3]))
 
