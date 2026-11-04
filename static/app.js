@@ -198,6 +198,11 @@ function applyCustomColor(theme, color) {
   }
 }
 const button = (label,action,style='secondary',ico='',extra='') => `<button type="button" class="button ${style}" data-action="${action}" ${extra}>${ico?icon(ico):''}${label}</button>`;
+/* 弹窗表单的通用收尾件：错误提示行 + 「取消 / 主按钮」一行。
+   十几个弹窗（日记、经期、音乐、心愿、主题、搜片源…）都是同一个骨架，
+   收敛成组件后调样式或改文案只需动这一处，不会再各写各的。 */
+const formError = () => '<div class="form-error" role="alert"></div>';
+const modalActions = (label='保存') => `<div class="form-actions">${button('取消','close-modal')}<button class="button primary" type="submit">${label}</button></div>`;
 const empty = (title,description,action='',label='留下第一份回忆',compact=false) => `<div class="empty ${compact?'compact':''}"><div class="empty-icon">♡</div><h3>${esc(title)}</h3><p>${esc(description)}</p>${action?button(label,action,'soft','plus'):''}</div>`;
 function heading(title,description,action='',label='写点什么',ico='plus',extra='') {return `<div class="page-heading"><div><h1>${esc(title)}</h1><p>${esc(description)}</p></div>${action?button(label,action,'primary',ico,extra):''}</div>`;}
 
@@ -1619,8 +1624,8 @@ async function watchDramaDetail(id){
 function watchSearchForm(){
  openModal('搜一部片',`<form class="modal-form" id="ws-search-form">
    <label>片名、演员或关键词<input name="q" required maxlength="40" autocomplete="off" value="${esc(WATCH_PICK.q||'')}" placeholder="例如：少夫人来自东北"></label>
-   <div class="form-error" role="alert"></div>
-   <div class="form-actions">${button('取消','close-modal')}<button class="button primary" type="submit">搜一下</button></div>
+   ${formError()}
+   ${modalActions('搜一下')}
   </form>`);
  $('#ws-search-form').onsubmit=async e=>{
   e.preventDefault();
@@ -1703,12 +1708,14 @@ async function watchToggleSource(sid,prov){
 }
 
 function watchAddSourceForm(){
+ /* 这里的「取消」不是关弹窗而是回上一层面板（watch-src-back），
+    和标准收尾件 modalActions() 的行为不同，所以保留自定义 actions。 */
  openModal('添加片源服务',`<form class="modal-form" id="ws-src-form">
    <label>名字<input name="name" maxlength="24" autocomplete="off" placeholder="随便起，例如「家里那台」"></label>
    <label>服务地址<input name="base" required maxlength="200" autocomplete="off" inputmode="url"
      placeholder="http://192.168.31.95:8788"></label>
    <p class="meta" style="margin:0">填 happy-capy 这类组件服务的根地址，保存后会自动去读它的组件清单。</p>
-   <div class="form-error" role="alert"></div>
+   ${formError()}
    <div class="form-actions">${button('取消','watch-src-back')}<button class="button primary" type="submit">保存</button></div>
   </form>`);
  $('#ws-src-form').onsubmit=async e=>{
@@ -3061,7 +3068,7 @@ function periodNumberSheet(day,field,title,unit,low,high){
 function periodLogSheet(field,day){
  const b=(periodDayRow(day)||{}).body||{};
  if(field==='content'){
-  openModal('这一天的日记',`<form class="modal-form" id="pday-note"><label>想说的话<textarea name="content" maxlength="20000" placeholder="今天特别难受，或者想让他知道的…">${esc(b.content||'')}</textarea></label><p class="small-note">日记只存在这一天里，历史卡上不会重复显示。</p><div class="form-error" role="alert"></div><div class="form-actions">${button('取消','close-modal')}<button class="button primary" type="submit">保存</button></div></form>`,{sheet:true});
+  openModal('这一天的日记',`<form class="modal-form" id="pday-note"><label>想说的话<textarea name="content" maxlength="20000" placeholder="今天特别难受，或者想让他知道的…">${esc(b.content||'')}</textarea></label><p class="small-note">日记只存在这一天里，历史卡上不会重复显示。</p>${formError()}${modalActions()}</form>`,{sheet:true});
   $('#pday-note').onsubmit=async e=>{
    e.preventDefault();const submit=$('button[type=submit]',e.currentTarget);submit.disabled=true;
    try{await periodSaveDay(day,{content:String(new FormData(e.currentTarget).get('content')||'')});closeModal();}
@@ -3423,7 +3430,7 @@ function periodForm(record=null, presetDay=null){
  const chips=PERIOD_SYMPTOMS.map(s=>`<button type="button" class="sym-chip${chosen.has(s)?' on':''}" data-name="${s}" aria-pressed="${chosen.has(s)}">${s}</button>`).join('');
  // 老数据里 flow 是「少/中/多」，换成最近的档位显示，不至于打开就是空白
  const flowVal=typeof b.flow==='number'?b.flow:({'少':2,'中':3,'多':4}[b.flow]||'');
- openModal(record?'编辑这次经期':'记录这次经期',`<form class="modal-form" id="period-form"><label>这次经期开始于<input name="start" type="date" required maxlength="10" value="${esc(b.start||presetDay||today())}"></label><div class="form-row"><label>经期几天<input name="length" type="number" min="1" max="15" value="${b.length??d.length}"></label><label>周期几天<input name="cycle" type="number" min="15" max="60" value="${b.cycle??d.cycle}"></label></div>${selectField('整体经量','flow',[['','不记'],...Object.entries(PERIOD_FLOW)],flowVal)}<label>身体的感受（可多选）</label><div class="sym-chips">${chips}</div><label>想说的话（可选）<textarea name="content" maxlength="20000" placeholder="这次特别难受，或者想让他知道的…">${esc(b.content||'')}</textarea></label><p class="small-note">周期默认按历史记录的平均值填好，也可以手动改。数据加密保存，两个人一起维护同一条周期。</p><div class="form-error" role="alert"></div><div class="form-actions">${button('取消','close-modal')}<button class="button primary" type="submit">保存</button></div></form>`);
+ openModal(record?'编辑这次经期':'记录这次经期',`<form class="modal-form" id="period-form"><label>这次经期开始于<input name="start" type="date" required maxlength="10" value="${esc(b.start||presetDay||today())}"></label><div class="form-row"><label>经期几天<input name="length" type="number" min="1" max="15" value="${b.length??d.length}"></label><label>周期几天<input name="cycle" type="number" min="15" max="60" value="${b.cycle??d.cycle}"></label></div>${selectField('整体经量','flow',[['','不记'],...Object.entries(PERIOD_FLOW)],flowVal)}<label>身体的感受（可多选）</label><div class="sym-chips">${chips}</div><label>想说的话（可选）<textarea name="content" maxlength="20000" placeholder="这次特别难受，或者想让他知道的…">${esc(b.content||'')}</textarea></label><p class="small-note">周期默认按历史记录的平均值填好，也可以手动改。数据加密保存，两个人一起维护同一条周期。</p>${formError()}${modalActions()}</form>`);
  $('#period-form').onclick=e=>{const chip=e.target.closest('.sym-chip');if(!chip)return;chip.classList.toggle('on');chip.setAttribute('aria-pressed',String(chip.classList.contains('on')));};
  $('#period-form').onsubmit=async e=>{
   e.preventDefault();const form=e.currentTarget,submit=$('button[type=submit]',form);
@@ -3457,7 +3464,7 @@ function musicPage(){
 }
 function musicForm(record=null){
  const b=record?.body||{};
- openModal(record?'编辑这首歌':'添加一首歌',`<form class="modal-form" id="music-form"><label>歌名<input name="title" required maxlength="120" value="${esc(b.title||'')}" placeholder="例如：晚安"></label><label>歌手，或者想说的话<input name="content" maxlength="200" value="${esc(b.content||'')}" placeholder="例如：陈奕迅 · 那年冬天一直循环"></label><label>音频文件${record?'（不换就留空）':''}<input name="file" type="file" accept="audio/*" ${record?'':'required'}></label><p class="small-note">建议 mp3，单曲控制在 10 MB 以内，手机流量也不会太心疼。</p><div class="form-error" role="alert"></div><div class="form-actions">${button('取消','close-modal')}<button class="button primary" type="submit">保存</button></div></form>`);
+ openModal(record?'编辑这首歌':'添加一首歌',`<form class="modal-form" id="music-form"><label>歌名<input name="title" required maxlength="120" value="${esc(b.title||'')}" placeholder="例如：晚安"></label><label>歌手，或者想说的话<input name="content" maxlength="200" value="${esc(b.content||'')}" placeholder="例如：陈奕迅 · 那年冬天一直循环"></label><label>音频文件${record?'（不换就留空）':''}<input name="file" type="file" accept="audio/*" ${record?'':'required'}></label><p class="small-note">建议 mp3，单曲控制在 10 MB 以内，手机流量也不会太心疼。</p>${formError()}${modalActions()}</form>`);
  $('#music-form').onsubmit=async e=>{
   e.preventDefault();const form=e.currentTarget,submit=$('button[type=submit]',form);submit.disabled=true;
   try{
@@ -3907,11 +3914,11 @@ function enhanceNativeControls(root){
  });
 }
 function simpleForm(title,fields,onSubmit,label='保存') {
- openModal(title,`<form class="modal-form" id="simple-form">${fields}<div class="form-error" role="alert"></div><div class="form-actions">${button('取消','close-modal')}<button class="button primary" type="submit">${label}</button></div></form>`);
+ openModal(title,`<form class="modal-form" id="simple-form">${fields}${formError()}${modalActions(label)}</form>`);
  $('#simple-form').onsubmit=async e=>{e.preventDefault();const form=e.currentTarget,b=$('button[type=submit]',form);b.disabled=true;try{await onSubmit(Object.fromEntries(new FormData(form)),form);closeModal();await refresh();toast('已保存这份小美好');}catch(err){$('.form-error',form).textContent=err.message;}finally{b.disabled=false;}};
 }
-function personalWishForm(){const clientId=uuid();openModal('许下一份个人心愿',`<form class="modal-form" id="personal-wish-form"><label>心愿名称（对方可见）<input name="title" required maxlength="100" placeholder="例如：有一天想和你去看海"></label><label>具体心愿内容（需要密码才能查看）<textarea name="content" required maxlength="20000" placeholder="写下想留给自己的心愿…"></textarea></label><label>这条心愿的独立密码<input name="password" type="password" required minlength="6" maxlength="128" inputmode="numeric" autocomplete="new-password" placeholder="至少 6 位，建议纯数字"></label><p class="small-note">每条心愿都要设置不同密码。写下心愿的你可以直接回看内容；把密码告诉对方后，对方输入一次就能看到，之后不必再输。忘记密码无法找回。</p><div class="form-error" role="alert"></div><div class="form-actions">${button('取消','close-modal')}<button class="button primary" type="submit">加密保存</button></div></form>`);$('#personal-wish-form').onsubmit=async e=>{e.preventDefault();const form=e.currentTarget,submit=$('button[type=submit]',form);submit.disabled=true;try{await post('/personal-wishes',{...Object.fromEntries(new FormData(form)),client_id:clientId});closeModal();await refresh();toast('这份个人心愿已加密保存');}catch(err){$('.form-error',form).textContent=err.message;}finally{submit.disabled=false;}};}
-function unlockPersonalWish(rid){const wish=state.records.find(r=>r.id===rid);if(!wish)return;openModal('打开这份个人心愿',`<form class="modal-form" id="unlock-personal-wish-form"><p class="meta">「${esc(wish.body.title)}」的内容已加密，请输入心愿本人交给你的密码。</p><label>心愿密码<input name="password" type="password" required maxlength="128" autocomplete="current-password" placeholder="向心愿本人获取这条心愿的密码"></label><div class="form-error" role="alert"></div><div class="form-actions">${button('取消','close-modal')}<button class="button primary" type="submit">解锁心愿</button></div></form>`);$('#unlock-personal-wish-form').onsubmit=async e=>{e.preventDefault();const form=e.currentTarget,submit=$('button[type=submit]',form);submit.disabled=true;try{await post('/personal-wishes/'+encodeURIComponent(rid)+'/unlock',Object.fromEntries(new FormData(form)));closeModal();await refresh();toast('已解锁，内容现在直接显示在心愿卡片里');}catch(err){$('.form-error',form).textContent=err.message;}finally{submit.disabled=false;}};}
+function personalWishForm(){const clientId=uuid();openModal('许下一份个人心愿',`<form class="modal-form" id="personal-wish-form"><label>心愿名称（对方可见）<input name="title" required maxlength="100" placeholder="例如：有一天想和你去看海"></label><label>具体心愿内容（需要密码才能查看）<textarea name="content" required maxlength="20000" placeholder="写下想留给自己的心愿…"></textarea></label><label>这条心愿的独立密码<input name="password" type="password" required minlength="6" maxlength="128" inputmode="numeric" autocomplete="new-password" placeholder="至少 6 位，建议纯数字"></label><p class="small-note">每条心愿都要设置不同密码。写下心愿的你可以直接回看内容；把密码告诉对方后，对方输入一次就能看到，之后不必再输。忘记密码无法找回。</p>${formError()}${modalActions('加密保存')}</form>`);$('#personal-wish-form').onsubmit=async e=>{e.preventDefault();const form=e.currentTarget,submit=$('button[type=submit]',form);submit.disabled=true;try{await post('/personal-wishes',{...Object.fromEntries(new FormData(form)),client_id:clientId});closeModal();await refresh();toast('这份个人心愿已加密保存');}catch(err){$('.form-error',form).textContent=err.message;}finally{submit.disabled=false;}};}
+function unlockPersonalWish(rid){const wish=state.records.find(r=>r.id===rid);if(!wish)return;openModal('打开这份个人心愿',`<form class="modal-form" id="unlock-personal-wish-form"><p class="meta">「${esc(wish.body.title)}」的内容已加密，请输入心愿本人交给你的密码。</p><label>心愿密码<input name="password" type="password" required maxlength="128" autocomplete="current-password" placeholder="向心愿本人获取这条心愿的密码"></label>${formError()}${modalActions('解锁心愿')}</form>`);$('#unlock-personal-wish-form').onsubmit=async e=>{e.preventDefault();const form=e.currentTarget,submit=$('button[type=submit]',form);submit.disabled=true;try{await post('/personal-wishes/'+encodeURIComponent(rid)+'/unlock',Object.fromEntries(new FormData(form)));closeModal();await refresh();toast('已解锁，内容现在直接显示在心愿卡片里');}catch(err){$('.form-error',form).textContent=err.message;}finally{submit.disabled=false;}};}
 async function confirmAction(title,text,callback) {openModal(title,`<p class="meta">${esc(text)}</p><div class="form-actions" style="margin-top:25px">${button('再想想','close-modal')}<button class="button danger" id="confirm-yes">确认</button></div>`);$('#confirm-yes').onclick=async e=>{e.currentTarget.disabled=true;try{await callback();closeModal();await refresh();}catch(err){toast(err.message);e.target.disabled=false;}};}
 
 function uploadFile(file,onProgress=()=>{}) {return new Promise((resolve,reject)=>{const xhr=new XMLHttpRequest(),data=new FormData();data.append('file',file);xhr.open('POST','/api/media');xhr.setRequestHeader('X-Love-Space','1');xhr.upload.onprogress=e=>{if(e.lengthComputable)onProgress(Math.round(e.loaded/e.total*100));};xhr.onload=()=>{let result;try{result=JSON.parse(xhr.responseText);}catch{return reject(new Error('上传失败，请重试'));}if(xhr.status>=200&&xhr.status<300)resolve(result);else reject(new Error(result.detail||'上传失败'));};xhr.onerror=()=>reject(new Error('网络中断，文字和已上传附件已保留，可重新选择文件上传'));xhr.send(data);});}
@@ -4013,8 +4020,8 @@ function themeForm() {
   </div>
   <label class="switch-row">启用轻柔动效<input name="motion" type="checkbox" ${s.motion?'checked':''}></label>
   <p class="small-note">夜间模式与字号只记在这台设备上，只影响你自己看到的界面；主题配色是两个人共用的。选中的配色会立刻套用，取消即还原。</p>
-  <div class="form-error" role="alert"></div>
-  <div class="form-actions">${button('取消','close-modal')}<button class="button primary" type="submit">保存</button></div>
+  ${formError()}
+  ${modalActions()}
  </form>`,{cleanup:()=>{ALL.forEach(x=>root.classList.remove('theme-'+x));root.classList.add('theme-'+cur);localStorage.setItem(DARK_KEY,oldDark);applyDarkMode();applyCustomColor(cur,s.custom_color||'');syncMetaThemeColor();}});
  const grid=$('#theme-grid');
  grid.onclick=e=>{

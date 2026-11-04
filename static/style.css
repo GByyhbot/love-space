@@ -1553,6 +1553,9 @@ body.cal-full{overflow:hidden;height:100dvh}
   .auth-form h2{font-size:var(--fs-h2)}
   .modal-overlay{padding:0}
   .modal{max-height:93dvh;border-radius:20px;padding:20px 18px}
+  /* 触屏上 textarea 右下角的拖拽手柄没法用还显脏：窄屏弹窗内一律禁掉，
+     桌面（>640px）保留 resize:vertical 可自由拉伸 */
+  .modal textarea{resize:none}
   .lightbox-image{max-height:100%}
   /* 手机上图片查看器直接全屏，一点不留白 */
   .modal.wide.viewer{width:100vw;max-width:none;height:100dvh;max-height:100dvh;border-radius:0;border:0}
