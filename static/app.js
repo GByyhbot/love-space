@@ -1271,6 +1271,17 @@ async function watchPick(){
  openModal('选一部一起看',watchPickBody());
 }
 
+/* 片源浏览统一裹一层影院外壳：openModal() 看见这个 class 就把弹窗切成全屏深色。
+   顶部/切换条/底栏都 flex:none，中间的片单区自己滚动，长列表不会把标题顶出屏幕。 */
+function wsPage(inner){return `<div class="ws-cinema">${inner}</div>`;}
+/* 上游组件清单没有图标字段，用名字首字 + 按 id 散列的彩色字标代替品牌 logo */
+const WS_LOGO_COLORS=['#F5C518','#FF6B8B','#A78BFA','#4ED8B0','#FF9840','#62A8FF','#F472B6','#9BD75B'];
+function wsLogo(title,id){
+ let h=0;for(const ch of String(id||''))h=(h*31+ch.charCodeAt(0))>>>0;
+ const c=WS_LOGO_COLORS[h%WS_LOGO_COLORS.length];
+ return `<span class="src-logo" style="--logo:${c}">${esc(String(title||'?').slice(0,1))}</span>`;
+}
+
 function watchPickBody(){
  const p=WATCH_PICK;
  const tabs=`<div class="ws-tabs">
@@ -1284,18 +1295,19 @@ function watchPickBody(){
     <span class="ws-thumb" style="background-image:url('/media/${esc(v.id)}?poster=1')"></span>
     <span class="ws-meta"><b>${esc(name)}</b><small>${new Date(v.created*1000).toLocaleDateString('zh-CN',{timeZone:state.me.space.timezone})}</small></span>
    </button>`;}).join(''):'<p class="meta">相册里还没有视频。短剧那栏可以直接挑，也可以先「从本机选文件」各自打开同一部。</p>';
-  return tabs+`<div class="ws-list">${items}</div>
-   <div class="form-actions ws-actions">${button('从本机选文件','watch-pick-local','soft')}${button('取消','close-modal')}</div>`;
+  return wsPage(tabs+`<div class="ws-section"><b>相册里的视频</b><span class="ws-section-count">${p.videos.length?p.videos.length+' 段':''}</span></div>
+   <div class="ws-list">${items}</div>
+   <div class="ws-bottom">${button('从本机选文件','watch-pick-local','soft')}${button('取消','close-modal')}</div>`);
  }
- if(p.detail)return tabs+watchEpisodesBody(p.detail);
+ if(p.detail)return wsPage(tabs+watchEpisodesBody(p.detail));
  const groups=watchGroups();
  const g=watchGroup();
  const manage=`<button type="button" class="ws-manage" data-action="watch-sources">${icon('gear')}组件</button>`;
  if(!groups.length){
   const hint=p.catalog===null?'正在读取片源服务…':'还没有启用任何组件。点「组件」把想要的勾上，或者加一台新的服务地址。';
-  return tabs+`<div class="ws-toolbar"><span class="ws-tool-tip">${esc(hint)}</span>${manage}</div>
-   <div class="ws-list">${p.catalog===null?'<p class="meta">稍等…</p>':''}</div>
-   <div class="form-actions ws-actions">${button('取消','close-modal')}</div>`;
+  return wsPage(tabs+`<div class="ws-toolbar"><span class="ws-tool-tip">${esc(hint)}</span>${manage}</div>
+   <div class="ws-list"><p class="ws-empty">${p.catalog===null?'稍等…':'先去「组件」勾一个想看的源吧'}</p></div>
+   <div class="ws-bottom">${button('取消','close-modal')}</div>`);
  }
  const srcs=`<div class="ws-srcs">`+groups.map(x=>{
   const on=g&&x.svc===g.svc&&x.prov===g.prov;
@@ -1306,17 +1318,21 @@ function watchPickBody(){
  }).join('')+`</div>`;
  const cats=(g?g.cats:[]).map(c=>`<button type="button" class="ws-chip${p.cat===c.id?' on':''}"
    data-action="watch-cat" data-id="${esc(c.id)}">${esc(c.title)}</button>`).join('');
- const list=p.loading?'<p class="meta">正在找…</p>':(p.dramas.length?p.dramas.map(d=>`
-   <button type="button" class="ws-item" data-action="watch-drama" data-id="${esc(d.id)}">
-    <span class="ws-poster" style="background-image:url('${esc(d.poster)}')"></span>
-    <span class="ws-meta"><b>${esc(d.title)}</b><small>${esc(d.remark||'点开选集')}</small></span>
-    <span class="ws-go">${icon('arrow')}</span>
-   </button>`).join(''):`<p class="meta">${p.error?esc(p.error)+'。<br>':''}换个关键词，或者切到别的分类/组件看看。</p>`);
- return tabs+srcs+`<div class="ws-toolbar"><div class="ws-cats">${cats}</div>
+ const catTitle=(g?g.cats:[]).find(c=>c.id===p.cat);
+ const section=`<div class="ws-section"><b>${esc(catTitle?catTitle.title:(g?g.title:'片单'))}</b>
+   <span class="ws-section-count">${p.dramas.length?p.dramas.length+' 部':''}</span>
+   <button type="button" class="ws-section-more" data-action="watch-more">换一批 ${icon('arrow')}</button></div>`;
+ /* 参考红果那类片库：竖版 3:4 海报成网格，片名压在图下一行，集数/更新信息做角标 */
+ const list=p.loading?'<p class="ws-empty">正在找…</p>':(p.dramas.length?`<div class="ws-grid">`+p.dramas.map(d=>`
+   <button type="button" class="ws-card" data-action="watch-drama" data-id="${esc(d.id)}">
+    <span class="ws-card-poster" style="background-image:url('${esc(d.poster)}')">${d.remark?`<i class="ws-card-tag">${esc(d.remark)}</i>`:''}</span>
+    <span class="ws-card-title">${esc(d.title)}</span>
+   </button>`).join('')+`</div>`:`<p class="ws-empty">${p.error?esc(p.error)+'。<br>':''}换个关键词，或者切到别的分类/组件看看。</p>`);
+ return wsPage(tabs+srcs+`<div class="ws-toolbar"><div class="ws-cats">${cats}</div>
    <button type="button" class="ws-search" data-action="watch-search">${icon('search')}${p.q?esc(p.q):'搜片名'}</button>
    ${manage}
-  </div><div class="ws-list">${list}</div>
-  <div class="form-actions ws-actions">${button('换一批','watch-more','soft')}${button('取消','close-modal')}</div>`;
+  </div>`+section+`<div class="ws-list">${list}</div>
+  <div class="ws-bottom">${button('取消','close-modal')}</div>`);
 }
 
 function watchEpisodesBody(d){
@@ -1335,17 +1351,21 @@ function watchEpisodesBody(d){
   </div>
   ${d.description?`<p class="ws-desc">${esc(d.description)}</p>`:''}
   <div class="ws-eps">${eps}</div>
-  <div class="form-actions ws-actions">${button('取消','close-modal')}</div>`;
+  <div class="ws-bottom">${button('取消','close-modal')}</div>`;
 }
 
 async function watchLoadDramas(){
  const p=WATCH_PICK;
  if(!p.catalog)p.catalog=await watchCatalog();
  const g=watchGroup();
- if(!g)return openModal('选一部一起看',watchPickBody());
+ /* 组件管理弹窗开着时，加载中的重绘也得让路 —— 以前只有末尾那句有保护，
+    开头这句会把管理页直接盖成「正在找…」。两处都判 .src-manage。 */
+ const inManage=()=>!!document.querySelector('.src-manage');
+ if(!g){if(!inManage())openModal('选一部一起看',watchPickBody());return;}
  /* 上游的 browse 必须带分类，空着会 404；没选过就默认第一个 */
  p.cat=p.cat||((g.cats[0]||{}).id||'');
- p.loading=true;p.error='';openModal('选一部一起看',watchPickBody());
+ p.loading=true;p.error='';
+ if(!inManage())openModal('选一部一起看',watchPickBody());
  const query=`?category=${encodeURIComponent(p.cat||'')}&page=${p.page}${p.q?'&q='+encodeURIComponent(p.q):''}`;
  try{
   const res=await api(`/dramas/${encodeURIComponent(g.svc)}/${encodeURIComponent(g.prov)}`+query);
@@ -1356,18 +1376,21 @@ async function watchLoadDramas(){
  }
  p.loading=false;
  /* 等数据这一会儿里，主人可能已经切到「组件管理」去了，这时别再把选片弹窗盖回去 */
- if(!document.querySelector('.src-manage'))openModal('选一部一起看',watchPickBody());
+ if(!inManage())openModal('选一部一起看',watchPickBody());
 }
 
 async function watchDramaDetail(id){
  const g=watchGroup();
  if(!g)return;
- WATCH_PICK.loading=true;openModal('选一部一起看',watchPickBody());
+ /* 与 watchLoadDramas 同理：加载开始和结束两处都要给组件管理弹窗让路 */
+ const inManage=()=>!!document.querySelector('.src-manage');
+ WATCH_PICK.loading=true;
+ if(!inManage())openModal('选一部一起看',watchPickBody());
  try{
   WATCH_PICK.detail=await api(`/dramas/${encodeURIComponent(g.svc)}/${encodeURIComponent(g.prov)}/${encodeURIComponent(id)}`);
  }catch(e){WATCH_PICK.detail=null;toast(e.message||'这个打不开');}
  WATCH_PICK.loading=false;
- if(!document.querySelector('.src-manage'))openModal('选一部一起看',watchPickBody());
+ if(!inManage())openModal('选一部一起看',watchPickBody());
 }
 
 function watchSearchForm(){
@@ -1417,35 +1440,33 @@ function watchNextEpisode(){
 /* ── 组件管理：加服务、勾组件 ─────────────────────────────────────── */
 function watchSourcesBody(){
  const cat=WATCH_PICK.catalog||{services:[]};
- const many=(cat.services||[]).length>1;
- /* 一台服务可能代理十几个组件，全展开的话第二台服务要滚很久才看得到 ——
-    默认只展开一台，其余的先把「已勾几个」写在折叠条上。 */
- const openSvc=WATCH_PICK.openSvc||((cat.services||[])[0]||{}).id||'';
- const rows=(cat.services||[]).map(s=>{
-  const provs=(s.providers||[]);
-  const on=provs.filter(p=>p.enabled).length;
-  const open=s.id===openSvc;
-  const body=provs.length?provs.map(p=>`<button type="button" class="src-row${p.enabled?' on':''}"
+ const svcs=cat.services||[];
+ const many=svcs.length>1;
+ /* 参考「组件」页：十几个组件平铺成两列卡片，一眼扫完；点卡片直接开/关，
+    不用先展开服务再找开关。多台服务同名组件就在标题上带服务名区分。 */
+ const cards=[];
+ svcs.forEach(s=>(s.providers||[]).forEach(p=>{
+  const label=many?`${s.name} · ${p.title}`:p.title;
+  const n=(p.categories||[]).length;
+  cards.push(`<button type="button" class="src-card${p.enabled?' on':''}"
     data-action="watch-src-toggle" data-id="${esc(s.id)}" data-prov="${esc(p.id)}">
-    <span class="src-tick">${p.enabled?icon('check'):''}</span>
-    <span class="src-name">${esc(p.title)}</span>
-    <small>${(p.categories||[]).length?esc((p.categories||[]).slice(0,3).map(c=>c.title).join(' / ')):''}</small>
-   </button>`).join(''):`<p class="meta">${esc(s.error||'这台服务没有可用的组件')}</p>`;
-  const toggle=provs.length?`<button type="button" class="src-toggle" data-action="watch-svc-open" data-id="${esc(s.id)}">
-    已勾 ${on} 个 · ${open?'收起':`展开 ${provs.length} 个组件`}</button>`:'';
-  return `<div class="src-svc${open?' open':''}">
-    <div class="src-svc-head">
-     <b>${esc(s.name)}</b><span class="src-dot${s.online?' on':''}"></span>
-     <small>${esc(s.base)}</small>
-     <button type="button" class="link-btn" data-action="watch-src-del" data-id="${esc(s.id)}">移除</button>
-    </div>
-    ${toggle}
-    <div class="src-list"${open?'':' hidden'}>${body}</div>
-   </div>`;
- }).join('');
- return `<p class="ws-tool-tip">勾上的组件才会出现在选片里。${many?'':'可以再加一台别的服务地址。'}</p>
-  <div class="src-manage">${rows||'<p class="meta">还没有服务。</p>'}</div>
-  <div class="form-actions ws-actions">${button('添加服务','watch-src-add','soft')}${button('完成','watch-src-done')}</div>`;
+    ${wsLogo(p.title,s.id+':'+p.id)}
+    <span class="src-card-txt"><b>${esc(label)}</b><small>${n?n+' 个分类':'点一下启用'}</small></span>
+    <span class="src-card-go">${p.enabled?icon('check'):icon('arrow')}</span>
+   </button>`);
+ }));
+ if(!cards.length)cards.push(`<p class="ws-empty">${esc((svcs[0]||{}).error||'还没有可用的组件，先添加一台服务地址。')}</p>`);
+ const svcRows=svcs.map(s=>`<div class="src-svc-row">
+   <span class="src-dot${s.online?' on':''}"></span>
+   <b>${esc(s.name)}</b><small>${esc(s.base)}</small>
+   <button type="button" class="link-btn" data-action="watch-src-del" data-id="${esc(s.id)}">移除</button>
+  </div>`).join('');
+ /* ⚠️ .src-manage 这个类名不能丢：watchLoadDramas()/watchDramaDetail() 靠它判断
+    「主人已经切到组件管理」，异步片单回来时才不会把当前弹窗盖掉。 */
+ return wsPage(`<p class="ws-tip">勾上的组件才会出现在选片里，点一下卡片就能开/关。</p>
+  <div class="src-manage src-grid">${cards.join('')}</div>
+  <div class="src-svc-block"><b>片源服务</b>${svcRows||'<p class="ws-empty">还没有服务。</p>'}</div>
+  <div class="ws-bottom">${button('添加服务','watch-src-add','soft')}${button('完成','watch-src-done','primary')}</div>`);
 }
 
 function watchSources(){
@@ -3443,7 +3464,11 @@ function backupsPage(){const s=state.storage||{};const fmt=b=>b>=1073741824?(b/1
 function openModal(title,content,{wide=false,sheet=false,cleanup=null}={}) {
  closeModal(); focusReturn=document.activeElement;
  const viewer = wide && /class="lightbox-body"/.test(content);
- $('#modal-root').innerHTML=`<div class="modal-overlay${sheet?' sheet':''}"><section class="modal ${wide?'wide':''}${sheet?' sheet':''}${viewer?' viewer':''}" role="dialog" aria-modal="true" aria-labelledby="modal-title"><header class="modal-header"><h2 id="modal-title">${esc(title)}</h2><button class="icon-btn" data-action="close-modal" aria-label="关闭">${icon('close')}</button></header>${content}</section></div>`;
+ /* 片源浏览是沉浸式影院层：只要内容根节点带 ws-cinema，弹窗就自动全屏、深色、
+    返回键换成箭头。跟 viewer 一样靠内容自报身份，调用方不用多传一个参数。 */
+ const cinema = /class="ws-cinema"/.test(content);
+ const closeIco = cinema?icon('back'):icon('close');
+ $('#modal-root').innerHTML=`<div class="modal-overlay${sheet?' sheet':''}${cinema?' cinema':''}"><section class="modal ${wide?'wide':''}${sheet?' sheet':''}${viewer?' viewer':''}${cinema?' cinema':''}" role="dialog" aria-modal="true" aria-labelledby="modal-title"><header class="modal-header"><h2 id="modal-title">${esc(title)}</h2><button class="icon-btn" data-action="close-modal" aria-label="关闭">${closeIco}</button></header>${content}</section></div>`;
  enhanceNativeControls($('.modal'));
  modalCleanup=cleanup;document.body.style.overflow='hidden';setTimeout(()=>$('.modal input:not([type=checkbox]),.modal textarea,.modal button')?.focus(),50);
 }
@@ -4295,6 +4320,9 @@ async function act(action,id,el) {
  if(action==='watch-src-back')return watchSources();
  if(action==='watch-src-done'){
   WATCH_PICK.dramas=[];WATCH_PICK.cat='';WATCH_PICK.page=1;
+  /* 先把管理页关掉：watchLoadDramas 见 .src-manage 就会跳过重绘（防止它盖住
+     管理页），不关的话「完成」会原地不动、永远回不到片单。 */
+  closeModal();
   return WATCH_PICK.tab==='drama'?watchLoadDramas():openModal('选一部一起看',watchPickBody());
  }
  if(action==='watch-cat'){WATCH_PICK.cat=id||'';WATCH_PICK.page=1;WATCH_PICK.q='';return watchLoadDramas();}

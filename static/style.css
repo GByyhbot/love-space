@@ -2726,3 +2726,198 @@ body.kb-open .pick-overlay{padding-bottom:0}
   box-shadow:-8px 0 24px -22px rgba(var(--shadow-rgb),.65)}
  .watch-now{padding:6px 12px}
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   片源浏览 · 影院式沉浸层（v210）
+   参考红果片库 / 组件页：全屏深色 + 竖版 3:4 海报墙 + 两列组件卡。
+   这是「内容浏览层」，底色与播放区一致；主题仍通过主色 chip / 选中态 /
+   按钮 / logo 体现，七套主题都能认出来，夜间也不冲突。
+   ═══════════════════════════════════════════════════════════════ */
+.modal-overlay.cinema{padding:0;background:#08070A;animation:none;
+  -webkit-backdrop-filter:none;backdrop-filter:none}
+.modal.cinema{
+  --ws-bg:#0C0B0E;--ws-card:#1A181D;--ws-elev:#242128;
+  --ws-ink:#F5F2F4;--ws-ink2:#C3BBC2;--ws-mut:#8E868D;
+  --ws-line:rgba(255,255,255,.10);
+  position:relative;width:100%;max-width:none;height:100dvh;max-height:none;
+  margin:0;padding:0;border:0;border-radius:0;overflow:hidden;
+  display:flex;flex-direction:column;background:var(--ws-bg);
+  box-shadow:none;animation:none;
+}
+.modal.cinema .modal-header{
+  /* 基础层是 sticky + top:-22px（负边距撑满圆角弹窗）；改 relative 后必须把 top
+     归零，否则整条头部会往上跑 22px，标题和返回键上半截被裁掉。 */
+  position:relative;top:0;flex:none;margin:0;min-height:52px;
+  padding:calc(12px + env(safe-area-inset-top)) 16px 12px;
+  background:var(--ws-bg);border-bottom:1px solid var(--ws-line);
+  border-radius:0;justify-content:center;
+}
+.modal.cinema .modal-header h2{font-size:var(--fs-lead);
+  font-weight:var(--fw-bold);color:var(--ws-ink);text-align:center}
+.modal.cinema .modal-header .icon-btn{
+  position:absolute;left:16px;top:calc(10px + env(safe-area-inset-top));
+  width:36px;height:36px;border-radius:50%;
+  background:var(--ws-card);border:1px solid var(--ws-line);
+  color:var(--ws-ink);box-shadow:none;
+}
+.modal.cinema .modal-header .icon-btn:hover{background:var(--ws-elev);border-color:var(--ws-line)}
+/* 影院内容层自己吃掉剩余高度，只有片单区滚动，标题和底栏都钉住 */
+.ws-cinema{flex:1;min-height:0;display:flex;flex-direction:column;
+  padding:0 16px calc(12px + env(safe-area-inset-bottom));
+  background:var(--ws-bg);color:var(--ws-ink);overflow:hidden}
+.ws-cinema .ws-tabs{flex:none;margin:12px 0 10px;padding:4px;
+  background:var(--ws-card);border-radius:var(--radius-s);box-shadow:none}
+.ws-cinema .ws-tab{color:var(--ws-mut);font-weight:var(--fw-medium)}
+.ws-cinema .ws-tab.on{background:var(--primary);color:var(--on-primary);
+  box-shadow:none;font-weight:var(--fw-bold)}
+.ws-cinema .ws-srcs{flex:none;margin:0 0 9px}
+.ws-cinema .ws-toolbar{flex:none;margin-bottom:0}
+.ws-cinema .ws-chip{background:var(--ws-card);border-color:var(--ws-line);
+  color:var(--ws-ink2);box-shadow:none}
+.ws-cinema .ws-chip.on{background:var(--primary);border-color:var(--primary);
+  color:var(--on-primary)}
+/* 组件条实心、分类条淡一点，两条 chip 别抢同一层视觉重量 */
+.ws-cinema .ws-cats .ws-chip.on{background:rgba(var(--primary-rgb),.18);
+  border-color:rgba(var(--primary-rgb),.55);color:var(--ws-ink)}
+.ws-cinema .ws-search,.ws-cinema .ws-manage{background:var(--ws-card);
+  border-color:var(--ws-line);color:var(--ws-ink2);box-shadow:none}
+.ws-cinema .ws-search:hover,.ws-cinema .ws-manage:hover{background:var(--ws-elev);color:var(--ws-ink)}
+.ws-cinema .ws-tool-tip,.ws-cinema .meta{color:var(--ws-mut)}
+.ws-tip{flex:none;margin:12px 0 10px;font-size:var(--fs-sm);
+  color:var(--ws-mut);line-height:1.6}
+.ws-empty{margin:24px 0;padding:22px 16px;text-align:center;
+  color:var(--ws-mut);font-size:var(--fs-md);line-height:1.6}
+
+/* 分区标题：左边分类名，右边「换一批 ›」，对应参考图每排海报的标题行 */
+.ws-section{flex:none;display:flex;align-items:center;gap:8px;margin:16px 0 10px}
+.ws-section>b{font-size:var(--fs-lead);font-weight:var(--fw-bold);color:var(--ws-ink)}
+.ws-section-count{font-size:var(--fs-xs);color:var(--ws-mut)}
+.ws-section-more{margin-left:auto;display:inline-flex;align-items:center;gap:4px;
+  background:none;border:0;color:var(--ws-ink2);font-size:var(--fs-sm);cursor:pointer}
+.ws-section-more .icon{width:14px;height:14px;opacity:.72}
+.ws-section-more:hover{color:var(--ws-ink)}
+
+/* 片单滚动区 */
+.ws-cinema .ws-list{flex:1;min-height:0;max-height:none;overflow-y:auto;
+  margin:0;padding:0 0 8px;scrollbar-width:none}
+.ws-cinema .ws-list::-webkit-scrollbar{display:none}
+/* 海报墙：3 列竖版，宽屏自动加到 4 / 6 列 */
+.ws-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:16px 10px;flex:0 0 auto}
+.ws-card{display:flex;flex-direction:column;gap:7px;min-width:0;
+  padding:0;border:0;background:none;text-align:left;color:inherit;font:inherit;cursor:pointer}
+/* padding 百分比做 3:4，不用 aspect-ratio（旧 WebView 不支持） */
+.ws-card-poster{position:relative;display:block;width:100%;padding-top:133%;
+  border-radius:10px;background-color:var(--ws-card);
+  background-size:cover;background-position:center;overflow:hidden;
+  box-shadow:0 8px 20px -14px rgba(0,0,0,.9);
+  transition:transform var(--speed) var(--ease)}
+.ws-card:active .ws-card-poster{transform:scale(.97)}
+.ws-card-tag{position:absolute;right:5px;bottom:5px;max-width:88%;
+  padding:2px 6px;border-radius:5px;background:rgba(0,0,0,.62);
+  color:#fff;font-size:var(--fs-2xs);font-style:normal;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ws-card-title{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:1;
+  overflow:hidden;font-size:var(--fs-sm);font-weight:var(--fw-medium);
+  line-height:1.35;color:var(--ws-ink)}
+.ws-card:active .ws-card-title{color:var(--ws-ink2)}
+
+/* 底栏 */
+.ws-bottom{flex:none;display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap;
+  margin-top:10px;padding-top:12px;border-top:1px solid var(--ws-line)}
+.ws-cinema .ws-bottom .button.soft,
+.ws-cinema .ws-bottom .button.secondary{background:var(--ws-card);
+  border-color:var(--ws-line);color:var(--ws-ink2);box-shadow:none}
+.ws-cinema .ws-bottom .button.primary{background:var(--primary);color:var(--on-primary)}
+
+/* 相册 tab 的横条列表与详情选集页，在影院层里换成同一套深色 */
+.ws-cinema .ws-item{background:var(--ws-card);border-color:var(--ws-line);
+  color:var(--ws-ink);box-shadow:none}
+.ws-cinema .ws-item:hover,.ws-cinema .ws-item:active{background:var(--ws-elev);border-color:var(--ws-line)}
+.ws-cinema .ws-meta b{color:var(--ws-ink)}
+.ws-cinema .ws-meta small{color:var(--ws-mut)}
+.ws-cinema .ws-thumb{background-color:#000}
+.ws-cinema .ws-detail-meta b{color:var(--ws-ink)}
+.ws-cinema .ws-detail-meta small{color:var(--ws-mut)}
+.ws-cinema .ws-detail-meta .link-btn{color:var(--ws-ink2)}
+.ws-cinema .ws-desc{color:var(--ws-ink2)}
+.ws-cinema .ws-poster{background-color:var(--ws-card);border-color:var(--ws-line)}
+.ws-cinema .ws-eps{flex:1;min-height:0;max-height:none;overflow-y:auto}
+.ws-cinema .ws-ep{background:var(--ws-card);border-color:var(--ws-line);
+  color:var(--ws-ink2);box-shadow:none}
+.ws-cinema .ws-ep:hover{background:var(--ws-elev);color:var(--ws-ink)}
+.ws-cinema .ws-ep.on{background:var(--primary);border-color:var(--primary);
+  color:var(--on-primary);box-shadow:none}
+
+/* 组件管理：两列卡片，彩色字标 + 名称 + 分类数 + 勾选/箭头 */
+.ws-cinema .src-manage.src-grid{
+  flex:1;min-height:0;max-height:none;overflow-y:auto;
+  display:grid;grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:10px;align-content:start;padding:2px 0 10px;scrollbar-width:none}
+.ws-cinema .src-manage.src-grid::-webkit-scrollbar{display:none}
+.ws-cinema .src-manage .ws-empty{grid-column:1/-1;margin:8px 0}
+.src-card{display:flex;align-items:center;gap:10px;min-width:0;min-height:76px;
+  padding:11px;border:1px solid var(--ws-line);border-radius:14px;
+  background:var(--ws-card);color:var(--ws-ink);text-align:left;font:inherit;cursor:pointer;
+  transition:background var(--speed) var(--ease),border-color var(--speed) var(--ease)}
+.src-card:hover{background:var(--ws-elev)}
+.src-card.on{border-color:rgba(var(--primary-rgb),.65);
+  background:rgba(var(--primary-rgb),.14)}
+.src-logo{flex:none;width:42px;height:42px;border-radius:12px;
+  display:grid;place-items:center;background:var(--logo);color:#17131A;
+  font-size:var(--fs-lead);font-weight:var(--fw-bold);line-height:1}
+.src-card-txt{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.src-card-txt b{font-size:var(--fs-md);font-weight:var(--fw-bold);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.src-card-txt small{font-size:var(--fs-xs);color:var(--ws-mut);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.src-card-go{flex:none;color:var(--ws-mut);display:inline-flex}
+.src-card-go .icon{width:15px;height:15px}
+.src-card.on .src-card-go{color:var(--ws-ink)}
+/* 服务增删收在底部小节，网格仍是主体 */
+.src-svc-block{flex:none;margin:12px 0 0;padding-top:12px;border-top:1px solid var(--ws-line)}
+.src-svc-block>b{display:block;margin-bottom:8px;font-size:var(--fs-sm);
+  font-weight:var(--fw-bold);color:var(--ws-mut)}
+.src-svc-row{display:flex;align-items:center;gap:8px;min-height:38px;
+  padding:0 10px;margin-bottom:6px;border-radius:10px;background:var(--ws-card)}
+.src-svc-row b{flex:none;font-size:var(--fs-sm);color:var(--ws-ink)}
+.src-svc-row small{flex:1;min-width:0;font-size:var(--fs-xs);color:var(--ws-mut);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.src-svc-row .link-btn{flex:none;color:var(--ws-mut)}
+.ws-cinema .src-dot{background:var(--ws-mut)}
+.ws-cinema .src-dot.on{background:#4ED8B0;box-shadow:0 0 0 3px rgba(78,216,176,.16)}
+
+@media (max-width:359px){
+ .ws-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media (min-width:560px){
+ .ws-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
+}
+@media (min-width:820px){
+ .ws-grid{grid-template-columns:repeat(6,minmax(0,1fr))}
+}
+@media (orientation:landscape) and (max-height:560px){
+ /* 矮屏里 3:4 海报网格会把首屏压成一条；改成参考图那样的一行横滑，
+    每张 78px 宽、100px 高，片名叠在海报底部不额外占高度。 */
+ .ws-grid{display:flex;gap:9px;flex-wrap:nowrap;overflow-x:auto;
+  padding-bottom:4px;scrollbar-width:none}
+ .ws-grid::-webkit-scrollbar{display:none}
+ .ws-card{position:relative;flex:0 0 78px;width:78px;gap:0}
+ .ws-card-poster{padding-top:128%}
+ /* 矮屏放不下「海报 + 下面一行片名」，把片名压进海报底部渐变里 */
+ .ws-card-title{position:absolute;left:0;right:0;bottom:0;z-index:1;
+  padding:12px 4px 4px;background:linear-gradient(180deg,transparent,rgba(0,0,0,.86));
+  color:#fff;font-size:var(--fs-2xs);line-height:1.2}
+ .ws-card-tag{top:4px;bottom:auto;right:4px;font-size:var(--fs-2xs);padding:1px 4px}
+ /* 矮屏里别再让片单区独占剩余高度（会被挤成 60px，海报下半截直接裁没），
+    改成整页可滚，底栏吸附在视口底部。 */
+ .ws-cinema{overflow-y:auto;overflow-x:hidden}
+ .ws-cinema .ws-list{flex:0 0 auto;overflow:visible;max-height:none;padding-bottom:0}
+ .ws-bottom{position:sticky;bottom:0;z-index:2;background:var(--ws-bg)}
+ .ws-cinema .src-manage.src-grid{flex:0 0 auto;overflow:visible;max-height:none;
+  grid-template-columns:repeat(3,minmax(0,1fr))}
+ .modal.cinema .modal-header{min-height:44px;padding-top:8px;padding-bottom:8px}
+ .modal.cinema .modal-header .icon-btn{top:5px}
+ .ws-section{margin:10px 0 8px}
+ .ws-cinema .ws-tabs{margin:8px 0}
+}
