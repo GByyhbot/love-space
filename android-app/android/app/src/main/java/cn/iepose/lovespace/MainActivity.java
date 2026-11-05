@@ -67,6 +67,16 @@ public class MainActivity extends BridgeActivity {
         "内网直连"
     };
     private static final String OFFLINE_PAGE = "file:///android_asset/lovespace-offline.html";
+    /* 内置贴图：打包时把仓库 static/stickers/ 拷进 assets/stickers/（CI 与本地出包各做一次，
+       assets 被 Capacitor 的 .gitignore 排除，贴图不会因此重复进仓库）。 */
+    private static final String STICKER_PREFIX = "/static/stickers/";
+    /* 五条线路的域名集合：贴图拦截只对这些 host 生效，别的网站路径一律不碰。 */
+    private static final Set<String> KNOWN_HOSTS = new HashSet<>();
+    static {
+        for (String u : SPACE_URLS) {
+            try { KNOWN_HOSTS.add(new URL(u).getHost()); } catch (Exception ignored) {}
+        }
+    }
     private static final String PREFS = "lovespace_prefs";
     private static final String KEY_FIRST_LAUNCH = "first_launch_done";
     private static final String KEY_BEST_URL = "best_url";
@@ -407,6 +417,79 @@ public class MainActivity extends BridgeActivity {
                 return true;
             }
             return false;
+        }
+
+        /**
+         * 内置贴图：/static/stickers/** 直接由 APK 内 assets/stickers 返回（v1.2.2 方案回归）。
+         * 好处：打开表情面板秒出、断网可用、不占服务器带宽；
+         * 资源缺失或损坏时自动回落网络（服务器仍有同一份文件）。
+         */
+        @Override
+        public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+            WebResourceResponse local = localSticker(request.getUrl(), request.getRequestHeaders());
+            return local != null ? local : super.shouldInterceptRequest(view, request);
+        }
+
+        private WebResourceResponse localSticker(Uri uri, java.util.Map<String, String> headers) {
+            if (uri == null || !KNOWN_HOSTS.contains(uri.getHost())) return null;
+            String path = uri.getPath();
+            if (path == null || !path.startsWith(STICKER_PREFIX)) return null;
+            String name = path.substring(STICKER_PREFIX.length());
+            if (name.isEmpty() || name.contains("..") || name.contains("%")) return null;
+            String asset = "stickers/" + name;
+            String mime = name.endsWith(".webm") ? "video/webm"
+                    : name.endsWith(".webp") ? "image/webp" : "application/octet-stream";
+            try {
+                // 优先 openFd（能拿到文件长度，支持视频贴图的 Range 请求）；
+                // 若资源被压缩存储则 openFd 会失败，回落到普通 open()（整文件返回，不支持 Range）
+                java.io.InputStream raw;
+                long total = -1;
+                try {
+                    android.content.res.AssetFileDescriptor afd = getAssets().openFd(asset);
+                    total = afd.getLength();
+                    raw = afd.createInputStream();
+                } catch (Exception compressed) {
+                    raw = getAssets().open(asset);
+                }
+                long start = 0;
+                boolean partial = false;
+                if (headers != null) {
+                    for (java.util.Map.Entry<String, String> entry : headers.entrySet()) {
+                        if (entry.getKey() == null || !"Range".equalsIgnoreCase(entry.getKey())) continue;
+                        String value = entry.getValue();
+                        if (value == null || !value.startsWith("bytes=")) continue;
+                        String spec = value.substring(6);
+                        int dash = spec.indexOf('-');
+                        if (dash <= 0) continue;
+                        try {
+                            start = Long.parseLong(spec.substring(0, dash).trim());
+                        } catch (NumberFormatException ignore) {
+                            continue;
+                        }
+                        // 只处理"从某处读到结尾"的区间请求；前缀区间按整文件返回
+                        partial = total > 0 && start > 0 && start < total;
+                        break;
+                    }
+                }
+                java.util.Map<String, String> extra = new java.util.HashMap<>();
+                extra.put("Cache-Control", "max-age=31536000");
+                extra.put("Access-Control-Allow-Origin", "*");
+                if (partial) {
+                    long skipped = 0;
+                    while (skipped < start) {
+                        long n = raw.skip(start - skipped);
+                        if (n <= 0) break;
+                        skipped += n;
+                    }
+                    extra.put("Accept-Ranges", "bytes");
+                    extra.put("Content-Range", "bytes " + start + "-" + (total - 1) + "/" + total);
+                    return new WebResourceResponse(mime, null, 206, "Partial Content", extra, raw);
+                }
+                return new WebResourceResponse(mime, null, 200, "OK", extra, raw);
+            } catch (Exception e) {
+                Log.d(TAG, "贴图未命中本地资源，回网络: " + asset);
+                return null;
+            }
         }
 
         @Override

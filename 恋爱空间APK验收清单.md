@@ -129,5 +129,6 @@
 | 2026-10-24 | v1.2.3 | CI 修复：补上 cap sync 与 cordova 插件目录，自动打包流水线稳定化（versionCode 15） |
 | 2026-10-24 | v1.2.4 | release: 1.2.4（versionCode 15） |
 | 2026-10-25 | **v1.2.5** | **release: 1.2.5（新增聊天壁纸）**；versionCode 改为按北京时间取日期（20261025）。贴图自此由服务器 `/static/stickers/` 提供，APK 回落网络加载；源码层 `MainActivity` 的本地贴图拦截逻辑已清理。APK 体积回落至 3.4MB |
+| 2026-11-06 | **v1.6.11** | **贴图内置回归**（v1.2.2 方案重启）：CI 在 cap sync 后把仓库 `static/stickers/`（289 个 / 39MB）拷进 assets，`MainActivity` 拦截 `/static/stickers/**` 本地直出——host 校验扩展到五条线路域名，支持 webm 贴图 Range（206），缺失自动回落网络。APK 体积 3.4MB → 约 43MB。贴图更新仍需重发 APK（与 v1.2.2 语义一致） |
 
-> 注：v1.2.2 记录的「44.6MB 贴图内置」为历史状态；后续贴图移回服务器后 APK 回到约 3.4MB，与 `static/lovespace.apk` 实际一致。每版详细变更以仓库 git tag（`v1.2.3`/`v1.2.4`/`v1.2.5`）为准。 |
+> 注：v1.2.2 记录的「44.6MB 贴图内置」为历史状态；v1.2.5~v1.6.10 期间贴图由服务器提供，APK 约 3.4MB；**v1.6.11 起恢复内置**。当时移回服务器的诱因是贴图未纳入打包流程（assets 里的贴图靠手工拷、CI 出包带不上）；现在贴图本就在仓库 `static/stickers/`，CI 与本地出包统一拷贝，行为一致。每版详细变更以仓库 git tag 为准。 |

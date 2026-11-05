@@ -66,6 +66,12 @@ jobs:
         working-directory: android-app
         run: npx cap sync android
 
+      # 内置贴图（v1.6.11 起）：仓库 static/stickers/ 拷进 APK assets，
+      # MainActivity 拦截 /static/stickers/** 本地直出，断网可用、缺失自动回落网络。
+      # assets 被 .gitignore 排除，贴图不会因此重复进仓库。
+      - name: 内置贴图进 APK
+        run: cp -r static/stickers android-app/android/app/src/main/assets/stickers
+
       - name: 还原签名密钥
         if: steps.guard.outputs.signed == 'true'
         working-directory: android-app
