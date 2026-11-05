@@ -574,7 +574,9 @@ function watchSrcCard(row,many){
     分类数截成「3…」，而它本来就是次要信息，让位给模式更划算。 */
  if(row.hidden)bits.push('已隐藏');
  else if(!net.mode&&n)bits.push(`${n} 分类`);
- const meta=bits.join(' · ')||'点一下打开';
+ /* 兜底文案只在「什么都没有」时才用：有徽章却还接一句「点一下打开」，
+     真机上又会把徽章挤成「直连 …」。 */
+ const meta=bits.length?bits.join(' · '):(net.mode?'':'点一下打开');
  const label=many?(row.svcName+' · '+row.name):row.name;
  /* 状态**单独一行**：真机（系统字号调大时）证明放在徽章同一行会被截成「直连 …」，
    而这几个字恰恰是整张卡最要紧的信息。状态行只在非正常时出现，正常卡片仍是一行副标题。 */
