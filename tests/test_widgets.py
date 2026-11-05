@@ -341,3 +341,63 @@ def test_nets_tolerates_missing_results():
     assert widgets.nets({}) == {}
     assert widgets.nets({'results': []}) == {}
     assert widgets.nets('nope') == {}
+
+
+# ── 组件目录（components/catalog）────────────────────────────────────────
+# 上游两份清单说的不是一件事：/providers 只有通用契约，/components/catalog 才是全量。
+# 三个内建组件（bilibili / huangguo / missav）就在差集里 —— 它们的 install 包里
+# 只有 widget.js，没有 provider.so，抓取跑在手机端，服务端拿不到片单。
+def test_component_recognises_generic_provider_contract():
+    one = widgets.component({
+        'id': 'hongguo', 'title': '红果短剧', 'version': '0.3.15',
+        'backendCapabilities': ['provider:hongguo@1'], 'backendType': 'so-worker',
+        'artifacts': {'provider': 'provider.so', 'widget': 'widget.js'}})
+    assert one['provider'] == 'hongguo'
+    assert one['provider_so'] is True
+    assert one['builtin'] if 'builtin' in one else True   # 归一化层不判 builtin，交由上层
+
+
+def test_component_without_provider_cap_is_the_builtin_case():
+    """没有 `provider:<id>@1` 就是接不上的那一类 —— 这是唯一的判据。"""
+    for caps in (['widget:universal@1'],
+                 ['huangguo:cover@1', 'huangguo:routes@1', 'widget:access-bootstrap@1'],
+                 ['discovery:missav@1', 'missav:prepare@1', 'video:proxy@1']):
+        one = widgets.component({'id': 'x', 'backendCapabilities': caps,
+                                 'backendType': 'builtin',
+                                 'artifacts': {'widget': 'widget.js'}})
+        assert one['provider'] == ''
+        assert one['provider_so'] is False
+        assert one['caps'] == caps        # 原样留着，排查时全靠它
+
+
+def test_component_prefers_top_level_title_over_install_record():
+    """顶层 title 才是中文名（bilibili → 哔哩哔哩），`local` 里那份是安装记录原文。"""
+    one = widgets.component({'id': 'bilibili', 'title': '哔哩哔哩',
+                             'local': {'title': 'bilibili'}, 'backendCapabilities': []})
+    assert one['title'] == '哔哩哔哩'
+    # 顶层缺了才退到 local，再缺就用 id —— 卡片上绝不能是空白
+    two = widgets.component({'id': 'x', 'local': {'title': '某组件'}})
+    assert two['title'] == '某组件'
+    assert widgets.component({'id': 'y'})['title'] == 'y'
+
+
+def test_component_rejects_ids_that_would_escape_the_path():
+    for bad in ('../evil', 'a/b', '', 'x' * 40):
+        assert widgets.component({'id': bad, 'title': 't'}) is None
+    assert widgets.component('nope') is None
+    assert widgets.component({'title': '没有 id'}) is None
+
+
+def test_components_keeps_upstream_order_and_drops_duplicates():
+    payload = {'components': [
+        {'id': 'b', 'title': 'B'}, {'id': 'a', 'title': 'A'},
+        {'id': 'b', 'title': 'B 重复'}, {'id': '../evil', 'title': '脏'}]}
+    out = widgets.components(payload)
+    assert [x['id'] for x in out] == ['b', 'a']
+    assert out[0]['title'] == 'B'
+
+
+def test_components_tolerates_unusable_payloads():
+    assert widgets.components(None) == []
+    assert widgets.components({'components': 'x'}) == []
+    assert widgets.components({}) == []

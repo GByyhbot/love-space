@@ -3010,6 +3010,24 @@ body.kb-open .pick-overlay{padding-bottom:0}
    选择器要比 `.src-card-txt small` 更具体，否则颜色被它盖掉。 */
 .src-card-txt small.src-state{color:#FF8FA3}
 .src-card-txt small.src-state.warn{color:#FFD166}
+/* ── 内建组件（v229）───────────────────────────────────────────────────
+   这一类装在这台机器上、却没有任何服务端接口（安装包里只有 widget.js），
+   所以**永远点不进片源**。虚线边是给它一个人的记号：看起来也是组件卡，
+   但点下去给说明而不是片单。跟 `.off`（能用但没勾，压暗）必须区分开 ——
+   两者点一下的结果完全不同，光靠亮度差异说不清。
+   整行铺开：双列时文字宽度只剩 ~120px，「手机端组件」「本应用接不了」全被
+   截成「手…」「本应用接不…」—— 这几句恰恰是唯一要说清的事。 */
+.src-card.builtin{grid-column:1/-1;border-style:dashed;
+  background:rgba(255,255,255,.02);cursor:default}
+.src-card.builtin .src-logo{opacity:.66}
+.src-card.builtin:hover{background:rgba(255,255,255,.05)}
+.src-net-builtin{color:var(--ws-mut);background:none;border:1px solid var(--ws-line)}
+/* 说明弹窗里那串能力标记要能换行，一行塞不下 widget:universal@1 这种长串 */
+.src-caps{display:inline-flex;flex-wrap:wrap;gap:4px;vertical-align:middle}
+.src-caps .src-net{margin-right:0}
+/* 内建组件说明的正文。不能沿用 `.ws-desc`：那个带 -webkit-line-clamp:2，
+   是用来截卡片简介的，而这里每句话都是主人点进来要看的答案，截一半等于没说。 */
+.src-why{margin:0 0 10px;font-size:var(--fs-sm);line-height:1.65;color:var(--ink-2)}
 /* 组件报错时的处置建议。四种模式对应四句完全不同的话，所以这行不能笼统写成
    「加载失败，请重试」—— 手机端直连的组件让人去挂服务端代理是南辕北辙。 */
 .ws-advice{margin:10px 0 0;padding:10px 12px;border-radius:12px;

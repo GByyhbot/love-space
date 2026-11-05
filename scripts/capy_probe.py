@@ -223,6 +223,48 @@ def diag_shape(payload):
     }
 
 
+def cap_kind(cap):
+    """能力串归一成「种类」：`provider:hongguo@1` → `provider:*`。
+
+    不归一的话，每装一个组件这组值就要多一项，全落在 `provider:` 上 ——
+    那不是契约变更，只是装的东西变多了。真正要盯的是**出现新种类**。
+    """
+    head = str(cap or '').split('@')[0]
+    return 'provider:*' if head.startswith('provider:') else head
+
+
+def catalog_shape(payload):
+    """组件目录 → 只留「谁装在这台机器上、它有没有通用契约」。
+
+    两份清单的差集就是「装了却接不上」的那几个（bilibili / huangguo / missav）。
+    契约变更里最容易被忽略的正是这一类：组件数从 17 涨到 20 时，
+    `/providers` 完全没变，只看它永远发现不了。
+    """
+    rows = payload.get('components') if isinstance(payload, dict) else None
+    rows = rows if isinstance(rows, list) else []
+    out = []
+    for one in rows:
+        if not isinstance(one, dict) or not one.get('id'):
+            continue
+        caps = [str(c) for c in (one.get('backendCapabilities') or []) if c]
+        out.append({
+            'id': str(one.get('id')),
+            'backend_type': str(one.get('backendType') or ''),
+            'caps': caps,
+            # 没有 provider:<id>@1 就是接不上的那一类，快照里直接标出来
+            'provider': any(str(c).startswith('provider:') for c in caps),
+        })
+    out.sort(key=lambda r: r['id'])
+    return {
+        'count': len(out),
+        'backend_types': sorted({r['backend_type'] for r in out}),
+        # 能力串去掉 id 与版本再归一，否则每装一个组件这组值就要变一次
+        'cap_kinds': sorted({cap_kind(c) for r in out for c in r['caps']}),
+        'builtin': sorted(r['id'] for r in out if not r['provider']),
+        'rows': out,
+    }
+
+
 def build(base, diag_payload=None):
     payload = get(base, '/api/v1/providers')
     providers = payload.get('providers') if isinstance(payload, dict) else None
@@ -233,6 +275,10 @@ def build(base, diag_payload=None):
             diag_payload = get(base, '/api/v1/diagnostics')
         except SystemExit:
             diag_payload = {}
+    try:
+        catalog_payload = get(base, '/api/v1/components/catalog')
+    except SystemExit:
+        catalog_payload = {}
     return {
         'generated_at': time.strftime('%Y-%m-%d %H:%M:%S'),
         'base': base,
@@ -246,6 +292,7 @@ def build(base, diag_payload=None):
         'episode_fields': sorted({f for r in rows for f in (r.get('episode_fields') or [])}),
         'providers': rows,
         'diagnostics': diag_shape(diag_payload),
+        'catalog': catalog_shape(catalog_payload),
     }
 
 
@@ -274,6 +321,21 @@ def diff(old, new):
             lines.append('  + diagnostics.%s: %s' % (field, name or '(空)'))
         for name in sorted(a - b):
             lines.append('  - diagnostics.%s: %s' % (field, name or '(空)'))
+    # 组件目录：`/providers` 不动也可能「多装了东西」，只看前一份永远发现不了
+    ca, cb = old.get('catalog') or {}, new.get('catalog') or {}
+    for field in ('backend_types', 'cap_kinds'):
+        a, b = set(ca.get(field) or []), set(cb.get(field) or [])
+        for name in sorted(b - a):
+            lines.append('  + catalog.%s: %s' % (field, name or '(空)'))
+        for name in sorted(a - b):
+            lines.append('  - catalog.%s: %s' % (field, name or '(空)'))
+    if ca and cb and ca.get('count') != cb.get('count'):
+        lines.append('  ~ catalog.count: %s → %s' % (ca.get('count'), cb.get('count')))
+    a, b = set(ca.get('builtin') or []), set(cb.get('builtin') or [])
+    for name in sorted(b - a):
+        lines.append('  + 新内建组件（接不上）: %s' % name)
+    for name in sorted(a - b):
+        lines.append('  - 内建组件变可用/消失: %s' % name)
     return lines
 
 
@@ -284,6 +346,7 @@ def main():
     ap.add_argument('--diff', action='store_true', help='和已有快照对比字段增删')
     ap.add_argument('--diag', action='store_true',
                     help='先让上游跑一遍全量诊断（会真的访问各源站，慢），再抓快照')
+    ap.add_argument('--out', default='', help='输出路径（默认 docs/capy-contract.json）')
     args = ap.parse_args()
 
     diag_payload = run_diagnostics(args.base) if args.diag else None
@@ -307,14 +370,20 @@ def main():
         print('  %-18s %-18s %-10s %-22s checks=%s'
               % (row['id'], row['network_mode'] or '(未标)', row['status'] or '—',
                  row['server_check_role'] or '—', ','.join(row['checks']) or '-'))
+    cat = data['catalog']
+    print('组件目录 %s 个（通用契约 %s 个，内建接不上 %s 个）'
+          % (cat['count'], cat['count'] - len(cat['builtin']), len(cat['builtin'])))
+    for pid in cat['builtin']:
+        print('  内建 %s' % pid)
     if args.write:
+        target = args.out or SNAPSHOT
         old = None
-        if os.path.exists(SNAPSHOT):
-            old = json.load(open(SNAPSHOT, encoding='utf-8'))
-        with open(SNAPSHOT, 'w', encoding='utf-8', newline='\n') as fh:
+        if os.path.exists(target):
+            old = json.load(open(target, encoding='utf-8'))
+        with open(target, 'w', encoding='utf-8', newline='\n') as fh:
             json.dump(data, fh, ensure_ascii=False, indent=1, sort_keys=True)
             fh.write('\n')
-        print('已写入 %s' % SNAPSHOT)
+        print('已写入 %s' % target)
         if args.diff and old:
             lines = diff(old, data)
             print('\n'.join(lines) if lines else '契约没有变化。')

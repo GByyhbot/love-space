@@ -86,6 +86,8 @@ DIAG_TTL = 120
 DIAG_TIMEOUT = 3.0
 # 一台服务最多等这么久；主人加的地址可能是台关着的机器
 PROBE_TIMEOUT = 3.0
+# 组件目录（含内建组件）跟组件清单一样，只有装/卸组件时才会变
+COMPONENTS_TTL = 300
 # 分片代理的签名有效期：一集通常几分钟，留足余量又不至于永久有效
 PART_TTL = 6 * 3600
 PART_PATH = '/api/drama-part?t='
@@ -104,6 +106,7 @@ _stream_probe = {}  # (base, provider, item_id, ep) -> (expire_ts, url, is_hls)
 _health = {}
 # 上游诊断快照：(base) -> (expire_ts, {provider_id: net})。见 `diagnostics()`。
 _diagnostics = {}
+_components = {}    # base -> (expire_ts, [component])  组件目录（含内建）
 _lock = threading.Lock()
 _transport = None   # 测试注入 httpx.MockTransport
 _part_key_cache = None
@@ -592,28 +595,32 @@ async def catalog(c, refresh=False):
     """给管理界面：每台服务在线情况 + 它代理的组件 + 勾选/整理状态。
 
     几台服务并发探测 —— 串行的话，一台连不上的机器会把后面全卡住，
-    主人看到的就是「点了没反应」。诊断快照跟探测一起发出去，两者互不依赖。
+    主人看到的就是「点了没反应」。诊断快照和组件目录跟探测一起发出去，
+    三者互不依赖。
     """
     cfg = load_config(c)
     enabled = set(cfg['enabled'])
     overlay = load_overlay(c)
-    # 探测和诊断快照交错排：每台服务两个任务，最后按奇偶拆开。
-    # 分两批 await 会让最坏耗时变成 3+3 秒，交错发就只有 3 秒。
+    # 探测、诊断快照、组件目录交错排：每台服务三个任务，最后按 3 取模拆开。
+    # 分几批 await 会让最坏耗时累加成 3+3+3 秒，交错发就只有 3 秒。
     tasks = []
     for svc in cfg['services']:
         tasks.append(_probe(svc['base'], refresh))
         tasks.append(_nets_safe(svc['base'], refresh))
+        tasks.append(_components_safe(svc['base'], refresh))
     ready = await asyncio.gather(*tasks, return_exceptions=True)
-    probes, nets = ready[0::2], ready[1::2]
+    probes, nets, comps = ready[0::3], ready[1::3], ready[2::3]
     services = []
-    for svc, result, net_map in zip(cfg['services'], probes, nets):
+    for svc, result, net_map, comp_list in zip(cfg['services'], probes, nets, comps):
         entry = {'id': svc['id'], 'name': svc['name'], 'base': svc['base'],
-                 'online': False, 'error': '', 'providers': []}
+                 'online': False, 'error': '', 'providers': [], 'total': 0}
         nets_of = net_map if isinstance(net_map, dict) else {}
+        comps_of = comp_list if isinstance(comp_list, list) else []
         if isinstance(result, Exception):          # 超时、连不上、返回看不懂
             entry['error'] = str(result) or '这台服务连不上'
         else:
             entry['online'] = True
+            have = set()
             for p in result:
                 key = f"{svc['id']}:{p['id']}"
                 one = _decorate(p, overlay.get(key))
@@ -623,7 +630,20 @@ async def catalog(c, refresh=False):
                 # 网络模式与健康度并列，互不覆盖：健康度是「我们刚才请求成没成」，
                 # 网络模式是上游说「这个源该由谁去连」。两者都会缺，缺了就是空。
                 one['net'] = nets_of.get(p['id']) or {}
+                one['builtin'] = False
+                one['usable'] = True
                 entry['providers'].append(one)
+                have.add(p['id'])
+            # 组件目录里多出来的，全是「装在这台机器上、但没有通用 provider 契约」
+            # 的内建组件。接在通用组件后面，不插进去打乱主人已经排好的顺序。
+            for comp in comps_of:
+                if comp['id'] in have:
+                    continue
+                entry['providers'].append(_builtin_entry(
+                    svc['id'], comp, have, overlay))
+            # total 是「上游装了多少个」，不是「我们能用的有几个」。
+            # 两个数必须都露出来，差集才看得见 —— 否则主人只会觉得这边漏接了。
+            entry['total'] = len(comps_of) or len(entry['providers'])
         services.append(entry)
     return {'services': services}
 
@@ -665,6 +685,75 @@ async def _nets_safe(base, refresh):
     except Exception as exc:                   # 不是 DramaError 也照兜
         log.warning('drama diagnostics failed: %s %s', base, exc)
         return {}
+
+
+async def components(base, refresh=False):
+    """这台机器上装着的**全部**组件（含内建），用于补齐 `/providers` 看不到的那几个。
+
+    两份清单语义不同：`/api/v1/providers` 只列实现了通用 provider 契约的，
+    `/api/v1/components/catalog` 才列全量。少了这份，界面上就永远是 17 个。
+    """
+    now = time.time()
+    if not refresh:
+        with _lock:
+            hit = _components.get(base)
+        if hit and hit[0] > now:
+            return hit[1]
+    payload = await _get_json(base, '/api/v1/components/catalog')
+    out = widgets.components(payload)
+    with _lock:
+        _components[base] = (now + COMPONENTS_TTL, out)
+    return out
+
+
+async def _components_safe(base, refresh):
+    """组件目录缺了只影响「内建组件能不能显示出来」，绝不该让组件列表报错。"""
+    try:
+        return await asyncio.wait_for(components(base, refresh), PROBE_TIMEOUT)
+    except Exception as exc:
+        log.warning('drama components failed: %s %s', base, exc)
+        return []
+
+
+# ── 内建组件 ────────────────────────────────────────────────────────────
+# 内建组件（`backendType=builtin`，artifacts 里只有 widget.js）的抓取写在手机端
+# 的 Widget 沙箱里，服务端没有对应实现，所以**不能当普通组件用**。但它们在主人
+# 装的清单里真实存在，静默少 3 个只会让人以为漏接了 —— 于是给它们一张只说事实、
+# 不给假入口的卡片。
+#
+# `alt` 是「同样内容用哪个组件看得见」。只有 missav 有：它和 missav-official
+# 是同一个站点的两套实现，后者走通用契约，内容一样、封面标题齐全。
+BUILTIN_REASON = {
+    'bilibili': '抓取与 DASH 播放都在手机端组件里完成，服务端没有对应接口',
+    'huangguo': '正文抓取在手机端组件里完成，服务端只提供线路与封面',
+    'missav': '内建通道只给编号、不给标题封面，且每片要单独再请求一次',
+}
+BUILTIN_ALT = {'missav': 'missav-official'}
+
+
+def _builtin_entry(svc_id, comp, have, overlay):
+    """把一个内建组件整理成与普通组件同形的卡片数据。"""
+    key = f'{svc_id}:{comp["id"]}'
+    alt = BUILTIN_ALT.get(comp['id']) or ''
+    # 替代组件必须真在这台服务上，否则不给这个入口
+    if alt and alt not in have:
+        alt = ''
+    reason = BUILTIN_REASON.get(comp['id']) or '抓取逻辑在手机端组件里完成，服务端没有对应实现'
+    out = _decorate({'id': comp['id'], 'title': comp['title'], 'version': comp['version'],
+                     'desc': comp['desc'], 'icon': '', 'caps': [], 'categories': []},
+                    overlay.get(key))
+    out['key'] = key
+    # 恒 False，不看配置：内建组件没有服务端接口，被「启用」只会换来一次 404。
+    # 就算有人直接 PUT 进来，界面也照样显示成关的；下一次保存就自然清掉了。
+    out['enabled'] = False
+    out['health'] = {}
+    out['net'] = {}
+    out['builtin'] = True
+    out['usable'] = False                  # 界面据此禁止点进列表
+    out['reason'] = reason
+    out['alt'] = alt
+    out['backend_caps'] = comp['caps']
+    return out
 
 
 async def _probe(base, refresh):

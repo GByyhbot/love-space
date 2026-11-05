@@ -24,7 +24,38 @@ PROVIDERS = {'providers': [
      'categories': [{'id': 'short', 'title': '短剧'}, {'id': 'comic', 'title': '漫剧'}]},
     {'id': 'huangju', 'title': '剧果', 'capabilities': ['browse'],
      'categories': [{'id': 'film', 'title': '影视'}]},
+    # 走通用契约的 missav（用来验证内建 missav 的「替代组件」指向它）
+    {'id': 'missav-official', 'title': 'MissAV (官方原站)', 'capabilities': ['browse'],
+     'categories': [{'id': 'today-hot', 'title': '今日热门'}]},
     # id 会拼进上游 URL，这种脏数据必须被丢掉
+    {'id': '../evil', 'title': '坏数据'},
+]}
+
+# `GET /api/v1/components/catalog`：装在这台机器上的**全部**组件。
+# 真实形状照抄上游（2026-11 实测），三个内建组件的差别就在这里：
+# `backendType=builtin`、artifacts 里没有 provider、backendCapabilities 里没有
+# `provider:<id>@1`。这正是「20 个组件只接上 17 个」的全部原因。
+COMPONENTS = {'repository': 'official', 'stale': False, 'components': [
+    {'id': 'hongguo', 'title': '红果短剧', 'version': '0.3.15',
+     'backendCapabilities': ['provider:hongguo@1'], 'backendType': 'so-worker',
+     'artifacts': {'provider': 'provider.so', 'widget': 'widget.js'}},
+    {'id': 'huangju', 'title': '剧果', 'version': '1.0.4',
+     'backendCapabilities': ['provider:huangju@1'], 'backendType': 'so-worker',
+     'artifacts': {'provider': 'provider.so', 'widget': 'widget.js'}},
+    {'id': 'missav-official', 'title': 'MissAV (官方原站)', 'version': '1.0.4',
+     'backendCapabilities': ['provider:missav-official@1', 'video:proxy@1'],
+     'backendType': 'so-worker',
+     'artifacts': {'provider': 'provider.so', 'widget': 'widget.js'}},
+    {'id': 'bilibili', 'title': '哔哩哔哩', 'version': '2.1.3',
+     'local': {'id': 'bilibili', 'title': 'bilibili', 'enabled': True},
+     'backendCapabilities': ['widget:universal@1'], 'backendType': 'builtin',
+     'artifacts': {'widget': 'widget.js'}},
+    {'id': 'missav', 'title': 'MissAV', 'version': '5.9.19',
+     'description': '支持通用播放器和手机端自适应直连',
+     'backendCapabilities': ['discovery:missav@1', 'missav:prepare@1',
+                             'video:proxy@1'], 'backendType': 'builtin',
+     'artifacts': {'icon': 'icon.ico', 'widget': 'widget.js'}},
+    # 目录里的脏数据同样要丢
     {'id': '../evil', 'title': '坏数据'},
 ]}
 
@@ -73,6 +104,7 @@ def clean_state():
     dramas._list_cache.clear()
     dramas._health.clear()
     dramas._diagnostics.clear()
+    dramas._components.clear()
     dramas._stream_probe.clear()
     dramas._part_key_cache = None
     yield
@@ -81,7 +113,9 @@ def clean_state():
 @pytest.fixture
 def upstream(monkeypatch):
     """按路径分发的假上游；返回一个可改写的 dict 方便单条用例调行为。"""
-    state = {'range': '', 'hits': [], 'bases': [], 'methods': [], 'diag': {'results': {}}}
+    state = {'range': '', 'hits': [], 'bases': [], 'methods': [],
+             'diag': {'results': {}}, 'components': COMPONENTS, 'comps_code': 200,
+             'providers': PROVIDERS}
 
     def handler(request: httpx.Request) -> httpx.Response:
         path = request.url.path
@@ -89,9 +123,13 @@ def upstream(monkeypatch):
         state['methods'].append(request.method)
         state['bases'].append(str(request.url).rsplit(path, 1)[0])
         if path == '/api/v1/providers':
-            return httpx.Response(200, json=PROVIDERS)
+            return httpx.Response(200, json=state['providers'])
         if path == '/api/v1/diagnostics':
             return httpx.Response(200, json=state['diag'])
+        if path == '/api/v1/components/catalog':
+            if state['comps_code'] != 200:
+                return httpx.Response(state['comps_code'], json={'detail': 'boom'})
+            return httpx.Response(200, json=state['components'])
         if path.endswith('/browse'):
             return httpx.Response(200, json=BROWSE)
         if path.endswith('/search'):
@@ -116,11 +154,89 @@ def test_catalog_lists_providers_and_marks_default_enabled(client_a, upstream):
     assert r.status_code == 200, r.text
     svc = r.json()['services'][0]
     assert svc['id'] == 'capy' and svc['online'] is True
-    # 脏 id 被丢掉，顺序不变
-    assert [p['id'] for p in svc['providers']] == ['hongguo', 'huangju']
+    # 脏 id 被丢掉，顺序不变：先是通用 provider，再是内建组件
+    assert [p['id'] for p in svc['providers']] == [
+        'hongguo', 'huangju', 'missav-official', 'bilibili', 'missav']
     assert svc['providers'][0]['enabled'] is True
     assert svc['providers'][1]['enabled'] is False
     assert svc['providers'][0]['categories'][0]['title'] == '短剧'
+    # total 说的是「上游装了几个」，不是「我们能用几个」
+    assert svc['total'] == 5
+
+
+def test_catalog_exposes_builtin_components_instead_of_dropping_them(client_a, upstream):
+    """上游装了 20 个，`/providers` 只报 17 个 —— 差的那些必须显示出来。
+
+    静默少 3 个，主人只会以为这边漏接了。
+    """
+    svc = client_a.get('/api/drama-sources', headers=HEADERS).json()['services'][0]
+    rows = {p['id']: p for p in svc['providers']}
+    assert rows['bilibili']['builtin'] is True
+    assert rows['missav']['builtin'] is True
+    # 通用契约里的组件不该被误标
+    assert rows['hongguo']['builtin'] is False
+    # 内建的一律不可用，且永远不可能是启用状态
+    for pid in ('bilibili', 'missav'):
+        assert rows[pid]['usable'] is False
+        assert rows[pid]['enabled'] is False
+        assert rows[pid]['reason']
+    # 能用的那几个仍然是 usable
+    assert rows['hongguo']['usable'] is True
+
+
+def test_builtin_component_keeps_the_capabilities_it_does_have(client_a, upstream):
+    """能力串是判断依据，得原样带出来 —— 排查时全靠它认「为什么接不上」。"""
+    svc = client_a.get('/api/drama-sources', headers=HEADERS).json()['services'][0]
+    bil = next(p for p in svc['providers'] if p['id'] == 'bilibili')
+    assert bil['backend_caps'] == ['widget:universal@1']
+    # 中文名在 local 里，顶层的 title 是 id 原文
+    assert bil['name'] == '哔哩哔哩'
+
+
+def test_builtin_component_points_at_a_working_alternative(client_a, upstream):
+    """missav 的内容用 missav-official 就能看 —— 这个出口必须给出来。"""
+    svc = client_a.get('/api/drama-sources', headers=HEADERS).json()['services'][0]
+    rows = {p['id']: p for p in svc['providers']}
+    assert rows['missav']['alt'] == 'missav-official'
+    # bilibili 没有同内容的通用组件，就不该瞎指一个
+    assert rows['bilibili']['alt'] == ''
+
+
+def test_builtin_alt_is_dropped_when_that_component_is_missing(client_a, upstream):
+    """替代组件不在这台机器上时，宁可不给出口，也不能指到 404 去。"""
+    upstream['providers'] = {'providers': [
+        {'id': 'hongguo', 'title': '红果短剧', 'capabilities': ['browse'],
+         'categories': [{'id': 'short', 'title': '短剧'}]},
+    ]}
+    upstream['components'] = {'components': [
+        {'id': 'hongguo', 'title': '红果短剧', 'backendCapabilities': ['provider:hongguo@1'],
+         'artifacts': {'provider': 'provider.so'}},
+        {'id': 'missav', 'title': 'MissAV', 'backendCapabilities': ['discovery:missav@1'],
+         'backendType': 'builtin', 'artifacts': {'widget': 'widget.js'}},
+    ]}
+    svc = client_a.get('/api/drama-sources', headers=HEADERS).json()['services'][0]
+    missav = next(p for p in svc['providers'] if p['id'] == 'missav')
+    assert missav['builtin'] is True
+    assert missav['alt'] == ''
+
+
+def test_catalog_still_works_when_component_dir_is_down(client_a, upstream):
+    """组件目录只是补充信息，挂了不能让整个组件列表变成空白。"""
+    upstream['comps_code'] = 500
+    r = client_a.get('/api/drama-sources', headers=HEADERS)
+    assert r.status_code == 200, r.text
+    svc = r.json()['services'][0]
+    assert [p['id'] for p in svc['providers']] == ['hongguo', 'huangju', 'missav-official']
+    assert svc['total'] == 3
+
+
+def test_enabling_a_builtin_component_never_shows_as_on(client_a, upstream):
+    """就算有人绕过界面直接启用，卡片也必须还是关的 —— 它根本没有服务端接口。"""
+    client_a.put('/api/drama-sources/enabled', headers=HEADERS,
+                 json={'enabled': ['capy:missav']})
+    svc = client_a.get('/api/drama-sources', headers=HEADERS).json()['services'][0]
+    missav = next(p for p in svc['providers'] if p['id'] == 'missav')
+    assert missav['enabled'] is False
 
 
 def test_catalog_marks_service_offline_when_unreachable(client_a, monkeypatch):
@@ -215,7 +331,7 @@ def test_enabled_rejects_unknown_service(client_a, upstream):
     client_a.put('/api/drama-sources/enabled', headers=HEADERS,
                  json={'enabled': ['ghost:hongguo', 'capy:hongguo']})
     svc = client_a.get('/api/drama-sources', headers=HEADERS).json()['services'][0]
-    assert [p['enabled'] for p in svc['providers']] == [True, False]
+    assert [p['enabled'] for p in svc['providers'] if not p['builtin']] == [True, False, False]
 
 
 def test_add_service_shows_up_online(client_a, upstream):
@@ -636,7 +752,7 @@ def test_overlay_hidden_only_affects_local_view(client_a, upstream):
     client_a.put('/api/drama-sources/overlay', headers=HEADERS,
                  json={'key': 'capy:huangju', 'hidden': True})
     provs = client_a.get('/api/drama-sources', headers=HEADERS).json()['services'][0]['providers']
-    assert [p['hidden'] for p in provs] == [False, True]
+    assert [p['hidden'] for p in provs if not p['builtin']] == [False, True, False]
     # 隐藏只是「选择器里不显示」，接口本身不能因此拒绝服务
     assert client_a.get('/api/dramas/capy/huangju', headers=HEADERS).status_code in (200, 403)
 
@@ -720,7 +836,9 @@ def test_diagnostics_without_probe_only_reports_清单(client_a, upstream):
     assert r.status_code == 200, r.text
     svc = r.json()['services'][0]
     assert svc['online'] is True
-    assert [p['id'] for p in svc['providers']] == ['hongguo', 'huangju']
+    # 体检只针对能用通用契约的组件：内建组件没有服务端接口，没什么可体检的
+    assert [p['id'] for p in svc['providers']] == [
+        'hongguo', 'huangju', 'missav-official']
     assert 'browse' not in svc['providers'][0]        # 没 probe 就不去打上游
 
 
@@ -775,7 +893,7 @@ def test_catalog_still_works_when_diagnostics_is_missing(client_a, monkeypatch):
     r = client_a.get('/api/drama-sources', headers=HEADERS)
     assert r.status_code == 200, r.text
     rows = r.json()['services'][0]['providers']
-    assert [p['id'] for p in rows] == ['hongguo', 'huangju']
+    assert [p['id'] for p in rows] == ['hongguo', 'huangju', 'missav-official']
     assert all(p['net'] == {} for p in rows)
 
 
@@ -815,7 +933,7 @@ def test_overlay_proxy_flag_round_trips(client_a, upstream):
                      json={'key': 'capy:hongguo', 'proxy': True})
     assert r.status_code == 200, r.text
     provs = client_a.get('/api/drama-sources', headers=HEADERS).json()['services'][0]['providers']
-    assert [p['proxy'] for p in provs] == [True, False]
+    assert [p['proxy'] for p in provs if not p['builtin']] == [True, False, False]
 
 
 def test_overlay_proxy_can_be_turned_off_again(client_a, upstream):

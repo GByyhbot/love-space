@@ -121,7 +121,8 @@ def provider(raw):
     """一个组件。id 不合法直接丢（它会拼进上游路径）。"""
     if not isinstance(raw, dict):
         return None
-    pid = text(raw.get('id'), limit=32)
+    # 同上：先校验再截断，别让超长脏 id 被截成一个合法的短 id
+    pid = text(raw.get('id'))
     if not pid or not PROVIDER_RE.match(pid):
         return None
     return {
@@ -146,6 +147,82 @@ def providers(payload):
     out, seen = [], set()
     for item in payload.get('providers') or []:
         one = provider(item)
+        if one and one['id'] not in seen:
+            seen.add(one['id'])
+            out.append(one)
+    return out
+
+
+# ── 组件目录（components/catalog）─────────────────────────────────────────
+# 上游有**两份**清单，说的不是同一件事，必须都读：
+#   `/api/v1/providers`          只列实现了「通用 provider 契约」的组件
+#   `/api/v1/components/catalog` 列这台机器上装着的**全部**组件（含内建）
+# 本机实测两份差 3 个：bilibili / huangguo / missav。三者 `backendType=builtin`，
+# `artifacts` 里**只有 widget.js、没有 provider.so** —— 抓取逻辑跑在手机端的
+# Widget 沙箱里，服务端一侧没有实现。宿主那 63 条路由里也确实没有「跑任意外挂
+# 组件」的入口（最接近的是 `/api/v1/stream/bili/*`，只做流转发，不出列表）。
+#
+# 所以「20 个组件」这件事必须在界面上如实呈现：只显示 17 个会让人以为漏了，
+# 悄悄补 3 个假卡片更糟 —— 点进去必然报错。这里只负责把两份清单的**差异**
+# 说清楚，能不能用由上层判断。
+PROVIDER_CAP_RE = re.compile(r'^provider:([A-Za-z0-9_-]{1,32})@\d+$')
+
+
+def cap_contract(caps):
+    """能力串里有没有通用 provider 契约；有就返回它声明的 provider id。
+
+    `provider:hongguo@1` 这种才能真正走 `/api/v1/providers/<id>/…`。
+    `widget:universal@1` / `huangguo:routes@1` 是宿主内核实现的能力，
+    跟「有没有可浏览的内容接口」无关，不能拿来当契约。
+    """
+    for one in caps or []:
+        hit = PROVIDER_CAP_RE.match(text(one, limit=64))
+        if hit:
+            return hit.group(1)
+    return ''
+
+
+def component(raw):
+    """组件目录里的一项。id 不合法直接丢（它要拼进上游路径）。"""
+    if not isinstance(raw, dict):
+        return None
+    # ⚠️ 先校验再截断：先 `text(..., limit=32)` 会把 40 字符的脏 id 截成一个
+    # 合法的 32 字符 id，等于让脏数据换个名字混进来。
+    cid = text(raw.get('id'))
+    if not cid or not PROVIDER_RE.match(cid):
+        return None
+    caps = []
+    for one in raw.get('backendCapabilities') or []:
+        one = text(one, limit=64)
+        if one and one not in caps:
+            caps.append(one)
+    artifacts = raw.get('artifacts')
+    local = raw.get('local') if isinstance(raw.get('local'), dict) else {}
+    # 顶层 title 才是给人看的中文名（bilibili 是「哔哩哔哩」），`local` 里那份
+    # 反而是安装记录的原文（就是 id）。所以顶层优先，缺了才退到 local。
+    title = (text(raw.get('title'), limit=24) or text(raw.get('name'), limit=24)
+             or text(local.get('title'), limit=24) or cid)
+    return {
+        'id': cid,
+        'title': title,
+        'version': text(raw.get('version'), limit=16),
+        'desc': text(raw.get('description') or raw.get('desc'), limit=80),
+        'backend': text(raw.get('backendType'), limit=16),
+        'caps': caps,
+        # 空字符串 = 没有通用契约。这是「能不能接」的唯一判据。
+        'provider': cap_contract(caps),
+        'provider_so': isinstance(artifacts, dict) and bool(artifacts.get('provider')),
+    }
+
+
+def components(payload):
+    """`GET /api/v1/components/catalog` → 归一化列表，保持上游顺序。"""
+    if not isinstance(payload, dict):
+        return []
+    rows = payload.get('components')
+    out, seen = [], set()
+    for item in rows or []:
+        one = component(item)
         if one and one['id'] not in seen:
             seen.add(one['id'])
             out.append(one)

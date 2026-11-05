@@ -2176,6 +2176,8 @@ async function act(action,id,el) {
  if(action==='watch-src-open'||action==='watch-src')return watchOpenSource(id,el.dataset.prov||'');
  if(action==='watch-sources'||action==='watch-svc-open'||action==='watch-src-back')return watchSources();
  if(action==='watch-src-toggle')return watchToggleSource(id,el.dataset.prov||'');
+ /* 内建组件没有开关可拨，右侧那颗是「为什么用不了」的说明 */
+ if(action==='watch-src-why')return watchSrcWhy(id,el.dataset.prov||'');
  if(action==='watch-src-add')return watchAddSourceForm();
  if(action==='watch-src-curate')return watchCurateForm();
  if(action==='watch-src-hidden'){

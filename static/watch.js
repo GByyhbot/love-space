@@ -388,7 +388,12 @@ function watchIndex(){
        proxy = 本地「需代理」标记：上游没有任何字段说这件事（manifest 只有
        id/title/version/caps，diagnostics 只给 direct），只能用主人标的那一次。
        两者都有时**本地优先** —— 主人比上游更清楚自己这台机器的情况。 */
-    net:one.net||{},proxy:!!one.proxy});
+    net:one.net||{},proxy:!!one.proxy,
+    /* builtin = 上游装了、但没有通用 provider 契约的组件（抓取跑在手机端 Widget
+       里，服务端没有实现）。它永远不进「选片」：enabled 恒 false，也没有开关。
+       不显示会让主人以为漏接了 3 个；给个假入口则会点一次报一次错。 */
+    builtin:!!one.builtin,usable:one.usable!==false,
+    reason:one.reason||'',alt:one.alt||'',backendCaps:one.backend_caps||[]});
   });
  });
  return out;
@@ -569,7 +574,29 @@ function wsNetBad(row){
  return (row.health&&row.health.ok===false)||net.status==='failed';
 }
 
+/* 内建组件的卡片。上游装了它、宿主却不给服务端任何内容接口
+   （`backendType=builtin`，artifacts 里只有 widget.js），所以这里既不能进片源，
+   也不该假装能点。有替代组件的（missav → missav-official）直接指过去。 */
+function watchBuiltinCard(row,many){
+ const label=many?(row.svcName+' · '+row.name):row.name;
+ const alt=row.alt?(watchIndex().find(x=>x.prov===row.alt)||null):null;
+ const state=alt?`改用「${alt.name}」看`:'本应用接不了';
+ return `<div class="src-card builtin">
+    <button type="button" class="src-card-main" data-action="${alt?'watch-src-open':'watch-src-why'}"
+      data-id="${esc(row.svc)}" data-prov="${esc(alt?row.alt:row.prov)}">
+      ${wsLogo(row.name,row.key)}
+      <span class="src-card-txt"><b>${esc(label)}</b>
+       <small><i class="src-net src-net-builtin">内建</i>手机端组件</small>
+       <small class="src-state warn">${esc(state)}</small></span>
+     </button>
+    <button type="button" class="src-card-go" data-action="watch-src-why"
+      data-id="${esc(row.svc)}" data-prov="${esc(row.prov)}"
+      aria-label="说明：${esc(row.name)}为什么用不了">${icon('info')}</button>
+    </div>`;
+}
+
 function watchSrcCard(row,many){
+ if(row.builtin)return watchBuiltinCard(row,many);
  const n=(row.cats||[]).length;
  const net=row.net||{};
  const bad=wsNetBad(row);
@@ -634,8 +661,12 @@ function watchSrcCards(){
 function watchSrcCount(){
  const all=watchIndex();
  const hidden=all.filter(x=>x.hidden).length;
+ const builtin=all.filter(x=>x.builtin).length;
  const shown=watchVisible().length;
  const bits=[`共 ${all.length} 个组件`];
+ /* 上游装了多少个 ≠ 我们能用几个。两个数都给出来，差集才解释得清 ——
+    只说「共 20 个」而其中 3 个点不动，主人只会以为这边坏了。 */
+ if(builtin)bits.push(`${all.length-builtin} 个能用`);
  if(String(WATCH_PICK.filter||'').trim())bits.push(`匹配 ${shown} 个`);
  else if(hidden&&!WATCH_PICK.showHidden)bits.push(`隐藏 ${hidden} 个`);
  /* 上游只诊断它自己排的那一批（本机 17 个里覆盖 9 个），不是每个卡片都有
@@ -647,13 +678,18 @@ function watchSrcCount(){
 
 function watchSourcesInner(){
  const svcs=((WATCH_PICK.catalog||{}).services)||[];
- const hidden=watchIndex().filter(x=>x.hidden).length;
+ const idx=watchIndex();
+ const hidden=idx.filter(x=>x.hidden).length;
+ const builtin=idx.filter(x=>x.builtin).length;
+ /* 虚线卡片的规则必须写在图例里：它们看起来像组件、也占一格，但点进去是说明
+    而不是片源。不说清就会变成「点了没反应」。 */
+ const tip=builtin?' 虚线卡是内建组件（抓取在手机端跑），服务端接不了。':'';
  const head=`<div class="src-filter">
    <input type="search" id="ws-src-filter" class="src-filter-input"
      value="${esc(WATCH_PICK.filter||'')}" placeholder="找组件：名字、编号或标签"
      autocomplete="off" maxlength="24" enterkeyhint="search">
   </div>
-  <p class="ws-tip">点卡片进片源；右侧勾选框决定它出现在选片里。<span id="ws-src-count">${watchSrcCount()}</span></p>`;
+  <p class="ws-tip">点卡片进片源；右侧勾选框决定它出现在选片里。${tip}<span id="ws-src-count">${watchSrcCount()}</span></p>`;
  const hiddenRow=hidden?`<button type="button" class="src-hidden-toggle" data-action="watch-src-hidden">
    ${WATCH_PICK.showHidden?'收起':'显示'}已隐藏的 ${hidden} 个</button>`:'';
  const svcRows=svcs.map(s=>`<div class="src-svc-row">
@@ -804,6 +840,8 @@ async function watchOpenSource(sid,prov){
  const s=services.find(x=>x.id===sid);
  const p=s&&(s.providers||[]).find(x=>x.id===prov);
  if(!p)return;
+ /* 内建组件没有服务端接口，进片源必然 404；挡在这里比让主人等一次报错好 */
+ if(p.builtin)return watchSrcWhy(sid,prov);
  WATCH_PICK.tab='drama';WATCH_PICK.view='home';
  WATCH_PICK.svc=sid;WATCH_PICK.prov=prov;
  WATCH_PICK.detail=null;WATCH_PICK.dramas=[];WATCH_PICK.q='';
@@ -814,6 +852,24 @@ async function watchOpenSource(sid,prov){
   catch(e){p.enabled=false;toast(e.message||'启用失败');}
  }
  await watchHomeLoad();
+}
+
+/* 内建组件「为什么用不了」。主人点这张卡唯一的诉求就是这个，所以一次说清三件事：
+   它是什么、为什么我们接不了、有没有别的路能看同样的内容。 */
+function watchSrcWhy(sid,prov){
+ const row=watchIndex().find(x=>x.svc===sid&&x.prov===prov);
+ if(!row)return;
+ const alt=row.alt?(watchIndex().find(x=>x.prov===row.alt)||null):null;
+ const caps=(row.backendCaps||[]).map(c=>`<i class="src-net">${esc(c)}</i>`).join(' ');
+ const body=`<p class="src-why">${esc(row.reason||'抓取逻辑在手机端组件里完成，服务端没有对应实现')}。</p>
+  <p class="src-why">上游把这类组件标成「内建」：安装包里只有 widget.js、没有 provider.so，
+   片单和播放地址都由手机端组件自己去源站取。我们的服务端没有这段代码，也就没有可调的接口。</p>
+  ${caps?`<p class="src-why">它声明的能力：<span class="src-caps">${caps}</span></p>`:''}
+  <div class="ws-bottom">
+   ${alt?button(`改用「${alt.name}」`,'watch-src-open','primary','film',
+     `data-id="${esc(row.svc)}" data-prov="${esc(alt.prov)}"`):''}
+   ${button('知道了','close-modal','soft')}</div>`;
+ openModal(row.name,body);
 }
 
 function watchEpisodesBody(d){
@@ -966,13 +1022,13 @@ async function watchToggleSource(sid,prov){
 function watchCurateForm(){
  const rows=watchIndex();
  const list=rows.map(r=>`<div class="curate-row" data-key="${esc(r.key)}">
-   <div class="curate-head"><b>${esc(r.title)}</b>${wsNetPill(r)}<small>${esc(r.key)}</small></div>
+   <div class="curate-head"><b>${esc(r.title)}</b>${r.builtin?'<i class="src-net src-net-builtin">内建</i>':wsNetPill(r)}<small>${esc(r.key)}</small></div>
    <input name="alias:${esc(r.key)}" value="${esc(r.alias)}" maxlength="24"
      placeholder="改个名（留空 = 用上游原名）" autocomplete="off">
    <input name="tag:${esc(r.key)}" value="${esc(r.tag)}" maxlength="12"
      placeholder="标签，例如 短剧 / 影视" autocomplete="off">
    <div class="curate-line curate-switch-row">
-    <label class="switch-row"><input type="checkbox" name="proxy:${esc(r.key)}"${r.proxy?' checked':''}><span>需代理</span></label>
+    ${r.builtin?'':`<label class="switch-row"><input type="checkbox" name="proxy:${esc(r.key)}"${r.proxy?' checked':''}><span>需代理</span></label>`}
     <label class="switch-row"><input type="checkbox" name="hidden:${esc(r.key)}"${r.hidden?' checked':''}><span>隐藏</span></label>
    </div>
   </div>`).join('');

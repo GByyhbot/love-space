@@ -7,6 +7,200 @@
   "playback",
   "search"
  ],
+ "catalog": {
+  "backend_types": [
+   "builtin",
+   "so-worker"
+  ],
+  "builtin": [
+   "bilibili",
+   "huangguo",
+   "missav"
+  ],
+  "cap_kinds": [
+   "discovery:missav",
+   "huangguo:cover",
+   "huangguo:routes",
+   "missav:playlist",
+   "missav:prepare",
+   "missav:subtitles",
+   "provider:*",
+   "video:proxy",
+   "widget:access-bootstrap",
+   "widget:universal"
+  ],
+  "count": 20,
+  "rows": [
+   {
+    "backend_type": "so-worker",
+    "caps": [
+     "provider:51chigua@1"
+    ],
+    "id": "51chigua",
+    "provider": true
+   },
+   {
+    "backend_type": "so-worker",
+    "caps": [
+     "provider:69ck@1"
+    ],
+    "id": "69ck",
+    "provider": true
+   },
+   {
+    "backend_type": "builtin",
+    "caps": [
+     "widget:universal@1"
+    ],
+    "id": "bilibili",
+    "provider": false
+   },
+   {
+    "backend_type": "so-worker",
+    "caps": [
+     "provider:dsd@1"
+    ],
+    "id": "dsd",
+    "provider": true
+   },
+   {
+    "backend_type": "so-worker",
+    "caps": [
+     "provider:hanime1@1"
+    ],
+    "id": "hanime1",
+    "provider": true
+   },
+   {
+    "backend_type": "so-worker",
+    "caps": [
+     "provider:hlbdy@1"
+    ],
+    "id": "hlbdy",
+    "provider": true
+   },
+   {
+    "backend_type": "so-worker",
+    "caps": [
+     "provider:hongguo@1"
+    ],
+    "id": "hongguo",
+    "provider": true
+   },
+   {
+    "backend_type": "so-worker",
+    "caps": [
+     "provider:hsex@1"
+    ],
+    "id": "hsex",
+    "provider": true
+   },
+   {
+    "backend_type": "so-worker",
+    "caps": [
+     "provider:huangdou@1"
+    ],
+    "id": "huangdou",
+    "provider": true
+   },
+   {
+    "backend_type": "builtin",
+    "caps": [
+     "huangguo:cover@1",
+     "huangguo:routes@1",
+     "widget:access-bootstrap@1"
+    ],
+    "id": "huangguo",
+    "provider": false
+   },
+   {
+    "backend_type": "so-worker",
+    "caps": [
+     "provider:huangju@1"
+    ],
+    "id": "huangju",
+    "provider": true
+   },
+   {
+    "backend_type": "so-worker",
+    "caps": [
+     "provider:jable@1"
+    ],
+    "id": "jable",
+    "provider": true
+   },
+   {
+    "backend_type": "so-worker",
+    "caps": [
+     "provider:lissav@1"
+    ],
+    "id": "lissav",
+    "provider": true
+   },
+   {
+    "backend_type": "so-worker",
+    "caps": [
+     "provider:lissav-domestic@1"
+    ],
+    "id": "lissav-domestic",
+    "provider": true
+   },
+   {
+    "backend_type": "builtin",
+    "caps": [
+     "discovery:missav@1",
+     "missav:playlist@1",
+     "missav:prepare@1",
+     "missav:subtitles@1",
+     "video:proxy@1",
+     "widget:access-bootstrap@1"
+    ],
+    "id": "missav",
+    "provider": false
+   },
+   {
+    "backend_type": "so-worker",
+    "caps": [
+     "provider:missav-official@1",
+     "video:proxy@1"
+    ],
+    "id": "missav-official",
+    "provider": true
+   },
+   {
+    "backend_type": "so-worker",
+    "caps": [
+     "provider:mitao@1"
+    ],
+    "id": "mitao",
+    "provider": true
+   },
+   {
+    "backend_type": "so-worker",
+    "caps": [
+     "provider:ptt@1"
+    ],
+    "id": "ptt",
+    "provider": true
+   },
+   {
+    "backend_type": "so-worker",
+    "caps": [
+     "provider:rouav@1"
+    ],
+    "id": "rouav",
+    "provider": true
+   },
+   {
+    "backend_type": "so-worker",
+    "caps": [
+     "provider:yeguo@1"
+    ],
+    "id": "yeguo",
+    "provider": true
+   }
+  ]
+ },
  "detail_fields": [
   "currentEpisode",
   "currentEpisodeId",
@@ -192,7 +386,7 @@
   "streamUrl",
   "title"
  ],
- "generated_at": "2026-11-05 14:52:54",
+ "generated_at": "2026-11-05 16:06:00",
  "item_fields": [
   "description",
   "id",
@@ -606,7 +800,7 @@
     "remark",
     "title"
    ],
-   "items": 48,
+   "items": 47,
    "ok": true,
    "page_fields": [
     "items",
@@ -809,41 +1003,9 @@
   },
   {
    "categories": 1,
-   "detail_fields": [
-    "description",
-    "episodeCount",
-    "id",
-    "mediaType",
-    "posterUrl",
-    "seasonCount",
-    "seasons",
-    "title"
-   ],
-   "episode_fields": [
-    "episodeNumber",
-    "id",
-    "mediaUrl",
-    "resolveUrl",
-    "title"
-   ],
-   "error": "",
+   "error": "取不到 /api/v1/providers/yeguo/browse?category=recommend%3A1&page=1（HTTP 504）",
    "id": "yeguo",
-   "item_fields": [
-    "description",
-    "id",
-    "mediaType",
-    "posterUrl",
-    "remark",
-    "title"
-   ],
-   "items": 20,
-   "ok": true,
-   "page_fields": [
-    "items",
-    "page",
-    "pageCount",
-    "total"
-   ],
+   "ok": false,
    "title": "野果"
   }
  ]
