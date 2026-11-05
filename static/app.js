@@ -2177,6 +2177,11 @@ async function act(action,id,el) {
  if(action==='watch-sources'||action==='watch-svc-open'||action==='watch-src-back')return watchSources();
  if(action==='watch-src-toggle')return watchToggleSource(id,el.dataset.prov||'');
  if(action==='watch-src-add')return watchAddSourceForm();
+ if(action==='watch-src-curate')return watchCurateForm();
+ if(action==='watch-src-hidden'){
+  WATCH_PICK.showHidden=!WATCH_PICK.showHidden;
+  return watchSources();
+ }
  if(action==='watch-src-del')return watchDropSource(id);
  if(action==='watch-src-done')return closeModal();
  if(action==='watch-home-more'||action==='watch-home-all'){
@@ -2196,7 +2201,10 @@ async function act(action,id,el) {
   WATCH_PICK.view='list';WATCH_PICK.cat=id||'';WATCH_PICK.page=1;
   WATCH_PICK.q='';WATCH_PICK.detail=null;return watchLoadDramas();
  }
- if(action==='watch-more'){WATCH_PICK.view='list';WATCH_PICK.page=(WATCH_PICK.page||1)+1;return watchLoadDramas();}
+ if(action==='watch-more'){
+  if(WATCH_PICK.pageCount&&WATCH_PICK.page>=WATCH_PICK.pageCount){toast('这一类的片都翻完了');return;}
+  WATCH_PICK.view='list';WATCH_PICK.page=(WATCH_PICK.page||1)+1;return watchLoadDramas();
+ }
  if(action==='watch-search')return watchSearchForm();
  if(action==='watch-drama')return watchDramaDetail(id);
  if(action==='watch-drama-back'){WATCH_PICK.detail=null;WATCH_PICK.view='list';return watchPickOpen();}

@@ -1013,6 +1013,15 @@ class DramaEnabledIn(BaseModel):
     enabled: list[str] = []
 
 
+class DramaOverlayIn(BaseModel):
+    """本地整理：只改传进来的项，缺省表示「别动」。"""
+    key: str = Field(max_length=64)
+    alias: str | None = Field(default=None, max_length=24)
+    tag: str | None = Field(default=None, max_length=12)
+    hidden: bool | None = None
+    order: int | None = Field(default=None, ge=0, le=9999)
+
+
 def _drama_svc(c, sid, provider=None):
     """把「服务/组件是否可用」的检查收成一处，省得每个路由都抄一遍 try。"""
     try:
@@ -1045,6 +1054,49 @@ def set_drama_enabled(body: DramaEnabledIn, user=Depends(current_user)):
     return {'ok': True}
 
 
+@app.put('/api/drama-sources/overlay')
+def set_drama_overlay(body: DramaOverlayIn, user=Depends(current_user)):
+    """给某个组件改名/加标签/隐藏/定序。上游改名不影响本地整理结果。"""
+    patch = body.model_dump(exclude_none=True, exclude={'key'})
+    with connect() as c:
+        try:
+            overlay = dramas.set_overlay(c, body.key, patch)
+        except dramas.DramaError as exc:
+            raise HTTPException(exc.status, str(exc))
+    return {'ok': True, 'overlay': overlay}
+
+
+@app.get('/api/drama-sources/diagnostics')
+async def drama_diagnostics(probe: bool = False, user=Depends(current_user)):
+    """给主人的体检报告：每台服务、每个组件现在是什么状态。
+
+    上游没有文档也没有状态页，出问题时只能靠这个自证：组件清单读得到吗？
+    分类能翻吗？第一条的详情里有没有可播地址？带 `?probe=1` 才会真的去打
+    上游（每个组件 2 次请求），不带只回缓存里的健康度。
+    """
+    with connect() as c:
+        cfg = dramas.load_config(c)
+    report = []
+    for svc in cfg['services']:
+        rows = []
+        try:
+            items = await asyncio.wait_for(
+                dramas.providers(svc['base'], refresh=probe), dramas.PROBE_TIMEOUT * 3)
+            online, error = True, ''
+        except Exception as exc:
+            items, online, error = [], False, str(exc) or '这台服务连不上'
+        for item in items:
+            row = {'id': item['id'], 'title': item['title'], 'version': item['version'],
+                   'caps': item['caps'], 'categories': len(item['categories']),
+                   'health': dramas.health_of(svc['base'], item['id'])}
+            if probe and online:
+                row.update(await dramas.diagnose(svc['base'], item))
+            rows.append(row)
+        report.append({'id': svc['id'], 'name': svc['name'], 'base': svc['base'],
+                       'online': online, 'error': error, 'providers': rows})
+    return {'services': report}
+
+
 @app.delete('/api/drama-sources/{sid}')
 def drop_drama_source(sid: str, user=Depends(current_user)):
     with connect() as c:
@@ -1061,10 +1113,11 @@ async def drama_list(sid: str, provider: str, category: str = '', page: int = 1,
     with connect() as c:
         svc = _drama_svc(c, sid, provider)
     try:
-        items = await dramas.list_items(svc['base'], provider, category, page, q, rank)
+        # 列表 + 上游的分页信息（page/pageCount/total）一起给前端，
+        # 免得到处靠「这一页满没满」猜有没有下一页
+        return await dramas.list_items(svc['base'], provider, category, page, q, rank)
     except dramas.DramaError as exc:
         raise HTTPException(exc.status, str(exc))
-    return {'items': items, 'page': page}
 
 
 @app.get('/api/dramas/{sid}/{provider}/{item_id}')

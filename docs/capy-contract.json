@@ -1,0 +1,662 @@
+{
+ "base": "http://192.168.31.95:8788",
+ "caps_values": [
+  "browse",
+  "detail",
+  "home",
+  "playback",
+  "search"
+ ],
+ "detail_fields": [
+  "currentEpisode",
+  "currentEpisodeId",
+  "currentEpisodeName",
+  "currentSeason",
+  "currentSeasonId",
+  "description",
+  "episodeCount",
+  "id",
+  "mediaType",
+  "playUrl",
+  "playerType",
+  "posterUrl",
+  "seasonCount",
+  "seasons",
+  "title",
+  "url",
+  "videoUrl"
+ ],
+ "episode_fields": [
+  "episodeNumber",
+  "id",
+  "mediaUrl",
+  "rawStreamUrl",
+  "resolveUrl",
+  "streamUrl",
+  "title"
+ ],
+ "generated_at": "2026-11-05 14:19:34",
+ "item_fields": [
+  "description",
+  "id",
+  "mediaType",
+  "posterUrl",
+  "remark",
+  "title"
+ ],
+ "page_fields": [
+  "items",
+  "page",
+  "pageCount",
+  "total"
+ ],
+ "provider_count": 17,
+ "provider_fields": [
+  "capabilities",
+  "categories",
+  "id",
+  "title",
+  "version"
+ ],
+ "providers": [
+  {
+   "categories": 27,
+   "detail_fields": [
+    "description",
+    "episodeCount",
+    "id",
+    "mediaType",
+    "posterUrl",
+    "seasonCount",
+    "seasons",
+    "title"
+   ],
+   "episode_fields": [
+    "episodeNumber",
+    "id",
+    "mediaUrl",
+    "resolveUrl",
+    "title"
+   ],
+   "error": "",
+   "id": "51chigua",
+   "item_fields": [
+    "description",
+    "id",
+    "mediaType",
+    "posterUrl",
+    "remark",
+    "title"
+   ],
+   "items": 25,
+   "ok": true,
+   "page_fields": [
+    "items",
+    "page",
+    "pageCount",
+    "total"
+   ],
+   "title": "51吃瓜"
+  },
+  {
+   "categories": 6,
+   "detail_fields": [
+    "description",
+    "episodeCount",
+    "id",
+    "mediaType",
+    "posterUrl",
+    "seasonCount",
+    "seasons",
+    "title"
+   ],
+   "episode_fields": [
+    "episodeNumber",
+    "id",
+    "streamUrl",
+    "title"
+   ],
+   "error": "",
+   "id": "69ck",
+   "item_fields": [
+    "description",
+    "id",
+    "mediaType",
+    "posterUrl",
+    "remark",
+    "title"
+   ],
+   "items": 40,
+   "ok": true,
+   "page_fields": [
+    "items",
+    "page",
+    "pageCount",
+    "total"
+   ],
+   "title": "黄色仓库"
+  },
+  {
+   "categories": 3,
+   "error": "取不到 /api/v1/providers/dsd/browse?category=1&page=1（HTTP 502）",
+   "id": "dsd",
+   "ok": false,
+   "title": "帝果"
+  },
+  {
+   "categories": 12,
+   "detail_fields": [
+    "description",
+    "episodeCount",
+    "id",
+    "mediaType",
+    "posterUrl",
+    "seasonCount",
+    "seasons",
+    "title"
+   ],
+   "episode_fields": [
+    "episodeNumber",
+    "id",
+    "streamUrl",
+    "title"
+   ],
+   "error": "",
+   "id": "hanime1",
+   "item_fields": [
+    "description",
+    "id",
+    "mediaType",
+    "posterUrl",
+    "remark",
+    "title"
+   ],
+   "items": 127,
+   "ok": true,
+   "page_fields": [
+    "items",
+    "page",
+    "pageCount",
+    "total"
+   ],
+   "title": "Hanime1"
+  },
+  {
+   "categories": 23,
+   "detail_fields": [
+    "description",
+    "episodeCount",
+    "id",
+    "mediaType",
+    "posterUrl",
+    "seasonCount",
+    "seasons",
+    "title"
+   ],
+   "episode_fields": [
+    "episodeNumber",
+    "id",
+    "mediaUrl",
+    "resolveUrl",
+    "title"
+   ],
+   "error": "",
+   "id": "hlbdy",
+   "item_fields": [
+    "description",
+    "id",
+    "mediaType",
+    "posterUrl",
+    "remark",
+    "title"
+   ],
+   "items": 28,
+   "ok": true,
+   "page_fields": [
+    "items",
+    "page",
+    "pageCount",
+    "total"
+   ],
+   "title": "黑料不打烊"
+  },
+  {
+   "categories": 3,
+   "detail_fields": [
+    "currentEpisode",
+    "currentEpisodeId",
+    "currentEpisodeName",
+    "currentSeason",
+    "currentSeasonId",
+    "description",
+    "episodeCount",
+    "id",
+    "mediaType",
+    "playUrl",
+    "playerType",
+    "posterUrl",
+    "seasonCount",
+    "seasons",
+    "title",
+    "url",
+    "videoUrl"
+   ],
+   "episode_fields": [
+    "episodeNumber",
+    "id",
+    "streamUrl",
+    "title"
+   ],
+   "error": "",
+   "id": "hongguo",
+   "item_fields": [
+    "description",
+    "id",
+    "mediaType",
+    "posterUrl",
+    "remark",
+    "title"
+   ],
+   "items": 40,
+   "ok": true,
+   "page_fields": [
+    "items",
+    "page",
+    "pageCount",
+    "total"
+   ],
+   "title": "红果短剧"
+  },
+  {
+   "categories": 7,
+   "error": "取不到 /api/v1/providers/hsex/browse?category=featured&page=1（HTTP 502）",
+   "id": "hsex",
+   "ok": false,
+   "title": "好色TV"
+  },
+  {
+   "categories": 5,
+   "detail_fields": [
+    "description",
+    "episodeCount",
+    "id",
+    "mediaType",
+    "posterUrl",
+    "seasonCount",
+    "seasons",
+    "title"
+   ],
+   "episode_fields": [
+    "episodeNumber",
+    "id",
+    "mediaUrl",
+    "resolveUrl",
+    "title"
+   ],
+   "error": "",
+   "id": "huangdou",
+   "item_fields": [
+    "description",
+    "id",
+    "mediaType",
+    "posterUrl",
+    "remark",
+    "title"
+   ],
+   "items": 20,
+   "ok": true,
+   "page_fields": [
+    "items",
+    "page",
+    "pageCount",
+    "total"
+   ],
+   "title": "黄豆"
+  },
+  {
+   "categories": 2,
+   "detail_fields": [
+    "description",
+    "episodeCount",
+    "id",
+    "mediaType",
+    "posterUrl",
+    "seasonCount",
+    "seasons",
+    "title"
+   ],
+   "episode_fields": [
+    "episodeNumber",
+    "id",
+    "mediaUrl",
+    "resolveUrl",
+    "title"
+   ],
+   "error": "",
+   "id": "huangju",
+   "item_fields": [
+    "description",
+    "id",
+    "mediaType",
+    "posterUrl",
+    "remark",
+    "title"
+   ],
+   "items": 20,
+   "ok": true,
+   "page_fields": [
+    "items",
+    "page",
+    "pageCount",
+    "total"
+   ],
+   "title": "剧果"
+  },
+  {
+   "categories": 6,
+   "detail_fields": [
+    "description",
+    "episodeCount",
+    "id",
+    "mediaType",
+    "posterUrl",
+    "seasonCount",
+    "seasons",
+    "title"
+   ],
+   "episode_fields": [
+    "episodeNumber",
+    "id",
+    "streamUrl",
+    "title"
+   ],
+   "error": "",
+   "id": "jable",
+   "item_fields": [
+    "description",
+    "id",
+    "mediaType",
+    "posterUrl",
+    "remark",
+    "title"
+   ],
+   "items": 24,
+   "ok": true,
+   "page_fields": [
+    "items",
+    "page",
+    "pageCount",
+    "total"
+   ],
+   "title": "Jable"
+  },
+  {
+   "categories": 2,
+   "detail_fields": [
+    "description",
+    "episodeCount",
+    "id",
+    "mediaType",
+    "posterUrl",
+    "seasonCount",
+    "seasons",
+    "title"
+   ],
+   "episode_fields": [
+    "episodeNumber",
+    "id",
+    "streamUrl",
+    "title"
+   ],
+   "error": "",
+   "id": "lissav",
+   "item_fields": [
+    "description",
+    "id",
+    "mediaType",
+    "posterUrl",
+    "remark",
+    "title"
+   ],
+   "items": 47,
+   "ok": true,
+   "page_fields": [
+    "items",
+    "page",
+    "pageCount",
+    "total"
+   ],
+   "title": "LissAV"
+  },
+  {
+   "categories": 8,
+   "detail_fields": [
+    "description",
+    "episodeCount",
+    "id",
+    "mediaType",
+    "posterUrl",
+    "seasonCount",
+    "seasons",
+    "title"
+   ],
+   "episode_fields": [
+    "episodeNumber",
+    "id",
+    "streamUrl",
+    "title"
+   ],
+   "error": "",
+   "id": "lissav-domestic",
+   "item_fields": [
+    "description",
+    "id",
+    "mediaType",
+    "posterUrl",
+    "remark",
+    "title"
+   ],
+   "items": 12,
+   "ok": true,
+   "page_fields": [
+    "items",
+    "page",
+    "pageCount",
+    "total"
+   ],
+   "title": "LissAV国产区"
+  },
+  {
+   "categories": 10,
+   "detail_fields": [
+    "description",
+    "episodeCount",
+    "id",
+    "mediaType",
+    "posterUrl",
+    "seasonCount",
+    "seasons",
+    "title"
+   ],
+   "episode_fields": [
+    "episodeNumber",
+    "id",
+    "rawStreamUrl",
+    "streamUrl",
+    "title"
+   ],
+   "error": "",
+   "id": "missav-official",
+   "item_fields": [
+    "description",
+    "id",
+    "mediaType",
+    "posterUrl",
+    "remark",
+    "title"
+   ],
+   "items": 12,
+   "ok": true,
+   "page_fields": [
+    "items",
+    "page",
+    "pageCount",
+    "total"
+   ],
+   "title": "MissAV (官方原站)"
+  },
+  {
+   "categories": 8,
+   "detail_fields": [
+    "description",
+    "episodeCount",
+    "id",
+    "mediaType",
+    "posterUrl",
+    "seasonCount",
+    "seasons",
+    "title"
+   ],
+   "episode_fields": [
+    "episodeNumber",
+    "id",
+    "streamUrl",
+    "title"
+   ],
+   "error": "",
+   "id": "mitao",
+   "item_fields": [
+    "description",
+    "id",
+    "mediaType",
+    "posterUrl",
+    "remark",
+    "title"
+   ],
+   "items": 12,
+   "ok": true,
+   "page_fields": [
+    "items",
+    "page",
+    "pageCount",
+    "total"
+   ],
+   "title": "蜜桃影视"
+  },
+  {
+   "categories": 6,
+   "detail_fields": [
+    "description",
+    "episodeCount",
+    "id",
+    "mediaType",
+    "posterUrl",
+    "seasonCount",
+    "seasons",
+    "title"
+   ],
+   "episode_fields": [
+    "episodeNumber",
+    "id",
+    "streamUrl",
+    "title"
+   ],
+   "error": "",
+   "id": "ptt",
+   "item_fields": [
+    "description",
+    "id",
+    "mediaType",
+    "posterUrl",
+    "remark",
+    "title"
+   ],
+   "items": 48,
+   "ok": true,
+   "page_fields": [
+    "items",
+    "page",
+    "pageCount",
+    "total"
+   ],
+   "title": "三级片资源"
+  },
+  {
+   "categories": 8,
+   "detail_fields": [
+    "description",
+    "episodeCount",
+    "id",
+    "mediaType",
+    "posterUrl",
+    "seasonCount",
+    "seasons",
+    "title"
+   ],
+   "episode_fields": [
+    "episodeNumber",
+    "id",
+    "streamUrl",
+    "title"
+   ],
+   "error": "",
+   "id": "rouav",
+   "item_fields": [
+    "description",
+    "id",
+    "mediaType",
+    "posterUrl",
+    "remark",
+    "title"
+   ],
+   "items": 26,
+   "ok": true,
+   "page_fields": [
+    "items",
+    "page",
+    "pageCount",
+    "total"
+   ],
+   "title": "肉视频"
+  },
+  {
+   "categories": 1,
+   "detail_fields": [
+    "description",
+    "episodeCount",
+    "id",
+    "mediaType",
+    "posterUrl",
+    "seasonCount",
+    "seasons",
+    "title"
+   ],
+   "episode_fields": [
+    "episodeNumber",
+    "id",
+    "mediaUrl",
+    "resolveUrl",
+    "title"
+   ],
+   "error": "",
+   "id": "yeguo",
+   "item_fields": [
+    "description",
+    "id",
+    "mediaType",
+    "posterUrl",
+    "remark",
+    "title"
+   ],
+   "items": 20,
+   "ok": true,
+   "page_fields": [
+    "items",
+    "page",
+    "pageCount",
+    "total"
+   ],
+   "title": "野果"
+  }
+ ]
+}

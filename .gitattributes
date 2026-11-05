@@ -13,6 +13,8 @@ Dockerfile text eol=lf
 *.js text eol=lf
 *.css text eol=lf
 *.html text eol=lf
+# 后端补丁同理：deploy_patch_full.py 会逐字节比对 .py
+*.py text eol=lf
 
 # 二进制：不做任何转换
 *.jar binary

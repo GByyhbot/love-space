@@ -3,13 +3,21 @@
 那台服务本身是个**组件聚合器** —— `GET /api/v1/providers` 会列出它代理的全部内容源，
 每个源都遵循同一套协议：
 
-    /api/v1/providers/<源>/browse?category=…&page=1
-    /api/v1/providers/<源>/search?q=…&page=1
-    /api/v1/providers/<源>/items/<id>      → seasons[].episodes[].streamUrl
-    /api/v1/stream/<签名>                   → video/mp4（红果）或 HLS m3u8（多数其它源）
+    /api/v1/providers/<源>/browse?category=…&page=1   → items[] + page/pageCount/total
+    /api/v1/providers/<源>/search?q=…&page=1          → 同上
+    /api/v1/providers/<源>/items/<id>                 → seasons[].episodes[].streamUrl
+    /api/v1/stream/<签名>                              → video/mp4（红果）或 HLS（多数其它源）
 
 所以这里不写死任何一家：服务地址由主人自己加，能用哪些源由主人自己勾。
-上游的 `hongguo.js` 之类只是 Capy 宿主的适配器（依赖 `Widget.*` 运行时），不是播放器，
+
+**三层分工**（这是 2026-11 重构后的结构，别再把它们混回一坨）
+  ① 契约层 `app/widgets.py`：上游字段 → 内部字段的归一化，纯函数、零状态。
+     所有「猜字段」的规则只许写在那边，规范改别名时只改一处。
+  ② 本文件：传输与编排 —— 请求、重试、缓存、健康度、签名分片代理。
+  ③ 覆盖层 `drama_overlay`（settings 里另一张表）：本地改名/隐藏/排序/标签。
+     上游负责「发现有哪些组件」，本地负责「怎么整理」，两者分开存才不会互冲。
+
+上游 `hongguo.js` 之类只是 Capy 宿主的适配器（依赖 `Widget.*` 运行时），不是播放器，
 前端完全不需要它 —— 只认本站的 `/api/dramas/…`。
 
 **只有红果吐 mp4，其余多数是 HLS**。浏览器原生 <video> 播不了 m3u8（mpv 这类自带
@@ -41,7 +49,7 @@ from urllib.parse import quote, urljoin, urlsplit
 
 import httpx
 
-from . import db
+from . import db, widgets
 from .security import secret_key
 
 log = logging.getLogger('love.space')
@@ -53,19 +61,23 @@ DEFAULT_SERVICE_NAME = 'Capy'
 DEFAULT_ENABLED = [f'{DEFAULT_SERVICE_ID}:hongguo']
 
 SETTING_KEY = 'drama_sources'
+# 本地覆盖层：上游负责「发现有哪些组件」，这里负责「怎么整理」。两者分开存，
+# 上游增删组件不会冲掉主人的改名/隐藏/排序。
+SETTING_OVERLAY = 'drama_overlay'
 
-# 上游是拿 id 拼路径的，几个标识都必须卡死，否则「../」能拐到别的接口去。
-# 内容 id 各家花式不同：红果是纯数字，Jable 是 miab-678，蜜桃是 video@@…@@missav。
-# 所以放开字母与 _@.:-，但仍不许斜杠、百分号、空格，也单独拦住「..」。
-ITEM_RE = re.compile(r'^[A-Za-z0-9_@.:-]{1,160}$')
-SID_RE = re.compile(r'^[a-z0-9]{1,16}$')
-PROVIDER_RE = re.compile(r'^[A-Za-z0-9_-]{1,32}$')
-EPISODE_MAX = 2000
+# 标识与上限的唯一定义搬到了 widgets（契约层），这里只做转发，
+# 免得 main.py 的 `dramas.ITEM_RE` 等引用要跟着改。
+ITEM_RE = widgets.ITEM_RE
+SID_RE = widgets.SID_RE
+PROVIDER_RE = widgets.PROVIDER_RE
+EPISODE_MAX = widgets.EPISODE_MAX
 
 # 详情里带全部分集的直链，一集 300KB 起步：缓存五分钟，够一轮播放反复换集
 DETAIL_TTL = 300
 # 组件清单变得少，但探测一次要等上游，缓存长一点
 PROVIDERS_TTL = 300
+# 列表页缓存：上游对同一分类连拉两次要 4 秒，来回翻页时不该再等一遍
+LIST_TTL = 60
 # 一台服务最多等这么久；主人加的地址可能是台关着的机器
 PROBE_TIMEOUT = 3.0
 # 分片代理的签名有效期：一集通常几分钟，留足余量又不至于永久有效
@@ -79,7 +91,11 @@ MAX_PLAYLIST = 2 * 1024 * 1024
 
 _core = {}          # (base, provider, item_id) -> (expire_ts, detail)
 _providers = {}     # base -> (expire_ts, [provider])
+_list_cache = {}    # (base, provider, category, page, q, rank) -> (expire_ts, payload)
 _stream_probe = {}  # (base, provider, item_id, ep) -> (expire_ts, url, is_hls)
+# 组件健康度：(base, provider) -> {'ok','error','at','ms'}。只记最近一次结果，
+# 不落库 —— 上游本来就是「说挂就挂、过会儿又好了」，历史留着没有意义。
+_health = {}
 _lock = threading.Lock()
 _transport = None   # 测试注入 httpx.MockTransport
 _part_key_cache = None
@@ -99,20 +115,65 @@ def _client(**kw):
                              transport=_transport, **kw)
 
 
-async def _get_json(base, path):
-    try:
-        async with _client() as c:
-            r = await c.get(base + path)
-    except Exception as exc:                      # 上游没起来 / 网络不通
-        log.warning('drama upstream failed: %s%s %s', base, path, exc)
-        raise DramaError('片源服务暂时连不上')
-    if r.status_code >= 400:
-        log.warning('drama upstream %s%s -> %s', base, path, r.status_code)
-        raise DramaError('片源服务返回异常', 502 if r.status_code >= 500 else 404)
-    try:
-        return r.json()
-    except Exception:
-        raise DramaError('片源服务返回了非 JSON 内容')
+def _note_health(base, provider, ok, message='', started=0.0):
+    """记下某个组件最近一次请求的结果，给管理界面显示「这个源现在什么状态」。
+
+    只留最后一次：上游的可用性是分钟级的，历史数据只会误导人。
+    """
+    if not provider:
+        return
+    with _lock:
+        _health[(base, provider)] = {
+            'ok': bool(ok),
+            'error': '' if ok else str(message)[:120],
+            'at': int(time.time()),
+            'ms': int((time.time() - started) * 1000) if started else 0,
+        }
+
+
+def health_of(base, provider):
+    with _lock:
+        return dict(_health.get((base, provider)) or {})
+
+
+async def _get_json(base, path, provider=None):
+    """取一份 JSON。失败重试一次。
+
+    上游是个爬虫聚合器，同一分类连拉两次，一次 4.5 秒一次 504 是常态。而这些都是
+    GET、幂等、失败无副作用，所以「失败等 250ms 再试一次」的收益远大于成本：
+    实测能把偶发 504 挡在用户看不到的地方。仍失败才向上抛。
+    """
+    started = time.time()
+    last = None
+    for attempt in (0, 1):
+        try:
+            async with _client() as c:
+                r = await c.get(base + path)
+        except Exception as exc:                  # 上游没起来 / 网络不通
+            last = ('连不上', exc)
+            log.warning('drama upstream failed: %s%s (try %s) %s',
+                        base, path, attempt + 1, exc)
+        else:
+            if r.status_code < 400:
+                try:
+                    payload = r.json()
+                except Exception:
+                    _note_health(base, provider, False, '返回了非 JSON', started)
+                    raise DramaError('片源服务返回了非 JSON 内容')
+                _note_health(base, provider, True, started=started)
+                return payload
+            last = (f'HTTP {r.status_code}', r)
+            log.warning('drama upstream %s%s -> %s', base, path, r.status_code)
+            # 4xx 是「这条路本来就不通」，重试没有意义；5xx 才值得再敲一次
+            if r.status_code < 500:
+                _note_health(base, provider, False, f'HTTP {r.status_code}', started)
+                raise DramaError('片源服务返回异常', 404)
+        if attempt == 0:
+            await asyncio.sleep(0.25)
+    _note_health(base, provider, False, last[0] if last else '连不上', started)
+    if last and isinstance(last[1], httpx.Response):
+        raise DramaError('片源服务返回异常', 502)
+    raise DramaError('片源服务暂时连不上')
 
 
 async def _get_abs_json(url):
@@ -340,6 +401,92 @@ def save_config(c, cfg):
     })
 
 
+# ── 本地覆盖层：上游负责发现，本地负责整理 ──────────────────────────────
+# 为什么单独一张表：组件清单是上游给的，随时会变（新增/改名/消失）。如果主人的
+# 「改名、隐藏、排序、标签」也塞进 drama_sources，上游一改名就会连带被覆盖掉。
+# 所以本地只存**差异**，键是 `服务id:组件id`，读的时候再叠加上去。
+OVERLAY_FIELDS = ('alias', 'hidden', 'order', 'tag')
+
+
+def _overlay_key_ok(key):
+    key = str(key or '')
+    if key.count(':') != 1:
+        return ''
+    sid, pid = key.split(':', 1)
+    if not SID_RE.match(sid) or not PROVIDER_RE.match(pid):
+        return ''
+    return key
+
+
+def load_overlay(c):
+    """{ "capy:hongguo": {"alias": "红果", "hidden": false, "order": 3, "tag": "短剧"} }"""
+    raw = db.setting(c, SETTING_OVERLAY, None)
+    if not isinstance(raw, dict):
+        raw = {}
+    out = {}
+    for key, value in raw.items():
+        clean_key = _overlay_key_ok(key)
+        if not clean_key or not isinstance(value, dict):
+            continue
+        entry = {}
+        alias = str(value.get('alias') or '').strip()[:24]
+        if alias:
+            entry['alias'] = alias
+        tag = str(value.get('tag') or '').strip()[:12]
+        if tag:
+            entry['tag'] = tag
+        order = value.get('order')
+        if isinstance(order, int) and not isinstance(order, bool):
+            entry['order'] = max(0, min(order, 9999))
+        if value.get('hidden'):
+            entry['hidden'] = True
+        if entry:
+            out[clean_key] = entry
+    return out
+
+
+def set_overlay(c, key, patch):
+    """只改传进来的那几项；值为空/None 表示「恢复上游原样」。"""
+    key = _overlay_key_ok(key)
+    if not key:
+        raise DramaError('组件编号不对', 400)
+    cfg = load_config(c)
+    if key.split(':', 1)[0] not in {s['id'] for s in cfg['services']}:
+        raise DramaError('没有这个片源服务', 404)
+    overlay = load_overlay(c)
+    entry = dict(overlay.get(key) or {})
+    if 'alias' in patch:
+        alias = str(patch.get('alias') or '').strip()[:24]
+        entry['alias'] = alias
+    if 'tag' in patch:
+        tag = str(patch.get('tag') or '').strip()[:12]
+        entry['tag'] = tag
+    if 'order' in patch:
+        order = patch.get('order')
+        entry['order'] = max(0, min(int(order), 9999)) if isinstance(order, int) else None
+    if 'hidden' in patch:
+        entry['hidden'] = bool(patch.get('hidden'))
+    entry = {k: v for k, v in entry.items()
+             if v is not None and v != '' and v is not False}
+    overlay = {k: v for k, v in overlay.items() if k != key}
+    if entry:
+        overlay[key] = entry
+    db.set_setting(c, SETTING_OVERLAY, overlay)
+    return overlay
+
+
+def _decorate(provider, entry):
+    """把覆盖层叠到归一化后的组件上。上游字段一律不改，另开 *_own 字段。"""
+    alias = (entry or {}).get('alias') or ''
+    out = dict(provider)
+    out['alias'] = alias
+    out['name'] = alias or provider['title']
+    out['tag'] = (entry or {}).get('tag') or ''
+    out['hidden'] = bool((entry or {}).get('hidden'))
+    out['order'] = (entry or {}).get('order')
+    return out
+
+
 def add_service(c, name, base):
     cfg = load_config(c)
     base = clean_base(base)
@@ -382,6 +529,8 @@ def set_enabled(c, keys):
     with _lock:
         for key in [k for k in _core if f'{k[0]}:{k[1]}' not in seen]:
             _core.pop(key, None)
+        for key in [k for k in _list_cache if f'{k[0]}:{k[1]}' not in seen]:
+            _list_cache.pop(key, None)
     return cfg
 
 
@@ -409,18 +558,6 @@ def first_enabled(c):
 
 
 # ── 组件清单 ────────────────────────────────────────────────────────────
-def _clean_group(raw):
-    out = []
-    for cat in raw or []:
-        if not isinstance(cat, dict):
-            continue
-        cid = str(cat.get('id') or '').strip()
-        if not cid or len(cid) > 40:
-            continue
-        out.append({'id': cid, 'title': str(cat.get('title') or cid).strip()[:20]})
-    return out
-
-
 async def providers(base, refresh=False):
     now = time.time()
     if not refresh:
@@ -429,32 +566,22 @@ async def providers(base, refresh=False):
         if hit and hit[0] > now:
             return hit[1]
     payload = await _get_json(base, '/api/v1/providers')
-    out = []
-    for item in payload.get('providers') or []:
-        if not isinstance(item, dict):
-            continue
-        pid = str(item.get('id') or '').strip()
-        if not PROVIDER_RE.match(pid):
-            continue
-        out.append({
-            'id': pid,
-            'title': str(item.get('title') or pid).strip()[:24],
-            'categories': _clean_group(item.get('categories')),
-            'caps': [str(x) for x in (item.get('capabilities') or [])],
-        })
+    # 归一化与脏数据过滤都在契约层，这里只负责缓存与排序
+    out = widgets.providers(payload)
     with _lock:
         _providers[base] = (now + PROVIDERS_TTL, out)
     return out
 
 
 async def catalog(c, refresh=False):
-    """给管理界面：每台服务在线情况 + 它代理的组件，以及哪些已经勾上。
+    """给管理界面：每台服务在线情况 + 它代理的组件 + 勾选/整理状态。
 
     几台服务并发探测 —— 串行的话，一台连不上的机器会把后面全卡住，
     主人看到的就是「点了没反应」。
     """
     cfg = load_config(c)
     enabled = set(cfg['enabled'])
+    overlay = load_overlay(c)
     ready = await asyncio.gather(
         *(_probe(s['base'], refresh) for s in cfg['services']),
         return_exceptions=True,
@@ -468,12 +595,12 @@ async def catalog(c, refresh=False):
         else:
             entry['online'] = True
             for p in result:
-                entry['providers'].append({
-                    'id': p['id'],
-                    'title': p['title'],
-                    'categories': p['categories'],
-                    'enabled': f"{svc['id']}:{p['id']}" in enabled,
-                })
+                key = f"{svc['id']}:{p['id']}"
+                one = _decorate(p, overlay.get(key))
+                one['key'] = key
+                one['enabled'] = key in enabled
+                one['health'] = health_of(svc['base'], p['id'])
+                entry['providers'].append(one)
         services.append(entry)
     return {'services': services}
 
@@ -487,25 +614,30 @@ async def _probe(base, refresh):
 
 
 # ── 内容 ────────────────────────────────────────────────────────────────
-def _clean_item(item):
-    return {
-        'id': str(item.get('id') or ''),
-        'title': (item.get('title') or item.get('name') or '').strip(),
-        'poster': item.get('posterUrl') or item.get('poster') or '',
-        'remark': item.get('remark') or '',
-        'desc': (item.get('description') or '').strip(),
-    }
+async def list_items(base, provider, category='', page=1, keyword='', rank='', fresh=False):
+    """统一列表入口：有关键词就搜索，否则按分类浏览。
 
+    返回归一化后的条目 + 上游的分页信息。`pageCount/total` 以前被丢掉了，
+    于是前端只能靠「这一页是不是满的」猜还有没有下一页 —— 红果一个分类就有
+    1413 页 / 56496 条，猜不出来。
 
-async def list_items(base, provider, category='', page=1, keyword='', rank=''):
-    """统一列表入口：有关键词就搜索，有 rank 就查榜，否则按分类浏览。"""
+    `fresh=True` 绕过缓存，只给体检报告用；正常浏览走 60 秒缓存。
+    """
     try:
         page = max(1, min(int(page or 1), 100))
     except (TypeError, ValueError):
         page = 1
+    keyword = (keyword or '').strip()
+    cache_key = (base, provider, category or '', page, keyword, rank or '')
+    now = time.time()
+    with _lock:
+        hit = _list_cache.get(cache_key)
+    if hit and hit[0] > now and not fresh:
+        return hit[1]
+
     root = f'/api/v1/providers/{provider}'
-    if (keyword or '').strip():
-        path = f'{root}/search?q={quote(keyword.strip(), safe="")}&page={page}'
+    if keyword:
+        path = f'{root}/search?q={quote(keyword, safe="")}&page={page}'
     else:
         query = f'page={page}'
         if category:
@@ -513,50 +645,60 @@ async def list_items(base, provider, category='', page=1, keyword='', rank=''):
         if rank:
             query += f'&rank={quote(str(rank), safe="")}'
         path = f'{root}/browse?' + query
-    payload = await _get_json(base, path)
-    items = [_clean_item(x) for x in (payload.get('items') or []) if isinstance(x, dict)]
-    return [x for x in items if x['id'] and x['title']]
+    payload = await _get_json(base, path, provider)
+    result = {'items': widgets.items(payload.get('items') if isinstance(payload, dict) else None)}
+    result.update(widgets.page_meta(payload, page))
+    with _lock:
+        _list_cache[cache_key] = (now + LIST_TTL, result)
+        for stale in [k for k, v in _list_cache.items() if v[0] <= now]:
+            _list_cache.pop(stale, None)
+    return result
 
 
-def _parse_detail(item_id, payload):
-    episodes = []
-    seasons = payload.get('seasons') or []
-    if not isinstance(seasons, list):
-        seasons = []
-    for season in seasons:
-        if not isinstance(season, dict):
-            continue
-        for ep in season.get('episodes') or []:
-            if not isinstance(ep, dict):
-                continue
-            # 各家给播放地址的字段名不一样：红果/Jable 用 streamUrl，剧果这类的
-            # 剧集只有 mediaUrl + resolveUrl（要再解析一次才拿得到 videoUrl）。
-            url = ep.get('streamUrl') or ep.get('videoUrl') or ep.get('mediaUrl') or ''
-            resolve = ep.get('resolveUrl') or ''
-            if not url and not resolve:
-                continue
-            raw = ep.get('episodeNumber') or ep.get('episode') or len(episodes) + 1
-            try:
-                number = int(raw)
-            except (TypeError, ValueError):
-                number = len(episodes) + 1
-            if number < 1 or number > EPISODE_MAX:
-                continue
-            episodes.append({
-                'n': number,
-                'title': str(ep.get('title') or f'第{number}集').strip(),
-                'url': str(url),
-                'resolve': str(resolve),
-            })
-    if not episodes:
-        raise DramaError('这个内容还没有可播的剧集', 404)
-    return {
-        'id': item_id,
-        'title': (payload.get('title') or '').strip() or '未命名',
-        'poster': payload.get('posterUrl') or '',
-        'description': (payload.get('description') or '').strip(),
-        'episodes': episodes,
-    }
+async def diagnose(base, provider):
+    """给单个组件做一次最小可用性体检，带 `?probe=1` 时才会跑。
+
+    四项都过才算「真能用」：清单读得到（调用方已确认）→ 第一个分类翻得动 →
+    首条能取详情 → 详情里真有可播地址。上游没有状态页，这就是它的替代品。
+    """
+    started = time.time()
+    out = {'ok': False, 'browse': '', 'detail': '', 'items': 0, 'total': 0,
+           'episodes': 0, 'playable': False, 'needs_resolve': False,
+           'sample': '', 'ms': 0}
+    pid = provider.get('id') or ''
+    cats = provider.get('categories') or []
+    cat = (cats[0] or {}).get('id', '') if cats else ''
+    try:
+        res = await list_items(base, pid, cat, page=1, fresh=True)
+    except DramaError as exc:
+        out['browse'] = str(exc)
+        out['ms'] = int((time.time() - started) * 1000)
+        return out
+    rows = res.get('items') or []
+    out['browse'] = 'ok'
+    out['items'] = len(rows)
+    out['total'] = res.get('total', 0)
+    if not rows:
+        out['detail'] = '这个分类是空的'
+        out['ms'] = int((time.time() - started) * 1000)
+        return out
+    out['sample'] = rows[0]['title']
+    try:
+        data = await _detail(base, pid, rows[0]['id'])
+    except DramaError as exc:
+        out['detail'] = str(exc)
+        out['ms'] = int((time.time() - started) * 1000)
+        return out
+    eps = [e for e in (data.get('episodes') or []) if e.get('url') or e.get('resolve')]
+    out['detail'] = 'ok'
+    out['episodes'] = len(eps)
+    out['playable'] = bool(eps)
+    # 只有 resolveUrl 的组件每播一集都要多解析一次，出问题时的表现和别家不一样，
+    # 体检报告里标出来，省得排查时又从头猜
+    out['needs_resolve'] = any(not e.get('url') and e.get('resolve') for e in eps)
+    out['ok'] = out['playable']
+    out['ms'] = int((time.time() - started) * 1000)
+    return out
 
 
 async def _detail(base, provider, item_id):
@@ -571,8 +713,10 @@ async def _detail(base, provider, item_id):
         return hit[1]
     # id 里可能带 @ / : 之类，拼进路径前先编码
     payload = await _get_json(
-        base, f'/api/v1/providers/{provider}/items/{quote(item_id, safe="")}')
-    data = _parse_detail(item_id, payload)
+        base, f'/api/v1/providers/{provider}/items/{quote(item_id, safe="")}', provider)
+    data = widgets.detail(item_id, payload)
+    if not data:
+        raise DramaError('这个内容还没有可播的剧集', 404)
     with _lock:
         _core[key] = (now + DETAIL_TTL, data)
         # 顺手清理过期条目，避免换片多了无限涨
@@ -583,14 +727,7 @@ async def _detail(base, provider, item_id):
 
 async def detail(base, provider, item_id):
     """给前端的详情：**不含直链**，只有集号与集名。"""
-    data = await _detail(base, provider, item_id)
-    return {
-        'id': data['id'],
-        'title': data['title'],
-        'poster': data['poster'],
-        'description': data['description'],
-        'episodes': [{'n': e['n'], 'title': e['title']} for e in data['episodes']],
-    }
+    return widgets.public_detail(await _detail(base, provider, item_id))
 
 
 async def stream_url(base, provider, item_id, episode):

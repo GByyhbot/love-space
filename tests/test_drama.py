@@ -33,7 +33,7 @@ BROWSE = {'items': [
      'remark': '全60集', 'description': '一个很长的简介'},
     {'id': '', 'title': '没有 id 的脏数据'},
     {'id': '123', 'title': ''},
-]}
+], 'page': 1, 'pageCount': 1413, 'total': 56496}
 
 DETAIL = {'title': '和离后我带女儿横扫魔域', 'posterUrl': 'http://p/1.jpg',
           'description': '简介', 'seasons': [{'seasonNumber': 1, 'episodes': [
@@ -46,9 +46,12 @@ DETAIL = {'title': '和离后我带女儿横扫魔域', 'posterUrl': 'http://p/1
 def clean_state():
     """每个用例从「没配过任何片源」的干净状态起步（会话共用一个库）。"""
     with connect() as c:
-        c.execute("DELETE FROM settings WHERE key IN ('drama_sources', 'watch')")
+        c.execute("DELETE FROM settings WHERE key IN "
+                  "('drama_sources', 'drama_overlay', 'watch')")
     dramas._core.clear()
     dramas._providers.clear()
+    dramas._list_cache.clear()
+    dramas._health.clear()
     dramas._stream_probe.clear()
     dramas._part_key_cache = None
     yield
@@ -508,3 +511,207 @@ def test_media_url_episode_is_not_dropped(client_a, resolve_only_upstream, monke
     r = client_a.get(f'{BASE}/{ITEM_ID}', headers=HEADERS)
     assert r.status_code == 200, r.text
     assert [e['n'] for e in r.json()['episodes']] == [1]
+
+
+# ── 分页信息：别再让前端靠「这页满没满」猜 ──────────────────────────────
+def test_list_passes_upstream_page_meta(client_a, monkeypatch):
+    """pageCount/total 以前被丢掉，前端只能靠「这页满没满」猜有没有下一页。"""
+    seen = {'page': ''}
+
+    def handler(request):
+        if request.url.path == '/api/v1/providers':
+            return httpx.Response(200, json=PROVIDERS)
+        seen['page'] = request.url.params.get('page', '')
+        return httpx.Response(200, json={'items': [
+            {'id': ITEM_ID, 'title': '一条'}], 'page': 2, 'pageCount': 1413, 'total': 56496})
+
+    monkeypatch.setattr(dramas, '_transport', httpx.MockTransport(handler))
+    body = client_a.get(BASE + '?category=short&page=2', headers=HEADERS).json()
+    assert seen['page'] == '2'              # 请求确实带上了页码
+    assert body['page'] == 2                # 以上游回的为准
+    assert body['pageCount'] == 1413
+    assert body['total'] == 56496
+
+
+def test_list_without_meta_defaults_to_zero_not_error(client_a, monkeypatch):
+    def handler(request):
+        if request.url.path == '/api/v1/providers':
+            return httpx.Response(200, json=PROVIDERS)
+        return httpx.Response(200, json={'items': [
+            {'id': '1', 'title': '只有条目没有分页'}]})
+
+    monkeypatch.setattr(dramas, '_transport', httpx.MockTransport(handler))
+    body = client_a.get(BASE + '?category=short', headers=HEADERS).json()
+    assert body['items'] and body['pageCount'] == 0 and body['total'] == 0
+
+
+# ── 上游抖动：5xx 值得再敲一次，4xx 不值得 ──────────────────────────────
+def test_transient_5xx_is_retried_once(client_a, monkeypatch):
+    calls = {'n': 0}
+
+    def handler(request):
+        path = request.url.path
+        if path == '/api/v1/providers':
+            return httpx.Response(200, json=PROVIDERS)
+        if path.endswith('/browse'):
+            calls['n'] += 1
+            if calls['n'] == 1:
+                return httpx.Response(504, json={'detail': 'gateway timeout'})
+            return httpx.Response(200, json=BROWSE)
+        return httpx.Response(404)
+
+    monkeypatch.setattr(dramas, '_transport', httpx.MockTransport(handler))
+    r = client_a.get(BASE + '?category=short', headers=HEADERS)
+    assert r.status_code == 200, r.text          # 第二次成功，主人看不到这个 504
+    assert calls['n'] == 2
+
+
+def test_client_error_is_not_retried(client_a, monkeypatch):
+    calls = {'n': 0}
+
+    def handler(request):
+        if request.url.path == '/api/v1/providers':
+            return httpx.Response(200, json=PROVIDERS)
+        calls['n'] += 1
+        return httpx.Response(404, json={'detail': 'nope'})
+
+    monkeypatch.setattr(dramas, '_transport', httpx.MockTransport(handler))
+    assert client_a.get(BASE + '?category=x', headers=HEADERS).status_code == 404
+    assert calls['n'] == 1
+
+
+def test_health_is_recorded_and_exposed(client_a, monkeypatch):
+    """组件挂了要在管理界面看得见，而不是等主人点进片源才发现是空的。"""
+    def handler(request):
+        if request.url.path == '/api/v1/providers':
+            return httpx.Response(200, json=PROVIDERS)
+        return httpx.Response(502, json={'detail': 'upstream down'})
+
+    monkeypatch.setattr(dramas, '_transport', httpx.MockTransport(handler))
+    assert client_a.get(BASE + '?category=short', headers=HEADERS).status_code == 502
+    provs = client_a.get('/api/drama-sources', headers=HEADERS).json()['services'][0]['providers']
+    hit = [p for p in provs if p['id'] == 'hongguo'][0]
+    assert hit['health']['ok'] is False
+    assert '502' in hit['health']['error']
+
+
+# ── 覆盖层：上游负责发现，本地负责整理 ──────────────────────────────────
+def test_overlay_aliases_and_tags_a_provider(client_a, upstream):
+    key = 'capy:hongguo'
+    r = client_a.put('/api/drama-sources/overlay', headers=HEADERS,
+                     json={'key': key, 'alias': '红果', 'tag': '短剧', 'order': 5})
+    assert r.status_code == 200, r.text
+    prov = client_a.get('/api/drama-sources', headers=HEADERS).json()['services'][0]['providers'][0]
+    assert prov['alias'] == '红果'
+    assert prov['name'] == '红果'                 # 界面用 name，别名优先
+    assert prov['title'] == '红果短剧'            # 上游原名留着，不覆盖
+    assert prov['tag'] == '短剧' and prov['order'] == 5
+
+
+def test_overlay_hidden_only_affects_local_view(client_a, upstream):
+    client_a.put('/api/drama-sources/overlay', headers=HEADERS,
+                 json={'key': 'capy:huangju', 'hidden': True})
+    provs = client_a.get('/api/drama-sources', headers=HEADERS).json()['services'][0]['providers']
+    assert [p['hidden'] for p in provs] == [False, True]
+    # 隐藏只是「选择器里不显示」，接口本身不能因此拒绝服务
+    assert client_a.get('/api/dramas/capy/huangju', headers=HEADERS).status_code in (200, 403)
+
+
+def test_overlay_can_be_cleared(client_a, upstream):
+    client_a.put('/api/drama-sources/overlay', headers=HEADERS,
+                 json={'key': 'capy:hongguo', 'alias': '红果'})
+    client_a.put('/api/drama-sources/overlay', headers=HEADERS,
+                 json={'key': 'capy:hongguo', 'alias': ''})
+    prov = client_a.get('/api/drama-sources', headers=HEADERS).json()['services'][0]['providers'][0]
+    assert prov['alias'] == '' and prov['name'] == '红果短剧'
+
+
+def test_overlay_rejects_unknown_service(client_a, upstream):
+    r = client_a.put('/api/drama-sources/overlay', headers=HEADERS,
+                     json={'key': 'ghost:hongguo', 'alias': 'x'})
+    assert r.status_code == 404
+
+
+def test_overlay_rejects_malformed_key(client_a, upstream):
+    for key in ('hongguo', 'capy:bad id', ':hongguo'):
+        r = client_a.put('/api/drama-sources/overlay', headers=HEADERS,
+                         json={'key': key, 'alias': 'x'})
+        assert r.status_code == 400, key
+
+
+def test_overlay_survives_upstream_rename(client_a, monkeypatch):
+    """上游把标题改了，主人的改名不该被冲掉 —— 这正是分两张表的意义。"""
+    client_a.put('/api/drama-sources/overlay', headers=HEADERS,
+                 json={'key': 'capy:hongguo', 'alias': '红果'})
+    renamed = {'providers': [
+        {'id': 'hongguo', 'title': '红果短剧（新名字）', 'capabilities': ['browse']}]}
+
+    def handler(request):
+        return httpx.Response(200, json=renamed)
+
+    monkeypatch.setattr(dramas, '_transport', httpx.MockTransport(handler))
+    prov = client_a.get('/api/drama-sources?refresh=1', headers=HEADERS)\
+        .json()['services'][0]['providers'][0]
+    assert prov['name'] == '红果' and prov['title'] == '红果短剧（新名字）'
+
+
+# ── 详情形态：电影单直链 / 多线路 ───────────────────────────────────────
+def test_movie_with_only_top_level_url_is_playable(client_a, monkeypatch):
+    """movie 详情只有顶层 videoUrl，以前会被当成「没有可播的剧集」直接 404。"""
+    def handler(request):
+        if request.url.path == '/api/v1/providers':
+            return httpx.Response(200, json=PROVIDERS)
+        if '/items/' in request.url.path:
+            return httpx.Response(200, json={'title': '某部电影', 'mediaType': 'movie',
+                                             'videoUrl': 'http://u/api/v1/stream/m1'})
+        return httpx.Response(200, json={'items': []})
+
+    monkeypatch.setattr(dramas, '_transport', httpx.MockTransport(handler))
+    r = client_a.get(f'{BASE}/{ITEM_ID}', headers=HEADERS)
+    assert r.status_code == 200, r.text
+    assert [e['n'] for e in r.json()['episodes']] == [1]
+    assert r.json()['mediaType'] == 'movie'
+
+
+def test_play_sources_are_understood(client_a, monkeypatch):
+    def handler(request):
+        if request.url.path == '/api/v1/providers':
+            return httpx.Response(200, json=PROVIDERS)
+        if '/items/' in request.url.path:
+            return httpx.Response(200, json={'title': '多线路', 'mediaType': 'tv', 'episodes': [
+                {'episodeNumber': 1, 'playSources': [
+                    {'videoUrl': 'http://v/a.m3u8'},
+                    {'videoUrl': 'http://v/b.m3u8', 'isDefault': True}]}]})
+        return httpx.Response(200, json={'items': []})
+
+    monkeypatch.setattr(dramas, '_transport', httpx.MockTransport(handler))
+    r = client_a.get(f'{BASE}/{ITEM_ID}', headers=HEADERS)
+    assert r.status_code == 200, r.text
+    assert [e['n'] for e in r.json()['episodes']] == [1]
+
+
+# ── 体检报告 ────────────────────────────────────────────────────────────
+def test_diagnostics_without_probe_only_reports_清单(client_a, upstream):
+    r = client_a.get('/api/drama-sources/diagnostics', headers=HEADERS)
+    assert r.status_code == 200, r.text
+    svc = r.json()['services'][0]
+    assert svc['online'] is True
+    assert [p['id'] for p in svc['providers']] == ['hongguo', 'huangju']
+    assert 'browse' not in svc['providers'][0]        # 没 probe 就不去打上游
+
+
+def test_diagnostics_with_probe_checks_playability(client_a, upstream):
+    r = client_a.get('/api/drama-sources/diagnostics?probe=1', headers=HEADERS)
+    assert r.status_code == 200, r.text
+    row = [p for p in r.json()['services'][0]['providers'] if p['id'] == 'hongguo'][0]
+    assert row['browse'] == 'ok'
+    assert row['playable'] is True
+    assert row['episodes'] == 2
+    assert row['ok'] is True
+
+
+def test_diagnostics_requires_login():
+    from fastapi.testclient import TestClient
+    with TestClient(app, base_url='https://testserver', headers=HEADERS) as anon:
+        assert anon.get('/api/drama-sources/diagnostics').status_code == 401
+        assert anon.put('/api/drama-sources/overlay', json={'key': 'capy:hongguo'}).status_code == 401

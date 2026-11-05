@@ -357,37 +357,64 @@ function stopWatchSync(){
    片库 / list=某分类的完整海报墙 / detail=选集页。album tab 不走 view。 */
 const WATCH_PICK={tab:'album',view:'sources',svc:'',prov:'',cat:'',page:1,q:'',
  videos:[],dramas:[],detail:null,catalog:null,openSvc:'',loading:false,error:'',
+ /* filter = 组件卡页的关键词过滤（只在本地筛，不发请求）
+    showHidden = 是否显示被「整理」隐藏掉的组件
+    pageCount/total = 上游给的分页信息，决定「换一批」还能不能点 */
+ filter:'',showHidden:false,pageCount:0,total:0,
  home:{rows:[],loading:false,error:''},recent:[]};
 
-/* 已启用的组件，摊平成一维，方便做切换条 */
-function watchGroups(){
+/* ── 组件索引：所有组件相关视图都从这一个地方取数据 ────────────────────
+   上游清单（/drama-sources）+ 本地整理（别名/标签/隐藏/排序）在这里合成一张
+   扁平表。以前 watchGroups / watchGroup / watchEnabledKeys / watchSourcesInner
+   各走一遍 services[].providers[] 嵌套循环，想加一个维度就要改四处、还容易改漏
+   （比如「隐藏」只在管理页生效、选片页照旧显示）。现在只有一个入口。 */
+function watchIndex(){
+ const p=WATCH_PICK;
  const out=[];
- ((WATCH_PICK.catalog||{}).services||[]).forEach(s=>{
-  (s.providers||[]).forEach(p=>{if(p.enabled)out.push({
-   svc:s.id,svcName:s.name,prov:p.id,title:p.title,cats:p.categories||[],online:s.online,error:s.error||''});});
+ ((p.catalog||{}).services||[]).forEach(s=>{
+  (s.providers||[]).forEach((one,i)=>{
+   const key=one.key||(s.id+':'+one.id);
+   out.push({
+    key,svc:s.id,svcName:s.name,svcOnline:!!s.online,svcError:s.error||'',
+    prov:one.id,title:one.title||one.id,
+    name:one.name||one.alias||one.title||one.id,alias:one.alias||'',
+    tag:one.tag||'',hidden:!!one.hidden,
+    order:(typeof one.order==='number'?one.order:null),idx:i,
+    cats:one.categories||[],caps:one.caps||[],version:one.version||'',
+    health:one.health||{},enabled:!!one.enabled});
+  });
  });
  return out;
 }
 
+/* 已启用的组件，摊平成一维，方便做切换条 */
+function watchGroups(){return watchIndex().filter(x=>x.enabled);}
+
+/* 当前选中的组件。找不到就回落到第一个启用的 —— 但绝不在「不可见」的项上
+   静默回落（以前回落用的是 enabled 列表，选中项被隐藏后会串到别家去）。 */
 function watchGroup(){
- /* 组件卡列表里没勾过的源也能点进去看（进去时会自动勾上），所以这里从
-    「全部组件」里按当前 svc/prov 找，别只在已启用列表里找，否则会串到别的组件。 */
- const services=((WATCH_PICK.catalog||{}).services)||[];
- let hit=null;
- services.forEach(s=>(s.providers||[]).forEach(p=>{
-  if(s.id===WATCH_PICK.svc&&p.id===WATCH_PICK.prov)hit={
-   svc:s.id,svcName:s.name,prov:p.id,title:p.title,cats:p.categories||[],
-   online:s.online,error:s.error||''};
- }));
+ const p=WATCH_PICK;
+ const hit=watchIndex().find(x=>x.svc===p.svc&&x.prov===p.prov);
  if(hit)return hit;
  return watchGroups()[0]||null;
 }
 
-function watchEnabledKeys(){
- const out=[];
- ((WATCH_PICK.catalog||{}).services||[]).forEach(s=>
-  (s.providers||[]).forEach(p=>{if(p.enabled)out.push(s.id+':'+p.id);}));
- return out;
+function watchEnabledKeys(){return watchGroups().map(x=>x.key);}
+
+/* 界面上要显示的一批：默认滤掉隐藏项，按「本地排序 → 上游顺序」稳定排列。
+   注意不按 enabled 排序：勾选后卡片会当场换位置，手指下面的东西就跑了。 */
+function watchVisible(){
+ const q=String(WATCH_PICK.filter||'').trim().toLowerCase();
+ const rows=watchIndex().filter(x=>WATCH_PICK.showHidden||!x.hidden);
+ if(!q)return rows.sort(watchSort);
+ return rows.filter(x=>(x.name+' '+x.title+' '+x.prov+' '+x.tag).toLowerCase().includes(q))
+  .sort(watchSort);
+}
+function watchSort(a,b){
+ const ao=a.order===null?9999:a.order,bo=b.order===null?9999:b.order;
+ if(ao!==bo)return ao-bo;
+ if(a.svc!==b.svc)return 0;      /* 跨服务保持上游给的块顺序 */
+ return a.idx-b.idx;
 }
 
 async function watchCatalog(refresh){
@@ -398,6 +425,7 @@ async function watchPick(){
  const p=WATCH_PICK;
  p.tab='album';p.view='sources';p.page=1;p.q='';p.cat='';p.detail=null;
  p.svc='';p.prov='';p.dramas=[];p.home={rows:[],loading:false,error:''};
+ p.filter='';p.showHidden=false;p.pageCount=0;p.total=0;
  try{p.videos=await api('/media/videos');}catch{p.videos=[];}
  watchPickOpen();
  p.catalog=await watchCatalog();
@@ -422,7 +450,12 @@ function watchProvider(){
  const s=services.find(x=>x.id===WATCH_PICK.svc);
  return s?((s.providers||[]).find(x=>x.id===WATCH_PICK.prov)||null):null;
 }
-function watchGroupName(){const p=watchProvider();return p?p.title:'片源';}
+function watchGroupName(){
+ const g=watchGroup();
+ if(g)return g.name;
+ const p=watchProvider();
+ return p?(p.name||p.alias||p.title):'片源';
+}
 function watchPickTitle(){
  const p=WATCH_PICK;
  if(p.tab!=='drama')return '选一部一起看';
@@ -435,7 +468,22 @@ function watchPickTitle(){
  }
  return watchGroupName();
 }
-function watchPickOpen(){openModal(watchPickTitle(),watchPickBody());}
+function watchPickOpen(){
+ openModal(watchPickTitle(),watchPickBody());
+ /* 组件过滤框：只重画卡片区。整体重绘会让输入框失焦，打两个字就断。 */
+ const box=$('#ws-src-filter');
+ if(box){
+  box.oninput=()=>{
+   WATCH_PICK.filter=box.value;
+   const grid=$('.ws-cinema .src-manage');
+   if(grid)grid.innerHTML=watchSrcCards();
+   const count=$('#ws-src-count');
+   if(count)count.textContent=watchSrcCount();
+  };
+  /* 弹窗自己监听 Esc 关闭；在输入框里按 Esc 应该只是退出输入 */
+  box.onkeydown=e=>{if(e.key==='Escape'){e.stopPropagation();box.blur();}};
+ }
+}
 
 /* 继续观看只存本机：片名/海报/上次看到的集数，够点一下接着播，不碰服务端状态 */
 const WS_RECENT_KEY='love-watch-recent-v1';
@@ -488,39 +536,94 @@ function watchPickBody(){
  return wsPage(watchListInner(),'list');
 }
 
-/* 在线片源首页 = 两列组件卡（参考图 1）。卡片主体「进片源」，右侧小图标管开/关：
-   button 里不能再塞 button，所以外层用 div 容器、里面放两个平级按钮。 */
-function watchSourcesInner(){
- const cat=WATCH_PICK.catalog||{services:[]};
- const svcs=cat.services||[];
- const many=svcs.length>1;
- const cards=[];
- svcs.forEach(s=>(s.providers||[]).forEach(p=>{
-  const label=many?`${s.name} · ${p.title}`:p.title;
-  const n=(p.categories||[]).length;
-  cards.push(`<div class="src-card${p.enabled?' on':''}">
+/* 在线片源首页 = 搜索框 + 分组 + 两列组件卡。
+   分组规则：给组件起过「标签」就按标签分，都没标签就按服务分 —— 组件从 17 个长到
+   上百个时，只是纵向更长，不会像以前那样一次性铺满一屏还没法找。
+   卡片主体「进片源」、右侧小按钮管开/关：button 里不能再塞 button，
+   所以外层用 div 容器、里面放两个平级按钮。 */
+function watchSrcCard(row,many){
+ const n=(row.cats||[]).length;
+ const bits=[];
+ /* 异常优先占用这一行：卡片副标题是单行截断的，把「上游异常」排在分类数后面
+    会被「6 个分类…」挤掉，等于没提示。 */
+ if(row.health&&row.health.ok===false)bits.push('上游异常');
+ else if(n)bits.push(`${n} 个分类`);
+ if(row.hidden)bits.push('已隐藏');
+ const meta=bits.join(' · ')||'点一下打开';
+ const label=many?(row.svcName+' · '+row.name):row.name;
+ return `<div class="src-card${row.enabled?' on':''}${row.hidden?' off':''}">
     <button type="button" class="src-card-main" data-action="watch-src-open"
-      data-id="${esc(s.id)}" data-prov="${esc(p.id)}">
-      ${wsLogo(p.title,s.id+':'+p.id)}
-      <span class="src-card-txt"><b>${esc(label)}</b><small>${n?n+' 个分类':'点一下打开'}</small></span>
+      data-id="${esc(row.svc)}" data-prov="${esc(row.prov)}">
+      ${wsLogo(row.name,row.key)}
+      <span class="src-card-txt"><b>${esc(label)}</b>
+       <small>${row.tag?`<i class="src-tag">${esc(row.tag)}</i> `:''}${esc(meta)}</small></span>
      </button>
     <button type="button" class="src-card-go" data-action="watch-src-toggle"
-      data-id="${esc(s.id)}" data-prov="${esc(p.id)}"
-      aria-label="${p.enabled?'关闭':'启用'}${esc(p.title)}" aria-pressed="${p.enabled}">
-      ${p.enabled?icon('check'):icon('arrow')}
+      data-id="${esc(row.svc)}" data-prov="${esc(row.prov)}"
+      aria-label="${row.enabled?'关闭':'启用'}${esc(row.name)}" aria-pressed="${row.enabled}">
+      ${row.enabled?icon('check'):icon('arrow')}
      </button>
-    </div>`);
- }));
- if(!cards.length)cards.push(`<p class="ws-empty">${esc((svcs[0]||{}).error||'还没有可用的组件，先添加一台服务地址。')}</p>`);
+    </div>`;
+}
+
+/* 只画卡片区。过滤时单独重画这一块，不整体重绘弹窗 —— 整体重绘会让输入框失焦，
+   连打两个字就断。 */
+function watchSrcCards(){
+ const rows=watchVisible();
+ const many=(((WATCH_PICK.catalog||{}).services)||[]).length>1;
+ if(!rows.length){
+  const any=watchIndex().length;
+  const first=(((WATCH_PICK.catalog||{}).services)||[])[0]||{};
+  return `<p class="ws-empty">${any
+   ?'没找到匹配的组件，换个词试试。'
+   :esc(first.error||'还没有可用的组件，先添加一台服务地址。')}</p>`;
+ }
+ const byTag=watchIndex().some(x=>x.tag);
+ const groups=[];
+ rows.forEach(r=>{
+  const title=byTag?(r.tag||'未分组'):r.svcName;
+  let g=groups.find(x=>x.title===title);
+  if(!g){g={title,rows:[]};groups.push(g);}
+  g.rows.push(r);
+ });
+ return groups.map(g=>`<div class="src-group">
+   <div class="src-group-head"><b>${esc(g.title)}</b><span>${g.rows.length}</span></div>
+   <div class="src-grid">${g.rows.map(r=>watchSrcCard(r,many)).join('')}</div>
+  </div>`).join('');
+}
+
+/* 计数行单独抽出来：过滤时只重画卡片区，这一行要跟着一起更新，
+   否则会出现「共 20 个，筛出 18 个」却只显示 2 张卡的自相矛盾。 */
+function watchSrcCount(){
+ const all=watchIndex();
+ const hidden=all.filter(x=>x.hidden).length;
+ const shown=watchVisible().length;
+ const bits=[`共 ${all.length} 个组件`];
+ if(String(WATCH_PICK.filter||'').trim())bits.push(`匹配 ${shown} 个`);
+ else if(hidden&&!WATCH_PICK.showHidden)bits.push(`隐藏 ${hidden} 个`);
+ return bits.join('，');
+}
+
+function watchSourcesInner(){
+ const svcs=((WATCH_PICK.catalog||{}).services)||[];
+ const hidden=watchIndex().filter(x=>x.hidden).length;
+ const head=`<div class="src-filter">
+   <input type="search" id="ws-src-filter" class="src-filter-input"
+     value="${esc(WATCH_PICK.filter||'')}" placeholder="找组件：名字、编号或标签"
+     autocomplete="off" maxlength="24" enterkeyhint="search">
+  </div>
+  <p class="ws-tip">点卡片进片源；右侧勾选框决定它出现在选片里。<span id="ws-src-count">${watchSrcCount()}</span></p>`;
+ const hiddenRow=hidden?`<button type="button" class="src-hidden-toggle" data-action="watch-src-hidden">
+   ${WATCH_PICK.showHidden?'收起':'显示'}已隐藏的 ${hidden} 个</button>`:'';
  const svcRows=svcs.map(s=>`<div class="src-svc-row">
    <span class="src-dot${s.online?' on':''}"></span>
    <b>${esc(s.name)}</b><small>${esc(s.base)}</small>
    <button type="button" class="link-btn" data-action="watch-src-del" data-id="${esc(s.id)}">移除</button>
   </div>`).join('');
- return `<p class="ws-tip">点卡片进片源；右侧箭头/勾决定它是否出现在选片里。</p>
-  <div class="src-manage src-grid">${cards.join('')}</div>
+ return `${head}
+  <div class="src-manage">${watchSrcCards()}${hiddenRow}</div>
   <div class="src-svc-block"><b>片源服务</b>${svcRows||'<p class="ws-empty">还没有服务。</p>'}</div>
-  <div class="ws-bottom">${button('添加服务','watch-src-add','soft')}${button('完成','watch-src-done','primary')}</div>`;
+  <div class="ws-bottom">${button('整理','watch-src-curate','soft')}${button('加服务','watch-src-add','soft')}${button('完成','watch-src-done','primary')}</div>`;
 }
 
 /* 一行横滑海报：继续观看、各分类共用同一套卡片 */
@@ -550,8 +653,10 @@ function watchHomeInner(){
  if(!rows.length)blocks.push(`<p class="ws-empty">${p.home.loading?'正在找…':esc(p.home.error||'这个片源还没有分类')}</p>`);
  if(cats.length>rows.length)blocks.push(`<button type="button" class="ws-home-all" data-action="watch-home-all">
    查看全部 ${cats.length} 个分类 ${icon('arrow')}</button>`);
- const head=`<div class="ws-home-head"><button type="button" class="ws-search"
-   data-action="watch-search">${icon('search')}${p.q?'搜：'+esc(p.q):'搜片名'}</button></div>`;
+ const head=watchCanSearch()
+  ?`<div class="ws-home-head"><button type="button" class="ws-search"
+   data-action="watch-search">${icon('search')}${p.q?'搜：'+esc(p.q):'搜片名'}</button></div>`
+  :'';
  return `<div class="ws-home">${head}${blocks.join('')}</div>`;
 }
 
@@ -566,13 +671,28 @@ function watchListInner(){
     <span class="ws-card-poster" style="background-image:url('${esc(d.poster)}')">${d.remark?`<i class="ws-card-tag">${esc(d.remark)}</i>`:''}</span>
     <span class="ws-card-title">${esc(d.title)}</span>
    </button>`).join('')+`</div>`:`<p class="ws-empty">${p.error?esc(p.error)+'。<br>':''}换个关键词，或者切到别的分类看看。</p>`);
- const section=`<div class="ws-section"><b>${esc((cats.find(c=>c.id===p.cat)||{}).title||'片单')}</b>
-   <span class="ws-section-count">${p.dramas.length?p.dramas.length+' 部':''}</span>
-   <button type="button" class="ws-section-more" data-action="watch-more">换一批 ${icon('arrow')}</button></div>`;
- return `<div class="ws-toolbar"><div class="ws-cats">${chips}</div>
-   <button type="button" class="ws-search" data-action="watch-search">${icon('search')}${p.q?esc(p.q):'搜片名'}</button>
-  </div>`+section+`<div class="ws-list">${list}</div>
+ /* 上游给了 pageCount 就照着说清楚「第几页 / 共几页」，没给才退回按条数说话。
+    以前全靠「这一页是不是满的」猜，红果一个分类 1413 页，猜不出来。 */
+ const count=p.total?`共 ${p.total} 部${p.pageCount>1?` · 第 ${p.page}/${p.pageCount} 页`:''}`
+  :(p.dramas.length?p.dramas.length+' 部':'');
+ const canMore=!p.pageCount||p.page<p.pageCount;
+ const more=canMore
+  ?`<button type="button" class="ws-section-more" data-action="watch-more">换一批 ${icon('arrow')}</button>`
+  :`<span class="ws-section-end">到底了</span>`;
+ const section=`<div class="ws-section"><b>${esc((cats.find(c=>c.id===p.cat)||{}).title||(p.q?'搜「'+p.q+'」':'片单'))}</b>
+   <span class="ws-section-count">${count}</span>${more}</div>`;
+ const search=watchCanSearch()
+  ?`<button type="button" class="ws-search" data-action="watch-search">${icon('search')}${p.q?esc(p.q):'搜片名'}</button>`:'';
+ return `<div class="ws-toolbar"><div class="ws-cats">${chips}</div>${search}
+ </div>`+section+`<div class="ws-list">${list}</div>
   <div class="ws-bottom">${button('取消','close-modal')}</div>`;
+}
+
+/* 上游的 capabilities 是未文档化的扩展：没给就当作支持（宁可多一个入口，
+   也别把功能藏起来）；明确说没有 search 时才不显示搜索按钮。 */
+function watchCanSearch(){
+ const caps=((watchProvider()||{}).caps)||[];
+ return !caps.length||caps.indexOf('search')>=0;
 }
 
 /* 组件首页数据：每个分类各拉第一页铺一行。分类多的组件（27 个）不能一口气全并发，
@@ -651,9 +771,11 @@ async function watchLoadDramas(){
  try{
   const res=await api(`/dramas/${encodeURIComponent(g.svc)}/${encodeURIComponent(g.prov)}`+query);
   p.dramas=(res&&res.items)||[];
+  p.pageCount=Number(res&&res.pageCount)||0;
+  p.total=Number(res&&res.total)||0;
  }catch(e){
   /* 自己加的组件上游说挂就挂，得让主人知道是源站的事，不是我们没搜到 */
-  p.dramas=[];p.error=e.message||'片源列表没拉到';toast(p.error);
+  p.dramas=[];p.pageCount=0;p.total=0;p.error=e.message||'片源列表没拉到';toast(p.error);
  }
  p.loading=false;
  wsSafeOpen();
@@ -758,6 +880,61 @@ async function watchToggleSource(sid,prov){
  const g=watchGroup();
  WATCH_PICK.svc=g?g.svc:'';WATCH_PICK.prov=g?g.prov:'';
  watchSources();
+}
+
+/* ── 整理组件：改名 / 标签 / 隐藏 ─────────────────────────────────────
+   上游只告诉我们「有哪些组件」，怎么摆是本地的事。保存时只提交**改动过**的项，
+   改一个名字不必把几十个组件都写一遍；逐条 PUT，失败也能看出卡在哪一条。 */
+function watchCurateForm(){
+ const rows=watchIndex();
+ const list=rows.map(r=>`<div class="curate-row" data-key="${esc(r.key)}">
+   <div class="curate-head"><b>${esc(r.title)}</b><small>${esc(r.key)}</small></div>
+   <input name="alias:${esc(r.key)}" value="${esc(r.alias)}" maxlength="24"
+     placeholder="改个名（留空 = 用上游原名）" autocomplete="off">
+   <div class="curate-line">
+    <input name="tag:${esc(r.key)}" value="${esc(r.tag)}" maxlength="12"
+      placeholder="标签，例如 短剧 / 影视" autocomplete="off">
+    <label class="switch-row"><input type="checkbox" name="hidden:${esc(r.key)}"${r.hidden?' checked':''}><span>隐藏</span></label>
+   </div>
+  </div>`).join('');
+ openModal('整理组件',`<form class="modal-form" id="ws-curate-form">
+   <p class="meta" style="margin:0">只改本机显示，不动上游。标签相同的组件会自动归到一组。</p>
+   <div class="curate-list">${list||'<p class="ws-empty">还没有组件。</p>'}</div>
+   ${formError()}
+   <div class="form-actions">${button('取消','watch-src-back')}<button class="button primary" type="submit">保存</button></div>
+  </form>`);
+ const form=$('#ws-curate-form');
+ form.onsubmit=async e=>{
+  e.preventDefault();
+  const fd=new FormData(form);
+  const jobs=[];
+  rows.forEach(r=>{
+   const alias=String(fd.get('alias:'+r.key)||'').trim();
+   const tag=String(fd.get('tag:'+r.key)||'').trim();
+   const hidden=fd.get('hidden:'+r.key)==='on';
+   const patch={};
+   if(alias!==r.alias)patch.alias=alias;
+   if(tag!==r.tag)patch.tag=tag;
+   if(hidden!==r.hidden)patch.hidden=hidden;
+   if(Object.keys(patch).length)jobs.push({key:r.key,patch});
+  });
+  if(!jobs.length)return closeModal();
+  const box=form.querySelector('.form-error');
+  for(let i=0;i<jobs.length;i++){
+   const body=Object.assign({key:jobs[i].key},jobs[i].patch);
+   try{
+    await api('/drama-sources/overlay',{method:'PUT',body:JSON.stringify(body)});
+   }catch(err){
+    /* 可能只存进去一部分：先把清单刷新成真实状态再报错，别让界面骗人 */
+    WATCH_PICK.catalog=await watchCatalog(true);
+    if(box)box.textContent=(err.message||'保存失败')+'（已保存的部分仍然生效）';
+    return;
+   }
+  }
+  WATCH_PICK.catalog=await watchCatalog(true);
+  toast('整理好了');
+  watchSources();
+ };
 }
 
 function watchAddSourceForm(){
