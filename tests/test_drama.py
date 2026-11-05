@@ -41,6 +41,26 @@ DETAIL = {'title': '和离后我带女儿横扫魔域', 'posterUrl': 'http://p/1
               {'id': 'ep-2', 'episodeNumber': 2, 'title': '第2集', 'streamUrl': 'http://u/api/v1/stream/2'},
           ]}]}
 
+# 上游诊断快照。真实形状照抄 `GET /api/v1/diagnostics`（2026-11 实测）：
+# 只有 results 里出现的组件才有网络模式，本机 17 个里覆盖 9 个。
+DIAG = {'results': {
+    'hongguo': {
+        'target': 'hongguo', 'title': '红果短剧', 'version': '0.1.0',
+        'status': 'failed', 'rechecked': True, 'historical': True,
+        'network_mode': 'direct', 'network_text': '服务器直连',
+        'server_check_role': 'required_metadata',
+        'impact_hint': '服务器获取内容存在异常，可能影响手机中的列表或详情。',
+        'checks': {
+            'basic': {'label': '基础检查', 'status': 'passed', 'text': '正常'},
+            'server': {'label': '服务器获取内容', 'status': 'failed', 'text': '存在异常'},
+            'client': {'label': '手机浏览', 'status': 'not_checked', 'text': '待实际验证'},
+            'playback': {'label': '手机播放', 'status': 'not_checked', 'text': '待实际验证'},
+        },
+        # 这一整段（含问题定位里的源站域名）绝不能出现在接口响应里
+        'diagnostic_text': '问题定位:\n- 获取首页内容: 未能访问 https://www.dsd.com.se/',
+    },
+}}
+
 
 @pytest.fixture(autouse=True)
 def clean_state():
@@ -52,6 +72,7 @@ def clean_state():
     dramas._providers.clear()
     dramas._list_cache.clear()
     dramas._health.clear()
+    dramas._diagnostics.clear()
     dramas._stream_probe.clear()
     dramas._part_key_cache = None
     yield
@@ -60,14 +81,17 @@ def clean_state():
 @pytest.fixture
 def upstream(monkeypatch):
     """按路径分发的假上游；返回一个可改写的 dict 方便单条用例调行为。"""
-    state = {'range': '', 'hits': [], 'bases': []}
+    state = {'range': '', 'hits': [], 'bases': [], 'methods': [], 'diag': {'results': {}}}
 
     def handler(request: httpx.Request) -> httpx.Response:
         path = request.url.path
         state['hits'].append(path)
+        state['methods'].append(request.method)
         state['bases'].append(str(request.url).rsplit(path, 1)[0])
         if path == '/api/v1/providers':
             return httpx.Response(200, json=PROVIDERS)
+        if path == '/api/v1/diagnostics':
+            return httpx.Response(200, json=state['diag'])
         if path.endswith('/browse'):
             return httpx.Response(200, json=BROWSE)
         if path.endswith('/search'):
@@ -715,3 +739,70 @@ def test_diagnostics_requires_login():
     with TestClient(app, base_url='https://testserver', headers=HEADERS) as anon:
         assert anon.get('/api/drama-sources/diagnostics').status_code == 401
         assert anon.put('/api/drama-sources/overlay', json={'key': 'capy:hongguo'}).status_code == 401
+
+
+# ── 网络模式 ────────────────────────────────────────────────────────────
+def test_catalog_merges_network_mode_from_diagnostics(client_a, upstream):
+    upstream['diag'] = DIAG
+    svc = client_a.get('/api/drama-sources', headers=HEADERS).json()['services'][0]
+    rows = {p['id']: p for p in svc['providers']}
+    assert rows['hongguo']['net']['mode'] == 'direct'
+    assert rows['hongguo']['net']['label'] == '服务器直连'
+    assert rows['hongguo']['net']['checks']['server'] == 'failed'
+    # 快照里没这个组件就是空 dict，不能当成「它不通」
+    assert rows['huangju']['net'] == {}
+
+
+def test_catalog_never_leaks_diagnostic_detail(client_a, upstream):
+    """上游诊断报告里的「问题定位」带源站域名，整条链路都不许透出去。"""
+    upstream['diag'] = DIAG
+    body = client_a.get('/api/drama-sources', headers=HEADERS).text
+    assert 'dsd.com.se' not in body
+    assert 'diagnostic_text' not in body
+    assert '问题定位' not in body
+    # 检测项只剩状态：上游的 label/text 文案不往下发
+    assert '待实际验证' not in body
+
+
+def test_catalog_still_works_when_diagnostics_is_missing(client_a, monkeypatch):
+    """上游没有这套接口（或干脆是别的 Capy 实现）时，组件列表必须照常可用。"""
+    def handler(request):
+        if request.url.path == '/api/v1/providers':
+            return httpx.Response(200, json=PROVIDERS)
+        return httpx.Response(404, json={'detail': 'nope'})
+
+    monkeypatch.setattr(dramas, '_transport', httpx.MockTransport(handler))
+    r = client_a.get('/api/drama-sources', headers=HEADERS)
+    assert r.status_code == 200, r.text
+    rows = r.json()['services'][0]['providers']
+    assert [p['id'] for p in rows] == ['hongguo', 'huangju']
+    assert all(p['net'] == {} for p in rows)
+
+
+def test_diagnostics_snapshot_is_read_only(client_a, upstream):
+    """打开组件列表是只读操作：绝不能替主人触发一次全量诊断（上游要跑一分多钟）。"""
+    upstream['diag'] = DIAG
+    client_a.get('/api/drama-sources', headers=HEADERS)
+    hits = [m for p, m in zip(upstream['hits'], upstream['methods'])
+            if p == '/api/v1/diagnostics']
+    assert hits == ['GET']
+
+
+def test_diagnostics_snapshot_is_cached(client_a, upstream):
+    upstream['diag'] = DIAG
+    client_a.get('/api/drama-sources', headers=HEADERS)
+    client_a.get('/api/drama-sources', headers=HEADERS)
+    assert upstream['hits'].count('/api/v1/diagnostics') == 1
+    # refresh=1 才重新问一次
+    client_a.get('/api/drama-sources?refresh=1', headers=HEADERS)
+    assert upstream['hits'].count('/api/v1/diagnostics') == 2
+
+
+def test_diagnostics_endpoint_reports_network_mode(client_a, upstream):
+    upstream['diag'] = DIAG
+    r = client_a.get('/api/drama-sources/diagnostics', headers=HEADERS)
+    assert r.status_code == 200, r.text
+    row = [p for p in r.json()['services'][0]['providers'] if p['id'] == 'hongguo'][0]
+    assert row['net']['mode'] == 'direct'
+    assert row['net']['status'] == 'failed'
+    assert row['net']['stale'] is True

@@ -1073,6 +1073,10 @@ async def drama_diagnostics(probe: bool = False, user=Depends(current_user)):
     上游没有文档也没有状态页，出问题时只能靠这个自证：组件清单读得到吗？
     分类能翻吗？第一条的详情里有没有可播地址？带 `?probe=1` 才会真的去打
     上游（每个组件 2 次请求），不带只回缓存里的健康度。
+
+    `net` 是上游诊断快照里的网络模式（服务器直连 / 手机端直连 / 代理建议），
+    跟我们自己的 `health` 是两件事：前者说「这个源该由谁去连」，后者说
+    「我们刚才那一次请求成没成」。
     """
     with connect() as c:
         cfg = dramas.load_config(c)
@@ -1085,12 +1089,14 @@ async def drama_diagnostics(probe: bool = False, user=Depends(current_user)):
             online, error = True, ''
         except Exception as exc:
             items, online, error = [], False, str(exc) or '这台服务连不上'
-        for item in items:
+        nets = await dramas.diagnostics(svc['base']) if online else {}
+        reports = await dramas.diagnose_many(svc['base'], items) if (probe and online) else []
+        for item, extra in zip(items, reports or [{} for _ in items]):
             row = {'id': item['id'], 'title': item['title'], 'version': item['version'],
                    'caps': item['caps'], 'categories': len(item['categories']),
-                   'health': dramas.health_of(svc['base'], item['id'])}
-            if probe and online:
-                row.update(await dramas.diagnose(svc['base'], item))
+                   'health': dramas.health_of(svc['base'], item['id']),
+                   'net': nets.get(item['id']) or {}}
+            row.update(extra)
             rows.append(row)
         report.append({'id': svc['id'], 'name': svc['name'], 'base': svc['base'],
                        'online': online, 'error': error, 'providers': rows})

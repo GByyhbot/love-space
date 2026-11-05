@@ -2929,6 +2929,13 @@ body.kb-open .pick-overlay{padding-bottom:0}
 .curate-line{display:flex;align-items:center;gap:8px}
 .curate-line input{flex:1;min-width:0}
 .curate-line .switch-row{flex:none;margin:0}
+/* 整理弹窗是浅色层，影院那套「白底 8% + --ws-mut」在这儿等于没有底、没有色。
+   换成描边徽章，模式颜色仍保留 —— 主人在这儿也该看得出哪个组件要代理。 */
+.curate-head .src-net{flex:none;color:var(--muted);background:none;
+  border:1px solid var(--line-strong);line-height:14px;padding:0 4px}
+.curate-head .src-net-mobile{color:#2E7FB8;border-color:rgba(98,168,255,.5)}
+.curate-head .src-net-proxysuggested{color:#9A6A16;border-color:rgba(255,152,64,.55)}
+.curate-head .src-net-proxyconfigured{color:#16876A;border-color:rgba(78,216,176,.55)}
 
 @media (max-width:359px){
  .ws-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
@@ -2980,6 +2987,27 @@ body.kb-open .pick-overlay{padding-bottom:0}
 .src-card-go:hover{background:rgba(255,255,255,.08);color:var(--ws-ink)}
 .src-card.on .src-card-go{color:var(--primary)}
 .src-card-go .icon{width:15px;height:15px}
+
+/* ── 网络模式（v223）───────────────────────────────────────────────────
+   上游诊断快照给每个组件标了「该由谁去连源站」，卡片上用一个两三字的徽章
+   带出来：服务器直连 / 手机直连 / 需代理 / 已配代理。
+   四种模式的处置完全相反，主人点进去之前就该知道自己是哪一种。
+   `直连` 是绝大多数情况，用中性灰弱化；其余三种带色，一眼挑出要特殊照顾的。 */
+.src-net{display:inline-block;margin-right:5px;padding:0 5px;
+  border-radius:5px;font-style:normal;font-size:var(--fs-2xs);
+  line-height:15px;vertical-align:1px;color:var(--ws-mut);
+  background:rgba(255,255,255,.08)}
+.src-net-mobile{color:#7FD8FF;background:rgba(98,168,255,.18)}
+.src-net-proxysuggested{color:#FFD166;background:rgba(255,152,64,.16)}
+.src-net-proxyconfigured{color:#4ED8B0;background:rgba(78,216,176,.16)}
+/* 连不上的组件：左边一道红边，扫一眼就能跳过 */
+.src-card.bad{border-color:rgba(255,107,139,.55)}
+.src-card.bad .src-logo{opacity:.72}
+/* 组件报错时的处置建议。四种模式对应四句完全不同的话，所以这行不能笼统写成
+   「加载失败，请重试」—— 手机端直连的组件让人去挂服务端代理是南辕北辙。 */
+.ws-advice{margin:10px 0 0;padding:10px 12px;border-radius:12px;
+  background:rgba(255,152,64,.1);border:1px solid rgba(255,152,64,.26);
+  color:var(--ws-ink);font-size:var(--fs-sm);line-height:1.55}
 
 /* 组件首页：整页滚动，每个分类一行横滑海报，右上是搜索、分区右侧是 › */
 .ws-home{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;

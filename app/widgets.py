@@ -152,6 +152,132 @@ def providers(payload):
     return out
 
 
+# ── 网络模式（diagnostics）───────────────────────────────────────────────
+# 上游还有一套 `GET /api/v1/diagnostics`，`results[<id>]` 里说明「这个组件由谁
+# 去连源站」：
+#
+#   direct            服务器直连        容器自己访问源站，无需代理
+#   mobile            手机端直连        播放器手机客户端直接拉流，不占服务器流量
+#   proxy_suggested   建议海外代理      源站按地区限制，建议为它挂局部代理
+#   proxy_configured  海外代理已配置    已经配了代理
+#
+# 这正是 CapyPlayer 首页卡片上展示的那四种说法。我们**照搬原文**，主人在两个
+# 界面看到的话术才一致；自己另起一套名字只会让人以为是两件事。
+#
+# 🔴 上半游这套接口里还有一个 `diagnostic_text`，是含「问题定位」的多行报告，
+# 里面会出现源站域名、连接失败的具体细节。那个字段**一个字节都不许下发** ——
+# 主人要看的是「什么状态」，不是「上游在哪台机器上撞了什么墙」。
+NETWORK_MODES = {
+    'direct': '服务器直连',
+    'mobile': '手机端直连',
+    'proxy_suggested': '建议海外代理',
+    'proxy_configured': '海外代理已配置',
+}
+# 组件卡只有半屏宽，全称放不下；短版只用于卡片徽章，详情里仍给全称
+NETWORK_SHORT = {
+    'direct': '直连',
+    'mobile': '手机直连',
+    'proxy_suggested': '需代理',
+    'proxy_configured': '已配代理',
+}
+# 服务端那次检查是「必须过」还是「仅供参考」：
+#   required_metadata        服务端取不到内容 = 列表和详情都是空的，真的坏了
+#   reference_connectivity   只是参考，手机用自己的网络照样能看
+NETWORK_ROLES = {
+    'required_metadata': '服务端必须取到内容',
+    'reference_connectivity': '服务端仅作参考',
+}
+CHECK_KEYS = ('basic', 'server', 'client', 'playback')
+CHECK_STATES = ('passed', 'warning', 'failed', 'not_checked')
+NETWORK_STATUSES = ('passed', 'warning', 'failed')
+
+# 脱敏用的。上游的说明文字是按「给你自己看」写的，理论上会带上代理地址；
+# 我们这张卡片是要给主人看的，所以形似地址 / 账号的片段整段换掉 ——
+# 宁可文案变得含糊，也不让一个代理 IP 或密码出现在界面上。
+_SECRET_RE = re.compile(
+    r'[a-zA-Z][a-zA-Z0-9+.\-]*://\S+'             # scheme://host:port/path
+    r'|\b(?:\d{1,3}\.){3}\d{1,3}(?::\d+)?\b'      # 1.2.3.4[:7890]
+    r'|\b(?:[a-z0-9\-]+\.)+[a-z]{2,6}\b'          # 源站域名
+    r'|\b[\w.%+\-]+@[\w.\-]+\.\w{2,}\b'           # user@host
+    r'|\b(?:password|passwd|pwd|token|secret|auth|proxy)\s*[=:]\s*\S+',
+    re.IGNORECASE)
+
+
+def scrub(value, limit=120):
+    """去掉说明文字里可能存在的地址与账号，再截断。"""
+    out = text(value, limit=0)
+    if not out:
+        return ''
+    out = _SECRET_RE.sub('***', out)
+    # 换掉之后可能留下连续的空白和「*** ***」，收一下
+    out = re.sub(r'\s{2,}', ' ', out).strip()
+    return out[:limit] if limit > 0 else out
+
+
+def network(raw):
+    """`diagnostics.results[<id>]` → 卡片要显示的那点东西。取不到就返回 `{}`。
+
+    只取白名单字段：模式、四项检测的**状态**、服务端检查的角色、处置建议。
+    检测项的 `label`/`text` 文案不要 —— 那些是上游的措辞，我们本地另有话说，
+    而且文字越多越容易夹带地址。
+    """
+    if not isinstance(raw, dict):
+        return {}
+    mode = text(raw.get('network_mode'), limit=32).lower()
+    known = mode in NETWORK_MODES
+
+    checks = {}
+    raw_checks = raw.get('checks')
+    if isinstance(raw_checks, dict):
+        for key in CHECK_KEYS:
+            one = raw_checks.get(key)
+            state = text(one.get('status') if isinstance(one, dict) else one, limit=16).lower()
+            if state in CHECK_STATES:            # 不认识的状态直接丢，别猜
+                checks[key] = state
+
+    role = text(raw.get('server_check_role'), limit=32).lower()
+    status = text(raw.get('status'), limit=16).lower()
+    out = {
+        # mode 为空 = 上游没标（内建源就是这样），界面上就不显示徽章
+        'mode': mode if known else '',
+        'label': NETWORK_MODES.get(mode) or scrub(raw.get('network_text'), 16),
+        'short': NETWORK_SHORT.get(mode) or '',
+        # 上游给了个我们不认识的模式：原文留着给排障，但绝不冒充已知模式
+        'unknown': '' if known or not mode else scrub(mode, 24),
+        'status': status if status in NETWORK_STATUSES else '',
+        'role': role if role in NETWORK_ROLES else '',
+        'checks': checks,
+        'hint': scrub(raw.get('impact_hint'), 120),
+        # historical = 上游这份结果是从缓存里拿的（超过它的 600 秒窗口）
+        'stale': bool(raw.get('historical')),
+    }
+    if not (out['label'] or out['checks'] or out['status'] or out['unknown']):
+        return {}
+    return out
+
+
+def nets(payload):
+    """`GET /api/v1/diagnostics` 的载荷 → {组件 id: 网络模式}。
+
+    缺项是常态：上游只诊断它自己排的那一批（本机 17 个组件里只覆盖 9 个），
+    所以调用方必须按「取不到就没有」来处理，不能当成「这个组件不通」。
+    """
+    if not isinstance(payload, dict):
+        return {}
+    results = payload.get('results')
+    if not isinstance(results, dict):
+        return {}
+    out = {}
+    for pid, raw in results.items():
+        pid = text(pid, limit=32)
+        if not pid or not PROVIDER_RE.match(pid):
+            continue
+        one = network(raw)
+        if one:
+            out[pid] = one
+    return out
+
+
 # ── 条目（MediaItem）────────────────────────────────────────────────────
 def item(raw):
     """一条内容。规范：id 与 title/name 是唯一必填，其余全可缺。"""

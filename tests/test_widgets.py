@@ -225,3 +225,119 @@ def test_page_meta_passes_through_upstream_numbers():
 def test_page_meta_tolerates_missing_or_garbage():
     assert widgets.page_meta({}, 2) == {'page': 2, 'pageCount': 0, 'total': 0}
     assert widgets.page_meta({'page': 'x', 'pageCount': -5})['pageCount'] == 0
+
+
+# ── 网络模式 ────────────────────────────────────────────────────────────
+DIAG_ENTRY = {
+    'target': 'dsd', 'title': '帝果', 'version': '1.0.4',
+    'status': 'failed',
+    'network_mode': 'direct', 'network_text': '服务器直连',
+    'server_check_role': 'required_metadata',
+    'impact_hint': '服务器获取内容存在异常，可能影响手机中的列表或详情。',
+    'checks': {
+        'basic': {'label': '基础检查', 'status': 'passed', 'text': '正常'},
+        'server': {'label': '服务器获取内容', 'status': 'failed', 'text': '存在异常'},
+        'client': {'label': '手机浏览', 'status': 'not_checked', 'text': '待实际验证'},
+        'playback': {'label': '手机播放', 'status': 'not_checked', 'text': '待实际验证'},
+    },
+    'historical': True,
+    'diagnostic_text': '问题定位:\n- 获取首页内容: 未能访问 https://www.dsd.com.se/',
+}
+
+
+def test_network_recognises_the_four_known_modes():
+    for mode, label, short in (('direct', '服务器直连', '直连'),
+                               ('mobile', '手机端直连', '手机直连'),
+                               ('proxy_suggested', '建议海外代理', '需代理'),
+                               ('proxy_configured', '海外代理已配置', '已配代理')):
+        net = widgets.network({'network_mode': mode})
+        assert net['mode'] == mode
+        assert net['label'] == label
+        assert net['short'] == short
+        assert net['unknown'] == ''
+
+
+def test_network_keeps_unused_status_and_role_vocabulary():
+    net = widgets.network(DIAG_ENTRY)
+    assert net['status'] == 'failed'
+    assert net['role'] == 'required_metadata'
+    assert net['checks'] == {'basic': 'passed', 'server': 'failed',
+                             'client': 'not_checked', 'playback': 'not_checked'}
+    assert net['stale'] is True
+
+
+def test_network_drops_check_wording_only_status_survives():
+    """检测项只留状态：上游的 label/text 是它的措辞，越长的文字越容易夹带地址。"""
+    net = widgets.network(DIAG_ENTRY)
+    assert set(net['checks'].values()) <= set(widgets.CHECK_STATES)
+    assert '存在异常' not in str(net['checks'])
+    assert '待实际验证' not in str(net['checks'])
+    assert 'label' not in str(net['checks'])
+
+
+def test_network_never_exposes_addresses_or_accounts():
+    """诊断报告里的「问题定位」可能带源站域名，一个字节都不许漏到前端。"""
+    net = widgets.network(DIAG_ENTRY)
+    blob = str(net)
+    assert 'dsd.com.se' not in blob
+    assert 'https://' not in blob
+
+    dirty = {'network_mode': 'proxy_configured',
+             'network_text': 'http://192.168.31.9:7890',
+             'impact_hint': '请检查代理 http://10.0.0.2:7890 与账号 user:pa55@host.net 是否可用'}
+    net = widgets.network(dirty)
+    blob = str(net)
+    assert '192.168' not in blob
+    assert '10.0.0.2' not in blob
+    assert 'pa55' not in blob
+    assert '***' in net['hint']
+
+
+def test_network_unknown_mode_is_kept_but_never_renamed():
+    """上游将来加了新模式：原文留着排障，但绝不冒充已知的四种之一。"""
+    net = widgets.network({'network_mode': 'carrier_pigeon', 'network_text': '信鸽直连'})
+    assert net['mode'] == ''
+    assert net['short'] == ''
+    assert net['unknown'] == 'carrier_pigeon'
+    assert net['label'] == '信鸽直连'
+
+
+def test_network_empty_mode_means_upstream_did_not_say():
+    """内建源的 network_mode 就是空串 —— 界面该整块不画，而不是画个「未知」。"""
+    net = widgets.network({'network_mode': '', 'network_text': '',
+                           'status': 'passed', 'checks': {'server': {'status': 'passed'}}})
+    assert net['mode'] == '' and net['label'] == '' and net['unknown'] == ''
+    assert net['checks'] == {'server': 'passed'}
+
+
+def test_network_ignores_garbage_states():
+    """状态词全是认不出来的：不如整条当没有，别在卡片上显示一个来路不明的词。"""
+    assert widgets.network({'status': '???', 'server_check_role': 'nonsense',
+                            'checks': {'server': {'status': 'melted'}}}) == {}
+    # 有一样能认就留下，认不出的那几样仍然丢掉
+    net = widgets.network({'status': '???', 'network_mode': 'direct',
+                           'checks': {'server': {'status': 'melted'}}})
+    assert net['status'] == '' and net['role'] == ''
+    assert net['checks'] == {}
+    assert net['mode'] == 'direct'
+
+
+def test_network_returns_empty_for_unusable_payloads():
+    assert widgets.network(None) == {}
+    assert widgets.network('x') == {}
+    assert widgets.network({}) == {}
+
+
+def test_nets_indexes_by_provider_and_drops_bad_ids():
+    payload = {'results': {'dsd': DIAG_ENTRY, '../evil': DIAG_ENTRY,
+                           'yeguo': {'network_mode': 'mobile'},
+                           'empty': {'network_mode': '', 'status': ''}}}
+    out = widgets.nets(payload)
+    assert sorted(out) == ['dsd', 'yeguo']
+    assert out['yeguo']['mode'] == 'mobile'
+
+
+def test_nets_tolerates_missing_results():
+    assert widgets.nets({}) == {}
+    assert widgets.nets({'results': []}) == {}
+    assert widgets.nets('nope') == {}

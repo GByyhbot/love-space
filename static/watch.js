@@ -381,7 +381,11 @@ function watchIndex(){
     tag:one.tag||'',hidden:!!one.hidden,
     order:(typeof one.order==='number'?one.order:null),idx:i,
     cats:one.categories||[],caps:one.caps||[],version:one.version||'',
-    health:one.health||{},enabled:!!one.enabled});
+    health:one.health||{},enabled:!!one.enabled,
+    /* net = 上游诊断快照里的网络模式（服务器直连 / 手机端直连 / 建议代理 …）。
+       它不是「这个组件好没好」，而是「该由谁去连源站」—— 拿它当可用性判断
+       会误伤手机端直连的组件（服务端初筛不过，手机上照样能播）。 */
+    net:one.net||{}});
   });
  });
  return out;
@@ -541,22 +545,44 @@ function watchPickBody(){
    上百个时，只是纵向更长，不会像以前那样一次性铺满一屏还没法找。
    卡片主体「进片源」、右侧小按钮管开/关：button 里不能再塞 button，
    所以外层用 div 容器、里面放两个平级按钮。 */
+/* 组件的网络模式徽章。上游没标（内建源就是这样）就整块不画 —— 空徽章比
+   没有徽章更让人困惑。四种模式照搬 CapyPlayer 首页卡片的说法，只是缩成两三个字。 */
+function wsNetPill(net){
+ const m=(net||{}).mode||'';
+ if(!m)return '';
+ const cls=' src-net-'+m.replace(/[^a-z]/g,'');
+ return `<i class="src-net${cls}">${esc((net||{}).short||(net||{}).label||m)}</i>`;
+}
+
+/* 这个组件现在算不算「坏了」。
+   ⚠️ 上游说 `mobile`（手机端直连）时，服务端那项检查不过**不代表**播不了：
+   真正拉流的是手机自己。所以这里只把它算成「待手机验证」，不算异常。 */
+function wsNetBad(row){
+ const net=row.net||{};
+ if(net.mode==='mobile')return false;
+ return (row.health&&row.health.ok===false)||net.status==='failed';
+}
+
 function watchSrcCard(row,many){
  const n=(row.cats||[]).length;
+ const net=row.net||{};
+ const bad=wsNetBad(row);
  const bits=[];
- /* 异常优先占用这一行：卡片副标题是单行截断的，把「上游异常」排在分类数后面
-    会被「6 个分类…」挤掉，等于没提示。 */
- if(row.health&&row.health.ok===false)bits.push('上游异常');
- else if(n)bits.push(`${n} 个分类`);
+ /* 状态优先占这一行：卡片副标题是单行截断的，排在分类数后面会被「6 个分类…」
+    挤掉，等于没提示。 */
+ if(bad)bits.push('连不上');
+ else if(net.mode==='mobile'&&net.checks&&net.checks.server!=='passed')bits.push('待手机验证');
+ /* 「个」省掉：两列窄卡里「直连 · 27 个分类」会被截成「27 个…」，少一个字就正好够 */
+ else if(n)bits.push(`${n} 分类`);
  if(row.hidden)bits.push('已隐藏');
  const meta=bits.join(' · ')||'点一下打开';
  const label=many?(row.svcName+' · '+row.name):row.name;
- return `<div class="src-card${row.enabled?' on':''}${row.hidden?' off':''}">
+ return `<div class="src-card${row.enabled?' on':''}${row.hidden?' off':''}${bad?' bad':''}">
     <button type="button" class="src-card-main" data-action="watch-src-open"
       data-id="${esc(row.svc)}" data-prov="${esc(row.prov)}">
       ${wsLogo(row.name,row.key)}
       <span class="src-card-txt"><b>${esc(label)}</b>
-       <small>${row.tag?`<i class="src-tag">${esc(row.tag)}</i> `:''}${esc(meta)}</small></span>
+       <small>${wsNetPill(net)}${row.tag?`<i class="src-tag">${esc(row.tag)}</i>`:''}${esc(meta)}</small></span>
      </button>
     <button type="button" class="src-card-go" data-action="watch-src-toggle"
       data-id="${esc(row.svc)}" data-prov="${esc(row.prov)}"
@@ -601,6 +627,10 @@ function watchSrcCount(){
  const bits=[`共 ${all.length} 个组件`];
  if(String(WATCH_PICK.filter||'').trim())bits.push(`匹配 ${shown} 个`);
  else if(hidden&&!WATCH_PICK.showHidden)bits.push(`隐藏 ${hidden} 个`);
+ /* 上游只诊断它自己排的那一批（本机 17 个里覆盖 9 个），不是每个卡片都有
+    网络模式。不说明白，主人会以为是漏画了。 */
+ const netted=all.filter(x=>x.net&&x.net.mode).length;
+ if(netted&&netted<all.length)bits.push(`${netted} 个标了网络模式`);
  return bits.join('，');
 }
 
@@ -651,6 +681,9 @@ function watchHomeInner(){
    ${r.items.length?wsRail(r.items,'watch-drama'):`<p class="ws-rail-empty">${p.home.loading?'正在找…':esc(r.error||'这个分类暂时没有内容')}</p>`}
   </section>`));
  if(!rows.length)blocks.push(`<p class="ws-empty">${p.home.loading?'正在找…':esc(p.home.error||'这个片源还没有分类')}</p>`);
+ /* 出错时紧跟一句针对这款组件网络模式的建议，别让人对着「加载失败」猜 */
+ const advice=watchNetAdvice();
+ if(advice)blocks.push(`<p class="ws-advice">${esc(advice)}</p>`);
  if(cats.length>rows.length)blocks.push(`<button type="button" class="ws-home-all" data-action="watch-home-all">
    查看全部 ${cats.length} 个分类 ${icon('arrow')}</button>`);
  const head=watchCanSearch()
@@ -693,6 +726,32 @@ function watchListInner(){
 function watchCanSearch(){
  const caps=((watchProvider()||{}).caps)||[];
  return !caps.length||caps.indexOf('search')>=0;
+}
+
+/* 组件连不上时给一句「接下来怎么办」。
+   四种网络模式的处置**完全相反**，笼统说「出错了」等于没说 —— 最典型的是
+   `mobile`：真正拉流的是手机自己，这时候让人去给服务器挂代理是南辕北辙。 */
+function watchNetAdvice(){
+ const p=WATCH_PICK;
+ const g=watchGroup();
+ if(!g)return '';
+ const rows=p.home&&p.home.rows?p.home.rows:[];
+ const failed=!!(p.home&&p.home.error)||rows.some(r=>!!r.error);
+ /* 还在拉的时候别下结论：分类是一条条回来的，第一批失败不代表整页完蛋，
+    提前弹一句「连不上」会跟下面还转着的「正在找…」自相矛盾。 */
+ if(p.home&&p.home.loading)return '';
+ if(!failed&&!wsNetBad(g))return '';
+ const net=g.net||{};
+ /* 明确标了「手机端直连」的组件：服务端拿不到内容本来就不该当成故障 */
+ if(net.mode==='mobile')
+  return '这个组件由手机端直连拉流，服务端取不到内容不代表播不了 —— 先在手机上试播一集。';
+ if(net.mode==='proxy_configured')
+  return '已经给它配了海外代理，服务端却还是连不上：先确认代理在容器里能访问，再重启这个组件，让它的 worker 重新读一次配置。';
+ if(net.mode==='proxy_suggested')
+  return '源站按地区限制访问，可以只给它挂一个局部代理，不必让整台服务都走代理。';
+ if(net.mode==='direct')
+  return '这个组件要由服务器自己去连源站，现在连不上：先查 NAS 的出网（DNS / 上游链路）。';
+ return '这个组件现在连不上。';
 }
 
 /* 组件首页数据：每个分类各拉第一页铺一行。分类多的组件（27 个）不能一口气全并发，
@@ -888,7 +947,7 @@ async function watchToggleSource(sid,prov){
 function watchCurateForm(){
  const rows=watchIndex();
  const list=rows.map(r=>`<div class="curate-row" data-key="${esc(r.key)}">
-   <div class="curate-head"><b>${esc(r.title)}</b><small>${esc(r.key)}</small></div>
+   <div class="curate-head"><b>${esc(r.title)}</b>${wsNetPill(r.net)}<small>${esc(r.key)}</small></div>
    <input name="alias:${esc(r.key)}" value="${esc(r.alias)}" maxlength="24"
      placeholder="改个名（留空 = 用上游原名）" autocomplete="off">
    <div class="curate-line">

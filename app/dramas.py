@@ -78,6 +78,12 @@ DETAIL_TTL = 300
 PROVIDERS_TTL = 300
 # 列表页缓存：上游对同一分类连拉两次要 4 秒，来回翻页时不该再等一遍
 LIST_TTL = 60
+# 上游的诊断快照缓存。这份数据本身是上游**上一次全量诊断**的结果，变化很慢，
+# 缓存两分钟纯粹是为了别在每次打开组件列表时都去要一遍。
+DIAG_TTL = 120
+# 诊断快照只是读一份本地 JSON，理论上百毫秒级；给 3 秒是为了跟组件探测
+# 共用同一个「最坏等多久」上限 —— 两者是并发的，总上限不该因此变长。
+DIAG_TIMEOUT = 3.0
 # 一台服务最多等这么久；主人加的地址可能是台关着的机器
 PROBE_TIMEOUT = 3.0
 # 分片代理的签名有效期：一集通常几分钟，留足余量又不至于永久有效
@@ -96,6 +102,8 @@ _stream_probe = {}  # (base, provider, item_id, ep) -> (expire_ts, url, is_hls)
 # 组件健康度：(base, provider) -> {'ok','error','at','ms'}。只记最近一次结果，
 # 不落库 —— 上游本来就是「说挂就挂、过会儿又好了」，历史留着没有意义。
 _health = {}
+# 上游诊断快照：(base) -> (expire_ts, {provider_id: net})。见 `diagnostics()`。
+_diagnostics = {}
 _lock = threading.Lock()
 _transport = None   # 测试注入 httpx.MockTransport
 _part_key_cache = None
@@ -577,19 +585,24 @@ async def catalog(c, refresh=False):
     """给管理界面：每台服务在线情况 + 它代理的组件 + 勾选/整理状态。
 
     几台服务并发探测 —— 串行的话，一台连不上的机器会把后面全卡住，
-    主人看到的就是「点了没反应」。
+    主人看到的就是「点了没反应」。诊断快照跟探测一起发出去，两者互不依赖。
     """
     cfg = load_config(c)
     enabled = set(cfg['enabled'])
     overlay = load_overlay(c)
-    ready = await asyncio.gather(
-        *(_probe(s['base'], refresh) for s in cfg['services']),
-        return_exceptions=True,
-    )
+    # 探测和诊断快照交错排：每台服务两个任务，最后按奇偶拆开。
+    # 分两批 await 会让最坏耗时变成 3+3 秒，交错发就只有 3 秒。
+    tasks = []
+    for svc in cfg['services']:
+        tasks.append(_probe(svc['base'], refresh))
+        tasks.append(_nets_safe(svc['base'], refresh))
+    ready = await asyncio.gather(*tasks, return_exceptions=True)
+    probes, nets = ready[0::2], ready[1::2]
     services = []
-    for svc, result in zip(cfg['services'], ready):
+    for svc, result, net_map in zip(cfg['services'], probes, nets):
         entry = {'id': svc['id'], 'name': svc['name'], 'base': svc['base'],
                  'online': False, 'error': '', 'providers': []}
+        nets_of = net_map if isinstance(net_map, dict) else {}
         if isinstance(result, Exception):          # 超时、连不上、返回看不懂
             entry['error'] = str(result) or '这台服务连不上'
         else:
@@ -600,9 +613,51 @@ async def catalog(c, refresh=False):
                 one['key'] = key
                 one['enabled'] = key in enabled
                 one['health'] = health_of(svc['base'], p['id'])
+                # 网络模式与健康度并列，互不覆盖：健康度是「我们刚才请求成没成」，
+                # 网络模式是上游说「这个源该由谁去连」。两者都会缺，缺了就是空。
+                one['net'] = nets_of.get(p['id']) or {}
                 entry['providers'].append(one)
         services.append(entry)
     return {'services': services}
+
+
+async def diagnostics(base, refresh=False):
+    """读上游的**诊断快照**，拿到每个组件的网络模式。
+
+    为什么只 GET 不 POST：`POST /api/v1/diagnostics` 会让上游对每个组件跑一遍
+    真实探测（本机实测 9 个组件 8 秒，带超时的源更久），而 `GET` 直接读上一次的
+    结果。打开一次组件列表就有这种副作用是不可接受的，所以触发留给
+    `scripts/capy_probe.py --diag`，这边只读。
+
+    读不到就返回空表 —— 网络模式只是**附加信息**，上游这套接口没开、或者干脆
+    是别的 Capy 实现时，组件列表本身必须照常能用。
+    """
+    now = time.time()
+    if not refresh:
+        with _lock:
+            hit = _diagnostics.get(base)
+        if hit and hit[0] > now:
+            return hit[1]
+    try:
+        payload = await asyncio.wait_for(
+            _get_json(base, '/api/v1/diagnostics'), DIAG_TIMEOUT)
+    except (DramaError, asyncio.TimeoutError) as exc:
+        log.info('drama diagnostics unavailable: %s %s', base, exc)
+        out = {}
+    else:
+        out = widgets.nets(payload)
+    with _lock:
+        _diagnostics[base] = (now + DIAG_TTL, out)
+    return out
+
+
+async def _nets_safe(base, refresh):
+    """`diagnostics()` 的兜底包装：任何异常都退回空表，绝不让组件列表跟着挂。"""
+    try:
+        return await diagnostics(base, refresh)
+    except Exception as exc:                   # 不是 DramaError 也照兜
+        log.warning('drama diagnostics failed: %s %s', base, exc)
+        return {}
 
 
 async def _probe(base, refresh):
@@ -699,6 +754,29 @@ async def diagnose(base, provider):
     out['ok'] = out['playable']
     out['ms'] = int((time.time() - started) * 1000)
     return out
+
+
+async def diagnose_many(base, providers_list, limit=4):
+    """批量体检：并发跑，但**卡住并发数**。
+
+    17 个组件串行跑要一分多钟（上游一个分类 4 秒是常态），主人的手机会一直转圈；
+    全放开并发又等于对着一台爬虫机器连开 17 个口子，上游会更慢。4 是实测的折中。
+    返回与入参同序的结果列表，失败的组件也在列表里（`ok=False` + 原因）。
+    """
+    sem = asyncio.Semaphore(max(1, int(limit or 1)))
+
+    async def one(provider):
+        async with sem:
+            try:
+                return await diagnose(base, provider)
+            except Exception as exc:           # 单个组件炸了不该拖垮整份报告
+                log.warning('drama diagnose failed: %s/%s %s',
+                            base, provider.get('id'), exc)
+                return {'ok': False, 'browse': str(exc) or '体检失败', 'detail': '',
+                        'items': 0, 'total': 0, 'episodes': 0, 'playable': False,
+                        'needs_resolve': False, 'sample': '', 'ms': 0}
+
+    return await asyncio.gather(*(one(p) for p in providers_list))
 
 
 async def _detail(base, provider, item_id):

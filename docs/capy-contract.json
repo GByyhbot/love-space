@@ -26,6 +26,163 @@
   "url",
   "videoUrl"
  ],
+ "diagnostics": {
+  "check_fields": [
+   "basic",
+   "client",
+   "playback",
+   "server"
+  ],
+  "covered": 9,
+  "network_modes": [
+   "",
+   "direct"
+  ],
+  "result_fields": [
+   "checks",
+   "diagnostic_text",
+   "finished_at",
+   "historical",
+   "impact_hint",
+   "network_mode",
+   "network_text",
+   "rechecked",
+   "server_check_role",
+   "started_at",
+   "status",
+   "target",
+   "title",
+   "version"
+  ],
+  "roles": [
+   "reference_connectivity",
+   "required_metadata"
+  ],
+  "rows": [
+   {
+    "checks": [
+     "basic",
+     "client",
+     "playback",
+     "server"
+    ],
+    "id": "51chigua",
+    "network_mode": "direct",
+    "network_text": "服务器直连",
+    "server_check_role": "required_metadata",
+    "status": "passed"
+   },
+   {
+    "checks": [
+     "basic",
+     "client",
+     "playback",
+     "server"
+    ],
+    "id": "dsd",
+    "network_mode": "direct",
+    "network_text": "服务器直连",
+    "server_check_role": "required_metadata",
+    "status": "failed"
+   },
+   {
+    "checks": [
+     "basic",
+     "client",
+     "playback",
+     "server"
+    ],
+    "id": "hlbdy",
+    "network_mode": "direct",
+    "network_text": "服务器直连",
+    "server_check_role": "required_metadata",
+    "status": "passed"
+   },
+   {
+    "checks": [
+     "basic",
+     "client",
+     "playback",
+     "server"
+    ],
+    "id": "hongguo",
+    "network_mode": "",
+    "network_text": "",
+    "server_check_role": "required_metadata",
+    "status": "passed"
+   },
+   {
+    "checks": [
+     "basic",
+     "client",
+     "playback",
+     "server"
+    ],
+    "id": "huangdou",
+    "network_mode": "direct",
+    "network_text": "服务器直连",
+    "server_check_role": "required_metadata",
+    "status": "passed"
+   },
+   {
+    "checks": [
+     "basic",
+     "client",
+     "playback",
+     "server"
+    ],
+    "id": "huangguo",
+    "network_mode": "",
+    "network_text": "",
+    "server_check_role": "reference_connectivity",
+    "status": "warning"
+   },
+   {
+    "checks": [
+     "basic",
+     "client",
+     "playback",
+     "server"
+    ],
+    "id": "huangju",
+    "network_mode": "direct",
+    "network_text": "服务器直连",
+    "server_check_role": "required_metadata",
+    "status": "passed"
+   },
+   {
+    "checks": [
+     "basic",
+     "client",
+     "playback",
+     "server"
+    ],
+    "id": "missav",
+    "network_mode": "",
+    "network_text": "",
+    "server_check_role": "reference_connectivity",
+    "status": "passed"
+   },
+   {
+    "checks": [
+     "basic",
+     "client",
+     "playback",
+     "server"
+    ],
+    "id": "yeguo",
+    "network_mode": "direct",
+    "network_text": "服务器直连",
+    "server_check_role": "required_metadata",
+    "status": "passed"
+   }
+  ],
+  "statuses": [
+   "failed",
+   "passed",
+   "warning"
+  ]
+ },
  "episode_fields": [
   "episodeNumber",
   "id",
@@ -35,7 +192,7 @@
   "streamUrl",
   "title"
  ],
- "generated_at": "2026-11-05 14:19:34",
+ "generated_at": "2026-11-05 14:52:54",
  "item_fields": [
   "description",
   "id",
@@ -269,9 +426,40 @@
   },
   {
    "categories": 7,
-   "error": "取不到 /api/v1/providers/hsex/browse?category=featured&page=1（HTTP 502）",
+   "detail_fields": [
+    "description",
+    "episodeCount",
+    "id",
+    "mediaType",
+    "posterUrl",
+    "seasonCount",
+    "seasons",
+    "title"
+   ],
+   "episode_fields": [
+    "episodeNumber",
+    "id",
+    "streamUrl",
+    "title"
+   ],
+   "error": "",
    "id": "hsex",
-   "ok": false,
+   "item_fields": [
+    "description",
+    "id",
+    "mediaType",
+    "posterUrl",
+    "remark",
+    "title"
+   ],
+   "items": 33,
+   "ok": true,
+   "page_fields": [
+    "items",
+    "page",
+    "pageCount",
+    "total"
+   ],
    "title": "好色TV"
   },
   {
@@ -418,7 +606,7 @@
     "remark",
     "title"
    ],
-   "items": 47,
+   "items": 48,
    "ok": true,
    "page_fields": [
     "items",
