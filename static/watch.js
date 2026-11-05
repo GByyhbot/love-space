@@ -203,10 +203,12 @@ function watchFitStage(){
  const box=$('#page');
  const pageH=(box&&box.clientHeight)||window.innerHeight;
  const h=Math.round(w*vh/vw);
- /* 竖屏片子（短剧基本都是 9:16）按 62% 卡会左右各留一大条黑边，
-     放宽到「只给聊天区留 240」；横屏片子照旧 62%，够看又不挤聊天。 */
+ /* 竖屏片子（短剧基本都是 9:16）只给聊天区留 240，放映区吃剩下的。
+     以前写成 max(0.62*pageH, pageH-240)：大屏等价，但键盘把可视区压到
+     632px 以下时 0.62*pageH 反超，stage+聊天 会溢出可视区，输入框又被
+     键盘盖住（Redmi 实测）。直接用 pageH-240，任何高度下聊天区都保得住。 */
  const portrait=vh>vw;
- let limit=portrait?Math.max(Math.round(pageH*0.62),pageH-240):Math.round(pageH*0.62);
+ let limit=portrait?pageH-240:Math.round(pageH*0.62);
  /* 键盘打开时放映区必须让位：竖屏片的 62% 上限会把聊天区压进键盘底下。
      这里保证聊天区至少还有 240px，放映区只吃剩下的空间；键盘收起时
      kbH 归零，这条限制不改变上面算出的结果。 */

@@ -4,6 +4,7 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
+import android.content.res.Configuration;
 import android.net.ConnectivityManager;
 import android.net.Network;
 import android.net.NetworkCapabilities;
@@ -14,12 +15,18 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
+import android.view.View;
+import android.view.ViewGroup;
 import android.webkit.CookieManager;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
+
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
@@ -169,6 +176,54 @@ public class MainActivity extends BridgeActivity {
         // ④ 打开本地存储：聊天背景图按 media id 缓存进 IndexedDB，省得每次进聊天都重下一遍。
         //    WebSettings 的 database/domStorage 默认未必开启，不开的话 JS 侧 indexedDB.open 会直接失败。
         setupLocalStorage();
+        // ⑤ Android 15 键盘避让：targetSdk 35 强制 edge-to-edge，系统不再随键盘缩窗口，
+        //    windowSoftInputMode=adjustResize 形同虚设，键盘直接盖住输入框（Redmi Note 12
+        //    Turbo 实测）。这里手动把 IME inset 应用成 WebView 高度，等效 adjustResize；
+        //    Android 15 以下系统会自己缩，交给系统（不重复处理，避免双重收缩）。
+        setupKeyboardResize();
+    }
+
+    /** 记录上次给 WebView 设的 height/底边距，insets 反复回调但值没变时跳过 setLayoutParams，防止布局抖动。 */
+    private int lastWebHeight = Integer.MIN_VALUE;
+    private int lastWebBottomMargin = Integer.MIN_VALUE;
+
+    private void setupKeyboardResize() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.VANILLA_ICE_CREAM) return;
+        View wv = getBridge() == null ? null : getBridge().getWebView();
+        if (wv == null) return;
+        ViewCompat.setOnApplyWindowInsetsListener(wv, (v, windowInsets) -> {
+            Insets bars = windowInsets.getInsets(
+                    WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout());
+            Insets ime = windowInsets.getInsets(WindowInsetsCompat.Type.ime());
+            ViewGroup.MarginLayoutParams mlp = (ViewGroup.MarginLayoutParams) v.getLayoutParams();
+            boolean portrait = getResources().getConfiguration().orientation
+                    == Configuration.ORIENTATION_PORTRAIT;
+            int imeBottom = ime.bottom;
+            int height;
+            int bottomMargin;
+            if (portrait && imeBottom > 0) {
+                // 键盘弹出：WebView 压到键盘上沿（IME inset 已从屏幕底算起，底边距归零）
+                height = Math.max(v.getRootView().getHeight() - imeBottom - bars.top, 0);
+                bottomMargin = 0;
+            } else {
+                // 键盘收起（或横屏——横屏屏高比键盘还矮，缩了没法看，保持全高）：
+                // 恢复全高，系统栏照常避让。与 Capacitor edgeToEdgeHandler 的 margin
+                // 逻辑同款，这里一并接管（本 listener 会覆盖它设置的）。
+                height = ViewGroup.LayoutParams.MATCH_PARENT;
+                bottomMargin = bars.bottom;
+            }
+            mlp.leftMargin = bars.left;
+            mlp.rightMargin = bars.right;
+            mlp.topMargin = bars.top;
+            mlp.bottomMargin = bottomMargin;
+            mlp.height = height;
+            if (height != lastWebHeight || bottomMargin != lastWebBottomMargin) {
+                v.setLayoutParams(mlp);
+                lastWebHeight = height;
+                lastWebBottomMargin = bottomMargin;
+            }
+            return WindowInsetsCompat.CONSUMED;
+        });
     }
 
     /**
