@@ -570,9 +570,10 @@ function watchSrcCard(row,many){
  /* 手机端直连的组件：服务端那项没过不算故障，但也不该假装一切正常 */
  const soft=!bad&&net.mode==='mobile'&&net.checks&&net.checks.server!=='passed';
  const bits=[];
- /* 「个」省掉：两列窄卡里「直连 · 27 个分类」会被截成「27 个…」，少一个字就正好够 */
- if(n)bits.push(`${n} 分类`);
+ /* 有网络模式徽章时不再挤分类数：真机（系统字号调大）实测「直连 3 分类」会把
+    分类数截成「3…」，而它本来就是次要信息，让位给模式更划算。 */
  if(row.hidden)bits.push('已隐藏');
+ else if(!net.mode&&n)bits.push(`${n} 分类`);
  const meta=bits.join(' · ')||'点一下打开';
  const label=many?(row.svcName+' · '+row.name):row.name;
  /* 状态**单独一行**：真机（系统字号调大时）证明放在徽章同一行会被截成「直连 …」，
