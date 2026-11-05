@@ -567,22 +567,24 @@ function watchSrcCard(row,many){
  const n=(row.cats||[]).length;
  const net=row.net||{};
  const bad=wsNetBad(row);
+ /* 手机端直连的组件：服务端那项没过不算故障，但也不该假装一切正常 */
+ const soft=!bad&&net.mode==='mobile'&&net.checks&&net.checks.server!=='passed';
  const bits=[];
- /* 状态优先占这一行：卡片副标题是单行截断的，排在分类数后面会被「6 个分类…」
-    挤掉，等于没提示。 */
- if(bad)bits.push('连不上');
- else if(net.mode==='mobile'&&net.checks&&net.checks.server!=='passed')bits.push('待手机验证');
  /* 「个」省掉：两列窄卡里「直连 · 27 个分类」会被截成「27 个…」，少一个字就正好够 */
- else if(n)bits.push(`${n} 分类`);
+ if(n)bits.push(`${n} 分类`);
  if(row.hidden)bits.push('已隐藏');
  const meta=bits.join(' · ')||'点一下打开';
  const label=many?(row.svcName+' · '+row.name):row.name;
+ /* 状态**单独一行**：真机（系统字号调大时）证明放在徽章同一行会被截成「直连 …」，
+   而这几个字恰恰是整张卡最要紧的信息。状态行只在非正常时出现，正常卡片仍是一行副标题。 */
+ const state=bad?'连不上':(soft?'待手机验证':'');
  return `<div class="src-card${row.enabled?' on':''}${row.hidden?' off':''}${bad?' bad':''}">
     <button type="button" class="src-card-main" data-action="watch-src-open"
       data-id="${esc(row.svc)}" data-prov="${esc(row.prov)}">
       ${wsLogo(row.name,row.key)}
       <span class="src-card-txt"><b>${esc(label)}</b>
-       <small>${wsNetPill(net)}${row.tag?`<i class="src-tag">${esc(row.tag)}</i>`:''}${esc(meta)}</small></span>
+       <small>${wsNetPill(net)}${row.tag?`<i class="src-tag">${esc(row.tag)}</i>`:''}${esc(meta)}</small>
+       ${state?`<small class="src-state${bad?' bad':' warn'}">${state}</small>`:''}</span>
      </button>
     <button type="button" class="src-card-go" data-action="watch-src-toggle"
       data-id="${esc(row.svc)}" data-prov="${esc(row.prov)}"

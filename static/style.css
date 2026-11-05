@@ -3003,6 +3003,11 @@ body.kb-open .pick-overlay{padding-bottom:0}
 /* 连不上的组件：左边一道红边，扫一眼就能跳过 */
 .src-card.bad{border-color:rgba(255,107,139,.55)}
 .src-card.bad .src-logo{opacity:.72}
+/* 状态独占一行。真机上（系统字号调大）放在徽章同一行会被截成「直连 …」，
+   而「连不上」这三个字是整张卡最要紧的信息，不能靠运气。
+   选择器要比 `.src-card-txt small` 更具体，否则颜色被它盖掉。 */
+.src-card-txt small.src-state{color:#FF8FA3}
+.src-card-txt small.src-state.warn{color:#FFD166}
 /* 组件报错时的处置建议。四种模式对应四句完全不同的话，所以这行不能笼统写成
    「加载失败，请重试」—— 手机端直连的组件让人去挂服务端代理是南辕北辙。 */
 .ws-advice{margin:10px 0 0;padding:10px 12px;border-radius:12px;
