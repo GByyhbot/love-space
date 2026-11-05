@@ -211,15 +211,30 @@ pytest            # 全部测试：API 验收 + 媒体链路 + 安全 + 版本�
 
 ### 改前端必须同时改两个版本号（否则用户会拿到「新 JS + 旧 CSS」）
 
-`static/sw.js` 顶部的 `const VERSION` 与 `static/index.html` 里
-`style.css` / `app.js` 的 `?v=` **必须同号**。`sw.js` 对 CSS 是 cache-first，
-版本号脱钩时旧 CSS 缓存会一直被命中，表现为样式莫名其妙错乱，而服务端一切正常。
+`static/sw.js` 顶部的 `const VERSION` 与 `static/index.html` 里全部 `?v=`
+**必须同号**。`sw.js` 对 CSS 是 cache-first，版本号脱钩时旧 CSS 缓存会一直被命中，
+表现为样式莫名其妙错乱，而服务端一切正常。
 
-1. `static/sw.js`：`const VERSION = 69;`（`CACHE` 与 `CORE` 都由它拼出，不要再手写）
-2. `static/index.html`：两处 `?v=69`
+1. `static/sw.js`：`const VERSION = 221;`（`CACHE`、`CORE`、`BUNDLES` 都由它拼出，不要再手写）
+2. `static/index.html`：`style.css` 与 5 个 bundle 的 `?v=` 全部同号
 
-`tests/test_version_consistency.py` 会自动校验这三处；只升一处的话 pytest 会失败。
-只改后端不用升版本。
+前端拆成了 5 个 classic script（共享全局作用域，靠 `defer` 保证顺序）：
+
+| 文件 | 职责 |
+| --- | --- |
+| `static/watch.js` | 一起看放映区 + 进度同步 + 片源四层 |
+| `static/chat.js` | 私聊消息流 / 壁纸 / 表情 / 气泡 / 贴纸面板 |
+| `static/music.js` | 歌单页与选歌弹窗 |
+| `static/period.js` | 生理期日历 / 分析 / 记录表单 |
+| `static/app.js` | 其余页面渲染核心 |
+
+⚠️ `watch.js` / `chat.js` / `music.js` / `period.js` **必须排在 `app.js` 之前**
+（`app.js` 末尾的 `boot()` 会调它们），顺序反了会整页白屏。
+新增/拆分文件要同步四处：`index.html` 的 `<script>`、`sw.js` 的 `BUNDLES`、
+三个部署脚本的 `FILES`、`tests/test_version_consistency.py` 的预热校验。
+
+`tests/test_version_consistency.py` 会自动校验版本号一致、每个本地 bundle 都被
+SW 预热、以及上述加载顺序；漏改任一处 pytest 会失败。只改后端不用升版本。
 
 ### 网页版本号从 git tag 来，不要手改代码
 
@@ -234,6 +249,12 @@ pytest            # 全部测试：API 验收 + 媒体链路 + 安全 + 版本�
 所以**发版只需要打 tag**：`git tag v1.2.5 && git push --tags`，镜像里的版本号自动变成 1.2.5。
 `tests/test_version_config.py` 会校验 `/api/status` 报的 APK 版本与 `build.gradle` 的
 `versionName` 一致——不同号的话客户端「检查更新」会一直提示有新版本。
+
+### 真机验收
+
+`tests/e2e/smoke.py` 跑的是干净库，覆盖不到「历史数据渲染、跨页面状态、媒体播放、
+上游片源」这些分支。发版前照 [`docs/真机验收.md`](docs/真机验收.md) 在真机上走一遍，
+里面带可直接用的 `adb` 命令与坐标。
 
 ## 安全与隐私设计
 
