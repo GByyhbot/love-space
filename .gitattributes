@@ -8,6 +8,12 @@ gradlew text eol=lf
 Dockerfile text eol=lf
 *.yml text eol=lf
 
+# 前端静态资源也钉成 LF：补丁部署脚本按 md5 比对本地文件与容器内文件，
+# Windows 检出成 CRLF 时会报「内容不一致」的假差异
+*.js text eol=lf
+*.css text eol=lf
+*.html text eol=lf
+
 # 二进制：不做任何转换
 *.jar binary
 *.jks binary
