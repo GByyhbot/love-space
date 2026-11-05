@@ -241,7 +241,26 @@ def run():
                            'period.js 的全局对 app.js 可见',
                            f"periodData={per['days']} periodSaveDay={per['save']}")
 
-                    # ---- 9. 零运行时错误 ----
+                    # ---- 9. 歌单页（music.js 拆出后的可见性）----
+                    # 歌单页在空库里没有卡片，只有标题，所以断言标题文案而不是某个容器。
+                    mus = page.evaluate("""async () => {
+                        try { await navigate('together', 'music'); }
+                        catch (e) { return 'ERR ' + (e && e.message || e); }
+                        const txt = document.querySelector('#page')?.textContent || '';
+                        return {
+                            titled: txt.includes('共同歌单'),
+                            page: typeof musicPage, card: typeof musicCard,
+                            pick: typeof songPicker, send: typeof sendSong,
+                        };
+                    }""")
+                    ok(isinstance(mus, dict) and mus['titled'],
+                       '歌单页渲染出「共同歌单」（music.js 已生效）', str(mus))
+                    if isinstance(mus, dict):
+                        ok(all(mus[k] != 'undefined' for k in ('page', 'card', 'pick', 'send')),
+                           'music.js 的全局对 app.js 可见',
+                           f"musicPage={mus['page']} songPicker={mus['pick']}")
+
+                    # ---- 10. 零运行时错误 ----
                     ok(not page_errors, '无 PAGEERROR', ' / '.join(page_errors[:3]))
                     ok(not console_errors, '无 console error', ' / '.join(console_errors[:3]))
 
