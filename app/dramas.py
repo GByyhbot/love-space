@@ -413,7 +413,7 @@ def save_config(c, cfg):
 # 为什么单独一张表：组件清单是上游给的，随时会变（新增/改名/消失）。如果主人的
 # 「改名、隐藏、排序、标签」也塞进 drama_sources，上游一改名就会连带被覆盖掉。
 # 所以本地只存**差异**，键是 `服务id:组件id`，读的时候再叠加上去。
-OVERLAY_FIELDS = ('alias', 'hidden', 'order', 'tag')
+OVERLAY_FIELDS = ('alias', 'hidden', 'proxy', 'order', 'tag')
 
 
 def _overlay_key_ok(key):
@@ -448,6 +448,10 @@ def load_overlay(c):
             entry['order'] = max(0, min(order, 9999))
         if value.get('hidden'):
             entry['hidden'] = True
+        # 「需要海外代理」是纯本地知识：上游 manifest 里没有这个字段，
+        # diagnostics 也只会说 direct。所以只能主人自己标一次，之后一直认它。
+        if value.get('proxy'):
+            entry['proxy'] = True
         if entry:
             out[clean_key] = entry
     return out
@@ -474,6 +478,8 @@ def set_overlay(c, key, patch):
         entry['order'] = max(0, min(int(order), 9999)) if isinstance(order, int) else None
     if 'hidden' in patch:
         entry['hidden'] = bool(patch.get('hidden'))
+    if 'proxy' in patch:
+        entry['proxy'] = bool(patch.get('proxy'))
     entry = {k: v for k, v in entry.items()
              if v is not None and v != '' and v is not False}
     overlay = {k: v for k, v in overlay.items() if k != key}
@@ -491,6 +497,7 @@ def _decorate(provider, entry):
     out['name'] = alias or provider['title']
     out['tag'] = (entry or {}).get('tag') or ''
     out['hidden'] = bool((entry or {}).get('hidden'))
+    out['proxy'] = bool((entry or {}).get('proxy'))
     out['order'] = (entry or {}).get('order')
     return out
 

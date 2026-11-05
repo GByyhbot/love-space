@@ -2929,6 +2929,8 @@ body.kb-open .pick-overlay{padding-bottom:0}
 .curate-line{display:flex;align-items:center;gap:8px}
 .curate-line input{flex:1;min-width:0}
 .curate-line .switch-row{flex:none;margin:0}
+/* 两个开关并排一行（需代理 / 隐藏）：标签输入独占一行，免得真机大字号下挤成一团 */
+.curate-switch-row{justify-content:flex-start;gap:16px}
 /* 整理弹窗是浅色层，影院那套「白底 8% + --ws-mut」在这儿等于没有底、没有色。
    换成描边徽章，模式颜色仍保留 —— 主人在这儿也该看得出哪个组件要代理。 */
 .curate-head .src-net{flex:none;color:var(--muted);background:none;

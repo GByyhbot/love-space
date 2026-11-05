@@ -384,8 +384,11 @@ function watchIndex(){
     health:one.health||{},enabled:!!one.enabled,
     /* net = 上游诊断快照里的网络模式（服务器直连 / 手机端直连 / 建议代理 …）。
        它不是「这个组件好没好」，而是「该由谁去连源站」—— 拿它当可用性判断
-       会误伤手机端直连的组件（服务端初筛不过，手机上照样能播）。 */
-    net:one.net||{}});
+       会误伤手机端直连的组件（服务端初筛不过，手机上照样能播）。
+       proxy = 本地「需代理」标记：上游没有任何字段说这件事（manifest 只有
+       id/title/version/caps，diagnostics 只给 direct），只能用主人标的那一次。
+       两者都有时**本地优先** —— 主人比上游更清楚自己这台机器的情况。 */
+    net:one.net||{},proxy:!!one.proxy});
   });
  });
  return out;
@@ -546,12 +549,15 @@ function watchPickBody(){
    卡片主体「进片源」、右侧小按钮管开/关：button 里不能再塞 button，
    所以外层用 div 容器、里面放两个平级按钮。 */
 /* 组件的网络模式徽章。上游没标（内建源就是这样）就整块不画 —— 空徽章比
-   没有徽章更让人困惑。四种模式照搬 CapyPlayer 首页卡片的说法，只是缩成两三个字。 */
-function wsNetPill(net){
- const m=(net||{}).mode||'';
+   没有徽章更让人困惑。四种模式照搬 CapyPlayer 首页卡片的说法，只是缩成两三个字。
+   本地的「需代理」标记优先：上游只会说 direct，而主人已经知道这家要挂代理。 */
+function wsNetPill(row){
+ if(row&&row.proxy)return '<i class="src-net src-net-proxysuggested">需代理</i>';
+ const net=(row&&row.net)||{};
+ const m=net.mode||'';
  if(!m)return '';
  const cls=' src-net-'+m.replace(/[^a-z]/g,'');
- return `<i class="src-net${cls}">${esc((net||{}).short||(net||{}).label||m)}</i>`;
+ return `<i class="src-net${cls}">${esc(net.short||net.label||m)}</i>`;
 }
 
 /* 这个组件现在算不算「坏了」。
@@ -573,10 +579,10 @@ function watchSrcCard(row,many){
  /* 有网络模式徽章时不再挤分类数：真机（系统字号调大）实测「直连 3 分类」会把
     分类数截成「3…」，而它本来就是次要信息，让位给模式更划算。 */
  if(row.hidden)bits.push('已隐藏');
- else if(!net.mode&&n)bits.push(`${n} 分类`);
+ else if(!net.mode&&!row.proxy&&n)bits.push(`${n} 分类`);
  /* 兜底文案只在「什么都没有」时才用：有徽章却还接一句「点一下打开」，
      真机上又会把徽章挤成「直连 …」。 */
- const meta=bits.length?bits.join(' · '):(net.mode?'':'点一下打开');
+ const meta=bits.length?bits.join(' · '):((net.mode||row.proxy)?'':'点一下打开');
  const label=many?(row.svcName+' · '+row.name):row.name;
  /* 状态**单独一行**：真机（系统字号调大时）证明放在徽章同一行会被截成「直连 …」，
    而这几个字恰恰是整张卡最要紧的信息。状态行只在非正常时出现，正常卡片仍是一行副标题。 */
@@ -586,7 +592,7 @@ function watchSrcCard(row,many){
       data-id="${esc(row.svc)}" data-prov="${esc(row.prov)}">
       ${wsLogo(row.name,row.key)}
       <span class="src-card-txt"><b>${esc(label)}</b>
-       <small>${wsNetPill(net)}${row.tag?`<i class="src-tag">${esc(row.tag)}</i>`:''}${esc(meta)}</small>
+       <small>${wsNetPill(row)}${row.tag?`<i class="src-tag">${esc(row.tag)}</i>`:''}${esc(meta)}</small>
        ${state?`<small class="src-state${bad?' bad':' warn'}">${state}</small>`:''}</span>
      </button>
     <button type="button" class="src-card-go" data-action="watch-src-toggle"
@@ -747,6 +753,10 @@ function watchNetAdvice(){
  if(p.home&&p.home.loading)return '';
  if(!failed&&!wsNetBad(g))return '';
  const net=g.net||{};
+ /* 主人标过「需代理」的组件：上游只会说 direct（它不知道你配没配），
+    这时候让人去查 NAS 出网就是南辕北辙 —— 这条分支必须排在 direct 前面。 */
+ if(g.proxy)
+  return '这个组件要走海外代理才能连上。先在 Capy 的 config.toml 里确认 [providers.'+g.prov+'] 的 proxy 指向一个容器内能访问的地址，再重启这个组件让 worker 重新读配置。';
  /* 明确标了「手机端直连」的组件：服务端拿不到内容本来就不该当成故障 */
  if(net.mode==='mobile')
   return '这个组件由手机端直连拉流，服务端取不到内容不代表播不了 —— 先在手机上试播一集。';
@@ -956,17 +966,18 @@ async function watchToggleSource(sid,prov){
 function watchCurateForm(){
  const rows=watchIndex();
  const list=rows.map(r=>`<div class="curate-row" data-key="${esc(r.key)}">
-   <div class="curate-head"><b>${esc(r.title)}</b>${wsNetPill(r.net)}<small>${esc(r.key)}</small></div>
+   <div class="curate-head"><b>${esc(r.title)}</b>${wsNetPill(r)}<small>${esc(r.key)}</small></div>
    <input name="alias:${esc(r.key)}" value="${esc(r.alias)}" maxlength="24"
      placeholder="改个名（留空 = 用上游原名）" autocomplete="off">
-   <div class="curate-line">
-    <input name="tag:${esc(r.key)}" value="${esc(r.tag)}" maxlength="12"
-      placeholder="标签，例如 短剧 / 影视" autocomplete="off">
+   <input name="tag:${esc(r.key)}" value="${esc(r.tag)}" maxlength="12"
+     placeholder="标签，例如 短剧 / 影视" autocomplete="off">
+   <div class="curate-line curate-switch-row">
+    <label class="switch-row"><input type="checkbox" name="proxy:${esc(r.key)}"${r.proxy?' checked':''}><span>需代理</span></label>
     <label class="switch-row"><input type="checkbox" name="hidden:${esc(r.key)}"${r.hidden?' checked':''}><span>隐藏</span></label>
    </div>
   </div>`).join('');
  openModal('整理组件',`<form class="modal-form" id="ws-curate-form">
-   <p class="meta" style="margin:0">只改本机显示，不动上游。标签相同的组件会自动归到一组。</p>
+   <p class="meta" style="margin:0">只改本机显示，不动上游。标签相同的组件会自动归到一组。<br>「需代理」是给海外源打的记号：上游不会说自己要代理，标过之后卡片会显示「需代理」，连不上时也按这个给建议。</p>
    <div class="curate-list">${list||'<p class="ws-empty">还没有组件。</p>'}</div>
    ${formError()}
    <div class="form-actions">${button('取消','watch-src-back')}<button class="button primary" type="submit">保存</button></div>
@@ -980,10 +991,12 @@ function watchCurateForm(){
    const alias=String(fd.get('alias:'+r.key)||'').trim();
    const tag=String(fd.get('tag:'+r.key)||'').trim();
    const hidden=fd.get('hidden:'+r.key)==='on';
+   const proxy=fd.get('proxy:'+r.key)==='on';
    const patch={};
    if(alias!==r.alias)patch.alias=alias;
    if(tag!==r.tag)patch.tag=tag;
    if(hidden!==r.hidden)patch.hidden=hidden;
+   if(proxy!==!!r.proxy)patch.proxy=proxy;
    if(Object.keys(patch).length)jobs.push({key:r.key,patch});
   });
   if(!jobs.length)return closeModal();

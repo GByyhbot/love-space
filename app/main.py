@@ -1014,11 +1014,17 @@ class DramaEnabledIn(BaseModel):
 
 
 class DramaOverlayIn(BaseModel):
-    """本地整理：只改传进来的项，缺省表示「别动」。"""
+    """本地整理：只改传进来的项，缺省表示「别动」。
+
+    `proxy` 是「这个组件需要海外代理」的本地标记 —— 上游没有任何字段说这件事
+    （`manifest` 只有 id/title/version/capabilities/categories，diagnostics 的
+    network_mode 只会给 direct），所以只能本地记一次，之后卡片和排障提示都认它。
+    """
     key: str = Field(max_length=64)
     alias: str | None = Field(default=None, max_length=24)
     tag: str | None = Field(default=None, max_length=12)
     hidden: bool | None = None
+    proxy: bool | None = None
     order: int | None = Field(default=None, ge=0, le=9999)
 
 

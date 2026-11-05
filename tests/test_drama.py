@@ -806,3 +806,52 @@ def test_diagnostics_endpoint_reports_network_mode(client_a, upstream):
     assert row['net']['mode'] == 'direct'
     assert row['net']['status'] == 'failed'
     assert row['net']['stale'] is True
+
+
+# ── 「需代理」本地标记 ──────────────────────────────────────────────────
+def test_overlay_proxy_flag_round_trips(client_a, upstream):
+    """上游 manifest 里没有「要不要代理」这个字段，只能本地标一次。"""
+    r = client_a.put('/api/drama-sources/overlay', headers=HEADERS,
+                     json={'key': 'capy:hongguo', 'proxy': True})
+    assert r.status_code == 200, r.text
+    provs = client_a.get('/api/drama-sources', headers=HEADERS).json()['services'][0]['providers']
+    assert [p['proxy'] for p in provs] == [True, False]
+
+
+def test_overlay_proxy_can_be_turned_off_again(client_a, upstream):
+    client_a.put('/api/drama-sources/overlay', headers=HEADERS,
+                 json={'key': 'capy:hongguo', 'proxy': True})
+    client_a.put('/api/drama-sources/overlay', headers=HEADERS,
+                 json={'key': 'capy:hongguo', 'proxy': False})
+    prov = client_a.get('/api/drama-sources', headers=HEADERS).json()['services'][0]['providers'][0]
+    assert prov['proxy'] is False
+
+
+def test_overlay_proxy_does_not_disturb_other_fields(client_a, upstream):
+    key = 'capy:hongguo'
+    client_a.put('/api/drama-sources/overlay', headers=HEADERS,
+                 json={'key': key, 'alias': '红果', 'tag': '短剧', 'order': 2})
+    client_a.put('/api/drama-sources/overlay', headers=HEADERS,
+                 json={'key': key, 'proxy': True})
+    prov = client_a.get('/api/drama-sources', headers=HEADERS).json()['services'][0]['providers'][0]
+    assert prov['proxy'] is True
+    assert prov['alias'] == '红果' and prov['tag'] == '短剧' and prov['order'] == 2
+
+
+def test_overlay_proxy_survives_upstream_rename(client_a, monkeypatch):
+    """上游改名不该把「需代理」这个本地知识冲掉。"""
+    client_a.put('/api/drama-sources/overlay', headers=HEADERS,
+                 json={'key': 'capy:hongguo', 'proxy': True})
+    renamed = {'providers': [dict(PROVIDERS['providers'][0], title='红果改名了')]}
+
+    def handler(request):
+        if request.url.path == '/api/v1/providers':
+            return httpx.Response(200, json=renamed)
+        if request.url.path == '/api/v1/diagnostics':
+            return httpx.Response(200, json={'results': {}})
+        return httpx.Response(200, json={'items': []})
+
+    monkeypatch.setattr(dramas, '_transport', httpx.MockTransport(handler))
+    prov = client_a.get('/api/drama-sources?refresh=1', headers=HEADERS).json()['services'][0]['providers'][0]
+    assert prov['title'] == '红果改名了'
+    assert prov['proxy'] is True
