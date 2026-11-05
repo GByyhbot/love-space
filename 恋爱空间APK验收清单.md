@@ -130,5 +130,6 @@
 | 2026-10-24 | v1.2.4 | release: 1.2.4（versionCode 15） |
 | 2026-10-25 | **v1.2.5** | **release: 1.2.5（新增聊天壁纸）**；versionCode 改为按北京时间取日期（20261025）。贴图自此由服务器 `/static/stickers/` 提供，APK 回落网络加载；源码层 `MainActivity` 的本地贴图拦截逻辑已清理。APK 体积回落至 3.4MB |
 | 2026-11-06 | **v1.6.11** | **贴图内置回归**（v1.2.2 方案重启）：CI 在 cap sync 后把仓库 `static/stickers/`（289 个 / 39MB）拷进 assets，`MainActivity` 拦截 `/static/stickers/**` 本地直出——host 校验扩展到五条线路域名，支持 webm 贴图 Range（206），缺失自动回落网络。APK 体积 3.4MB → 约 43MB。贴图更新仍需重发 APK（与 v1.2.2 语义一致） |
+| 2026-11-06 | **v1.6.12** | **键盘顶起修复**：Manifest 的 MainActivity 此前缺 `windowSoftInputMode`（Android 默认 adjustUnspecified，MIUI 等系统不 resize → 输入框被键盘盖住），补 `adjustResize`（Capacitor 模板本有）。配套：`watchFitStage()` 感知 `--kb-h`，键盘打开时保证聊天区 ≥240px、放映区吃剩余（竖屏片 62% 上限的挤压场景一并解决）；`syncKeyboard()` 联动重算；放映区高度加过渡动画 |
 
 > 注：v1.2.2 记录的「44.6MB 贴图内置」为历史状态；v1.2.5~v1.6.10 期间贴图由服务器提供，APK 约 3.4MB；**v1.6.11 起恢复内置**。当时移回服务器的诱因是贴图未纳入打包流程（assets 里的贴图靠手工拷、CI 出包带不上）；现在贴图本就在仓库 `static/stickers/`，CI 与本地出包统一拷贝，行为一致。每版详细变更以仓库 git tag 为准。 |

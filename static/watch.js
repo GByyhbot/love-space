@@ -206,7 +206,15 @@ function watchFitStage(){
  /* 竖屏片子（短剧基本都是 9:16）按 62% 卡会左右各留一大条黑边，
      放宽到「只给聊天区留 240」；横屏片子照旧 62%，够看又不挤聊天。 */
  const portrait=vh>vw;
- const limit=portrait?Math.max(Math.round(pageH*0.62),pageH-240):Math.round(pageH*0.62);
+ let limit=portrait?Math.max(Math.round(pageH*0.62),pageH-240):Math.round(pageH*0.62);
+ /* 键盘打开时放映区必须让位：竖屏片的 62% 上限会把聊天区压进键盘底下。
+     这里保证聊天区至少还有 240px，放映区只吃剩下的空间；键盘收起时
+     kbH 归零，这条限制不改变上面算出的结果。 */
+ const kbH=parseFloat(document.documentElement.style.getPropertyValue('--kb-h'))||0;
+ if(kbH>90){
+  const kbLimit=Math.round(pageH-kbH-240);
+  limit=Math.min(limit,Math.max(96,kbLimit));
+ }
  st.style.height=Math.max(96,Math.min(h,limit))+'px';
 }
 

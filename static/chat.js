@@ -296,6 +296,9 @@ function syncKeyboard(){
  /* kb-open 用来给"底部安全区内边距"让位：键盘顶上来时那块安全区已经被键盘占了，
     再留一道 env(safe-area-inset-bottom) 就成了多出来的空白条。 */
  if(document.body)document.body.classList.toggle('kb-open',hidden>90);
+ /* 一起看的放映区高度要跟着键盘走（见 watchFitStage 的 kbH 分支）：
+    只靠 watch 自己的 resize 监听会漏掉"视口没缩、只缩视觉视口"的老内核。 */
+ if(state.page==='watch'&&typeof watchFitStage==='function')watchFitStage();
 }
 
 /* ── 聊天里直接发文件（相册 / 拍摄 / 录音都走这里）───────────────── */
