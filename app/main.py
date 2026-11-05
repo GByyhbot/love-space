@@ -1457,31 +1457,9 @@ def clean_body(c, kind, data, user_id, previous=None):
     return body
 
 
-def serialize_many(c, rows, user_id):
-    """Serialize a result page with bounded queries instead of per-row lookups."""
-    related = {'likes': {}, 'comments': {}, 'answers': {}, 'checks': {}, 'media': {}}
-    rows = list(rows)
-    for start in range(0, len(rows), 300):
-        chunk = rows[start:start + 300]
-        ids = [row['id'] for row in chunk]
-        if not ids:
-            continue
-        marks = ','.join('?' for _ in ids)
-        for row in c.execute(f'SELECT record_id,user_id FROM likes WHERE record_id IN ({marks})', ids):
-            related['likes'].setdefault(row['record_id'], []).append(row['user_id'])
-        for row in c.execute(f'SELECT * FROM comments WHERE record_id IN ({marks}) ORDER BY created', ids):
-            related['comments'].setdefault(row['record_id'], []).append(dict(row))
-        for row in c.execute(f'SELECT * FROM answers WHERE record_id IN ({marks})', ids):
-            related['answers'].setdefault(row['record_id'], []).append(dict(row))
-        for row in c.execute(f'SELECT * FROM checks WHERE record_id IN ({marks}) ORDER BY day DESC', ids):
-            related['checks'].setdefault(row['record_id'], []).append(dict(row))
-        media_ids = list(dict.fromkeys(mid for record in chunk for mid in db.body_decode(record).get('media', [])))
-        for media_start in range(0, len(media_ids), 300):
-            mids = media_ids[media_start:media_start + 300]
-            media_marks = ','.join('?' for _ in mids)
-            for row in c.execute(f'SELECT id,name,mime,size,status,preview FROM media WHERE id IN ({media_marks})', mids):
-                related['media'][row['id']] = dict(row)
-    return [serialize(c, row, user_id, related) for row in rows]
+# serialize / serialize_many 的唯一实现在 app/serializers.py，顶部直接 import。
+# 这里曾留过一份逐字相同的副本，把 import 遮蔽掉：改了 serializers.py 却不生效，
+# 两份实现迟早各自漂移。别再往这儿加同名函数（见 tests/test_import_graph.py 守卫）。
 
 
 @app.get('/api/records')
@@ -2437,7 +2415,7 @@ async def events(request: Request, user=Depends(current_user)):
 @app.get('/api/dashboard')
 def dashboard(user=Depends(current_user)):
     """两个人的数据看板：记录、心情、互动与近一年趋势。只统计当前用户可见的内容。"""
-    vis = "deleted IS NULL AND (kind NOT IN ('diary','draft','surprise') OR author=?)"
+    vis = db.VISIBLE_SQL
     with connect() as c:
         total = c.execute(f'SELECT count(*) FROM records WHERE {vis}', (user['id'],)).fetchone()[0]
         by_kind = {r['kind']: r['n'] for r in c.execute(
@@ -2497,7 +2475,7 @@ def weekly(offset: int = 0, user=Depends(current_user)):
         return int(dt.datetime.combine(day, dt.time.min, tzinfo=tz).timestamp())
 
     start, end = stamp(monday), stamp(sunday + dt.timedelta(days=1))
-    vis = "deleted IS NULL AND (kind NOT IN ('diary','draft','surprise') OR author=?)"
+    vis = db.VISIBLE_SQL
     with connect() as c:
         rows = c.execute(f'SELECT * FROM records WHERE {vis} AND created>=? AND created<? ORDER BY created',
                          (user['id'], start, end)).fetchall()
@@ -2624,8 +2602,11 @@ def yearbook(year: int = 0, user=Depends(current_user)):
     current_year = dt.datetime.now(tz).year
     y = year or current_year
     with connect() as c:
-        rows = [serialize(c, r, user['id']) for r in c.execute('SELECT * FROM records ORDER BY created')
-                if db.visible(r, user['id']) and r['kind'] not in {'chat', 'album'}]
+        # 先按可见性过滤、再批量取关联数据：逐行 serialize 会让每条记录各查 4 次，
+        # 年报这类全表扫的场景是 O(4N) 次查询。serialize_many 按 300 条分批，O(N/300)。
+        candidates = [r for r in c.execute('SELECT * FROM records ORDER BY created')
+                      if db.visible(r, user['id']) and r['kind'] not in {'chat', 'album'}]
+        rows = serialize_many(c, candidates, user['id'])
         like_count = dict(c.execute('SELECT record_id, count(*) FROM likes GROUP BY record_id').fetchall())
         comment_count = dict(c.execute('SELECT record_id, count(*) FROM comments GROUP BY record_id').fetchall())
 
@@ -2701,8 +2682,8 @@ def calendar(month: str = '', user=Depends(current_user)):
     first, last = dt.date(year, mon, 1), (dt.date(year, mon + 1, 1) if mon < 12 else dt.date(year + 1, 1, 1))
     days = {}
     with connect() as c:
-        rows = [serialize(c, r, user['id']) for r in c.execute('SELECT * FROM records')
-                if db.visible(r, user['id'])]
+        candidates = [r for r in c.execute('SELECT * FROM records') if db.visible(r, user['id'])]
+        rows = serialize_many(c, candidates, user['id'])
     for r in rows:
         if r['kind'] == 'mood' and (r['body'].get('date') or '').startswith(month):
             days.setdefault(r['body']['date'][8:10], {}).setdefault('moods', []).append(
@@ -2757,8 +2738,9 @@ def on_this_day(user=Depends(current_user)):
     today_md = now_local.strftime('-%m-%d')
     today_year = now_local.year
     with connect() as c:
-        rows = [serialize(c, r, user['id']) for r in c.execute('SELECT * FROM records ORDER BY created')
-                if db.visible(r, user['id']) and r['kind'] not in {'chat', 'album'}]
+        candidates = [r for r in c.execute('SELECT * FROM records ORDER BY created')
+                      if db.visible(r, user['id']) and r['kind'] not in {'chat', 'album'}]
+        rows = serialize_many(c, candidates, user['id'])
     groups = {}
     for r in rows:
         date = (r['body'].get('date') or '')[:10]
@@ -2962,8 +2944,8 @@ def export_ics(user=Depends(current_user)):
     """
     with connect() as c:
         space = db.setting(c, 'space')
-        rows = [serialize(c, r, user['id']) for r in c.execute('SELECT * FROM records ORDER BY created')
-                if db.visible(r, user['id'])]
+        candidates = [r for r in c.execute('SELECT * FROM records ORDER BY created') if db.visible(r, user['id'])]
+        rows = serialize_many(c, candidates, user['id'])
     tz = ZoneInfo((space or {}).get('timezone', 'Asia/Shanghai'))
     this_year = dt.datetime.now(tz).year
 
@@ -3235,11 +3217,16 @@ def get_import(c, iid):
 
 @app.get('/api/imports')
 def import_list(user=Depends(current_user)):
-    """共享列表：不做 author 过滤，两人看到的是同一份。"""
+    """共享列表：不做 author 过滤，两人看到的是同一份。
+
+    「最后一条消息」原来在 Python 里逐行查，有多少个导入批次就多打多少次库；
+    现在交给相关子查询，走 import_messages(import_id, id) 索引，一次往返取全。
+    """
     with connect() as c:
-        return [{**dict(r),
-                 'last': (c.execute('SELECT content FROM import_messages WHERE import_id=? ORDER BY id DESC LIMIT 1', (r['id'],)).fetchone() or [''])[0]}
-                for r in c.execute('SELECT * FROM imports ORDER BY created DESC')]
+        return [dict(r) for r in c.execute(
+            "SELECT i.*, COALESCE((SELECT m.content FROM import_messages m "
+            "WHERE m.import_id=i.id ORDER BY m.id DESC LIMIT 1), '') AS last "
+            "FROM imports i ORDER BY i.created DESC")]
 
 
 @app.get('/api/imports/{iid}/messages')

@@ -344,6 +344,12 @@ def ensure_push_topic(c, user_id):
 
 
 PRIVATE = {'diary', 'draft', 'surprise'}
+# SQL 侧的同款可见性条件。从 PRIVATE 派生而不是让调用方各写一份字面量：
+# 以前看板/周报里各抄一遍 "kind NOT IN ('diary','draft','surprise')"，
+# 将来新增私密类型只改 Python 侧就会漏过滤，等于把私密记录算进统计里。
+# 末尾的 author=? 由调用方传入当前用户 id。
+VISIBLE_SQL = "deleted IS NULL AND (kind NOT IN ({}) OR author=?)".format(
+    ','.join("'" + kind + "'" for kind in sorted(PRIVATE)))
 # 静态加密的类型：私密记录 + 生理期（健康数据，库文件被拷走也不该是明文）。
 # 注意它和 PRIVATE 不等价：period 加密但可以按 shared 共享给另一半。
 ENCRYPTED = PRIVATE | {'period'}
