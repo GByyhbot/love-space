@@ -499,6 +499,22 @@ def cleanup():
     for path in (db.DATA / 'tmp').glob('*.zip'):
         if now() - path.stat().st_mtime > 86400:
             path.unlink(missing_ok=True)
+    # tempfile.TemporaryDirectory 的清理只在正常退出时执行；备份/导出中途抛异常
+    # （如磁盘满）会留下 tmpXXXXXX/ 目录，每个约 780K（love.db + period.db 快照）。
+    # 2026-11-07 一次备份风暴就堆了 117 个、89M。这里连同子目录一起清。
+    tmp_root = db.DATA / 'tmp'
+    try:
+        for entry in tmp_root.iterdir():
+            if not entry.is_dir() or not entry.name.startswith('tmp'):
+                continue
+            try:
+                if now() - entry.stat().st_mtime > 3600:
+                    shutil.rmtree(entry, ignore_errors=True)
+                    log.warning('清理残留临时目录 %s', entry.name)
+            except OSError:
+                continue
+    except OSError:
+        pass
     # 备份残包兜底清理：失败的备份会留下 .partial，正常情况下 finally 里已经删了，
     # 但磁盘写满时连 unlink 都可能失败。这里把超过 1 小时的残包一律清掉，
     # 避免 2026-11-07 那种「每个残包近 1GB、堆到 31G 吃满磁盘」的事故重演。

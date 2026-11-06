@@ -92,7 +92,7 @@ def _estimate_backup_bytes(backups_dir: Path) -> int:
     媒体目录扫不出来（权限/不存在）时给个保守的 2GB，宁可拒绝也不写爆磁盘。"""
     media_total = 0
     try:
-        for sub in ('media', 'out', 'bubbles'):
+        for sub in ('media', 'bubbles'):
             folder = db.DATA / sub
             if not folder.is_dir():
                 continue
