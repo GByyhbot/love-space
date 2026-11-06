@@ -983,7 +983,11 @@ body.watch-open.kb-open .watch-chat .chat-compose{padding-bottom:8px}
 .chat-body{position:relative;flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden}
 /* 置顶条/筛选条是固定在消息区顶部的横条，别让它们被 flex 拉伸或滚走 */
 .chat-body>.chat-pinned,.chat-body>.chat-search-bar{flex:none}
-.chat-wallpaper{position:absolute;inset:0;z-index:0;background-size:cover;background-position:center;background-repeat:no-repeat;pointer-events:none}
+/* --kb-shift 补偿：键盘弹出时 APK 原生把 WebView 底边缩到键盘上沿（等效 adjustResize），
+   壁纸层若跟着变矮，cover 会重新适配、视觉上移。这里让层高保持「键盘弹出前」的尺寸
+   （顶边不动、超出部分被键盘盖住），cover 的 fit 与位置都不变 → 壁纸视觉完全静止。
+   层超出 .chat-panel 的部分由 panel 的 overflow:hidden 裁掉，不会撑出滚动。 */
+.chat-wallpaper{position:absolute;inset:0;height:calc(100% + var(--kb-shift,0px));z-index:0;background-size:cover;background-position:center;background-repeat:no-repeat;pointer-events:none}
 .chat-wallpaper::after{content:'';position:absolute;inset:0;background:var(--veil,var(--bg));opacity:var(--chat-bg-dim,.35)}
 /* 照片壁纸用深色遮罩（浅色遮罩会把照片冲成灰白，白字也读不清），但只叠很薄一层：
    气泡自己有深色底撑着对比度，遮罩压狠了照片就糊成一团黑，反而看不出那是你们的照片。 */

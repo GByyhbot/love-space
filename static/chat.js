@@ -289,8 +289,19 @@ function syncCompose(){
 }
 /* 键盘避让：Chrome 108+ 的 interactive-widget=resizes-content 会让布局视口跟着键盘
    一起缩，输入栏自然浮在键盘上；旧 WebView 只缩视觉视口，这里用 --kb-h 手动顶上去。 */
+/* --kb-shift：布局视口被键盘缩掉的量（基准法）。v1.6.15 起 APK 在键盘弹出时由原生
+   把 WebView 底边缩到键盘上沿（等效 adjustResize），此时 innerHeight 和 vv.height
+   一起变小 → --kb-h 恒为 0；但壁纸层（.chat-wallpaper）会跟着变矮、cover 重新适配
+   而视觉上移。基准法记录见过的最大 innerHeight，与当前值之差就是被缩掉的高度，
+   专门给壁纸层补高度用（CSS：height:calc(100% + var(--kb-shift))），让壁纸维持
+   键盘弹出前的渲染结果、视觉完全静止。与 --kb-h 语义正交，互不干扰。 */
+let kbMaxVh=0;
 function syncKeyboard(){
  const vv=window.visualViewport;if(!vv)return;
+ const vh=Math.round(window.innerHeight);
+ if(vh>kbMaxVh)kbMaxVh=vh;
+ const shift=Math.max(0,kbMaxVh-vh);
+ document.documentElement.style.setProperty('--kb-shift',shift>90?shift+'px':'0px');
  const hidden=Math.max(0,Math.round(window.innerHeight-vv.height-vv.offsetTop));
  document.documentElement.style.setProperty('--kb-h',hidden>90?hidden+'px':'0px');
  /* kb-open 用来给"底部安全区内边距"让位：键盘顶上来时那块安全区已经被键盘占了，
