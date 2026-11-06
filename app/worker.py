@@ -523,9 +523,13 @@ def maintenance():
         try:
             create_backup()
         except BackupRefused as exc:
-            # 没设口令是配置问题，不是故障；每天提醒一次，别刷屏
+            # 没设口令 / 磁盘不足 —— 配置或环境问题，不是故障；每天提醒一次，别刷屏
             log.warning('%s', exc)
+            # 🔴 同样要退避：磁盘不足时若不推进 last_backup，maintenance 每分钟
+            # 重试一次，虽然预检已能拦住写包，但每次都白扫一遍媒体目录、每次都
+            # 尝试写一条 notice。退避 1 小时后重试，给清理腾出空间的时间。
             with connect() as c:
+                db.set_setting(c, 'last_backup', now() - 86400 + BACKUP_RETRY_AFTER)
                 day = dt.datetime.now(dt.timezone.utc).date().isoformat()
                 db.notice(c, 'backup', '未设置备份密码，已跳过备份：请在服务器环境变量里配置 BACKUP_PASSWORD',
                           dedupe='backup-no-password:' + day)
