@@ -983,11 +983,7 @@ body.watch-open.kb-open .watch-chat .chat-compose{padding-bottom:8px}
 .chat-body{position:relative;flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden}
 /* 置顶条/筛选条是固定在消息区顶部的横条，别让它们被 flex 拉伸或滚走 */
 .chat-body>.chat-pinned,.chat-body>.chat-search-bar{flex:none}
-/* --kb-shift 补偿：键盘弹出时 APK 原生把 WebView 底边缩到键盘上沿（等效 adjustResize），
-   壁纸层若跟着变矮，cover 会重新适配、视觉上移。这里让层高保持「键盘弹出前」的尺寸
-   （顶边不动、超出部分被键盘盖住），cover 的 fit 与位置都不变 → 壁纸视觉完全静止。
-   层超出 .chat-panel 的部分由 panel 的 overflow:hidden 裁掉，不会撑出滚动。 */
-.chat-wallpaper{position:absolute;inset:0;height:calc(100% + var(--kb-shift,0px));z-index:0;background-size:cover;background-position:center;background-repeat:no-repeat;pointer-events:none}
+.chat-wallpaper{position:absolute;inset:0;z-index:0;background-size:cover;background-position:center;background-repeat:no-repeat;pointer-events:none}
 .chat-wallpaper::after{content:'';position:absolute;inset:0;background:var(--veil,var(--bg));opacity:var(--chat-bg-dim,.35)}
 /* 照片壁纸用深色遮罩（浅色遮罩会把照片冲成灰白，白字也读不清），但只叠很薄一层：
    气泡自己有深色底撑着对比度，遮罩压狠了照片就糊成一团黑，反而看不出那是你们的照片。 */
@@ -2140,25 +2136,14 @@ body.figure-full{overflow:hidden;height:100dvh}
    浏览器完全不受影响。Android 15 起强制 edge-to-edge，网页会铺到状态栏下面，
    所以顶栏必须自己让出一条状态栏的高度。
 
-   --safe-top：状态栏高度。v1.6.15 起 APK 侧 WebView 四边贴满屏幕（完整 edge-to-edge，
-   原生不再加 topMargin，insets 透传给 Chromium）→ env() 有真实值，网页自己避让一次、
-   顶栏毛玻璃自然延伸到状态栏后面。clamp 的 24px 下限是给拿不到 env() 的老 WebView
-   兜底的（27~36px 的状态栏高度区间，24px 大多数机器够用）；封顶 36px 防个别机型
-   env() 多报把顶栏推下去一大块。⚠️ 这条与原生 MainActivity.setupKeyboardResize()
-   是一对：那边若恢复 topMargin=bars.top，这里就必须归零，否则双重避让出空白。 */
-html.is-native-app{--safe-top:clamp(24px, env(safe-area-inset-top,0px), 36px)}
+   --safe-top：状态栏高度。有刘海/挖孔的机器由 env() 给出真实值，取不到按 24px 兜底。
+   但实测有的机器 env() 会多报一截（截图量出状态栏实际占 32px，env 却报 48px），
+   所以用 clamp 封顶 36px，否则顶栏会被推下去一大块。
 
-/* 顶栏用「负上边距抵消主区上内边距 + 自身 padding-top」把自己顶到 y=0，
+   顶栏用「负上边距抵消主区上内边距 + 自身 padding-top」把自己顶到 y=0，
    这样它的背景始终盖住状态栏那条缝；再 position:sticky 钉在顶部，滚内容时导航栏不动。 */
+html.is-native-app{--safe-top:clamp(24px, env(safe-area-inset-top,0px), 36px)}
 html.is-native-app .main{padding-top:calc(var(--safe-top,0px) + 6px)}
-/* ── APK 键盘让位（v1.6.19）──
-   原生把键盘高度逐帧写进 --kb-h，WebView 尺寸全程不动（改尺寸会让 Chromium 新区域
-   未绘制、露出黑帧——1.6.13~1.6.18 五次翻车的根因）。这里让页面自己让出键盘高度：
-   普通页面主区整体上移；弹层（居中/贴底）上移并收缩；聊天页和一起看页已有各自的
-   --kb-h 消费点（见 .chat-panel / .watch-page），这里不重复加，否则输入条会顶两次。 */
-html.is-native-app .shell:not(.chat-full) .main{padding-bottom:var(--kb-h,0px)}
-html.is-native-app .modal-overlay{padding-bottom:var(--kb-h,0px)}
-html.is-native-app .modal.sheet{max-height:calc(92dvh - var(--kb-h,0px))}
 html.is-native-app .shell.chat-full .main{padding-top:var(--safe-top,0px)}
 html.is-native-app .auth-page{padding-top:calc(var(--safe-top,0px) + 18px)}
 html.is-native-app .topbar{
@@ -3122,7 +3107,3 @@ body.kb-open .pick-overlay{padding-bottom:0}
 .wn-sync:active{transform:scale(.97)}
 .wn-sync .icon{width:13px;height:13px}
 :root.dark .wn-sync{background:var(--raised);color:var(--ink-2)}
-
-/* ── 放映区高度平滑过渡：键盘弹出/收起、竖屏片元数据就位时 watchFitStage 会改写
-   内联 height，加过渡避免聊天区被突然挤压或弹回（跳变观感很廉价）。 */
-.watch-stage{transition:height .25s ease}

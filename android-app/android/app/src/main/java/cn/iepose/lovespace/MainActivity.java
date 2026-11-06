@@ -14,19 +14,12 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
-import android.view.View;
-import android.view.ViewGroup;
 import android.webkit.CookieManager;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
-
-import androidx.core.graphics.Insets;
-import androidx.core.view.ViewCompat;
-import androidx.core.view.WindowInsetsAnimationCompat;
-import androidx.core.view.WindowInsetsCompat;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
@@ -41,7 +34,6 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -177,59 +169,6 @@ public class MainActivity extends BridgeActivity {
         // ④ 打开本地存储：聊天背景图按 media id 缓存进 IndexedDB，省得每次进聊天都重下一遍。
         //    WebSettings 的 database/domStorage 默认未必开启，不开的话 JS 侧 indexedDB.open 会直接失败。
         setupLocalStorage();
-        // ⑤ Android 15 键盘避让：targetSdk 35 强制 edge-to-edge，系统不再随键盘缩窗口，
-        //    windowSoftInputMode=adjustResize 形同虚设（Redmi Note 12 Turbo 实测）。
-        //    v1.6.19 起：WebView 永远四边贴满、尺寸不动，原生只把键盘高度写进网页
-        //    --kb-h，由网页 padding 让位——零 resize 就没有「新区域未绘制」的黑帧。
-        //    Android 15 以下系统 adjustResize 自己缩，交给系统（不重复处理）。
-        setupKeyboardResize();
-    }
-
-    /** 把键盘高度写进网页的 --kb-h，由网页用 padding 让位（WebView 尺寸全程不动）。 */
-    private void pushKeyboardHeight(View wv, int px) {
-        if (!(wv instanceof WebView)) return;
-        ((WebView) wv).evaluateJavascript(
-                "(function(d){if(d)d.style.setProperty('--kb-h','" + px + "px');})(document.documentElement)",
-                null);
-    }
-
-    private void setupKeyboardResize() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.VANILLA_ICE_CREAM) return;
-        View wv = getBridge() == null ? null : getBridge().getWebView();
-        if (wv == null || !(wv.getParent() instanceof ViewGroup)) return;
-        ViewGroup parent = (ViewGroup) wv.getParent();
-        // 🔴 v1.6.19 定稿：WebView 永远四边贴满，任何时候都不改尺寸/边距——键盘避让改成
-        //    「原生把键盘高度写进网页 --kb-h，网页用 padding 让位」（消费点已在
-        //    chat-panel/fn-panel/watch-page/main/modal 里）。
-        //    手动缩 WebView（1.6.13~1.6.18 五次尝试：height/margin/动画跟随）全部翻车，
-        //    根因是 view 级 resize 与键盘动画不同步，Chromium 渲染慢一帧 → 新区域露黑；
-        //    逐帧改 margin 反而每帧都露黑（1.6.16 主人实测「闪得更厉害」）。
-        //    改 --kb-h 方案后零 resize → 结构上不可能再有 resize 黑帧。
-        //
-        //    listener 挂父容器（不挂 WebView）：挂 WebView 上会替代 Chromium 自己的
-        //    inset 处理 → 网页 env(safe-area-inset-*) 恒 0（1.6.13 实证）。
-        ViewCompat.setOnApplyWindowInsetsListener(parent, (v, windowInsets) -> {
-            Insets ime = windowInsets.getInsets(WindowInsetsCompat.Type.ime());
-            pushKeyboardHeight(wv, ime.bottom);   // 键盘收起时 ime.bottom=0，正好归零
-            return windowInsets;                   // 不消费：Chromium 仍能拿到真实 env()
-        });
-        // 动画期间普通 insets 分发只在首尾给值，输入条会「卡在底部再跳上去」（1.6.15 实测）；
-        // 这里每帧取 IME 中间值写进 --kb-h，输入条与键盘严格同步升降。
-        ViewCompat.setWindowInsetsAnimationCallback(wv, new WindowInsetsAnimationCompat.Callback(
-                WindowInsetsAnimationCompat.Callback.DISPATCH_MODE_CONTINUE_ON_SUBTREE) {
-            private int lastPx = Integer.MIN_VALUE;
-
-            @Override
-            public WindowInsetsCompat onProgress(WindowInsetsCompat insets,
-                                                 List<WindowInsetsAnimationCompat> runningAnimations) {
-                int px = insets.getInsets(WindowInsetsCompat.Type.ime()).bottom;
-                if (px != lastPx) {
-                    lastPx = px;
-                    pushKeyboardHeight(wv, px);
-                }
-                return insets;
-            }
-        });
     }
 
     /**
