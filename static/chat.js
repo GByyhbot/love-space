@@ -291,6 +291,10 @@ function syncCompose(){
    一起缩，输入栏自然浮在键盘上；旧 WebView 只缩视觉视口，这里用 --kb-h 手动顶上去。 */
 function syncKeyboard(){
  const vv=window.visualViewport;if(!vv)return;
+ /* APK + Android 15：系统强制 edge-to-edge，键盘弹出时窗口不缩，innerHeight 与
+    vv.height 都不变 → 下面必然算出 0，把原生键盘高度桥写进去的真值冲掉。
+    原生一旦接管（data-native-kb），这里就彻底让路。 */
+ if(document.documentElement.hasAttribute('data-native-kb'))return;
  const hidden=Math.max(0,Math.round(window.innerHeight-vv.height-vv.offsetTop));
  document.documentElement.style.setProperty('--kb-h',hidden>90?hidden+'px':'0px');
  /* kb-open 用来给"底部安全区内边距"让位：键盘顶上来时那块安全区已经被键盘占了，

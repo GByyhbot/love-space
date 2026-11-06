@@ -974,6 +974,12 @@ html.is-native-app .watch-head{padding-top:8px}
 body.chat-full .chat-panel{padding-bottom:var(--kb-h,0px)}
 body.chat-full .fn-panel{padding-bottom:calc(14px + env(safe-area-inset-bottom) + var(--kb-h,0px))}
 body.watch-open .watch-page{padding-bottom:var(--kb-h,0px)}
+/* APK 里 --kb-h 由原生 MainActivity 的键盘高度桥一次性写成最终值（系统 insets 回调
+   不逐帧触发），补一条过渡让它跟键盘滑入同步；只改内边距、WebView 尺寸全程不动，
+   所以不会像直接缩 WebView 那样露出未渲染的黑帧。 */
+html.is-native-app body.chat-full .chat-panel,
+html.is-native-app body.chat-full .fn-panel,
+html.is-native-app body.watch-open .watch-page{transition:padding-bottom .22s cubic-bezier(.22,.8,.24,1)}
 body.watch-open.kb-open .watch-chat .chat-compose{padding-bottom:8px}
 /* ── 聊天壁纸：底图铺满整个聊天面板（标题栏和输入栏也压在图上） ──
    .chat-wallpaper 挂到 .chat-panel 上绝对定位铺满，::after 是压在图上的遮罩（--chat-bg-dim 控制强度）。
@@ -2142,6 +2148,32 @@ body.figure-full{overflow:hidden;height:100dvh}
 
    顶栏用「负上边距抵消主区上内边距 + 自身 padding-top」把自己顶到 y=0，
    这样它的背景始终盖住状态栏那条缝；再 position:sticky 钉在顶部，滚内容时导航栏不动。 */
+/* ════════════ 原生 App：键盘让位（弹层 / 表单） ════════════
+   --kb-h 由 MainActivity 的键盘高度桥写入（Android 15 不缩窗口，网页自己算不出来）。
+   聊天的三个消费点在 974~976 行，这里补弹层：
+
+   overlay 是 position:fixed inset:0，键盘弹上来时会整个被盖住——弹层自身没有
+   让位的概念，只能靠 padding-bottom 把它的"可视底边"提到键盘上沿，
+   底部的 form-actions（sticky）才会停在能点到的地方。
+   普通弹窗原本 padding:20px，用 max() 保住键盘收起时的 20px；sheet 是贴底弹层，
+   原本 padding:0，单独覆盖。 */
+html.is-native-app .modal-overlay{
+  padding-bottom:max(20px, var(--kb-h, 0px));
+  transition:padding-bottom .22s cubic-bezier(.22,.8,.24,1);
+}
+html.is-native-app .modal.sheet{
+  max-height:calc(92dvh - var(--kb-h, 0px));
+  transition:max-height .22s cubic-bezier(.22,.8,.24,1);
+}
+@media (max-width:640px){
+  html.is-native-app .modal-overlay.sheet{padding-bottom:var(--kb-h, 0px)}
+  /* 键盘已经占住底部，安全区那一道内边距再留着就是多出来的一条空白 */
+  html.is-native-app body.kb-open .modal.sheet{padding-bottom:16px}
+  html.is-native-app body.kb-open .modal.sheet .form-actions{
+    bottom:-16px;margin-bottom:-16px;padding-bottom:12px;
+  }
+}
+
 html.is-native-app{--safe-top:clamp(24px, env(safe-area-inset-top,0px), 36px)}
 html.is-native-app .main{padding-top:calc(var(--safe-top,0px) + 6px)}
 html.is-native-app .shell.chat-full .main{padding-top:var(--safe-top,0px)}
