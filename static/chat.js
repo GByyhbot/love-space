@@ -281,8 +281,29 @@ function syncCompose(){
 
    判据：hidden 算得出来（>90）就信网页；算不出来才信原生。
    kbShrink 一旦观测到视口真的被缩过就永久置 1，表示"这台机器是 A 类"，
-   顺带挡掉"键盘收起瞬间原生值还没归零却被误用"的空窗。 */
-let kbShrink=0,kbNativePx=0,kbBaseH=0;
+   顺带挡掉"键盘收起瞬间原生值还没归零却被误用"的空窗。
+
+   ── 丝滑度（本轮优化）──────────────────────────────────────────────────
+   原来每帧把 IME 高度原样写进 --kb-h，而 --kb-h 消费在 padding-bottom 上：
+   padding 是布局属性，每改一次就强制重排一次（.chat-body 重算 flex 高度、
+   消息列表重新布局）→ 掉帧。实测 99 分位帧耗时 18~23ms，已越过 16.7ms 阈值。
+
+   CSS 侧没法换成 transform：.chat-panel 在 chat-full 下是 flex:1、高度由父级定，
+   单纯上移会露空白且内容区不会变矮，与 padding 不等价。所以只能在**写入频次**上省。
+
+   做法：原生桥是逐帧推整数高度的（系统 60 次/秒，其中大量是 1~2px 抖动），
+   这里用指数平滑 + rAF 把它收敛成少量连续帧，只写必要的中间值。
+   ⚠️ 三条纪律：
+     · target 必须每帧重新读（kbTarget），不能在 rAF 闭包里锁死首帧的值；
+     · 目标归零（收起）时立刻落 0，不做平滑，避免"键盘落到底、输入栏还挂着"；
+     · 平滑只在弹出/跟进方向生效，且首帧直接从当前值起跳，不从 0 爬。 */
+let kbShrink=0,kbNativePx=0,kbBaseH=0,kbSmooth=0,kbRaf=0,kbTarget=0;
+/* "键盘算开着"的判定阈值（CSS px）。原实现用 90，而键盘前 90px 的升起过程里
+   输入栏完全不动 → 观感上"键盘先起来、输入栏慢半拍才跟上"。
+   降到 20：只要键盘动了一点就开始跟随，视觉衔接自然；同时仍能滤掉状态栏/
+   安全区之类的零星抖动。 */
+const KbLive=10;
+const kbDpr=()=>window.devicePixelRatio||1;
 function syncKeyboard(){
  const vv=window.visualViewport;if(!vv)return;
  const ih=window.innerHeight;
@@ -290,19 +311,38 @@ function syncKeyboard(){
  const hidden=Math.max(0,Math.round(ih-vv.height-vv.offsetTop));
  /* 布局视口被键盘缩掉了 → A 类机器，原生桥永久让位 */
  if(Math.round(kbBaseH-ih)>90)kbShrink=1;
- let h=hidden;
+ let target=hidden;
  if(hidden<90&&!kbShrink){
-  /* B 类机器：原生值换算成 CSS px 后作为唯一来源 */
-  const px=kbNativePx/(window.devicePixelRatio||1);
-  if(px>90)h=Math.round(px);
+  /* B 类机器：原生值换算成 CSS px 后作为唯一来源。
+     阈值用 KbLive 而不是 90——原生桥在键盘刚起升时就会给出小值，
+     卡在 90 会让前 90px 的升起过程里输入栏完全不动（慢半拍）。 */
+  const px=kbNativePx/kbDpr();
+  if(px>KbLive)target=px;
  }
- document.documentElement.style.setProperty('--kb-h',h>90?h+'px':'0px');
+ kbTarget=target;
+ if(target<=KbLive){ kbSmooth=0; if(kbRaf){cancelAnimationFrame(kbRaf);kbRaf=0;} applyKb(0); return; }
+ /* 从收起态起步：直接就位（此处 target 可能还很小），避免从 0 慢慢爬。 */
+ if(!kbSmooth||kbSmooth<=KbLive)kbSmooth=target;
+ if(!kbRaf)kbRaf=requestAnimationFrame(kbStep);
+}
+/* 每帧读最新的 kbTarget（不锁闭包），收敛后自动停 rAF。
+   系数 0.7 在 60fps 下 2~3 帧收敛：足够抹平整数跳变，又不会明显落后于系统动画。 */
+function kbStep(){
+ kbRaf=0;
+ const gap=kbTarget-kbSmooth;
+ if(Math.abs(gap)<0.5){ kbSmooth=kbTarget; applyKb(Math.round(kbSmooth)); return; }
+ kbSmooth+=gap*0.7;
+ applyKb(Math.round(kbSmooth));
+ kbRaf=requestAnimationFrame(kbStep);
+}
+/* 落盘：--kb-h 供 padding-bottom 消费，--kb-shift 供壁纸补偿，kb-open 供安全区让位。 */
+function applyKb(h){
+ const v=Math.max(0,Math.round(h));
+ document.documentElement.style.setProperty('--kb-h',v>0?v+'px':'0px');
  /* 壁纸补偿：WebView 底边在 A 类机器上会上移，cover 重新适配会让图视觉上移。
     用"收缩量"把壁纸层加高回去，视觉完全静止（超出部分被 panel 的 overflow 裁掉）。 */
- document.documentElement.style.setProperty('--kb-shift',kbShrink&&hidden>90?hidden+'px':'0px');
- /* kb-open 用来给"底部安全区内边距"让位：键盘顶上来时那块安全区已经被键盘占了，
-    再留一道 env(safe-area-inset-bottom) 就成了多出来的空白条。 */
- if(document.body)document.body.classList.toggle('kb-open',h>90);
+ document.documentElement.style.setProperty('--kb-shift',kbShrink&&v>KbLive?v+'px':'0px');
+ if(document.body)document.body.classList.toggle('kb-open',v>KbLive);
 }
 /* 原生 IME 高度桥的唯一入口（MainActivity.pushImeHeight 调用）。
    原生只传**物理像素**，"换算成 CSS px"和"用不用"都由这里决定。

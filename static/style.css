@@ -829,6 +829,12 @@ button.mood-row.no-mood .mood-bubble.empty{color:var(--primary-dark)}
 .sp-btn:hover{background:var(--soft)}
 .sp-warn{font-size:var(--fs-xs);color:var(--amber);font-style:normal;flex:none}
 
+/* 键盘避让：padding-bottom 把输入栏推到键盘上沿。
+   ⚠️ 这是布局属性，每帧改都会重排——所以 chat.js 侧对 --kb-h 做了指数平滑，
+   把原生桥的高频整数跳变收敛成少量连续帧，降低重排频次（详见 syncKeyboard 注释）。
+   曾试过换成 transform 平移，但 .chat-panel 在 chat-full 下是 flex:1、高度由父级决定，
+   单纯上移会让底部露出空白、且内部可视高度不会随之收窄，与 padding 不等价；
+   要等价就得同时改高度（仍是布局属性），收益归零却引入风险。故保留 padding。 */
 body.chat-full .chat-panel{padding-bottom:var(--kb-h,0px)}
 body.chat-full .fn-panel{padding-bottom:calc(14px + env(safe-area-inset-bottom) + var(--kb-h,0px))}
 /* ── 聊天壁纸：底图铺满整个聊天面板（标题栏和输入栏也压在图上） ──
