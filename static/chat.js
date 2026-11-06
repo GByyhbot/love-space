@@ -338,13 +338,20 @@ function syncKeyboard(){
  if(!kbRaf)kbRaf=requestAnimationFrame(kbStep);
 }
 /* 每帧读最新的 kbTarget（不锁闭包），收敛后自动停 rAF。
-   系数 0.85：60fps 下约 2 帧追平，接近「完全跟随」又保留抹平整数跳变的作用，
-   不会让人感觉输入栏落后于键盘。 */
+   🔴 关键：指数平滑必须配「单帧最大步长」，否则第一帧就打满。
+   gap 一开始是整段位移（294px），乘 0.85 意味着第一帧直接跳到 252px——
+   真机上看到的就是「猛一下闪到终态附近，再磨几下才对齐」。
+   加 kbMaxStep 把每帧位移封顶，位移被强制摊到 ~10 帧里走完，
+   这才是肉眼可见的「平滑上升」，而不是「闪一下」。 */
+const kbMaxStep=42;                  /* 每帧最多走 42 CSS px ≈ 60fps 下 280ms 走完 294px */
 function kbStep(){
  kbRaf=0;
  const gap=kbTarget-kbSmooth;
  if(Math.abs(gap)<0.6){ kbSmooth=kbTarget; applyKb(Math.round(kbSmooth)); return; }
- kbSmooth+=gap*0.85;
+ let step=gap*0.85;
+ if(step>kbMaxStep)step=kbMaxStep;
+ if(step<-kbMaxStep)step=-kbMaxStep;
+ kbSmooth+=step;
  applyKb(Math.round(kbSmooth));
  kbRaf=requestAnimationFrame(kbStep);
 }
