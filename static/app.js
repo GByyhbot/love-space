@@ -751,6 +751,15 @@ if(window.visualViewport){addEventListener('resize',syncKeyboard);window.visualV
 
 /* 点击表情面板与输入栏以外的区域时收起面板 */
 document.addEventListener('click',e=>{const d=$('#sticker-dock');if(d&&!d.hidden&&!e.target.closest('#sticker-dock')&&!e.target.closest('.chat-compose')&&!e.target.closest('[data-action="sticker-panel"]'))d.hidden=true;},true);
+/* 点输入框 → 面板让位给键盘。
+   功能面板与键盘同高互斥，聚焦输入框就是要用键盘，此刻直接关掉面板即可，
+   键盘与面板在总高度上是等量替换，不需要任何等待（详见 chat-fn 分支注释）。
+   用 focusin 委托而不是给 #chat-text 绑事件：输入栏每次重绘都会重建节点。 */
+document.addEventListener('focusin',e=>{
+ const t=e.target;
+ if(!t||t.id!=='chat-text')return;
+ const fn=$('#chat-fn');if(fn&&!fn.hidden)fn.hidden=true;
+},true);
 document.addEventListener('change',e=>{
  if(e.target.id!=='sticker-file'||!e.target.files[0])return;
  const file=e.target.files[0];e.target.value='';
@@ -2074,41 +2083,23 @@ async function act(action,id,el) {
  /* ── 输入栏「更多功能」面板 ───────────────────────────────── */
  if(action==='chat-fn'){const p=$('#chat-fn');if(!p)return;
   const d=$('#sticker-dock');if(d)d.hidden=true;
+  /* 功能面板与键盘是「同高互斥」的两块区域（面板高度 = --kb-panel-h，
+     由 chat.js 记录该机键盘实际高度，见 noteKbPanel）。
+     正因为高度相同，切换时容器总高度守恒，**不需要等任何一边的动画完成**：
+       · 键盘开着 → 收键盘 + 开面板，同一帧完成
+       · 键盘没开 → 直接开面板
+     曾写成「先等键盘收干净再开面板」（轮询 --kb-h + 800ms 兜底），
+     那是把互斥做成了先后，凭空多出 200~800ms 延迟，与微信行为不符，已废弃。 */
   const wasOpen=!p.hidden;
-  /* 面板开合会改变 .chat-body 高度，消息滚动位置必须跟着重算，
-     否则同一 scrollTop 在新的容器高度下就是「内容整体上移」的观感。
-     ⚠️ 不能在改 hidden 的同一帧 scrollChat：那时布局还没重算，
-     scrollHeight 仍是旧值，滚了个空。必须等一帧。 */
-  const openDone=()=>{p.hidden=false;requestAnimationFrame(scrollChat);};
-  const closeDone=()=>{p.hidden=true;requestAnimationFrame(scrollChat);};
-  if(wasOpen){closeDone();return;}
-  /* 展开面板前必须先把键盘收干净：
-     键盘收起时 --kb-h 从键盘高度平滑归零，这期间 .chat-panel 的 padding-bottom
-     一直在变；若此时同时展开面板（又压缩 .chat-body），两个高度变化反向叠加，
-     真机上就是「闪屏/抖动」。所以先 blur 收键盘，等键盘真的落下去再展面板。
-     🔴 两个条件都要满足，不能只等 --kb-h：
-       B 类机器（女友机）的 --kb-h 由原生桥推，blur 之后原生还要等系统走完
-       收起动画才推送 0，只靠 400ms 兜底会「面板开了、键盘还挂着」。
-     🔴 兜底放宽到 800ms：宁可多等一点，也不能在键盘没落干净时展开。
-     键盘本来就没开（--kb-h<=10 且输入框无焦点）时零延迟直接展开。 */
-  const ta=$('#chat-text');
-  const focused=ta&&document.activeElement===ta;
-  if(document.activeElement&&document.activeElement.blur)document.activeElement.blur();
-  const v0=parseFloat(document.documentElement.style.getPropertyValue('--kb-h'))||0;
-  if(v0<=10&&!focused){openDone();return;}
-  const t0=Date.now();
-  const wait=()=>{
-   const v=parseFloat(document.documentElement.style.getPropertyValue('--kb-h'))||0;
-   if(v<=10){
-    /* --kb-h 归零只说明"位移量没了"，系统键盘的收滑动画可能还差几十毫秒。
-       再等 150ms 让动画彻底走完，避免面板撑开时残影/抖动。 */
-    setTimeout(openDone,150);
-    return;
-   }
-   if(Date.now()-t0>800){openDone();return;}
-   requestAnimationFrame(wait);
-  };
-  requestAnimationFrame(wait);
+  if(wasOpen){p.hidden=true;}
+  else{
+   if(document.activeElement&&document.activeElement.blur)document.activeElement.blur();
+   p.hidden=false;
+  }
+  /* 面板开合改变 .chat-body 高度，消息滚动位置要跟着重算，
+     否则同一 scrollTop 在新容器高度下就是「内容整体上移」。
+     ⚠️ 不能在改 hidden 的同一帧 scrollChat：布局还没重算，scrollHeight 是旧值。 */
+  requestAnimationFrame(scrollChat);
   return;}
  if(action==='chat-fn-close'){const p=$('#chat-fn');if(p)p.hidden=true;return;}
  if(action==='chat-pick'){const p=$('#chat-fn');if(p)p.hidden=true;return id==='camera'?$('#chat-shot')?.click():chatAlbumPick();}
