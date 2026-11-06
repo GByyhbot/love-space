@@ -293,15 +293,18 @@ function syncCompose(){
 
    做法：原生桥是逐帧推整数高度的（系统 60 次/秒，其中大量是 1~2px 抖动），
    这里用指数平滑 + rAF 把它收敛成少量连续帧，只写必要的中间值。
-   ⚠️ 三条纪律：
+   ⚠️ 四条纪律（前两条是本轮踩坑后补的，别改回去）：
      · target 必须每帧重新读（kbTarget），不能在 rAF 闭包里锁死首帧的值；
-     · 目标归零（收起）时立刻落 0，不做平滑，避免"键盘落到底、输入栏还挂着"；
-     · 平滑只在弹出/跟进方向生效，且首帧直接从当前值起跳，不从 0 爬。 */
-let kbShrink=0,kbNativePx=0,kbBaseH=0,kbSmooth=0,kbRaf=0,kbTarget=0;
+     · **首帧绝不自作主张就位**：kbSmooth 从当前位置（0）出发逐帧追随。
+       曾写成「kbSmooth<=KbLive 时直接等于 target」，键盘升起第一帧原生就给出
+       较大值（如 60px），输入栏瞬间蹦到 60，紧接着又被系统后续更小的抖动值
+       拉回、再重新爬升 —— 真机上看到的就是「先闪一下、再慢慢升到位」；
+     · 只有原生明确归零（键盘真的收起）才立即落 0，升起初期的小值不许把位移拉回；
+     · 平滑只做「不完全追随」不做「瞬间跳跃」，系数越接近 1 越跟手。 */
+let kbShrink=0,kbNativePx=0,kbBaseH=0,kbSmooth=0,kbRaf=0,kbTarget=0,kbUp=0;
 /* "键盘算开着"的判定阈值（CSS px）。原实现用 90，而键盘前 90px 的升起过程里
-   输入栏完全不动 → 观感上"键盘先起来、输入栏慢半拍才跟上"。
-   降到 20：只要键盘动了一点就开始跟随，视觉衔接自然；同时仍能滤掉状态栏/
-   安全区之类的零星抖动。 */
+   输入栏完全不动 → 观感上"键盘先起来、输入栏慢半拍才跟上"。降到 10 后衔接自然，
+   同时仍能滤掉状态栏/安全区之类的零星抖动。 */
 const KbLive=10;
 const kbDpr=()=>window.devicePixelRatio||1;
 function syncKeyboard(){
@@ -311,27 +314,37 @@ function syncKeyboard(){
  const hidden=Math.max(0,Math.round(ih-vv.height-vv.offsetTop));
  /* 布局视口被键盘缩掉了 → A 类机器，原生桥永久让位 */
  if(Math.round(kbBaseH-ih)>90)kbShrink=1;
- let target=hidden;
- if(hidden<90&&!kbShrink){
-  /* B 类机器：原生值换算成 CSS px 后作为唯一来源。
-     阈值用 KbLive 而不是 90——原生桥在键盘刚起升时就会给出小值，
-     卡在 90 会让前 90px 的升起过程里输入栏完全不动（慢半拍）。 */
+ let target=0;
+ if(hidden>KbLive){
+  /* A 类机器（视口自己会缩）或浏览器：网页自算值就是真值 */
+  target=hidden;
+ }else if(!kbShrink){
+  /* B 类机器：原生值换算成 CSS px。阈值用 KbLive 而不是 90——
+     原生桥在键盘刚起升时就会给出小值，卡在 90 会让前 90px 里输入栏完全不动。 */
   const px=kbNativePx/kbDpr();
   if(px>KbLive)target=px;
  }
- kbTarget=target;
- if(target<=KbLive){ kbSmooth=0; if(kbRaf){cancelAnimationFrame(kbRaf);kbRaf=0;} applyKb(0); return; }
- /* 从收起态起步：直接就位（此处 target 可能还很小），避免从 0 慢慢爬。 */
- if(!kbSmooth||kbSmooth<=KbLive)kbSmooth=target;
+ /* 原生明确归零（键盘收起）才立刻落 0；升起初期的小值不触发归零，
+   否则会出现「先跳到某处、被小值拉回、再爬上来」的闪烁。 */
+ const off=kbNativePx===0&&hidden<=KbLive;
+ if(off){
+  kbTarget=0;kbSmooth=0;kbUp=0;
+  if(kbRaf){cancelAnimationFrame(kbRaf);kbRaf=0;}
+  applyKb(0);
+  return;
+ }
+ if(target>KbLive)kbUp=target;       /* 记住这一轮升起达到过的高度 */
+ kbTarget=target>KbLive?target:kbUp;
  if(!kbRaf)kbRaf=requestAnimationFrame(kbStep);
 }
 /* 每帧读最新的 kbTarget（不锁闭包），收敛后自动停 rAF。
-   系数 0.7 在 60fps 下 2~3 帧收敛：足够抹平整数跳变，又不会明显落后于系统动画。 */
+   系数 0.85：60fps 下约 2 帧追平，接近「完全跟随」又保留抹平整数跳变的作用，
+   不会让人感觉输入栏落后于键盘。 */
 function kbStep(){
  kbRaf=0;
  const gap=kbTarget-kbSmooth;
- if(Math.abs(gap)<0.5){ kbSmooth=kbTarget; applyKb(Math.round(kbSmooth)); return; }
- kbSmooth+=gap*0.7;
+ if(Math.abs(gap)<0.6){ kbSmooth=kbTarget; applyKb(Math.round(kbSmooth)); return; }
+ kbSmooth+=gap*0.85;
  applyKb(Math.round(kbSmooth));
  kbRaf=requestAnimationFrame(kbStep);
 }
