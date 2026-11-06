@@ -283,29 +283,18 @@ function syncCompose(){
    kbShrink 一旦观测到视口真的被缩过就永久置 1，表示"这台机器是 A 类"，
    顺带挡掉"键盘收起瞬间原生值还没归零却被误用"的空窗。
 
-   ── 丝滑度（本轮优化）──────────────────────────────────────────────────
-   原来每帧把 IME 高度原样写进 --kb-h，而 --kb-h 消费在 padding-bottom 上：
-   padding 是布局属性，每改一次就强制重排一次（.chat-body 重算 flex 高度、
-   消息列表重新布局）→ 掉帧。实测 99 分位帧耗时 18~23ms，已越过 16.7ms 阈值。
-
-   CSS 侧没法换成 transform：.chat-panel 在 chat-full 下是 flex:1、高度由父级定，
-   单纯上移会露空白且内容区不会变矮，与 padding 不等价。所以只能在**写入频次**上省。
-
-   做法：原生桥是逐帧推整数高度的（系统 60 次/秒，其中大量是 1~2px 抖动），
-   这里用指数平滑 + rAF 把它收敛成少量连续帧，只写必要的中间值。
-   ⚠️ 四条纪律（前两条是本轮踩坑后补的，别改回去）：
-     · target 必须每帧重新读（kbTarget），不能在 rAF 闭包里锁死首帧的值；
-     · **首帧绝不自作主张就位**：kbSmooth 从当前位置（0）出发逐帧追随。
-       曾写成「kbSmooth<=KbLive 时直接等于 target」，键盘升起第一帧原生就给出
-       较大值（如 60px），输入栏瞬间蹦到 60，紧接着又被系统后续更小的抖动值
-       拉回、再重新爬升 —— 真机上看到的就是「先闪一下、再慢慢升到位」；
-     · 只有原生明确归零（键盘真的收起）才立即落 0，升起初期的小值不许把位移拉回；
-     · 平滑只做「不完全追随」不做「瞬间跳跃」，系数越接近 1 越跟手。 */
-let kbShrink=0,kbNativePx=0,kbBaseH=0,kbSmooth=0,kbRaf=0,kbTarget=0,kbUp=0;
-/* "键盘算开着"的判定阈值（CSS px）。原实现用 90，而键盘前 90px 的升起过程里
-   输入栏完全不动 → 观感上"键盘先起来、输入栏慢半拍才跟上"。降到 10 后衔接自然，
-   同时仍能滤掉状态栏/安全区之类的零星抖动。 */
-const KbLive=10;
+   ── 平滑（只对 B 类机器生效）────────────────────────────────────────────
+   原生桥是逐帧推整数高度的，直接写进 --kb-h 会让 padding-bottom 每帧重排。
+   B 类机器上加一层指数平滑 + 单帧步长封顶，把跳变摊成连续上升。
+   🔴 **A 类机器（主人机）必须逐字节保持原逻辑、不走平滑**：
+      它的视口自己会缩，hidden 已经是平滑的系统值；再叠一层平滑会引入滞后，
+      而且 --kb-shift 必须直接用 hidden（真实收缩量），不能用被削过的平滑值，
+      否则壁纸补偿对不上、图会跟着键盘漂。
+      2026-11-06 就是在这里改坏主人机的（KbLive 90→10、--kb-shift 改用平滑值、
+      kbUp 记忆值把输入栏粘在高位），三处一起回归。 */
+let kbShrink=0,kbNativePx=0,kbBaseH=0;
+/* B 类机器平滑用的状态 */
+let kbSmooth=0,kbRaf=0,kbTarget=0;
 const kbDpr=()=>window.devicePixelRatio||1;
 function syncKeyboard(){
  const vv=window.visualViewport;if(!vv)return;
@@ -314,55 +303,60 @@ function syncKeyboard(){
  const hidden=Math.max(0,Math.round(ih-vv.height-vv.offsetTop));
  /* 布局视口被键盘缩掉了 → A 类机器，原生桥永久让位 */
  if(Math.round(kbBaseH-ih)>90)kbShrink=1;
- let target=0;
- if(hidden>KbLive){
-  /* A 类机器（视口自己会缩）或浏览器：网页自算值就是真值 */
-  target=hidden;
- }else if(!kbShrink){
-  /* B 类机器：原生值换算成 CSS px。阈值用 KbLive 而不是 90——
-     原生桥在键盘刚起升时就会给出小值，卡在 90 会让前 90px 里输入栏完全不动。 */
-  const px=kbNativePx/kbDpr();
-  if(px>KbLive)target=px;
- }
- /* 原生明确归零（键盘收起）才立刻落 0；升起初期的小值不触发归零，
-   否则会出现「先跳到某处、被小值拉回、再爬上来」的闪烁。 */
- const off=kbNativePx===0&&hidden<=KbLive;
- if(off){
-  kbTarget=0;kbSmooth=0;kbUp=0;
+
+ /* ── A 类机器：完全沿用 e6cf8d1 的算法，一帧不平滑 ── */
+ if(kbShrink||hidden>90){
+  kbTarget=0;kbSmooth=0;
   if(kbRaf){cancelAnimationFrame(kbRaf);kbRaf=0;}
-  applyKb(0);
+  applyKbA(hidden);
   return;
  }
- if(target>KbLive)kbUp=target;       /* 记住这一轮升起达到过的高度 */
- kbTarget=target>KbLive?target:kbUp;
+
+ /* ── B 类机器：原生值才是唯一来源 ── */
+ const px=kbNativePx/kbDpr();
+ if(px<=90){                    /* 键盘真的没开（或已收起）：立刻归零 */
+  kbTarget=0;kbSmooth=0;
+  if(kbRaf){cancelAnimationFrame(kbRaf);kbRaf=0;}
+  applyKbB(0);
+  return;
+ }
+ kbTarget=px;
  if(!kbRaf)kbRaf=requestAnimationFrame(kbStep);
 }
-/* 每帧读最新的 kbTarget（不锁闭包），收敛后自动停 rAF。
-   🔴 关键：指数平滑必须配「单帧最大步长」，否则第一帧就打满。
-   gap 一开始是整段位移（294px），乘 0.85 意味着第一帧直接跳到 252px——
-   真机上看到的就是「猛一下闪到终态附近，再磨几下才对齐」。
-   加 kbMaxStep 把每帧位移封顶，位移被强制摊到 ~10 帧里走完，
-   这才是肉眼可见的「平滑上升」，而不是「闪一下」。 */
-const kbMaxStep=42;                  /* 每帧最多走 42 CSS px ≈ 60fps 下 280ms 走完 294px */
+/* A 类机器落盘：与 e6cf8d1 逐字节等价。
+   --kb-h 与 --kb-shift 两个阈值/条件必须按原样分开写，不能合并：
+     · --kb-h   = hidden>90 ? hidden : 0
+     · --kb-shift = (kbShrink && hidden>90) ? hidden : 0
+   kbShrink 表示"布局视口真的被键盘缩过"；浏览器/老内核只缩视觉视口时
+   kbShrink=0，此时壁纸本来就不会变矮，**绝不能**写 shift，否则会把壁纸拉长。 */
+function applyKbA(hidden){
+ const h=hidden>90?hidden:0;
+ document.documentElement.style.setProperty('--kb-h',h>0?h+'px':'0px');
+ document.documentElement.style.setProperty('--kb-shift',(kbShrink&&hidden>90)?hidden+'px':'0px');
+ if(document.body)document.body.classList.toggle('kb-open',h>90);
+}
+/* B 类机器落盘：--kb-shift 恒 0（这类机型视口不缩，壁纸本来就不动，不需要补偿）。 */
+function applyKbB(v){
+ const h=Math.max(0,Math.round(v));
+ document.documentElement.style.setProperty('--kb-h',h>0?h+'px':'0px');
+ document.documentElement.style.setProperty('--kb-shift','0px');
+ if(document.body)document.body.classList.toggle('kb-open',h>90);
+}
+/* 每帧读最新的 kbTarget（不在 rAF 闭包里锁死首帧值）。
+   🔴 指数平滑必须配单帧步长封顶：gap 初始就是整段位移（294px），
+      乘 0.85 会第一帧直接跳 252px —— 真机表现是「闪一下、闪在终态位置」。
+      封顶 42px 后 294px 摊到 7 帧（约 200ms）走完，是肉眼可见的连续上升。 */
+const kbMaxStep=42;
 function kbStep(){
  kbRaf=0;
  const gap=kbTarget-kbSmooth;
- if(Math.abs(gap)<0.6){ kbSmooth=kbTarget; applyKb(Math.round(kbSmooth)); return; }
+ if(Math.abs(gap)<0.6){ kbSmooth=kbTarget; applyKbB(kbSmooth); return; }
  let step=gap*0.85;
  if(step>kbMaxStep)step=kbMaxStep;
  if(step<-kbMaxStep)step=-kbMaxStep;
  kbSmooth+=step;
- applyKb(Math.round(kbSmooth));
+ applyKbB(kbSmooth);
  kbRaf=requestAnimationFrame(kbStep);
-}
-/* 落盘：--kb-h 供 padding-bottom 消费，--kb-shift 供壁纸补偿，kb-open 供安全区让位。 */
-function applyKb(h){
- const v=Math.max(0,Math.round(h));
- document.documentElement.style.setProperty('--kb-h',v>0?v+'px':'0px');
- /* 壁纸补偿：WebView 底边在 A 类机器上会上移，cover 重新适配会让图视觉上移。
-    用"收缩量"把壁纸层加高回去，视觉完全静止（超出部分被 panel 的 overflow 裁掉）。 */
- document.documentElement.style.setProperty('--kb-shift',kbShrink&&v>KbLive?v+'px':'0px');
- if(document.body)document.body.classList.toggle('kb-open',v>KbLive);
 }
 /* 原生 IME 高度桥的唯一入口（MainActivity.pushImeHeight 调用）。
    原生只传**物理像素**，"换算成 CSS px"和"用不用"都由这里决定。
