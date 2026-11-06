@@ -183,9 +183,10 @@ public class MainActivity extends BridgeActivity {
         setupKeyboardResize();
     }
 
-    /** 记录上次给 WebView 设的 height/底边距，insets 反复回调但值没变时跳过 setLayoutParams，防止布局抖动。 */
-    private int lastWebHeight = Integer.MIN_VALUE;
-    private int lastWebBottomMargin = Integer.MIN_VALUE;
+    /** 记录上次给 WebView 设的边距/高度，insets 反复回调但值没变时跳过 setLayoutParams，防止布局抖动。 */
+    private int lastTop = Integer.MIN_VALUE, lastBottom = Integer.MIN_VALUE,
+                lastLeft = Integer.MIN_VALUE, lastRight = Integer.MIN_VALUE,
+                lastHeight = Integer.MIN_VALUE;
 
     private void setupKeyboardResize() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.VANILLA_ICE_CREAM) return;
@@ -198,29 +199,26 @@ public class MainActivity extends BridgeActivity {
             ViewGroup.MarginLayoutParams mlp = (ViewGroup.MarginLayoutParams) v.getLayoutParams();
             boolean portrait = getResources().getConfiguration().orientation
                     == Configuration.ORIENTATION_PORTRAIT;
-            int imeBottom = ime.bottom;
-            int height;
-            int bottomMargin;
-            if (portrait && imeBottom > 0) {
-                // 键盘弹出：WebView 压到键盘上沿（IME inset 已从屏幕底算起，底边距归零）
-                height = Math.max(v.getRootView().getHeight() - imeBottom - bars.top, 0);
-                bottomMargin = 0;
-            } else {
-                // 键盘收起（或横屏——横屏屏高比键盘还矮，缩了没法看，保持全高）：
-                // 恢复全高，系统栏照常避让。与 Capacitor edgeToEdgeHandler 的 margin
-                // 逻辑同款，这里一并接管（本 listener 会覆盖它设置的）。
-                height = ViewGroup.LayoutParams.MATCH_PARENT;
-                bottomMargin = bars.bottom;
-            }
+            // 键盘是否真的弹出（ime 覆盖导航栏才算，别把手势条当键盘）
+            boolean keyboard = portrait && ime.bottom > bars.bottom;
+            // 三边与 Capacitor edgeToEdgeHandler 同款；底部：键盘弹出时顶到键盘上沿。
+            // 不动 height（保持 MATCH_PARENT）——WebView 顶边永远不动，顶部不可能被裁；
+            // MATCH_PARENT + bottomMargin 让 WebView 高度自动收缩，等效 adjustResize。
+            int bottom = keyboard ? ime.bottom : bars.bottom;
             mlp.leftMargin = bars.left;
             mlp.rightMargin = bars.right;
             mlp.topMargin = bars.top;
-            mlp.bottomMargin = bottomMargin;
-            mlp.height = height;
-            if (height != lastWebHeight || bottomMargin != lastWebBottomMargin) {
+            mlp.bottomMargin = bottom;
+            mlp.height = ViewGroup.LayoutParams.MATCH_PARENT;
+            if (mlp.topMargin != lastTop || mlp.bottomMargin != lastBottom
+                    || mlp.leftMargin != lastLeft || mlp.rightMargin != lastRight
+                    || mlp.height != lastHeight) {
                 v.setLayoutParams(mlp);
-                lastWebHeight = height;
-                lastWebBottomMargin = bottomMargin;
+                lastTop = mlp.topMargin;
+                lastBottom = mlp.bottomMargin;
+                lastLeft = mlp.leftMargin;
+                lastRight = mlp.rightMargin;
+                lastHeight = mlp.height;
             }
             return WindowInsetsCompat.CONSUMED;
         });
