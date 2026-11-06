@@ -300,17 +300,26 @@ let kbNativePx=0;   // 原生递来的键盘高度，物理像素
 let kbShrink=0;     // 这台机器的视觉视口会不会跟着键盘缩：0 未知 / 1 会
 function syncKeyboard(){
  const vv=window.visualViewport;if(!vv)return;
+ const de=document.documentElement;
  const ih=Math.round(window.innerHeight);
  const dropped=Math.max(0,ih-Math.round(vv.height));   // 视觉视口被键盘顶掉多少
  if(dropped>90)kbShrink=1;
  /* 1.6.20 的老算法，一字未改 */
  const hidden=Math.max(0,ih-Math.round(vv.height)-Math.round(vv.offsetTop));
- /* 只有「网页真算不出来」（视觉视口一点没缩）时，才采用原生高度 */
- const v=(hidden<90&&!kbShrink&&kbNativePx>90)
-   ?Math.min(ih,Math.round(kbNativePx/(window.devicePixelRatio||1)))
-   :hidden;
+ /* 只有「网页真算不出来」（视觉视口一点没缩）时，才采用原生给的键盘高度 */
+ let v=hidden;
+ if(v<90&&!kbShrink){
+  if(kbNativePx>90)v=Math.min(ih,Math.round(kbNativePx/(window.devicePixelRatio||1)));
+  /* 旧 APK（≤1.6.21）没有 __kbSetNative 入口，是直接把值写进 --kb-h 再打
+     data-native-kb 标记的。网页和 APK 不可能同时更新，所以这段兼容要留到两人
+     都装上新包为止，否则她手机上原生写好的值会被这里算出的 0 冲掉。 */
+  else if(de.hasAttribute('data-native-kb')){
+   const cur=parseFloat(de.style.getPropertyValue('--kb-h'))||0;
+   if(cur>90&&cur<ih*0.6)v=cur;      // 超过 60% 屏高的一律当脏值，不认
+  }
+ }
  const k=v<90?0:v;
- document.documentElement.style.setProperty('--kb-h',k?k+'px':'0px');
+ de.style.setProperty('--kb-h',k?k+'px':'0px');
  /* kb-open 用来给"底部安全区内边距"让位：键盘顶上来时那块安全区已经被键盘占了，
     再留一道 env(safe-area-inset-bottom) 就成了多出来的空白条。 */
  if(document.body)document.body.classList.toggle('kb-open',k>0);
