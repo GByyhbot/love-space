@@ -2151,6 +2151,14 @@ html.is-native-app{--safe-top:clamp(24px, env(safe-area-inset-top,0px), 36px)}
 /* 顶栏用「负上边距抵消主区上内边距 + 自身 padding-top」把自己顶到 y=0，
    这样它的背景始终盖住状态栏那条缝；再 position:sticky 钉在顶部，滚内容时导航栏不动。 */
 html.is-native-app .main{padding-top:calc(var(--safe-top,0px) + 6px)}
+/* ── APK 键盘让位（v1.6.19）──
+   原生把键盘高度逐帧写进 --kb-h，WebView 尺寸全程不动（改尺寸会让 Chromium 新区域
+   未绘制、露出黑帧——1.6.13~1.6.18 五次翻车的根因）。这里让页面自己让出键盘高度：
+   普通页面主区整体上移；弹层（居中/贴底）上移并收缩；聊天页和一起看页已有各自的
+   --kb-h 消费点（见 .chat-panel / .watch-page），这里不重复加，否则输入条会顶两次。 */
+html.is-native-app .shell:not(.chat-full) .main{padding-bottom:var(--kb-h,0px)}
+html.is-native-app .modal-overlay{padding-bottom:var(--kb-h,0px)}
+html.is-native-app .modal.sheet{max-height:calc(92dvh - var(--kb-h,0px))}
 html.is-native-app .shell.chat-full .main{padding-top:var(--safe-top,0px)}
 html.is-native-app .auth-page{padding-top:calc(var(--safe-top,0px) + 18px)}
 html.is-native-app .topbar{

@@ -178,30 +178,19 @@ public class MainActivity extends BridgeActivity {
         //    WebSettings 的 database/domStorage 默认未必开启，不开的话 JS 侧 indexedDB.open 会直接失败。
         setupLocalStorage();
         // ⑤ Android 15 键盘避让：targetSdk 35 强制 edge-to-edge，系统不再随键盘缩窗口，
-        //    windowSoftInputMode=adjustResize 形同虚设，键盘直接盖住输入框（Redmi Note 12
-        //    Turbo 实测）。v1.6.15：WebView 平时四边贴满（完整 edge-to-edge，状态栏/手势条
-        //    由网页毛玻璃自绘+避让，系统栏与页面视觉统一），键盘弹出时只缩底边到键盘上沿；
-        //    listener 挂在 WebView 父容器上（挂 WebView 会拦掉 Chromium 的 env()）。
-        //    Android 15 以下系统会自己缩，交给系统（不重复处理，避免双重收缩）。
+        //    windowSoftInputMode=adjustResize 形同虚设（Redmi Note 12 Turbo 实测）。
+        //    v1.6.19 起：WebView 永远四边贴满、尺寸不动，原生只把键盘高度写进网页
+        //    --kb-h，由网页 padding 让位——零 resize 就没有「新区域未绘制」的黑帧。
+        //    Android 15 以下系统 adjustResize 自己缩，交给系统（不重复处理）。
         setupKeyboardResize();
     }
 
-    /** 记录上次给 WebView 设的底部边距，insets 反复回调但值没变时跳过 setLayoutParams，防止布局抖动。 */
-    private int lastBottom = Integer.MIN_VALUE;
-
-    /** 把 WebView 底边缩到 bottom（其余三边恒 0、高度 MATCH_PARENT），带防抖。
-        键盘动画回调与 insets 分发两条路都走这里。 */
-    private void applyBottomMargin(View wv, int bottom) {
-        ViewGroup.MarginLayoutParams mlp = (ViewGroup.MarginLayoutParams) wv.getLayoutParams();
-        mlp.leftMargin = 0;
-        mlp.rightMargin = 0;
-        mlp.topMargin = 0;
-        mlp.bottomMargin = bottom;
-        mlp.height = ViewGroup.LayoutParams.MATCH_PARENT;
-        if (bottom != lastBottom) {
-            wv.setLayoutParams(mlp);
-            lastBottom = bottom;
-        }
+    /** 把键盘高度写进网页的 --kb-h，由网页用 padding 让位（WebView 尺寸全程不动）。 */
+    private void pushKeyboardHeight(View wv, int px) {
+        if (!(wv instanceof WebView)) return;
+        ((WebView) wv).evaluateJavascript(
+                "(function(d){if(d)d.style.setProperty('--kb-h','" + px + "px');})(document.documentElement)",
+                null);
     }
 
     private void setupKeyboardResize() {
@@ -209,37 +198,35 @@ public class MainActivity extends BridgeActivity {
         View wv = getBridge() == null ? null : getBridge().getWebView();
         if (wv == null || !(wv.getParent() instanceof ViewGroup)) return;
         ViewGroup parent = (ViewGroup) wv.getParent();
-        // 🔴 listener 必须挂在 WebView 的「父容器」上，而不是 WebView 自己：
-        //    挂在 WebView 上会替代（拦截掉）WebView 内部 Chromium 的 inset 处理，
-        //    网页 env(safe-area-inset-*) 恒为 0，网页就无法自己避让状态栏/手势条；
-        //    挂在父容器上并把 insets 原样返回，insets 会照常分发给 WebView（Chromium
-        //    拿到真实值，网页毛玻璃顶栏能延伸到状态栏后面），我们只趁机改 WebView 边距。
+        // 🔴 v1.6.19 定稿：WebView 永远四边贴满，任何时候都不改尺寸/边距——键盘避让改成
+        //    「原生把键盘高度写进网页 --kb-h，网页用 padding 让位」（消费点已在
+        //    chat-panel/fn-panel/watch-page/main/modal 里）。
+        //    手动缩 WebView（1.6.13~1.6.18 五次尝试：height/margin/动画跟随）全部翻车，
+        //    根因是 view 级 resize 与键盘动画不同步，Chromium 渲染慢一帧 → 新区域露黑；
+        //    逐帧改 margin 反而每帧都露黑（1.6.16 主人实测「闪得更厉害」）。
+        //    改 --kb-h 方案后零 resize → 结构上不可能再有 resize 黑帧。
+        //
+        //    listener 挂父容器（不挂 WebView）：挂 WebView 上会替代 Chromium 自己的
+        //    inset 处理 → 网页 env(safe-area-inset-*) 恒 0（1.6.13 实证）。
         ViewCompat.setOnApplyWindowInsetsListener(parent, (v, windowInsets) -> {
-            Insets bars = windowInsets.getInsets(
-                    WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout());
             Insets ime = windowInsets.getInsets(WindowInsetsCompat.Type.ime());
-            // 键盘是否真的弹出（ime 覆盖导航栏才算，别把手势条当键盘）
-            boolean keyboard = ime.bottom > bars.bottom;
-            // v1.6.15：WebView 平时四边贴满屏幕（完整 edge-to-edge），状态栏/手势条
-            // 区域由网页自己铺 + 避让（顶栏毛玻璃、底部 env(safe-area-inset-bottom)），
-            // 视觉上系统栏与页面融为一体。键盘弹出时只把底边缩到键盘上沿
-            // （bottomMargin = ime.bottom，等效 adjustResize）；
-            // 顶边永远不动（topMargin 恒 0）——顶部不可能再被裁。
-            applyBottomMargin(wv, keyboard ? ime.bottom : 0);
-            return windowInsets;   // 不消费：继续传给 WebView，Chromium 的 env() 才有真实值
+            pushKeyboardHeight(wv, ime.bottom);   // 键盘收起时 ime.bottom=0，正好归零
+            return windowInsets;                   // 不消费：Chromium 仍能拿到真实 env()
         });
-        // 🔴 键盘弹出/收起是 ~300ms 的动画，普通 insets 分发只在动画「首/尾」给值：
-        //    动画期间键盘已经升起而 WebView 还没缩，输入框仍停在屏幕底部，被键盘
-        //    逐渐盖过再「跳」到键盘上沿——真机上就是「输入框在导航栏下方闪过一下」
-        //    （主人录屏确认）。WindowInsetsAnimationCompat 的 onProgress 每帧给 IME
-        //    中间值，底边距跟着逐帧应用，WebView 与键盘动画完全同步，输入框始终
-        //    浮在键盘上沿。挂 WebView 自己（与 insets listener 不冲突，是平行机制）。
+        // 动画期间普通 insets 分发只在首尾给值，输入条会「卡在底部再跳上去」（1.6.15 实测）；
+        // 这里每帧取 IME 中间值写进 --kb-h，输入条与键盘严格同步升降。
         ViewCompat.setWindowInsetsAnimationCallback(wv, new WindowInsetsAnimationCompat.Callback(
                 WindowInsetsAnimationCompat.Callback.DISPATCH_MODE_CONTINUE_ON_SUBTREE) {
+            private int lastPx = Integer.MIN_VALUE;
+
             @Override
             public WindowInsetsCompat onProgress(WindowInsetsCompat insets,
                                                  List<WindowInsetsAnimationCompat> runningAnimations) {
-                applyBottomMargin(wv, insets.getInsets(WindowInsetsCompat.Type.ime()).bottom);
+                int px = insets.getInsets(WindowInsetsCompat.Type.ime()).bottom;
+                if (px != lastPx) {
+                    lastPx = px;
+                    pushKeyboardHeight(wv, px);
+                }
                 return insets;
             }
         });
