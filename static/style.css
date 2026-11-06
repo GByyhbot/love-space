@@ -970,16 +970,16 @@ html.is-native-app .watch-head{padding-top:8px}
 /* 键盘避让：新版 WebView 靠 viewport 的 interactive-widget=resizes-content 自己缩，
    旧版只缩视觉视口，app.js 的 syncKeyboard() 把差值写进 --kb-h，这里把输入栏整体顶上去。
    一起看页是独立的全屏分屏（不套 .chat-panel），所以得单独补一条，否则键盘一弹
-   整页被顶出屏幕、分屏比例全乱。 */
-body.chat-full .chat-panel{padding-bottom:var(--kb-h,0px)}
-body.chat-full .fn-panel{padding-bottom:calc(14px + env(safe-area-inset-bottom) + var(--kb-h,0px))}
-body.watch-open .watch-page{padding-bottom:var(--kb-h,0px)}
+   整页被顶出屏幕、分屏比例全乱。
+/* ⚠️ 这里不再拿 --kb-h 做 padding 抬输入栏（v1.6.22 改的）：键盘弹出后布局视口
+   仍是整屏，浏览器会把「视觉视口」往下滚去露出输入框（实测 offsetTop≈360），
+   加 padding 不但治不了，顶部还会被滚出屏幕。现在改成键盘开着时缩根高度，
+   见文件末尾 html.is-native-app body.kb-open 那一块。 */
+body.chat-full .fn-panel{padding-bottom:calc(14px + env(safe-area-inset-bottom))}
 /* APK 里 --kb-h 由原生 MainActivity 的键盘高度桥一次性写成最终值（系统 insets 回调
    不逐帧触发），补一条过渡让它跟键盘滑入同步；只改内边距、WebView 尺寸全程不动，
    所以不会像直接缩 WebView 那样露出未渲染的黑帧。 */
-html.is-native-app body.chat-full .chat-panel,
-html.is-native-app body.chat-full .fn-panel,
-html.is-native-app body.watch-open .watch-page{transition:padding-bottom .22s cubic-bezier(.22,.8,.24,1)}
+
 body.watch-open.kb-open .watch-chat .chat-compose{padding-bottom:8px}
 /* ── 聊天壁纸：底图铺满整个聊天面板（标题栏和输入栏也压在图上） ──
    .chat-wallpaper 挂到 .chat-panel 上绝对定位铺满，::after 是压在图上的遮罩（--chat-bg-dim 控制强度）。
@@ -2174,7 +2174,23 @@ html.is-native-app .modal.sheet{
   }
 }
 
-html.is-native-app{--safe-top:clamp(24px, env(safe-area-inset-top,0px), 36px)}
+html.is-native-app{--safe-top:clamp(24px, env(safe-area-inset-top,0px), 64px)}
+/* 根高度被键盘缩掉之后，下面那块由 html 兜底色，否则会透出 WebView 的黑。 */
+html.is-native-app{background:var(--bg)}
+
+/* ── 键盘弹出时缩根，而不是给面板加 padding（v1.6.22）────────────────
+   实测（Android 17 / 1200x2670 / dpr 3.25）：键盘弹出后布局视口仍是整屏，
+   只有视觉视口变小，浏览器为了露出聚焦的输入框会把视觉视口往下滚
+   （visualViewport.offsetTop ≈ 360）——标题栏、壁纸、一起看页的视频就这样
+   被滚出屏幕，看着像「导航栏消失、视频不见了」。
+   把根高度缩掉一个键盘高：文档不再超出可视区，浏览器没得滚，offsetTop 被夹回 0，
+   顶部一切留在原位，输入栏正好落在键盘上沿。 */
+html.is-native-app body.chat-full.kb-open,
+html.is-native-app body.chat-full.kb-open .shell.chat-full,
+html.is-native-app body.chat-full.kb-open .shell.chat-full .main,
+html.is-native-app body.watch-open.kb-open,
+html.is-native-app body.watch-open.kb-open .shell.watch-full,
+html.is-native-app body.watch-open.kb-open .shell.watch-full .main{height:calc(100dvh - var(--kb-h,0px))}
 html.is-native-app .main{padding-top:calc(var(--safe-top,0px) + 6px)}
 html.is-native-app .shell.chat-full .main{padding-top:var(--safe-top,0px)}
 html.is-native-app .auth-page{padding-top:calc(var(--safe-top,0px) + 18px)}

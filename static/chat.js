@@ -301,21 +301,31 @@ function syncCompose(){
    缩过 → 这台机器会让位，--kb-h 一律 0；没缩 → 才用原生高度或视觉视口差值。
    只要观测到一次「缩过」就记住这台机器，之后不等观测直接归零。 */
 let kbBase=(Math.round(window.innerHeight)||0);   // 无键盘时的布局高度基线
-let kbNative=0, kbLegacy=0, kbMode='', kbWrote=-1, kbWatch=0, kbWasOpen=0;
-const KB_RESIZE='ls.kbmode.resize';
-try{if(localStorage.getItem(KB_RESIZE)==='1')kbMode='resize';}catch(e){}
+let kbNative=0, kbLegacy=0, kbWrote=-1, kbWatch=0, kbWasOpen=0;
+/* 这台机器键盘弹出时视觉视口会不会缩（Android 16/17 上是缩的）。一旦观测到，
+   键盘高度就等于「innerHeight - visualViewport.height」，既不用原生也不用预测确认。 */
+let kbShrinkDevice=false;
+
+/* 上一次学到的键盘高度：聚焦瞬间要拿它先把根缩掉，见下面的 kbPredict。 */
+let kbLast=0;
+try{kbLast=parseFloat(localStorage.getItem('ls.kbh'))||0;}catch(e){}
 
 function kbWrite(v){
  if(v<90)v=0;
  kbWrote=v;
+ if(v>0){kbLast=v;try{localStorage.setItem('ls.kbh',String(v));}catch(e){}}
  document.documentElement.style.setProperty('--kb-h',v?v+'px':'0px');
- /* kb-open 用来给"底部安全区内边距"让位：键盘顶上来时那块安全区已经被键盘占了，
-    再留一道 env(safe-area-inset-bottom) 就成了多出来的空白条。 */
+ /* kb-open 给 CSS 用：键盘开着时把根容器高度缩掉一个键盘高（见 style.css 末尾），
+    同时让底部安全区内边距让位。 */
  if(document.body)document.body.classList.toggle('kb-open',v>0);
+ /* 一起看页的放映区高度是按「页面可视高度」算的（watchFitStage），
+    根高度一变就得重算，否则键盘一弹放映区还占着原来的高度、把聊天区挤没。 */
+ if(document.body&&document.body.classList.contains('watch-open')
+    &&typeof watchFitStage==='function')setTimeout(watchFitStage,60);
 }
 
-/* 键盘刚弹出来那一小段（原生写入与布局收缩的先后顺序不固定），开一个 700ms 的
-   看护窗口多确认几轮；只在「刚变成开着」时开一次，不会空转。 */
+/* 键盘刚弹出来那一小段，原生写入与浏览器滚动谁先谁后不固定，开一个 700ms 的看护
+   窗口多确认几轮；只在「刚变成开着」时开一次，不会空转。 */
 function kbArm(open){
  if(open&&!kbWasOpen)kbWatch=Date.now()+700;
  kbWasOpen=open?1:0;
@@ -326,29 +336,29 @@ function syncKeyboard(){
  const ih=Math.round(window.innerHeight);
  if(ih>kbBase)kbBase=ih;                       // 键盘收起时这里就是真基线
  const vv=window.visualViewport;
- const vvHidden=vv?Math.max(0,Math.round(ih-vv.height-vv.offsetTop)):0;
- const shrunk=Math.max(0,kbBase-ih);           // 布局视口已经缩掉的高度
+ /* 注意不要减 offsetTop：那是浏览器自己把视觉视口往下滚的量（键盘弹出后 ≈360），
+    减掉就等于把「键盘占了多高」算小，输入栏会抬不到位。 */
+ const vvHidden=vv?Math.max(0,Math.round(ih-vv.height)):0;
+ const shrunk=Math.max(0,kbBase-ih);           // 布局视口被别人缩掉了多少
  const cap=Math.round(ih*0.6);                 // 兜底：键盘不可能占到六成屏以上
 
  /* 老包（1.6.21 及以前）的原生桥直接把值写进 --kb-h。不是我们写的就读回来记着，
-    我们这个值一直认它，别被自己的写入冲掉（否则每轮都会 432→0 来回跳）。 */
+    这个值一直认它，否则每轮都会被自己的写入冲成 0 来回跳。 */
  const cur=parseFloat(document.documentElement.style.getPropertyValue('--kb-h'))||0;
  if(Math.abs(cur-kbWrote)>0.5)kbLegacy=cur;
 
- if(shrunk>90&&kbMode!=='resize'){             // 这台机器会让位，记下来
-  kbMode='resize';
-  try{localStorage.setItem(KB_RESIZE,'1');}catch(e){}
+ if(vvHidden>90)kbShrinkDevice=true;            // 视觉视口会缩：这台机器自己就能算
+ let v;
+ if(kbShrinkDevice){
+  /* 唯一真相：视觉视口被键盘顶掉多少，键盘就占多高。键盘收起自动归 0，
+     不会出现「键盘没弹但布局还卡在缩着的状态」（那会留一条黑边）。 */
+  v=vvHidden;
+ }else{
+  v=Math.max(kbNative,kbLegacy);
+  /* 更早的包连 DPR 都没除就把物理像素写了进来：值超过上限就按 DPR 折回来 */
+  if(kbLegacy>cap)v=Math.max(kbNative,Math.round(kbLegacy/(window.devicePixelRatio||1)));
+  if(v>0&&shrunk>v*0.5)v=0;                    // 布局视口自己缩过了，别再叠加
  }
- if(kbMode==='resize'){                        // 已经让过位，绝不再叠加
-  kbWrite(0);
-  kbArm(kbLegacy>0);
-  return;
- }
-
- let v=Math.max(vvHidden,kbNative,kbLegacy);
- /* 更早的包连 DPR 都没除就把物理像素写了进来：值超过上限就按 DPR 折回来 */
- if(kbLegacy>cap)v=Math.max(vvHidden,kbNative,Math.round(kbLegacy/(window.devicePixelRatio||1)));
- if(v>0&&shrunk>v*0.5)v=0;                     // 观测到缩了：浏览器让过了
  if(v>cap)v=cap;
  if(v<90)v=0;
  kbWrite(v);
@@ -361,6 +371,26 @@ window.__kbSetNative=function(px){
  if(px<=0){const ih=Math.round(window.innerHeight);if(ih>kbBase)kbBase=ih;}
  syncKeyboard();
 };
+
+/* ── 聚焦预判 ────────────────────────────────────────────────────────
+   WebView 在键盘弹出时，会先把视觉视口往下滚去露出聚焦的输入框（实测量
+   offsetTop≈360，把标题栏、壁纸、一起看页的视频一起滚出屏幕），而且这个滚动
+   在拿到真实 inset 之后再缩根也回不来。所以在输入框刚拿到焦点、键盘还没弹的
+   那一瞬，先按上一次学到的键盘高度把根缩掉——浏览器就没得滚，顶部原地不动。
+   真实 inset 到了 syncKeyboard 会再校准一次；键盘收起时归零。 */
+const KB_FIELD='.chat-compose,.fn-panel,.watch-chat,.modal,.pick-overlay,.compose-field';
+function kbPredict(el){
+ if(!kbShrinkDevice||kbWrote>0||kbLast<90)return;
+ if(!el||!el.closest||!el.closest(KB_FIELD))return;
+ kbWrite(kbLast);
+}
+document.addEventListener('focusin',function(e){kbPredict(e.target);},true);
+document.addEventListener('focusout',function(){
+ setTimeout(function(){
+  const a=document.activeElement;
+  if(!a||!/^(INPUT|TEXTAREA)$/.test(a.tagName))kbWrite(0);
+ },80);
+},true);
 
 /* ── 聊天里直接发文件（相册 / 拍摄 / 录音都走这里）───────────────── */
 async function sendChatFiles(files){
