@@ -2085,15 +2085,27 @@ async function act(action,id,el) {
   /* 展开面板前必须先把键盘收干净：
      键盘收起时 --kb-h 从键盘高度平滑归零，这期间 .chat-panel 的 padding-bottom
      一直在变；若此时同时展开面板（又压缩 .chat-body），两个高度变化反向叠加，
-     真机上就是「闪屏/抖动」。所以先 blur 收键盘，等 --kb-h 归零那帧再展开。
-     键盘本来就没开时（--kb-h<=10）直接展开，无延迟。 */
+     真机上就是「闪屏/抖动」。所以先 blur 收键盘，等键盘真的落下去再展面板。
+     🔴 两个条件都要满足，不能只等 --kb-h：
+       B 类机器（女友机）的 --kb-h 由原生桥推，blur 之后原生还要等系统走完
+       收起动画才推送 0，只靠 400ms 兜底会「面板开了、键盘还挂着」。
+     🔴 兜底放宽到 800ms：宁可多等一点，也不能在键盘没落干净时展开。
+     键盘本来就没开（--kb-h<=10 且输入框无焦点）时零延迟直接展开。 */
+  const ta=$('#chat-text');
+  const focused=ta&&document.activeElement===ta;
   if(document.activeElement&&document.activeElement.blur)document.activeElement.blur();
   const v0=parseFloat(document.documentElement.style.getPropertyValue('--kb-h'))||0;
-  if(v0<=10){openDone();return;}
+  if(v0<=10&&!focused){openDone();return;}
   const t0=Date.now();
   const wait=()=>{
    const v=parseFloat(document.documentElement.style.getPropertyValue('--kb-h'))||0;
-   if(v<=10||Date.now()-t0>400){openDone();return;}
+   if(v<=10){
+    /* --kb-h 归零只说明"位移量没了"，系统键盘的收滑动画可能还差几十毫秒。
+       再等 150ms 让动画彻底走完，避免面板撑开时残影/抖动。 */
+    setTimeout(openDone,150);
+    return;
+   }
+   if(Date.now()-t0>800){openDone();return;}
    requestAnimationFrame(wait);
   };
   requestAnimationFrame(wait);
