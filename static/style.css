@@ -732,6 +732,11 @@ button.mood-row.no-mood .mood-bubble.empty{color:var(--primary-dark)}
    （z-index:0），普通流内元素（这里原本没有定位）会被它整个盖住——面板"点了没反应"
    就是这个原因，只剩几个自身定位的小圆钮从壁纸上透出来。 */
 .fn-panel{position:relative;z-index:1;border-top:1px solid var(--line);background:var(--surface);padding:10px 14px calc(14px + env(safe-area-inset-bottom))}
+/* 面板高度与键盘对齐（微信式）：展开时聊天区按固定量收窄，收起时收回，
+   高度可预测、没有「先按内容撑开再跳一下」的抖动。
+   --kb-panel-h 由 chat.js 在键盘弹出时记录该机键盘实际高度，
+   键盘没开过（或浏览器）时回落到 260px，足够放下 4 列图标。 */
+body.chat-full .fn-panel{height:var(--kb-panel-h,260px);overflow:hidden}
 .fn-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px 8px}
 .fn-tile{display:flex;flex-direction:column;align-items:center;gap:7px;background:transparent;border:0;padding:0;color:var(--ink-2)}
 .fn-tile b{font-size:var(--fs-sm);font-weight:500;line-height:1.2;color:var(--ink-2)}
@@ -836,7 +841,10 @@ button.mood-row.no-mood .mood-bubble.empty{color:var(--primary-dark)}
    单纯上移会让底部露出空白、且内部可视高度不会随之收窄，与 padding 不等价；
    要等价就得同时改高度（仍是布局属性），收益归零却引入风险。故保留 padding。 */
 body.chat-full .chat-panel{padding-bottom:var(--kb-h,0px)}
-body.chat-full .fn-panel{padding-bottom:calc(14px + env(safe-area-inset-bottom) + var(--kb-h,0px))}
+/* ⚠️ 功能面板不再吃 --kb-h：面板展开前一定先收键盘（见 app.js:chat-fn），
+   此时 --kb-h 已归零，再叠一层只会让面板高度在键盘收起过程中反复变化、
+   加重重排。面板高度改由 --kb-panel-h 固定，与键盘高度对齐。 */
+body.chat-full .fn-panel{padding-bottom:calc(14px + env(safe-area-inset-bottom))}
 /* ── 聊天壁纸：底图铺满整个聊天面板（标题栏和输入栏也压在图上） ──
    .chat-wallpaper 挂到 .chat-panel 上绝对定位铺满，::after 是压在图上的遮罩（--chat-bg-dim 控制强度）。
    底图不随消息滚动，标题栏/输入栏改成半透明玻璃让图透出来，文字对比度靠气泡自身背景兜底。 */

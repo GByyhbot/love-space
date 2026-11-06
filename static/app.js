@@ -2074,9 +2074,29 @@ async function act(action,id,el) {
  /* ── 输入栏「更多功能」面板 ───────────────────────────────── */
  if(action==='chat-fn'){const p=$('#chat-fn');if(!p)return;
   const d=$('#sticker-dock');if(d)d.hidden=true;
+  const wasOpen=!p.hidden;
+  /* 面板开合会改变 .chat-body 高度，消息滚动位置必须跟着重算，
+     否则同一 scrollTop 在新的容器高度下就是「内容整体上移」的观感。
+     ⚠️ 不能在改 hidden 的同一帧 scrollChat：那时布局还没重算，
+     scrollHeight 仍是旧值，滚了个空。必须等一帧。 */
+  const openDone=()=>{p.hidden=false;requestAnimationFrame(scrollChat);};
+  const closeDone=()=>{p.hidden=true;requestAnimationFrame(scrollChat);};
+  if(wasOpen){closeDone();return;}
+  /* 展开面板前必须先把键盘收干净：
+     键盘收起时 --kb-h 从键盘高度平滑归零，这期间 .chat-panel 的 padding-bottom
+     一直在变；若此时同时展开面板（又压缩 .chat-body），两个高度变化反向叠加，
+     真机上就是「闪屏/抖动」。所以先 blur 收键盘，等 --kb-h 归零那帧再展开。
+     键盘本来就没开时（--kb-h<=10）直接展开，无延迟。 */
   if(document.activeElement&&document.activeElement.blur)document.activeElement.blur();
-  p.hidden=!p.hidden;
-  if(!p.hidden)setTimeout(scrollChat,60);
+  const v0=parseFloat(document.documentElement.style.getPropertyValue('--kb-h'))||0;
+  if(v0<=10){openDone();return;}
+  const t0=Date.now();
+  const wait=()=>{
+   const v=parseFloat(document.documentElement.style.getPropertyValue('--kb-h'))||0;
+   if(v<=10||Date.now()-t0>400){openDone();return;}
+   requestAnimationFrame(wait);
+  };
+  requestAnimationFrame(wait);
   return;}
  if(action==='chat-fn-close'){const p=$('#chat-fn');if(p)p.hidden=true;return;}
  if(action==='chat-pick'){const p=$('#chat-fn');if(p)p.hidden=true;return id==='camera'?$('#chat-shot')?.click():chatAlbumPick();}

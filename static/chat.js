@@ -334,6 +334,7 @@ function applyKbA(hidden){
  document.documentElement.style.setProperty('--kb-h',h>0?h+'px':'0px');
  document.documentElement.style.setProperty('--kb-shift',(kbShrink&&hidden>90)?hidden+'px':'0px');
  if(document.body)document.body.classList.toggle('kb-open',h>90);
+ noteKbPanel(h);
 }
 /* B 类机器落盘：--kb-shift 恒 0（这类机型视口不缩，壁纸本来就不动，不需要补偿）。 */
 function applyKbB(v){
@@ -341,6 +342,18 @@ function applyKbB(v){
  document.documentElement.style.setProperty('--kb-h',h>0?h+'px':'0px');
  document.documentElement.style.setProperty('--kb-shift','0px');
  if(document.body)document.body.classList.toggle('kb-open',h>90);
+ noteKbPanel(h);
+}
+/* 记住这台机器键盘的实际高度，给「更多功能」面板当高度用（见 style.css:.fn-panel）。
+   只增不减：键盘收起时 h 归零，不能把已记下的高度清掉，否则下次开面板又回落 260。
+   上限夹在 200~420，避免异常值把聊天区挤没。 */
+let kbPanelH=0;
+function noteKbPanel(h){
+ if(h<200)return;
+ if(h>420)h=420;
+ if(h===kbPanelH)return;
+ kbPanelH=h;
+ document.documentElement.style.setProperty('--kb-panel-h',h+'px');
 }
 /* 每帧读最新的 kbTarget（不在 rAF 闭包里锁死首帧值）。
    🔴 指数平滑必须配单帧步长封顶：gap 初始就是整段位移（294px），
