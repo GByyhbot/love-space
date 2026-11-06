@@ -840,6 +840,11 @@ body.chat-full .fn-panel{padding-bottom:calc(14px + env(safe-area-inset-bottom) 
 /* 置顶条/筛选条是固定在消息区顶部的横条，别让它们被 flex 拉伸或滚走 */
 .chat-body>.chat-pinned,.chat-body>.chat-search-bar{flex:none}
 .chat-wallpaper{position:absolute;inset:0;z-index:0;background-size:cover;background-position:center;background-repeat:no-repeat;pointer-events:none}
+/* 键盘补偿：布局视口被键盘缩掉时（Android 17 一类机器），.chat-wallpaper 会跟着变矮、
+   cover 重新适配 → 图片视觉上"往上窜"。用 --kb-shift 把层高加回去，尺寸与位置都维持原样，
+   超出的部分落在键盘底下，被 .chat-panel 的 overflow:hidden 裁掉，看不见。
+   --kb-shift 只在真的发生了视口收缩时才非 0（见 chat.js:syncKeyboard），平时这条不生效。 */
+.chat-wallpaper{height:calc(100% + var(--kb-shift,0px))}
 .chat-wallpaper::after{content:'';position:absolute;inset:0;background:var(--veil,var(--bg));opacity:var(--chat-bg-dim,.35)}
 /* 照片壁纸用深色遮罩（浅色遮罩会把照片冲成灰白，白字也读不清），但只叠很薄一层：
    气泡自己有深色底撑着对比度，遮罩压狠了照片就糊成一团黑，反而看不出那是你们的照片。 */

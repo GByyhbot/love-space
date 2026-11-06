@@ -268,16 +268,46 @@ function syncCompose(){
  const form=$('#chat-form'),ta=$('#chat-text');
  if(form&&ta){form.classList.toggle('has-text',!!ta.value.trim());autoGrow(ta);}
 }
-/* 键盘避让：Chrome 108+ 的 interactive-widget=resizes-content 会让布局视口跟着键盘
-   一起缩，输入栏自然浮在键盘上；旧 WebView 只缩视觉视口，这里用 --kb-h 手动顶上去。 */
+/* ── 键盘避让 ────────────────────────────────────────────────────────────────
+   两种机型行为互斥，必须分开走，混用就是双份位移（v1.6.21 踩过）：
+
+   A. 布局视口会跟着键盘缩的机器（Android 17 实测：主人机）
+      window.innerHeight 变小，vv.height 也变小 → hidden 能算出真值。
+      直接用 hidden，**绝不能再用原生桥的值**，否则输入框会多顶一个键盘高度。
+
+   B. 布局视口不缩的机器（Android 15 强制 edge-to-edge 后实测：女友机）
+      innerHeight 与 vv.height 都不变 → hidden 恒 0 → 输入框被键盘遮住。
+      只能靠原生 setupImeHeightBridge 经 __kbSetNative() 把 IME 高度喂进来。
+
+   判据：hidden 算得出来（>90）就信网页；算不出来才信原生。
+   kbShrink 一旦观测到视口真的被缩过就永久置 1，表示"这台机器是 A 类"，
+   顺带挡掉"键盘收起瞬间原生值还没归零却被误用"的空窗。 */
+let kbShrink=0,kbNativePx=0,kbBaseH=0;
 function syncKeyboard(){
  const vv=window.visualViewport;if(!vv)return;
- const hidden=Math.max(0,Math.round(window.innerHeight-vv.height-vv.offsetTop));
- document.documentElement.style.setProperty('--kb-h',hidden>90?hidden+'px':'0px');
+ const ih=window.innerHeight;
+ if(!kbBaseH||ih>kbBaseH)kbBaseH=ih;   /* 基准：见过的最大布局视口高度，换屏/旋转自动跟随 */
+ const hidden=Math.max(0,Math.round(ih-vv.height-vv.offsetTop));
+ /* 布局视口被键盘缩掉了 → A 类机器，原生桥永久让位 */
+ if(Math.round(kbBaseH-ih)>90)kbShrink=1;
+ let h=hidden;
+ if(hidden<90&&!kbShrink){
+  /* B 类机器：原生值换算成 CSS px 后作为唯一来源 */
+  const px=kbNativePx/(window.devicePixelRatio||1);
+  if(px>90)h=Math.round(px);
+ }
+ document.documentElement.style.setProperty('--kb-h',h>90?h+'px':'0px');
+ /* 壁纸补偿：WebView 底边在 A 类机器上会上移，cover 重新适配会让图视觉上移。
+    用"收缩量"把壁纸层加高回去，视觉完全静止（超出部分被 panel 的 overflow 裁掉）。 */
+ document.documentElement.style.setProperty('--kb-shift',kbShrink&&hidden>90?hidden+'px':'0px');
  /* kb-open 用来给"底部安全区内边距"让位：键盘顶上来时那块安全区已经被键盘占了，
     再留一道 env(safe-area-inset-bottom) 就成了多出来的空白条。 */
- if(document.body)document.body.classList.toggle('kb-open',hidden>90);
+ if(document.body)document.body.classList.toggle('kb-open',h>90);
 }
+/* 原生 IME 高度桥的唯一入口（MainActivity.pushImeHeight 调用）。
+   原生只传**物理像素**，"换算成 CSS px"和"用不用"都由这里决定。
+   收到的值先存起来再触发一次同步，判据与网页自算走同一条路。 */
+window.__kbSetNative=function(px){kbNativePx=Number(px)||0;syncKeyboard();};
 
 /* ── 聊天里直接发文件（相册 / 拍摄 / 录音都走这里）───────────────── */
 async function sendChatFiles(files){

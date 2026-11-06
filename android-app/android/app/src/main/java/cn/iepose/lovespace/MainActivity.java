@@ -169,6 +169,99 @@ public class MainActivity extends BridgeActivity {
         // ④ 打开本地存储：聊天背景图按 media id 缓存进 IndexedDB，省得每次进聊天都重下一遍。
         //    WebSettings 的 database/domStorage 默认未必开启，不开的话 JS 侧 indexedDB.open 会直接失败。
         setupLocalStorage();
+        // ⑤ 键盘高度桥：targetSdk 35 起系统强制 edge-to-edge 且不再随键盘缩窗口，
+        //    WebView 侧的 innerHeight / visualViewport 可能都不变（Android 15 实测），
+        //    网页算不出键盘高度 → 输入框被键盘遮住。这里把 IME 高度主动喂给网页。
+        setupImeHeightBridge();
+    }
+
+    /**
+     * 键盘高度桥：把 IME 高度实时写进网页的 CSS 变量 --kb-h。
+     *
+     * 三条硬约束（v1.6.12~v1.6.22 七轮试错换来的，别改）：
+     *  ① 绝不改 WebView 的尺寸（height / margin / setFitInsetsTypes 全部走不通）：
+     *     - setFitInsetsTypes 在非 translucent 主窗口上会被 AOSP 硬校验拒绝并抛
+     *       IllegalArgumentException（真机 logcat 实证）；
+     *     - 手动 resize/margin 是异步重排，Chromium 慢一帧渲染，新腾出的区域是黑帧。
+     *  ② insets listener 必须挂在 WebView 的**父容器**上，不能挂 WebView 自身——
+     *     挂上去会顶掉 Chromium 自己的 onApplyWindowInsets，env(safe-area-inset-*) 全部归零。
+     *     返回值原样下发，让 WebView 继续收到真实 insets。
+     *  ③ 这里是**物理像素**，网页端除以 devicePixelRatio 才是 CSS px。
+     *     不做换算直接写，density 2.75 会放大近 3 倍。
+     *
+     * 用动画回调而不是普通 insets 分发：普通分发只在键盘动画首/尾给值，
+     * 动画中间那 ~300ms 网页拿到的是旧值，输入条会滞后。
+     */
+    private void setupImeHeightBridge() {
+        try {
+            if (getBridge() == null || getBridge().getWebView() == null) return;
+            final WebView wv = getBridge().getWebView();
+            final android.view.View parent = (wv.getParent() instanceof android.view.View)
+                    ? (android.view.View) wv.getParent() : null;
+            if (parent == null) return;
+
+            final int[] lastPx = { -1 };
+            final android.view.View target = parent;
+
+            androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(target,
+                    new androidx.core.view.OnApplyWindowInsetsListener() {
+                        @Override
+                        public androidx.core.view.WindowInsetsCompat onApplyWindowInsets(
+                                android.view.View v, androidx.core.view.WindowInsetsCompat insets) {
+                            // 返回值必须是原 insets：只旁路读取，不拦截 Chromium 自己的处理
+                            pushImeHeight(wv, insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.ime()).bottom, lastPx);
+                            return insets;
+                        }
+                    });
+
+            androidx.core.view.ViewCompat.setWindowInsetsAnimationCallback(target,
+                    new androidx.core.view.WindowInsetsAnimationCompat.Callback(
+                            androidx.core.view.WindowInsetsAnimationCompat.Callback.DISPATCH_MODE_CONTINUE_ON_SUBTREE) {
+                        @Override
+                        public androidx.core.view.WindowInsetsCompat onProgress(
+                                androidx.core.view.WindowInsetsCompat insets,
+                                java.util.List<androidx.core.view.WindowInsetsAnimationCompat> runningAnimations) {
+                            // 键盘动画每一帧都会进来，尺寸全程不动，只写变量
+                            pushImeHeight(wv, insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.ime()).bottom, lastPx);
+                            return insets;
+                        }
+                    });
+        } catch (Throwable t) {
+            // 桥不成立只影响"键盘顶不顶得起"，绝不允许它拖垮启动流程
+            Log.w(TAG, "setupImeHeightBridge failed", t);
+        }
+    }
+
+    /**
+     * 把 IME 高度推进网页。值没变就不重复发（动画每帧都会调，去重能省掉大量 JS 调用）。
+     * 网页端 __kbSetNative 由 static/chat.js 提供；老前端没有这个函数，桥直接跳过即可——
+     * 老前端自己走 visualViewport 那套，写了反而可能双份位移。
+     */
+    private void pushImeHeight(final WebView wv, final int px, final int[] lastPx) {
+        if (px == lastPx[0]) return;
+        lastPx[0] = px;
+        Log.d(TAG, "kb imeHeight=" + px);
+        try {
+            final int h = px;
+            wv.post(new Runnable() {
+                @Override public void run() {
+                    try {
+                        wv.evaluateJavascript(
+                                "(function(){try{if(typeof window.__kbSetNative==='function')window.__kbSetNative("
+                                        + h + ");return 'ok kbh='+document.documentElement.style.getPropertyValue('--kb-h')"
+                                        + "+' shift='+(document.documentElement.style.getPropertyValue('--kb-shift')||'-')"
+                                        + "+' innerH='+window.innerHeight"
+                                        + "+' vvh='+(window.visualViewport?Math.round(window.visualViewport.height):'na')"
+                                        + "+' dpr='+window.devicePixelRatio;}catch(e){return 'err '+e;}})()",
+                                new android.webkit.ValueCallback<String>() {
+                                    @Override public void onReceiveValue(String v) {
+                                        Log.d(TAG, "kb js ret=" + v);
+                                    }
+                                });
+                    } catch (Exception e) { Log.w(TAG, "kb js fail", e); }
+                }
+            });
+        } catch (Exception ignored) {}
     }
 
     /**
