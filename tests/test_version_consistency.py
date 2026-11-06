@@ -51,9 +51,7 @@ def test_sw_core_uses_version():
     assert f'v={version - 1}' not in text, 'CORE 里还残留着上一个版本号'
 
 
-# 第三方库不预热：hls.min.js 有 500KB+，只有进「一起看」才用得到，
-# 打进 CORE 会让首装多拉一倍体积。它靠 ?v= 走 HTTP 长缓存。
-THIRD_PARTY = {'/static/hls.min.js'}
+# 本站 JS 全部要预热，没有第三方库例外（hls.min.js 随「一起看」一并移除）。
 
 
 def index_scripts():
@@ -78,20 +76,7 @@ def test_every_local_bundle_is_precached():
     """
     scripts = set(index_scripts())
     bundles = sw_bundles()
-    missing = sorted(p for p in scripts - THIRD_PARTY if p not in bundles)
+    missing = sorted(p for p in scripts if p not in bundles)
     assert not missing, f'index.html 加载了 {missing}，但 sw.js 的 BUNDLES 里没有'
     stale = sorted(bundles - scripts)
     assert not stale, f'sw.js 的 BUNDLES 里有 {stale}，但 index.html 已经不再加载它'
-
-
-def test_watch_js_loads_before_app_js():
-    """watch.js 必须先于 app.js 执行。
-
-    app.js 末尾的 boot() 会调用 watch* 系列函数，而两者是 classic script、
-    共享全局词法作用域——顺序反了就是 ReferenceError，而且报在加载期，
-    整页白屏。defer 保证按文档顺序执行，所以只靠 index.html 的行序。
-    """
-    scripts = index_scripts()
-    assert '/static/watch.js' in scripts and '/static/app.js' in scripts
-    assert scripts.index('/static/watch.js') < scripts.index('/static/app.js'), \
-        'watch.js 必须排在 app.js 之前，否则 boot() 调 watch* 会 ReferenceError'

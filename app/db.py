@@ -137,9 +137,6 @@ def init():
         CREATE INDEX IF NOT EXISTS import_messages_day ON import_messages(import_id, day);
         ''')
         c.execute("INSERT OR IGNORE INTO app_state(key,value) VALUES ('content_revision',0)")
-        # 一起看状态单独一个计数器：变了只让另一半拉一次 /api/watch，
-        # 不必把记录/聊天/照片整站重拉一遍（content_revision 是"整站数据变了"）。
-        c.execute("INSERT OR IGNORE INTO app_state(key,value) VALUES ('watch_revision',0)")
         # 刷新的颗粒度：内容变了不等于"整站都变了"。
         # chat_revision 只统计 kind='chat'，other_revision 统计聊天以外的共享记录。
         # 对方每发一条消息都要触发一轮刷新，而聊天占全部记录的 88%——不分开的话，
@@ -243,18 +240,18 @@ def init():
           BEGIN UPDATE app_state SET value=value+1 WHERE key='content_revision'; END;
         CREATE TRIGGER IF NOT EXISTS revision_checks_delete AFTER DELETE ON checks
           BEGIN UPDATE app_state SET value=value+1 WHERE key='content_revision'; END;
-        -- settings 是张杂项表，'watch' 键（一起看状态）单独走 watch_revision 计数器，
-        -- 不许在这里推进 content_revision：否则对方拖一下进度条，就要连带把
-        -- 记录、聊天、照片整站重拉一遍——「事件触发式同步」省下来的开销全吐回去了。
-        -- 其余键（space 背景、drama_sources 片源清单、last_backup 备份时间）照旧推进。
-        CREATE TRIGGER IF NOT EXISTS revision_settings_insert AFTER INSERT ON settings
-          WHEN NEW.key <> 'watch'
+        -- settings 是张杂项表（space 背景、last_backup 备份时间等），任何一处改动
+        -- 都算"整站数据变了"，推进 content_revision。
+        -- 先 DROP 再建：老库里的这三条触发器带着 WHEN NEW.key <> 'watch' 的条件，
+        -- IF NOT EXISTS 不会覆盖它们，只能显式重建。
+        DROP TRIGGER IF EXISTS revision_settings_insert;
+        DROP TRIGGER IF EXISTS revision_settings_update;
+        DROP TRIGGER IF EXISTS revision_settings_delete;
+        CREATE TRIGGER revision_settings_insert AFTER INSERT ON settings
           BEGIN UPDATE app_state SET value=value+1 WHERE key='content_revision'; END;
-        CREATE TRIGGER IF NOT EXISTS revision_settings_update AFTER UPDATE ON settings
-          WHEN NEW.key <> 'watch'
+        CREATE TRIGGER revision_settings_update AFTER UPDATE ON settings
           BEGIN UPDATE app_state SET value=value+1 WHERE key='content_revision'; END;
-        CREATE TRIGGER IF NOT EXISTS revision_settings_delete AFTER DELETE ON settings
-          WHEN OLD.key <> 'watch'
+        CREATE TRIGGER revision_settings_delete AFTER DELETE ON settings
           BEGIN UPDATE app_state SET value=value+1 WHERE key='content_revision'; END;
         CREATE TRIGGER IF NOT EXISTS revision_users_insert AFTER INSERT ON users
           BEGIN UPDATE app_state SET value=value+1 WHERE key='content_revision'; END;

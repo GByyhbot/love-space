@@ -10,7 +10,7 @@
    播放器是手画的，没用原生 <audio controls>：原生控件在深色气泡里会带一条
    系统菜单，老 WebView 上还会多画一层边框。
 
-   ⚠️ 和 app.js 共享全局作用域（classic script），不用 module 的原因见 watch.js 首部。
+   ⚠️ 和 app.js 共享全局作用域（classic script），不用 module 的原因见 app.js 首部。
    ⚠️ 必须排在 app.js 之前加载：boot() 会调 songReset()/paintSong()。
 
 /* ── 分享一首歌 ────────────────────────────────────────────────────────

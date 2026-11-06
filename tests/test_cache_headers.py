@@ -39,7 +39,7 @@ def _cc(client, url):
 @pytest.mark.parametrize('url', [
     '/static/app.js?v=999',
     '/static/style.css?v=999',
-    '/static/hls.min.js?v=999',
+    '/static/music.js?v=999',
 ])
 def test_versioned_static_is_immutable(client_a, url):
     assert _cc(client_a, url) == LONG
@@ -53,7 +53,7 @@ def test_sw_is_always_revalidated(client_a):
 
 def test_apk_not_pinned_forever(client_a):
     # 同版本号重打包时 URL 不变，immutable 会把旧包钉死
-    assert _cc(client_a, '/static/lovespace.apk?v=1.6.10') == 'no-cache'
+    assert _cc(client_a, '/static/lovespace.apk?v=1.7.0') == 'no-cache'
 
 
 def test_unversioned_static_not_cached_long(client_a):

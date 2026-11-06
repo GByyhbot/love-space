@@ -46,23 +46,20 @@ def test_other_write_bumps_other_not_chat(client_a):
 
 
 def test_payload_marks_chat_only():
-    """签名从 4 段扩到 6 段后，只改聊天 → chat=True、other=False。"""
-    prev = '7:0:0:4:10:5'
-    payload = _sse_payload(7, 0, 0, 4, prev, chat_revision=11, other_revision=5)
+    """签名为 5 段（revision:private:unread:chat:other）后，只改聊天 → chat=True、other=False。"""
+    prev = '7:0:0:10:5'
+    payload = _sse_payload(7, 0, 0, prev, chat_revision=11, other_revision=5)
     assert payload['chat'] is True and payload['other'] is False, payload
-    # 一起看也变了：连 watch 一起标上，客户端两边都要跟
-    payload = _sse_payload(7, 0, 0, 5, prev, chat_revision=11, other_revision=5)
-    assert payload['watch'] is True and payload['other'] is False, payload
     # 只改普通记录
-    payload = _sse_payload(7, 0, 0, 4, prev, chat_revision=10, other_revision=6)
+    payload = _sse_payload(7, 0, 0, prev, chat_revision=10, other_revision=6)
     assert payload['chat'] is False and payload['other'] is True, payload
     # 两样都没变（只是心跳把 signature 拼出来了）
-    payload = _sse_payload(7, 0, 0, 4, prev, chat_revision=10, other_revision=5)
+    payload = _sse_payload(7, 0, 0, prev, chat_revision=10, other_revision=5)
     assert payload['chat'] is False and payload['other'] is False, payload
 
 
 def test_payload_without_granularity_falls_back_to_full_refresh():
-    """升级瞬间的旧连接只有四段签名：必须当作两类都变了，不能把变化漏过去。"""
-    payload = _sse_payload(8, 0, 0, 4, '7:0:0:4')
+    """升级瞬间的旧连接只有三段签名：必须当作两类都变了，不能把变化漏过去。"""
+    payload = _sse_payload(8, 0, 0, '7:0:0')
     assert payload['refresh'] is True
     assert payload['chat'] is True and payload['other'] is True, payload

@@ -4,7 +4,7 @@
    消息流渲染、壁纸与皮肤、表情包、相册多选、表情气泡、位置。
 
    ⚠️ 和 app.js 共享全局作用域（两个都是 classic script，没走 ES module），
-   $ / esc / api / state / icon / openModal 直接用。不用 module 的原因见 watch.js 首部。
+   $ / esc / api / state / icon / openModal 直接用。不用 module 的原因见 app.js 首部。
    ⚠️ 必须排在 app.js 之前加载：app.js 末尾的 boot() 会调 messagesPage()/chatRows()。
    ⚠️ 新增本类文件要同步 static/sw.js 的 BUNDLES，否则旧 worker 拿不到。
 
@@ -23,15 +23,7 @@ function chatTimeLabel(ts,last){
  if(d.toDateString()===new Date(n.getTime()-864e5).toDateString())return '昨天 '+hm;
  return (d.getFullYear()===n.getFullYear()?'':d.getFullYear()+'年')+(d.getMonth()+1)+'月'+d.getDate()+'日 '+hm;
 }
-/* 一起看邀请卡的两种朝向：自己发的写「点击重新发起」，对方发的写「点一下，一起看」。
-   卡片自己就是整条气泡（不套 .chat-bubble），主色实底跟七套主题走。 */
-/* 参考图里是实心沙发剪影，通用 icon() 是纯描边，画出来像小汽车；
-   这里用几个圆角矩形直接拼：两块靠背 + 一体座垫 + 两只脚。 */
-const WATCH_SOFA=`<svg class="cw-sofa" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="7" height="6" rx="2"/><rect x="13" y="5" width="7" height="6" rx="2"/><rect x="2" y="11" width="20" height="7" rx="2.5"/><rect x="5" y="18" width="2" height="2" rx="1"/><rect x="17" y="18" width="2" height="2" rx="1"/></svg>`;
-function watchInviteCard(mine,attrs=''){
- return `<button type="button" class="chat-watch-invite" data-action="chat-watch-invite" data-mine="${mine?1:0}" ${attrs} aria-label="一起看视频"><span class="cw-ico">${WATCH_SOFA}</span><span class="cw-body"><b>一起看视频</b><small>${mine?'点击重新发起':'点一下，一起看'}</small></span></button>`;
-}
-function chatRows(quiet) {
+function chatRows() {
  /* 页内搜索只筛已加载的最近 200 条：聊天会无限增长，全量搜索得走后端，
     这里的定位是"刚聊过的东西翻不到了"，够用又不加接口。 */
  const q=(state.chatSearch||'').trim().toLowerCase();
@@ -57,18 +49,12 @@ function chatRows(quiet) {
      src 是在线搜来的 30 秒试听地址（走同源 /api/music/stream 转发）。两个都有就优先本地文件。 */
   const song=r.body.song&&r.body.song.title?r.body.song:null;
   const songCard=song?songCardMarkup(song):'';
-  /* 一起看邀请卡：body.watch_invite={v:1}，文案和图标全在前端按主题画。
-     自己那侧点一下是「重新发起」，对方那侧点一下是「加入」，别让两边互发刷屏。 */
-  const invite=r.body.watch_invite&&r.body.watch_invite.v===1;
-  const inviteCard=invite?watchInviteCard(mine,`data-id="${r.id}"`):'';
-  const inner=inviteCard?inviteCard:songCard?`<div class="chat-bubble song">${quote}${songCard}</div>`:locCard?`<div class="chat-bubble loc">${quote}${locCard}</div>`:sticker?`<div class="chat-sticker${sticker.endsWith('.webm')?' video':''}">${sticker.endsWith('.webm')?`<video src="${esc(sticker)}" autoplay loop muted playsinline></video>`:`<img src="${esc(sticker)}" alt="贴纸" loading="lazy">`}</div>`:`<div class="chat-bubble${voiceOnly?' voice':''}${r.body.pinned?' pinned':''}">${quote}<span style="white-space:pre-wrap">${esc(r.body.content)}</span>${mediaMarkup(r.media)}</div>`;
+  const inner=songCard?`<div class="chat-bubble song">${quote}${songCard}</div>`:locCard?`<div class="chat-bubble loc">${quote}${locCard}</div>`:sticker?`<div class="chat-sticker${sticker.endsWith('.webm')?' video':''}">${sticker.endsWith('.webm')?`<video src="${esc(sticker)}" autoplay loop muted playsinline></video>`:`<img src="${esc(sticker)}" alt="贴纸" loading="lazy">`}</div>`:`<div class="chat-bubble${voiceOnly?' voice':''}${r.body.pinned?' pinned':''}">${quote}<span style="white-space:pre-wrap">${esc(r.body.content)}</span>${mediaMarkup(r.media)}</div>`;
   return `${tl?`<div class="chat-day">${tl}</div>`:''}<div class="chat-line ${mine?'mine':''}" id="msg-${r.id}">${avatar(r.author)}<div>${inner}${ops?`<div class="chat-time">${ops}</div>`:''}</div></div>`;
  }).join('');
- const pend=pending.map(p=>`<div class="chat-line mine pending">${avatar(state.me.user.id)}<div>${p.body.watch_invite?watchInviteCard(true):`<div class="chat-bubble">${esc(p.body.content||'一个附件')}</div>`}<div class="chat-time">尚未发送 <button data-action="retry-chat" data-id="${p.client_id}">点击重试</button></div></div></div>`).join('');
+ const pend=pending.map(p=>`<div class="chat-line mine pending">${avatar(state.me.user.id)}<div><div class="chat-bubble">${esc(p.body.content||'一个附件')}</div><div class="chat-time">尚未发送 <button data-action="retry-chat" data-id="${p.client_id}">点击重试</button></div></div></div>`).join('');
  if(q&&!chats.length)return `<div class="chat-no-match">最近 200 条里没有「${esc(state.chatSearch)}」，试试清掉筛选。</div>`;
- return rows+pend||(quiet
-  ?`<p class="watch-chat-empty">${icon('chat')}<span>边看边聊，想说什么就说</span></p>`
-  :empty('今天，有什么想对 TA 说？','说说日常，也说说想念。'));
+ return rows+pend||empty('今天，有什么想对 TA 说？','说说日常，也说说想念。');
 }
 /* 聊天列表的增量重绘：按 id 原地对账，只动真正变了的行。
    以前每个刷新点都写 `log.innerHTML = chatRows()`，整段重建会把每一行的
@@ -82,14 +68,14 @@ function chatRowKey(node) {
  if (node.classList && node.classList.contains('chat-day')) return 'day:' + node.textContent;
  return null; /* 「尚未发送」这类临时行没有稳定 id：直接重建，它不含图片，代价可忽略 */
 }
-function paintChat(log, quiet) {
+function paintChat(log) {
  if (!log) return;
  /* 必须用 <template> 解析，不能用游离的 <div>：div 里解析出来的 <video poster="…">
     会立刻开始预取封面、<img> 也会开始下载——每重绘一次就凭空多出一整屏媒体请求
     （实测 8 个视频 = 8 次 /media?poster=true）。template.content 是惰性的，
     解析完一个请求都不发，节点搬进文档才激活。 */
  const tpl = document.createElement('template');
- tpl.innerHTML = chatRows(quiet);
+ tpl.innerHTML = chatRows();
  const prev = new Map();
  for (const node of Array.prototype.slice.call(log.children)) {
   const k = chatRowKey(node);
@@ -253,7 +239,6 @@ function messagesPage() {
    <button type="button" class="fn-tile" data-action="chat-pick" data-id="media"><span class="fn-ico">${icon('image')}</span><b>相册</b></button>
    <button type="button" class="fn-tile" data-action="chat-pick" data-id="camera"><span class="fn-ico">${icon('camera')}</span><b>拍摄</b></button>
    <button type="button" class="fn-tile" data-action="chat-call"><span class="fn-ico">${icon('phone')}</span><b>发起通话</b></button>
-   <button type="button" class="fn-tile" data-action="chat-watch"><span class="fn-ico">${icon('film')}</span><b>一起看</b></button>
    <button type="button" class="fn-tile" data-action="chat-locate"><span class="fn-ico">${icon('location')}</span><b>位置</b></button>
    <button type="button" class="fn-tile" data-action="chat-song"><span class="fn-ico">${icon('music')}</span><b>音乐</b></button>
   </div>
@@ -261,8 +246,6 @@ function messagesPage() {
  return `<section class="chat-panel${bgOn?' has-wallpaper':''}${immersive?' immersive':''}${skinAttrs.cls}"${skinAttrs.style}>${chatWallpaper()}<header class="chat-header"><button class="icon-btn" data-action="chat-back" aria-label="返回">${icon('back')}</button>${partner?avatar(partner.id):'<span class="avatar">♡</span>'}<div><h3>${partner?esc(partner.name):'等待另一半加入'}</h3><small>我们的悄悄话 · 仅彼此可见</small></div><button class="icon-btn" data-action="chat-search" aria-label="搜索消息" title="搜索消息" style="margin-left:auto">${icon('search')}</button><button class="icon-btn" data-action="chat-bg" aria-label="聊天背景" title="聊天背景">${icon('photo')}</button><button class="icon-btn" data-nav="imports" aria-label="聊天记录">${icon('book')}</button></header><div class="chat-body">${pinnedBar}${searchBar}<div id="chat-log" class="chat-log" aria-live="polite">${chatRows()}</div></div><div id="sticker-dock" class="sticker-dock" hidden></div>${replyBar}${composeBar}${fnPanel}<input id="chat-file" type="file" accept="image/*,video/*" multiple hidden><input id="chat-shot" type="file" accept="image/*" capture="environment" hidden></section>`;
 }
 function scrollChat(){const log=$('#chat-log');if(log)log.scrollTop=log.scrollHeight;}
-
-/* ── 一起看 / 在线片源：已拆分到 static/watch.js（原为这里的 1002–1826 行）── */
 
 
 /* ── 表情包：内置 emoji 两组（日常 / 涩涩）+ 个人自定义表情包（存本机，上传即存服务器媒体库） ── */
@@ -280,62 +263,21 @@ function setStickers(list){localStorage.setItem(stickerKey(),JSON.stringify(list
 function insertStickerText(em){const ta=$('#chat-text');if(!ta)return;if(document.activeElement===ta){const s=ta.selectionStart??ta.value.length,e=ta.selectionEnd??s;ta.value=ta.value.slice(0,s)+em+ta.value.slice(e);ta.selectionStart=ta.selectionEnd=s+em.length;}else ta.value+=em;syncCompose();}
 /* 微信式输入框：初始一行，输入后自动长高，超过约 4 行内部滚动 */
 function autoGrow(ta){if(!ta)return;ta.style.height='auto';ta.style.height=Math.min(ta.scrollHeight,96)+'px';}
-/* 有文字时把语音位换成发送按钮（.has-text 由样式接管显示/隐藏）。
-   一起看的输入栏只有发送键、按键常显，这里只负责让它跟着文字长高。 */
+/* 有文字时把语音位换成发送按钮（.has-text 由样式接管显示/隐藏）。 */
 function syncCompose(){
  const form=$('#chat-form'),ta=$('#chat-text');
  if(form&&ta){form.classList.toggle('has-text',!!ta.value.trim());autoGrow(ta);}
- const wt=$('#watch-text');if(wt)autoGrow(wt);
 }
 /* 键盘避让：Chrome 108+ 的 interactive-widget=resizes-content 会让布局视口跟着键盘
    一起缩，输入栏自然浮在键盘上；旧 WebView 只缩视觉视口，这里用 --kb-h 手动顶上去。 */
-/* 两种机型两条路，各自走已经验证过的那一条，谁也不叠加谁。
-   · 视觉视口会跟着键盘缩的机器（Android 16/17）：浏览器自己会把视觉视口往下滚去
-     露出输入框，网页只要按 1.6.20 的老算法补上和键盘等高的内边距就行。这条路
-     **绝不能**再用原生递来的高度——浏览器滚一次、网页再顶一次，就成了「输入栏
-     被顶到状态栏下面」。
-   · 视觉视口一点都不缩的机器（Android 15 + edge-to-edge）：上面那个差恒为 0，
-     网页自己算不出来，这时才用原生 __kbSetNative 递过来的高度（1.6.21 的行为）。 */
-let kbNativePx=0;   // 原生递来的键盘高度，物理像素
-let kbShrink=0;     // 这台机器的视觉视口会不会跟着键盘缩：0 未知 / 1 会
 function syncKeyboard(){
  const vv=window.visualViewport;if(!vv)return;
- const de=document.documentElement;
- const ih=Math.round(window.innerHeight);
- const dropped=Math.max(0,ih-Math.round(vv.height));   // 视觉视口被键盘顶掉多少
- if(dropped>90)kbShrink=1;
- /* 1.6.20 的老算法，一字未改 */
- const hidden=Math.max(0,ih-Math.round(vv.height)-Math.round(vv.offsetTop));
- /* 只有「网页真算不出来」（视觉视口一点没缩）时，才采用原生给的键盘高度 */
- let v=hidden;
- if(v<90&&!kbShrink){
-  if(kbNativePx>90)v=Math.min(ih,Math.round(kbNativePx/(window.devicePixelRatio||1)));
-  /* 旧 APK（≤1.6.21）没有 __kbSetNative 入口，是直接把值写进 --kb-h 再打
-     data-native-kb 标记的。网页和 APK 不可能同时更新，所以这段兼容要留到两人
-     都装上新包为止，否则她手机上原生写好的值会被这里算出的 0 冲掉。 */
-  else if(de.hasAttribute('data-native-kb')){
-   const cur=parseFloat(de.style.getPropertyValue('--kb-h'))||0;
-   if(cur>90&&cur<ih*0.6)v=cur;      // 超过 60% 屏高的一律当脏值，不认
-  }
- }
- const k=v<90?0:v;
- de.style.setProperty('--kb-h',k?k+'px':'0px');
+ const hidden=Math.max(0,Math.round(window.innerHeight-vv.height-vv.offsetTop));
+ document.documentElement.style.setProperty('--kb-h',hidden>90?hidden+'px':'0px');
  /* kb-open 用来给"底部安全区内边距"让位：键盘顶上来时那块安全区已经被键盘占了，
     再留一道 env(safe-area-inset-bottom) 就成了多出来的空白条。 */
- if(document.body)document.body.classList.toggle('kb-open',k>0);
+ if(document.body)document.body.classList.toggle('kb-open',hidden>90);
 }
-/* 原生键盘高度桥的入口（MainActivity.pushImeHeight 调）。传物理像素，「换算成
-   CSS px」和「用不用它」都由网页定：只有网页知道 devicePixelRatio，也只有网页
-   知道视觉视口有没有被键盘缩过。 */
-window.__kbSetNative=function(px){
- const next=px>0?Math.round(px):0;
- if(next===kbNativePx)return;
- kbNativePx=next;
- if(next<=0){syncKeyboard();return;}   // 收起：立即归零
- /* 弹出：等 90ms 再看。会缩的机器这时视觉视口已经缩了，就该走老算法，
-     不至于抢在浏览器前面把输入栏先顶上去。 */
- setTimeout(syncKeyboard,90);
-};
 
 /* ── 聊天里直接发文件（相册 / 拍摄 / 录音都走这里）───────────────── */
 async function sendChatFiles(files){

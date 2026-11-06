@@ -218,7 +218,7 @@ async function boot() {
   if (!state.me) return renderAuth(status,invite);
   history.replaceState(null,'',location.pathname+location.hash);
   state.page=location.hash.slice(1).split('/')[0] || 'home';
-  if (!['home','timeline','albums','messages','together','personal','settings','notices','channels','backups','imports','importdetail','dashboard','weekly','figure','linkcheck','watch'].includes(state.page)) state.page='home';
+  if (!['home','timeline','albums','messages','together','personal','settings','notices','channels','backups','imports','importdetail','dashboard','weekly','figure','linkcheck'].includes(state.page)) state.page='home';
   await refreshData(); if(state.page==='timeline')await loadTimeline(true); renderShell(); connectEvents(); connectNtfy(); syncNativePush(); startKeepAlive();
  } catch(e) {$('#app').innerHTML=empty('暂时无法连接空间',e.message,'reload','重新连接');}
 }
@@ -286,18 +286,18 @@ function renderShell() {
  root.classList.add('theme-'+themeNow);
  if(!state.me.space.motion)root.classList.add('reduced-motion');
  applyFontScale();
- document.body.className=state.page==='messages'?('chat-full'+(chatBgIsPhoto()?' chat-immersive':'')):(state.page==='watch'?'chat-full watch-open':(state.page==='together'&&state.tab==='calendar'?'cal-full':(state.page==='figure'?'figure-full':'')));
+ document.body.className=state.page==='messages'?('chat-full'+(chatBgIsPhoto()?' chat-immersive':'')):(state.page==='together'&&state.tab==='calendar'?'cal-full':(state.page==='figure'?'figure-full':''));
  /* className 是整体覆盖写的，会把 syncKeyboard 加的 kb-open 一起冲掉；键盘还开着就补回来 */
  if(parseFloat(document.documentElement.style.getPropertyValue('--kb-h'))>90)document.body.classList.add('kb-open');
  applyCustomColor(state.me.space.theme,state.me.space.custom_color);
  syncMetaThemeColor();
- $('#app').innerHTML=`<div class="shell${state.page==='messages'?' chat-full':''}${state.page==='watch'?' chat-full watch-full':''}${state.page==='figure'?' figure-full':''}"><aside class="sidebar"><div class="brand"><img src="/static/icon.svg" alt=""><div><strong>恋爱空间</strong><small>LOVE, EVERY DAY</small></div></div><nav class="nav" aria-label="主要导航">${navHtml.join('')}</nav><div class="sidebar-bottom"><div class="little-note"><span>❀</span><br>把喜欢，写进每一天。<br>little things, lasting love</div><button class="profile-btn" data-nav="personal">${avatar(state.me.user.id)}<div><strong>${esc(state.me.user.name)}</strong><small>我的小角落 ${icon('arrow')}</small></div></button></div></aside><main class="main"><header class="topbar${toolsSub?' has-back':''}">${toolsSub?`<button class="nav-back topbar-back" data-action="tools-back" aria-label="回到我们">${icon('back')}</button>`:''}<span class="desktop-date">${new Date().toLocaleDateString('zh-CN',{timeZone:state.me.space.timezone,month:'long',day:'numeric',weekday:'long'})} · 今天也要好好相爱</span><div class="topbar-right"><span class="pill">${icon('lock')} 双人私密空间</span><button class="icon-btn" id="dark-toggle" data-action="toggle-dark" aria-label="切换深浅色">${icon(document.documentElement.classList.contains('dark')?'sun':'moon')}</button><button class="icon-btn" data-action="open-search" aria-label="搜索">${icon('search')}</button><button class="icon-btn" data-nav="messages" aria-label="私聊">${icon('chat')}${state.me.chat_unread&&state.page!=='messages'?`<span class="badge">${state.me.chat_unread>99?'99+':state.me.chat_unread}</span>`:''}</button><button class="icon-btn" data-nav="notices" aria-label="通知">${icon('bell')}${state.me.unread?`<span class="badge">${state.me.unread>99?'99+':state.me.unread}</span>`:''}</button><details class="more-menu account-menu"><summary class="mobile-profile" aria-label="打开账号菜单" title="账号菜单">${avatar(state.me.user.id)}</summary><div class="menu-pop account-popover"><div class="account-menu-heading"><strong>${esc(state.me.user.name)}</strong><small>我的账号</small></div><button data-action="profile">${icon('edit')} 账号资料</button><button data-nav="personal">${icon('lock')} 个人小角落</button><button data-nav="settings">${icon('gear')} 设置</button><button data-action="logout" class="danger account-logout">${icon('arrow')} 退出登录</button></div></details></div></header>${!state.online?'<div class="offline-banner">网络暂时断开，正在等待重连。未发送的文字会为你保留。</div>':''}<div id="page"></div><p class="footer-note">♡ 有你在，平凡的日子也闪闪发光。</p></main></div>`;
+ $('#app').innerHTML=`<div class="shell${state.page==='messages'?' chat-full':''}${state.page==='figure'?' figure-full':''}"><aside class="sidebar"><div class="brand"><img src="/static/icon.svg" alt=""><div><strong>恋爱空间</strong><small>LOVE, EVERY DAY</small></div></div><nav class="nav" aria-label="主要导航">${navHtml.join('')}</nav><div class="sidebar-bottom"><div class="little-note"><span>❀</span><br>把喜欢，写进每一天。<br>little things, lasting love</div><button class="profile-btn" data-nav="personal">${avatar(state.me.user.id)}<div><strong>${esc(state.me.user.name)}</strong><small>我的小角落 ${icon('arrow')}</small></div></button></div></aside><main class="main"><header class="topbar${toolsSub?' has-back':''}">${toolsSub?`<button class="nav-back topbar-back" data-action="tools-back" aria-label="回到我们">${icon('back')}</button>`:''}<span class="desktop-date">${new Date().toLocaleDateString('zh-CN',{timeZone:state.me.space.timezone,month:'long',day:'numeric',weekday:'long'})} · 今天也要好好相爱</span><div class="topbar-right"><span class="pill">${icon('lock')} 双人私密空间</span><button class="icon-btn" id="dark-toggle" data-action="toggle-dark" aria-label="切换深浅色">${icon(document.documentElement.classList.contains('dark')?'sun':'moon')}</button><button class="icon-btn" data-action="open-search" aria-label="搜索">${icon('search')}</button><button class="icon-btn" data-nav="messages" aria-label="私聊">${icon('chat')}${state.me.chat_unread&&state.page!=='messages'?`<span class="badge">${state.me.chat_unread>99?'99+':state.me.chat_unread}</span>`:''}</button><button class="icon-btn" data-nav="notices" aria-label="通知">${icon('bell')}${state.me.unread?`<span class="badge">${state.me.unread>99?'99+':state.me.unread}</span>`:''}</button><details class="more-menu account-menu"><summary class="mobile-profile" aria-label="打开账号菜单" title="账号菜单">${avatar(state.me.user.id)}</summary><div class="menu-pop account-popover"><div class="account-menu-heading"><strong>${esc(state.me.user.name)}</strong><small>我的账号</small></div><button data-action="profile">${icon('edit')} 账号资料</button><button data-nav="personal">${icon('lock')} 个人小角落</button><button data-nav="settings">${icon('gear')} 设置</button><button data-action="logout" class="danger account-logout">${icon('arrow')} 退出登录</button></div></details></div></header>${!state.online?'<div class="offline-banner">网络暂时断开，正在等待重连。未发送的文字会为你保留。</div>':''}<div id="page"></div><p class="footer-note">♡ 有你在，平凡的日子也闪闪发光。</p></main></div>`;
  renderPage();
  if(keepScroll>0)window.scrollTo({top:keepScroll});
 }
 
 function renderPage() {
- const pages={home:homePage,timeline:timelinePage,albums:albumsPage,messages:messagesPage,together:togetherPage,personal:personalPage,settings:settingsPage,notices:noticesPage,channels:channelsPage,backups:backupsPage,imports:importsPage,importdetail:importDetailPage,dashboard:dashboardPage,weekly:weeklyPage,figure:figurePage,linkcheck:linkCheckPage,watch:watchPage};
+ const pages={home:homePage,timeline:timelinePage,albums:albumsPage,messages:messagesPage,together:togetherPage,personal:personalPage,settings:settingsPage,notices:noticesPage,channels:channelsPage,backups:backupsPage,imports:importsPage,importdetail:importDetailPage,dashboard:dashboardPage,weekly:weeklyPage,figure:figurePage,linkcheck:linkCheckPage};
  $('#page').innerHTML=(pages[state.page] || homePage)();
  if(state.page==='timeline'&&state.timelineHasMore)$('#timeline-list')?.insertAdjacentHTML('afterend',`<div class="timeline-more">${button('继续往前翻','load-more-timeline','secondary')}</div>`);
  if(state.page==='messages') {
@@ -315,12 +315,6 @@ function renderPage() {
   $('#chat-shot')?.addEventListener('change',e=>{const fs=[...e.target.files];e.target.value='';sendChatFiles(fs);});
   applyWallpaper();
  }
- if(state.page==='watch'){
-  const wt=$('#watch-text');
-  if(wt)wt.addEventListener('focus',()=>setTimeout(()=>{try{wt.scrollIntoView({block:'end'});}catch{}},300));
-  startWatchSync();
-  watchScroll();
- }
  if(state.page==='importdetail') initImportLog();
  syncStatusBarOverlay();
   if(state.page==='home'){measureHero();loadOnThisDay();loadYearbook();}
@@ -332,13 +326,13 @@ function renderPage() {
    会让 renderShell 读到 null.space 抛 TypeError，被 catch 成一条吓人的报错提示。
    直接返回即可——boot() 结束时会按 location.hash 渲染到正确的页面。 */
 /* 本次会话里由 navigate() 往历史栈压过几条。用来判断"现在能不能后退"：
-   直接从深链进来（#watch）时 history 里没有上一页，这时候 history.back()
+   直接从深链进来（#timeline）时 history 里没有上一页，这时候 history.back()
    会把整个 App 关掉，必须回落到 navigate。 */
 let navDepth=0;
 async function navigate(page,tab='') {if(!state.me)return;if(page!=='messages')state.chatReturn={page,tab};if(page==='messages'&&state.me){state.me.chat_unread=0;post('/notices/read?event=chat').catch(()=>{});/* 进聊天不主动弹输入法：先把上一页可能还活着的焦点交还，再渲染 */if(document.activeElement&&document.activeElement.blur)document.activeElement.blur();}state.page=page;state.tab=tab;if(location.hash!=='#'+page){location.hash=page;navDepth++;}try{if(page==='timeline')await loadTimeline(true);await loadSpecial();renderShell();window.scrollTo({top:0});}catch(e){toast(e.message);}}
 /* 返回上一页：走浏览器后退，**不要**再 push 一条新的 hash。
-   以前「一起看 → 返回」写的是 navigate('messages')，等于在历史里又压了一条 #messages，
-   于是栈变成 [ #messages, #watch, #messages ]——安卓实体返回键每按一次就在这两个界面
+   以前聊天里「返回」写的是 navigate('messages')，等于在历史里又压了一条 #messages，
+   于是栈变成 [ #home, #messages, #messages ]——安卓实体返回键每按一次就在这两个界面
    之间来回跳，怎么都退不回首页。现在三处"返回"统一走这里。
    万一历史里确实没有上一页（深链直进），history.back() 什么也不会发生，
    220ms 后按 fallback 兜底；真没有上一页时 back() 还可能把整个 App 退掉，
@@ -664,10 +658,6 @@ document.addEventListener('click',e=>{
  const audio=chip.querySelector('audio');if(!audio)return;
  if(audio.paused){document.querySelectorAll('.voice-chip.playing audio').forEach(a=>{if(a!==audio)a.pause();});audio.play().catch(()=>toast('语音播放失败，请稍后再试'));}
  else audio.pause();
-});
-document.addEventListener('click',e=>{
- const it=e.target.closest('[data-watch-media]');if(!it)return;
- watchChooseMedia(it.dataset.watchMedia,it.dataset.watchTitle||'');
 });
 ['loadedmetadata','durationchange','play','pause','ended'].forEach(ev=>document.addEventListener(ev,e=>{
  const t=e.target;if(!t||!t.classList||!t.classList.contains('voice-audio'))return;
@@ -1258,9 +1248,9 @@ function personalPage() {
  else content=`<p class="hint">${icon('lock')} ${tab==='surprise'?'到约定的时间，惊喜才会被另一半看见。':'这个角落只有你能看见。草稿主动发布后，才会进入共同空间。'}</p>${recordsOf(tab).length?recordsOf(tab).map(recordCard).join(''):empty(tab==='diary'?'给自己，留一点心里话':tab==='draft'?'还没写完的故事，在这里等你':'提前准备一份温柔的惊喜','慢慢写，不着急。',tab==='draft'?'compose':'new-'+tab,tab==='draft'?'写一份草稿':'开始记录')}`;
  return `${heading('我的小角落','有些心事留给自己，有些惊喜留给未来。',['diary','surprise'].includes(tab)?'new-'+tab:'',tab==='surprise'?'准备惊喜':'写日记')}<div class="tabs">${tabs.map(([id,label])=>`<button data-action="personal-tab" data-id="${id}" class="${tab===id?'active':''}">${label}</button>`).join('')}</div>${content}`;
 }
-function noticesPage(){const sysNotices=state.notices.filter(n=>n.event!=='chat'),readCount=sysNotices.filter(n=>n.seen).length;return `${heading('小小的提醒','每一份回应，都值得被看见。','read-notices','全部已读','check')}${readCount?`<div class="inline-actions" style="justify-content:flex-end;margin:-8px 0 16px">${button('删除已读提醒（'+readCount+'）','delete-read-notices','small secondary','trash')}</div>`:''}<div class="card">${sysNotices.length?sysNotices.map(n=>`<div class="notice ${n.seen?'':'unread'}"><span class="stat-icon">${icon(n.event==='chat'?'chat':'bell')}</span><div><p>${esc(n.title)}</p><small class="meta">${dateLabel(n.created)}</small></div>${n.record_id?`<button class="link-btn" style="margin-left:auto" data-action="notice-detail" data-id="${n.record_id}">查看 ${icon('arrow')}</button>`:(n.event==='watch'?`<button class="link-btn" style="margin-left:auto" data-action="notice-watch">去看 ${icon('arrow')}</button>`:'')}</div>`).join(''):empty('还没有新的提醒','收到留言、互动和纪念日提醒时，会出现在这里。聊天消息请在私聊中查看。')}</div>`;}
+function noticesPage(){const sysNotices=state.notices.filter(n=>n.event!=='chat'),readCount=sysNotices.filter(n=>n.seen).length;return `${heading('小小的提醒','每一份回应，都值得被看见。','read-notices','全部已读','check')}${readCount?`<div class="inline-actions" style="justify-content:flex-end;margin:-8px 0 16px">${button('删除已读提醒（'+readCount+'）','delete-read-notices','small secondary','trash')}</div>`:''}<div class="card">${sysNotices.length?sysNotices.map(n=>`<div class="notice ${n.seen?'':'unread'}"><span class="stat-icon">${icon(n.event==='chat'?'chat':'bell')}</span><div><p>${esc(n.title)}</p><small class="meta">${dateLabel(n.created)}</small></div>${n.record_id?`<button class="link-btn" style="margin-left:auto" data-action="notice-detail" data-id="${n.record_id}">查看 ${icon('arrow')}</button>`:''}</div>`).join(''):empty('还没有新的提醒','收到留言、互动和纪念日提醒时，会出现在这里。聊天消息请在私聊中查看。')}</div>`;}
 const channelNames={smtp:'邮件',bark:'Bark',serverchan:'Server酱',pushplus:'PushPlus',wecom:'企业微信机器人',webhook:'自定义 Webhook',telegram:'Telegram',dingtalk:'钉钉机器人',feishu:'飞书机器人',ntfy:'ntfy'};
-const eventNames={chat:'聊天消息',comment:'点赞与评论',note:'留言',activity:'新动态与互动',anniversary:'纪念日',period:'生理期提醒',wish:'愿望到期',surprise:'惊喜公开',habit:'共同打卡',watch:'一起看',backup:'备份失败',storage:'空间不足',system:'系统消息'};
+const eventNames={chat:'聊天消息',comment:'点赞与评论',note:'留言',activity:'新动态与互动',anniversary:'纪念日',period:'生理期提醒',wish:'愿望到期',surprise:'惊喜公开',habit:'共同打卡',backup:'备份失败',storage:'空间不足',system:'系统消息'};
 function channelsPage(){
  const native=isNativeApp(),supported=browserPushSupported();
  const webpushCard=native?'':`<section class="card webpush-card"><div class="section-heading"><h2>${icon('bell')} 浏览器系统通知</h2><span class="status-pill ${state.webpush?.local?'sent':'pending'}">${state.webpush?.local?'本设备已开启':(state.webpush?.devices?`已绑定 ${state.webpush.devices} 台设备`:'尚未开启')}</span></div><p class="meta">网页关闭或切到后台时，也可由系统送达提醒。锁屏通知只显示通用提示，不包含聊天或心愿内容。${/iphone|ipad|ipod/i.test(navigator.userAgent)?' iPhone/iPad 请先将恋爱空间添加到主屏幕，再开启通知。':''}</p>${!supported?'<p class="small-note">当前浏览器不支持网页系统通知，请使用支持通知的浏览器或配置其他通知渠道。</p>':state.webpush?.local?`<div class="inline-actions">${button('发送测试通知','test-webpush','small soft','bell')}${button('关闭本设备通知','disable-webpush','small secondary')}</div>`:button('开启本设备通知','enable-webpush','small primary','bell')}</section>`;
@@ -1956,45 +1946,6 @@ async function sendChat(body,clientId=uuid()) {
  try {await post('/records',{kind:'chat',body,client_id:clientId});setPending(pendingChats().filter(p=>p.client_id!==clientId));}catch(e){paintChat($('#chat-log'));scrollChat();throw e;}
 }
 
-/* 点「一起看」时给对方留一张邀请卡。它只是一条普通 chat 记录，服务端
-   create_record() 会自动 db.notice() + nudge_worker()，对方哪怕没开着页面也能
-   从 SSE / Web Push / 第三方渠道收到「TA 邀请你一起看视频」。
-
-   防重复有三道闸门，层层兜底：
-   ① 内存级 watchInvitePending —— 同一次点击连击、并发重入直接短路；
-   ② 前端时间节流 —— 同一作者 60 秒内无论点「一起看」还是点卡片「重新发起」都不再发；
-   ③ 服务端幂等 —— 邀请卡用**确定性 client_id**（watch-invite-<作者id>-<当天>），
-      同一天内重复提交，后端 create_record() 命中 author+client_id 直接返回已存在记录，
-      绝不会堆出第二条。之前每次都生成新 uuid，导致后端幂等形同虚设，这是刷屏根因。 */
-const WATCH_INVITE_KEY='love-watch-invite-at';
-let watchInvitePending=false;
-/* 邀请卡的稳定 client_id：按作者 + 当天去重，跨天自然允许再发一次。 */
-function watchInviteClientId(){
- return 'watch-invite-'+state.me.user.id+'-'+today();
-}
-async function sendWatchInvite(){
- if(watchInvitePending)return false;
- if(!state.me)return false;
- const last=Number(localStorage.getItem(WATCH_INVITE_KEY)||0);
- if(Date.now()-last<60000){
-  /* 刚邀请过：不再发，但给个明确反馈，别让用户以为点了没反应 */
-  toast('刚刚已经邀请过 TA 啦，点上面的卡片就能进一起看');
-  return false;
- }
- watchInvitePending=true;
- try{
-  /* 传入确定性 client_id，让后端幂等去重真正生效 */
-  await sendChat({content:'邀请你一起看视频',watch_invite:{v:1}},watchInviteClientId());
-  localStorage.setItem(WATCH_INVITE_KEY,String(Date.now()));
-  try{await refresh(false);}catch{}
-  const wl=$('#watch-log');if(wl){paintChat(wl,true);watchScroll();}
-  const cl=$('#chat-log');if(cl){paintChat(cl);scrollChat();}
-  toast('已邀请 TA 一起看视频');
-  return true;
- }catch(e){toast(e.message||'邀请没发出去');return false;}
- finally{watchInvitePending=false;}
-}
-
 async function act(action,id,el) {
  const r=state.records.find(x=>x.id===id);
  if(action==='reload')return boot();
@@ -2119,8 +2070,6 @@ async function act(action,id,el) {
   }
  }catch{openModal('检查更新失败','<p class="meta" style="margin:0">网络好像不太顺畅，点下方重试。</p><div class="form-actions" style="margin-top:12px"><button class="button primary" data-action="check-update">重试</button><button class="button soft" data-action="close-modal">取消</button></div>',{cleanup:null});}return;}
  if(action==='notice-detail'){closeModal();const detail=await api('/records/'+id);const unread=state.notices.filter(n=>n.record_id===id&&!n.seen);if(unread.length){try{await post('/notices/read?record_id='+encodeURIComponent(id));await refresh();}catch{}}if(detail.kind==='chat')return navigate('messages');openModal('这一刻的故事',recordCard(detail),{wide:true});return;}
- /* 开播提醒没有 record_id，不能走详情；点一下把这类提醒整体标已读再跳过去 */
- if(action==='notice-watch'){try{await post('/notices/read?event=watch');await refresh();}catch{}return navigate('watch');}
  if(action==='chat-attachment')return composer('chat');
  /* ── 输入栏「更多功能」面板 ───────────────────────────────── */
  if(action==='chat-fn'){const p=$('#chat-fn');if(!p)return;
@@ -2138,11 +2087,6 @@ async function act(action,id,el) {
   if(!isFinite(lat)||!isFinite(lng))return toast('这条位置信息不完整');
   return openMap(lat,lng,'我们的位置');
  }
- if(action==='chat-watch'){const p=$('#chat-fn');if(p)p.hidden=true;sendWatchInvite();return navigate('watch');}
- /* 邀请卡：自己那侧是「重新发起」，对方那侧点一下直接进放映室。
-    点自己的卡也用普通节流（不再 force 破例）——60 秒内重复点只导航不再发；
-    即使真过了 60 秒再点，确定性 client_id 也在后端兜底，一天只留一条。 */
- if(action==='chat-watch-invite'){const p=$('#chat-fn');if(p)p.hidden=true;if(el&&el.dataset.mine==='1')sendWatchInvite();return navigate('watch');}
  if(action==='chat-song'){const p=$('#chat-fn');if(p)p.hidden=true;return songPicker();}
  if(action==='song-tab'){state.songTab=id;$$('.ss-tab').forEach(b=>b.classList.toggle('active',b.dataset.id===id));return renderSongPane();}
  if(action==='song-toggle')return songToggle(el);
@@ -2152,65 +2096,6 @@ async function act(action,id,el) {
  if(action==='chat-song-golist'){closeModal();return navigate('together','music');}
  /* 实时通话需要 WebRTC + 信令，属于独立一轮的量，这里明说而不是假装点了没反应 */
  if(action==='chat-call')return toast('实时通话还没接（要 WebRTC + 信令服务），先用语音说两句');
- if(action==='watch-back')return goBack('messages');
- if(action==='watch-pick')return watchPick();
- if(action==='watch-pick-local')return watchPickLocal();
- if(action==='watch-join')return watchJoin();
- /* 手动对齐：拉一次服务端状态并硬对齐（无视 updated 判断）。
-    取消了实时进度校正后，长时间播放两边会漂移，靠这个按钮一键拉齐。 */
- if(action==='watch-align')return watchPull(true);
- if(action==='ws-back')return wsBack();
- if(action==='watch-tab'){
-  WATCH_PICK.tab=id||'album';
-  WATCH_PICK.detail=null;
-  if(id==='drama'){
-   WATCH_PICK.view='sources';
-   watchPickOpen();
-   /* 第一次进来可能还没探测完，先画骨架再补数据；主人若已翻页就别盖回去 */
-   if(!WATCH_PICK.catalog){WATCH_PICK.catalog=await watchCatalog();wsSafeOpen();}
-   return;
-  }
-  return watchPickOpen();
- }
- /* 组件卡主体：点进去看这个片源的分类分区首页 */
- if(action==='watch-src-open'||action==='watch-src')return watchOpenSource(id,el.dataset.prov||'');
- if(action==='watch-sources'||action==='watch-svc-open'||action==='watch-src-back')return watchSources();
- if(action==='watch-src-toggle')return watchToggleSource(id,el.dataset.prov||'');
- /* 内建组件没有开关可拨，右侧那颗是「为什么用不了」的说明 */
- if(action==='watch-src-why')return watchSrcWhy(id,el.dataset.prov||'');
- if(action==='watch-src-add')return watchAddSourceForm();
- if(action==='watch-src-curate')return watchCurateForm();
- if(action==='watch-src-hidden'){
-  WATCH_PICK.showHidden=!WATCH_PICK.showHidden;
-  return watchSources();
- }
- if(action==='watch-src-del')return watchDropSource(id);
- if(action==='watch-src-done')return closeModal();
- if(action==='watch-home-more'||action==='watch-home-all'){
-  const cs=(watchProvider()||{}).categories||[];
-  WATCH_PICK.view='list';WATCH_PICK.cat=id||(cs[0]||{}).id||'';
-  WATCH_PICK.q='';WATCH_PICK.page=1;WATCH_PICK.detail=null;
-  return watchLoadDramas();
- }
- if(action==='watch-recent-play'){
-  const row=watchRecentLoad().find(x=>x.id===id)||{};
-  /* 直接续播没有详情对象，先补个瘦的，免得片名串成上一部剧 */
-  WATCH_PICK.detail={id,title:row.title||'一段视频',poster:row.poster||'',episodes:[]};
-  return watchChooseDrama(id,Number(el.dataset.ep||1),
-   {svc:WATCH_PICK.svc,prov:WATCH_PICK.prov});
- }
- if(action==='watch-cat'){
-  WATCH_PICK.view='list';WATCH_PICK.cat=id||'';WATCH_PICK.page=1;
-  WATCH_PICK.q='';WATCH_PICK.detail=null;return watchLoadDramas();
- }
- if(action==='watch-more'){
-  if(WATCH_PICK.pageCount&&WATCH_PICK.page>=WATCH_PICK.pageCount){toast('这一类的片都翻完了');return;}
-  WATCH_PICK.view='list';WATCH_PICK.page=(WATCH_PICK.page||1)+1;return watchLoadDramas();
- }
- if(action==='watch-search')return watchSearchForm();
- if(action==='watch-drama')return watchDramaDetail(id);
- if(action==='watch-drama-back'){WATCH_PICK.detail=null;WATCH_PICK.view='list';return watchPickOpen();}
- if(action==='watch-drama-ep')return watchChooseDrama(id,Number(el.dataset.ep||1));
  if(action==='chat-bg')return chatBgForm();
  if(action==='chat-to-draft')return composer('post',null,{...r.body,mediaObjects:r.media});
  if(action==='retry-chat'){const p=pendingChats().find(p=>p.client_id===id);if(p){await sendChat(p.body,p.client_id);await refresh();}return;}
@@ -2301,14 +2186,12 @@ document.addEventListener('touchend',e=>{
  renderPage();
 },{passive:true});
 document.addEventListener('click',async e=>{$$('.more-menu[open]').forEach(d=>{if(!d.contains(e.target))d.removeAttribute('open');});const nav=e.target.closest('[data-nav]'),el=e.target.closest('[data-action]');try{if(nav||el)e.target.closest('.account-menu')?.removeAttribute('open');if(nav)return await navigate(nav.dataset.nav);if(el)await act(el.dataset.action,el.dataset.id||'',el);}catch(err){toast(err.message);}});
-document.addEventListener('submit',async e=>{const isWatch=e.target.id==='watch-form';if(e.target.id!=='chat-form'&&!isWatch)return;e.preventDefault();const input=$(isWatch?'#watch-text':'#chat-text'),content=input.value.trim();if(!content)return;const btn=$('button[type=submit]',e.target);btn.disabled=true;try{const body={content,date:today(),media:[]};if(!isWatch&&state.chatReply)body.reply_to=state.chatReply;await sendChat(body);if(!isWatch)state.chatReply=null;input.value='';localStorage.removeItem('chat-text:'+state.me.user.id);
- /* 一起看页不能整页重渲染：视频是本机 objectURL，重渲染就把放映区清空了 */
- if(isWatch){await refresh(false);const log=$('#watch-log');if(log)paintChat(log,true);syncCompose();watchScroll();}
- else{await refresh();syncCompose();}
+document.addEventListener('submit',async e=>{if(e.target.id!=='chat-form')return;e.preventDefault();const input=$('#chat-text'),content=input.value.trim();if(!content)return;const btn=$('button[type=submit]',e.target);btn.disabled=true;try{const body={content,date:today(),media:[]};if(state.chatReply)body.reply_to=state.chatReply;await sendChat(body);state.chatReply=null;input.value='';localStorage.removeItem('chat-text:'+state.me.user.id);
+ await refresh();syncCompose();
  }catch(err){toast(err.message);}finally{btn.disabled=false;}});
-document.addEventListener('input',e=>{if(e.target.id==='chat-text'){localStorage.setItem('chat-text:'+state.me.user.id,e.target.value);syncCompose();}if(e.target.id==='watch-text'){syncCompose();}if(e.target.id==='filter-q'){state.filters={...(state.filters||{}),q:e.target.value};clearTimeout(state.filterTimer);state.filterTimer=setTimeout(async()=>{const pos=$('#filter-q')?.selectionStart;try{await loadTimeline(true);renderPage();$('#filter-q')?.focus();$('#filter-q')?.setSelectionRange(pos,pos);}catch(err){toast(err.message);}},250);}});
+document.addEventListener('input',e=>{if(e.target.id==='chat-text'){localStorage.setItem('chat-text:'+state.me.user.id,e.target.value);syncCompose();}if(e.target.id==='filter-q'){state.filters={...(state.filters||{}),q:e.target.value};clearTimeout(state.filterTimer);state.filterTimer=setTimeout(async()=>{const pos=$('#filter-q')?.selectionStart;try{await loadTimeline(true);renderPage();$('#filter-q')?.focus();$('#filter-q')?.setSelectionRange(pos,pos);}catch(err){toast(err.message);}},250);}});
 document.addEventListener('change',e=>{const map={'filter-author':'author','filter-date':'date','filter-media':'media'};if(map[e.target.id]){state.filters={...(state.filters||{}),[map[e.target.id]]:e.target.value};state.timelineCursor=null;loadTimeline(true).then(renderPage).catch(err=>toast(err.message));}});
-document.addEventListener('keydown',e=>{if(e.key==='Escape'){const menu=$('.more-menu[open]');if(menu){menu.removeAttribute('open');$('summary',menu)?.focus();}}if(e.key==='Escape'&&$('.modal'))closeModal();if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing&&(e.target?.id==='chat-text'||e.target?.id==='watch-text')){e.preventDefault();const form=e.target.form||$('#chat-form'),btn=form&&$('button[type=submit]',form);if(form&&btn&&!btn.disabled)form.requestSubmit();}if(e.key==='Tab'&&$('.modal')){const els=$$('button,input,textarea,select,a[href]',$('.modal')).filter(el=>!el.disabled),first=els[0],last=els.at(-1);if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}}});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){const menu=$('.more-menu[open]');if(menu){menu.removeAttribute('open');$('summary',menu)?.focus();}}if(e.key==='Escape'&&$('.modal'))closeModal();if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing&&e.target?.id==='chat-text'){e.preventDefault();const form=e.target.form||$('#chat-form'),btn=form&&$('button[type=submit]',form);if(form&&btn&&!btn.disabled)form.requestSubmit();}if(e.key==='Tab'&&$('.modal')){const els=$$('button,input,textarea,select,a[href]',$('.modal')).filter(el=>!el.disabled),first=els[0],last=els.at(-1);if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}}});
 // —— Android APK 系统通知桥（浏览器/PWA 无 Capacitor 时自动跳过，零影响）——
 /* 原生环境识别不能只赌 window.Capacitor：APK 是「远程加载模式」（server.url 指向线上站），
    Capacitor 的桥接脚本只注入由它本地服务器提供的页面，远程页面里 window.Capacitor 常常是空的，
@@ -2432,9 +2315,8 @@ function connectNtfy(){const topic=state.me?.ntfy_topic;
 /* 服务端事件合并：SSE 每 5s 一条心跳、ntfy 与 SSE 又是两条独立通道，
    点赞+评论+通知常常在同一瞬间到达。不做合并会把一轮变化放大成三四次
    「拉 4 个全量接口 + 整页 innerHTML 替换」，滚动位置和视频贴纸全被冲掉。 */
-let lastRev=null,eventTimer=null,pendingRev='',pendingFlags={refresh:false,watch:false,chat:false,other:false};
+let lastRev=null,eventTimer=null,pendingRev='',pendingFlags={refresh:false,chat:false,other:false};
 /* flags.refresh —— 整站数据变了，要重拉记录/聊天/照片；
-   flags.watch —— 一起看状态变了，只需要拉一次 /api/watch；
    flags.chat / flags.other —— 变化落在哪一类，决定要不要走"只重拉聊天"的快速路径。
    没有 revision 信息的通道（ntfy）不传 flags，按"强制整站刷新"处理。 */
 function scheduleServerEvent(rev,flags){
@@ -2443,15 +2325,14 @@ function scheduleServerEvent(rev,flags){
               other 用或方向是对的——只要有一条说"别的也变了"，就必须整站刷新，
               宁可多拉一次也不能漏掉纪念日/相册的改动。 */
            pendingFlags.refresh=pendingFlags.refresh||!!flags.refresh;
-           pendingFlags.watch=pendingFlags.watch||!!flags.watch;
            pendingFlags.chat=pendingFlags.chat||!!flags.chat;
            pendingFlags.other=pendingFlags.other||!!flags.other;}
  else pendingFlags.refresh=pendingFlags.chat=pendingFlags.other=true;
  clearTimeout(eventTimer);
  eventTimer=setTimeout(async()=>{
   const rev=pendingRev;pendingRev='';
-  const flags=pendingFlags;pendingFlags={refresh:false,watch:false,chat:false,other:false};
-  if(rev&&rev===lastRev&&!flags.watch)return;  // 数据没变，这一轮可以直接跳过
+  const flags=pendingFlags;pendingFlags={refresh:false,chat:false,other:false};
+  if(rev&&rev===lastRev)return;  // 数据没变，这一轮可以直接跳过
   // 无论 handleServerEvent 成功与否都要记下 rev：以前写在 try 里，一旦 refreshData 抛错
   // lastRev 就永远停在旧值，于是每次心跳都被当成"数据变了"，整页 5 秒重绘一次。
   try{await handleServerEvent(flags);}catch{}finally{if(rev)lastRev=rev;}
@@ -2470,12 +2351,9 @@ async function refreshChatOnly(){
 async function handleServerEvent(flags){
  if(!state.me)return;
  if(refreshing){state.pendingRefresh=true;return;}
- flags=flags||{refresh:true,watch:true,chat:true,other:true};
+ flags=flags||{refresh:true,chat:true,other:true};
  try{
-  /* 一起看状态变了：只拉一次 /api/watch。对方拖了进度条、切了片，我这边立刻跟上，
-     但记录、聊天、照片一个都不用重拉 —— 这是"事件触发式同步"省下来的大头。 */
-  if(flags.watch&&state.page==='watch')await watchPull();
-  if(!flags.refresh)return;   // 只有一起看变了：整站数据没动，不必重拉也不必重绘
+  if(!flags.refresh)return;   // 整站数据没动，不必重拉也不必重绘
   const oldNotice=state.notices[0]?.id||null;
   const focused=document.activeElement,canRender=!$('.modal')&&!$('.more-menu[open]')&&!['INPUT','TEXTAREA','SELECT'].includes(focused?.tagName);
   /* 变化只落在聊天上才走快速路径；只要"其它"也变了（哪怕同时还有聊天），
@@ -2483,13 +2361,12 @@ async function handleServerEvent(flags){
   const chatOnly=flags.chat&&flags.other===false;
   if(chatOnly)await refreshChatOnly();else await refresh(false);
   if(state.page==='messages'&&$('#chat-log')){const log=$('#chat-log'),atBottom=log.scrollHeight-log.scrollTop-log.clientHeight<100;paintChat(log);if(atBottom)scrollChat();state.me.chat_unread=0;post('/notices/read?event=chat').catch(()=>{});}
-  else if(state.page==='watch'&&$('#watch-log')){const log=$('#watch-log'),atBottom=log.scrollHeight-log.scrollTop-log.clientHeight<80;paintChat(log,true);if(atBottom)watchScroll();state.me.chat_unread=0;post('/notices/read?event=chat').catch(()=>{});}
   else if(canRender)renderShell();
   /* 系统弹窗/锁屏通知已停用：手机端通知改由第三方渠道（企业微信等）+ 浏览器 Web Push 送达；在聊天页停留时消息即时标记已读，后端不再推送 */
  }catch{}
 }
 let sseRetry=0;
-function connectEvents(){clearTimeout(state.sseTimer);state.stream?.close();const es=new EventSource('/api/events');state.stream=es;es.onopen=()=>{sseRetry=0;};es.onmessage=e=>{let rev='',flags={refresh:true,watch:false,chat:true,other:true};try{const d=JSON.parse(e.data||'{}');rev=d.rev||'';/* 老服务端没有这些字段，等于"整站都变了"，按兼容处理 */flags={refresh:d.refresh===undefined?true:!!d.refresh,watch:!!d.watch,chat:d.chat===undefined?true:!!d.chat,other:d.other===undefined?true:!!d.other};}catch{}scheduleServerEvent(rev,flags);};/* 断线兜底：浏览器只自动重连“可恢复”断线（readyState=CONNECTING）；致命断流（401/代理掐断）进 CLOSED 后永不自愈 → 指数退避手动重建，1s 起步、30s 封顶，连上即清零 */
+function connectEvents(){clearTimeout(state.sseTimer);state.stream?.close();const es=new EventSource('/api/events');state.stream=es;es.onopen=()=>{sseRetry=0;};es.onmessage=e=>{let rev='',flags={refresh:true,chat:true,other:true};try{const d=JSON.parse(e.data||'{}');rev=d.rev||'';/* 老服务端没有这些字段，等于"整站都变了"，按兼容处理 */flags={refresh:d.refresh===undefined?true:!!d.refresh,chat:d.chat===undefined?true:!!d.chat,other:d.other===undefined?true:!!d.other};}catch{}scheduleServerEvent(rev,flags);};/* 断线兜底：浏览器只自动重连“可恢复”断线（readyState=CONNECTING）；致命断流（401/代理掐断）进 CLOSED 后永不自愈 → 指数退避手动重建，1s 起步、30s 封顶，连上即清零 */
 es.onerror=()=>{if(es.readyState!==EventSource.CLOSED)return;state.stream=null;clearTimeout(state.sseTimer);sseRetry=sseRetry?Math.min(sseRetry*2,30):1;state.sseTimer=setTimeout(()=>{if(state.me)connectEvents();},sseRetry*1000);};}
 /* 回前台：SSE 可能已被系统挂死（尤其安卓 WebView 后台冻结）→ 死流重建 + 立即补刷一轮，兜住后台错过的消息 */
 document.addEventListener('visibilitychange',()=>{if(document.hidden||!state.me)return;syncNativePush();if(!state.stream||state.stream.readyState===EventSource.CLOSED)connectEvents();if(!ntfyWs||ntfyWs.readyState!==WebSocket.OPEN)connectNtfy();handleServerEvent();});

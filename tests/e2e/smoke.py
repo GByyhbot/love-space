@@ -195,32 +195,9 @@ def run():
                     ok(reuse['total'] == baseline and reuse['same'] == baseline,
                        '刷新后附件节点原地复用', f"{reuse['same']}/{baseline}（当前 {reuse['total']} 个）")
 
-                    # ---- 7. 拆分后跨文件全局可见（app.js ↔ watch.js）----
-                    # watch.js 是独立的 classic script，和 app.js 靠共享的全局词法作用域
-                    # 交换那 77 个 watch* 函数。拆错不会在加载时报错——函数引用是调用时
-                    # 才解析的——只会在用户点进「一起看」时 ReferenceError。所以这里
-                    # 既验函数可达，也真的把页面走一遍。
-                    nav = page.evaluate("""async () => {
-                        try { await navigate('watch'); return 'ok'; }
-                        catch (e) { return 'ERR ' + (e && e.message || e); }
-                    }""")
-                    ok(nav == 'ok', '能进「一起看」页面', nav)
-                    page.wait_for_timeout(800)
-                    globs = page.evaluate("""() => ({
-                        pull: typeof watchPull, pick: typeof watchPick,
-                        back: typeof wsBack, hls: typeof watchMountHls,
-                        sofa: typeof WATCH_SOFA, cfg: typeof WATCH_PICK,
-                        mounted: !!document.querySelector('.watch-page'),
-                    })""")
-                    ok(globs['mounted'], '一起看页面渲染出 .watch-page')
-                    cross = ['pull', 'pick', 'back', 'hls', 'sofa']
-                    ok(all(globs[k] != 'undefined' for k in cross) and globs['cfg'] == 'object',
-                       'watch.js 的全局对 app.js 可见',
-                       f"watchPull={globs['pull']} WATCH_PICK={globs['cfg']} WATCH_SOFA={globs['sofa']}")
-
-                    # ---- 8. 生理期页（period.js 拆出后的可见性）----
-                    # 同 watch 的理由：period.js 也是独立 classic script，函数引用在调用时
-                    # 才解析，加载失败不会在首屏暴露，只会在点进「我们 → 生理期」时白屏。
+                    # ---- 7. 生理期页（period.js 拆出后的可见性）----
+                    # period.js 是独立 classic script，函数引用在调用时才解析，
+                    # 加载失败不会在首屏暴露，只会在点进「我们 → 生理期」时白屏。
                     per = page.evaluate("""async () => {
                         // navigate(page, tab) 会把 state.tab 重置成参数，所以 tab 必须当参数传，
                         // 先写 state.tab 再 navigate 是无效的。

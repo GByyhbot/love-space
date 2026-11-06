@@ -14,7 +14,6 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
-import android.view.ViewGroup;
 import android.webkit.CookieManager;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
@@ -45,9 +44,6 @@ import javax.net.ssl.SSLSocketFactory;
 import com.getcapacitor.Bridge;
 import com.getcapacitor.BridgeActivity;
 import com.getcapacitor.BridgeWebViewClient;
-
-import androidx.core.view.ViewCompat;
-import androidx.core.view.WindowInsetsCompat;
 
 public class MainActivity extends BridgeActivity {
     private static final String TAG = "LoveSpace/Main";
@@ -173,8 +169,6 @@ public class MainActivity extends BridgeActivity {
         // ④ 打开本地存储：聊天背景图按 media id 缓存进 IndexedDB，省得每次进聊天都重下一遍。
         //    WebSettings 的 database/domStorage 默认未必开启，不开的话 JS 侧 indexedDB.open 会直接失败。
         setupLocalStorage();
-        // ⑤ 键盘高度桥：Android 15 不再缩窗口，网页拿不到键盘高度，这里推给它
-        setupImeHeightBridge();
     }
 
     /**
@@ -192,68 +186,6 @@ public class MainActivity extends BridgeActivity {
         } catch (Exception e) {
             Log.e(TAG, "启用本地存储失败", e);
         }
-    }
-
-    /* ── 键盘高度桥（Android 11+）────────────────────────────────────────
-     *
-     * 为什么需要它：targetSdk 35 起系统强制 edge-to-edge，键盘弹出时不再缩放
-     * 窗口，WebView 尺寸、`window.innerHeight`、`visualViewport.height` 全都不变。
-     * 网页端 chat.js 的 syncKeyboard() 靠 `innerHeight - vv.height - vv.offsetTop`
-     * 算键盘高度，这个前提一失效它就恒得 0，`--kb-h` 永远是 0px ——
-     * 于是输入框被键盘直接盖住（1.6.11 的现状）。
-     *
-     * 这里只补「数据来源」，不动布局：
-     *   · 不加 resize / 不改 LayoutParams  → 不可能出现新区域未渲染的黑帧
-     *   · 不用 setFitInsetsTypes         → 非 translucent 主窗口会被 WMS 直接拒绝崩溃
-     * 把 IME 高度写进 `--kb-h` 后，style.css 里那 4 处既有消费点
-     * （.chat-panel / .fn-panel / .watch-page / .pick-overlay）自动生效。
-     *
-     * 两个必须踩准的细节：
-     *   ① listener 必须挂在 WebView 的**父容器**上。挂在 WebView 自身会顶掉它
-     *      的 onApplyWindowInsets，Chromium 收不到 insets，env(safe-area-inset-*) 变 0。
-     *      回调里 return windowInsets（不消费），让系统继续往下分发。
-     *   ② insets 给的是**物理像素**，而 `--kb-h` 是 CSS px。这里把物理像素原样交给
-     *      JS，由 devicePixelRatio 换算——density 3 的机器若直接写物理像素，
-     *      让位高度会变成 3 倍，输入框被顶到屏幕中间。
-     */
-    private int lastImePx = -1;
-
-    private void setupImeHeightBridge() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return;
-        try {
-            if (getBridge() == null || getBridge().getWebView() == null) return;
-            WebView webView = getBridge().getWebView();
-            if (!(webView.getParent() instanceof ViewGroup)) return;
-            ViewGroup parent = (ViewGroup) webView.getParent();
-            ViewCompat.setOnApplyWindowInsetsListener(parent, (v, windowInsets) -> {
-                int px = windowInsets.getInsets(WindowInsetsCompat.Type.ime()).bottom;
-                if (px != lastImePx) {
-                    lastImePx = px;
-                    pushImeHeight(webView, px);
-                }
-                return windowInsets;
-            });
-            Log.i(TAG, "键盘高度桥已挂载（父容器 " + parent.getClass().getSimpleName() + "）");
-        } catch (Exception e) {
-            // 挂不上只影响「键盘顶起输入框」，其余功能照常，绝不因此崩溃
-            Log.e(TAG, "键盘高度桥初始化失败", e);
-        }
-    }
-
-    /** 把物理像素的键盘高度交给网页换算成 CSS px 并写入 --kb-h。 */
-    private void pushImeHeight(WebView webView, int px) {
-        String js = "(function(d){if(!d)return;"
-                // 新前端（1.6.22 起）有这个入口：物理像素原样交过去，"用不用"由网页决定。
-                // 视觉视口会缩的机器（Android 16/17）网页自己算得准，原生值绝不能叠加，
-                // 否则浏览器滚一次 + 网页再顶一次，输入栏会被顶到状态栏下面。
-                + "if(window.__kbSetNative){window.__kbSetNative(" + px + ");return;}"
-                // 旧前端（≤1.6.21）没有这个入口，保持原来的直写行为，别把人卡死。
-                + "var r=window.devicePixelRatio||1;"
-                + "d.setAttribute('data-native-kb','1');"
-                + "d.style.setProperty('--kb-h',(Math.round(" + px + "/r))+'px');"
-                + "if(document.body)document.body.classList.toggle('kb-open',(" + px + ">90));"
-                + "})(document.documentElement)";
-        webView.evaluateJavascript(js, null);
     }
 
     /**

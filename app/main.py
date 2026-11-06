@@ -30,7 +30,6 @@ from starlette.middleware.gzip import GZipMiddleware
 from starlette.staticfiles import NotModifiedResponse
 
 from . import db
-from . import dramas
 from . import importers
 from . import period
 from .config import APK_VERSION, BUILD_ID, WEB_VERSION, SPACE_ROUTES, route_origins
@@ -906,322 +905,6 @@ def space(body: Space, user=Depends(current_user)):
     return {'ok': True}
 
 
-class WatchState(BaseModel):
-    """一起看的播放状态：两个人共用同一条时间轴。
-
-    `position` / `playing` 记的是「最后一次操作时」的快照，真实位置由 GET 时按
-    `updated` 往后推算（正在播就加上流逝时间）。这样客户端不必和服务端对时钟，
-    时区不同、手机时间不准都不会把进度算歪。
-    """
-    title: str | None = Field(default=None, max_length=120)
-    media: str | None = Field(default=None, max_length=64)
-    # 在线片源：只存「哪台服务 / 哪个组件 / 内容 id / 第几集」，直链由服务端现换
-    # （签名地址约 24 小时过期，落库或下发都会在隔天变成一张打不开的地址）。
-    drama_src: str | None = Field(default=None, max_length=16)
-    drama_provider: str | None = Field(default=None, max_length=32)
-    drama_id: str | None = Field(default=None, max_length=160)
-    drama_ep: int | None = None
-    position: float | None = None
-    duration: float | None = None
-    playing: bool | None = None
-
-
-@app.get('/api/watch')
-def get_watch(user=Depends(current_user)):
-    with connect() as c:
-        st = dict(db.setting(c, 'watch', {}) or {})
-        # 存量数据：1.7.21 之前只有剧 id，没有「哪台服务 / 哪个组件」，
-        # 就地补成第一个启用的组合，免得老的两端一直卡在「片源找不到」。
-        if st.get('drama_id') and not st.get('drama_src'):
-            st['drama_src'], st['drama_provider'] = dramas.first_enabled(c)
-    if st.get('playing'):
-        elapsed = max(0.0, db.now() - float(st.get('updated') or 0))
-        st['position'] = min(float(st.get('position') or 0) + elapsed,
-                             float(st.get('duration') or 0) or 1e9)
-    return st
-
-
-@app.put('/api/watch')
-def put_watch(body: WatchState, user=Depends(current_user)):
-    data = body.model_dump(exclude_none=True)
-    # 片源必须是这个人看得见的媒体：私密日记里的视频不该被拉进一起看
-    if data.get('media'):
-        with connect() as c:
-            if not db.media_visible(c, data['media'], user['id']):
-                raise HTTPException(404, '这个视频不能一起看')
-    # 在线片源：服务/组件都要在启用清单里，内容 id 会拼进上游 URL，不许带斜杠/空格/..
-    if data.get('drama_id'):
-        sid, pid = data.get('drama_src') or '', data.get('drama_provider') or ''
-        with connect() as c:
-            if not sid or not pid:
-                sid, pid = dramas.first_enabled(c)
-            try:
-                dramas.resolve(c, sid, pid or None)
-            except dramas.DramaError as exc:
-                raise HTTPException(exc.status, str(exc))
-        data['drama_src'], data['drama_provider'] = sid, pid
-        if '..' in data['drama_id'] or not dramas.ITEM_RE.match(data['drama_id']):
-            raise HTTPException(400, '这个内容的编号不对')
-        ep = int(data.get('drama_ep') or 1)
-        if not 1 <= ep <= dramas.EPISODE_MAX:
-            raise HTTPException(400, '集数超出范围')
-    with connect() as c:
-        old = dict(db.setting(c, 'watch', {}) or {})
-        st = dict(old)
-        st.update(data)
-        # 换了片源就把另一条来源清干净：否则前端不知道该听 media 还是 drama_id，
-        # 两边的播放器会各播各的。
-        if data.get('drama_id'):
-            st['media'] = ''
-        elif data.get('media'):
-            for key in ('drama_src', 'drama_provider', 'drama_id'):
-                st[key] = ''
-            st['drama_ep'] = 0
-        st['by'] = user['id']
-        st['updated'] = db.now()
-        db.set_setting(c, 'watch', st)
-        # 一起看状态变了 → 推进独立的 watch_revision。另一端的 SSE 收到信号才来
-        # 拉一次 /api/watch（事件触发式同步）。不复用 content_revision：那是
-        # "整站数据变了"，会把记录、聊天、照片全部重拉一遍。
-        c.execute("INSERT INTO app_state(key,value) VALUES ('watch_revision',1) "
-                  "ON CONFLICT(key) DO UPDATE SET value=value+1")
-        # 从「没在播」变成「正在播」，且手上有片源 → 告诉另一半。
-        # 只在"开播"这一刻发，暂停/拖动进度不打扰；dedupe 按片源 + 6 小时窗口，
-        # 同一部片反复暂停续播不会刷屏，隔天再看还能再提醒一次。
-        source = st.get('drama_id') or st.get('media')
-        if st.get('playing') and not old.get('playing') and source:
-            name = (st.get('title') or '').strip() or '一部片'
-            if st.get('drama_id') and st.get('drama_ep'):
-                name = f'{name} 第{int(st["drama_ep"])}集'
-            who = (user.get('name') or 'TA').strip() or 'TA'
-            db.notice(c, 'watch', f'{who}开始看《{name}》了，点这里一起看',
-                      actor=user['id'],
-                      dedupe=f'watch:{source}:{int(db.now() // 21600)}')
-    return get_watch(user)
-
-
-# ── 在线片源：主人自己加服务、自己勾组件 ────────────────────────────────
-# 上游是 happy-capy 那类"组件聚合器"：一台服务代理着十几个内容源，接口形状一致。
-# 客户端只认「服务 / 组件 / 内容 id / 集号」，直链一律由这里现换 —— 签名地址带 exp，
-# 落库隔天就废；而服务只有内网入口，外网手机连不上，HTTPS 页面也不能直接播 http 视频。
-class DramaServiceIn(BaseModel):
-    name: str = Field(default='', max_length=24)
-    base: str = Field(default='', max_length=200)
-
-
-class DramaEnabledIn(BaseModel):
-    enabled: list[str] = []
-
-
-class DramaOverlayIn(BaseModel):
-    """本地整理：只改传进来的项，缺省表示「别动」。
-
-    `proxy` 是「这个组件需要海外代理」的本地标记 —— 上游没有任何字段说这件事
-    （`manifest` 只有 id/title/version/capabilities/categories，diagnostics 的
-    network_mode 只会给 direct），所以只能本地记一次，之后卡片和排障提示都认它。
-    """
-    key: str = Field(max_length=64)
-    alias: str | None = Field(default=None, max_length=24)
-    tag: str | None = Field(default=None, max_length=12)
-    hidden: bool | None = None
-    proxy: bool | None = None
-    order: int | None = Field(default=None, ge=0, le=9999)
-
-
-def _drama_svc(c, sid, provider=None):
-    """把「服务/组件是否可用」的检查收成一处，省得每个路由都抄一遍 try。"""
-    try:
-        return dramas.resolve(c, sid, provider)
-    except dramas.DramaError as exc:
-        raise HTTPException(exc.status, str(exc))
-
-
-@app.get('/api/drama-sources')
-async def drama_sources(refresh: bool = False, user=Depends(current_user)):
-    """管理界面用：每台服务在不在线 + 它代理哪些组件 + 哪些已勾上。"""
-    with connect() as c:
-        return await dramas.catalog(c, refresh)
-
-
-@app.post('/api/drama-sources')
-def add_drama_source(body: DramaServiceIn, user=Depends(current_user)):
-    with connect() as c:
-        try:
-            dramas.add_service(c, body.name, body.base)
-        except dramas.DramaError as exc:
-            raise HTTPException(exc.status, str(exc))
-    return {'ok': True}
-
-
-@app.put('/api/drama-sources/enabled')
-def set_drama_enabled(body: DramaEnabledIn, user=Depends(current_user)):
-    with connect() as c:
-        dramas.set_enabled(c, body.enabled)
-    return {'ok': True}
-
-
-@app.put('/api/drama-sources/overlay')
-def set_drama_overlay(body: DramaOverlayIn, user=Depends(current_user)):
-    """给某个组件改名/加标签/隐藏/定序。上游改名不影响本地整理结果。"""
-    patch = body.model_dump(exclude_none=True, exclude={'key'})
-    with connect() as c:
-        try:
-            overlay = dramas.set_overlay(c, body.key, patch)
-        except dramas.DramaError as exc:
-            raise HTTPException(exc.status, str(exc))
-    return {'ok': True, 'overlay': overlay}
-
-
-@app.get('/api/drama-sources/diagnostics')
-async def drama_diagnostics(probe: bool = False, user=Depends(current_user)):
-    """给主人的体检报告：每台服务、每个组件现在是什么状态。
-
-    上游没有文档也没有状态页，出问题时只能靠这个自证：组件清单读得到吗？
-    分类能翻吗？第一条的详情里有没有可播地址？带 `?probe=1` 才会真的去打
-    上游（每个组件 2 次请求），不带只回缓存里的健康度。
-
-    `net` 是上游诊断快照里的网络模式（服务器直连 / 手机端直连 / 代理建议），
-    跟我们自己的 `health` 是两件事：前者说「这个源该由谁去连」，后者说
-    「我们刚才那一次请求成没成」。
-    """
-    with connect() as c:
-        cfg = dramas.load_config(c)
-    report = []
-    for svc in cfg['services']:
-        rows = []
-        try:
-            items = await asyncio.wait_for(
-                dramas.providers(svc['base'], refresh=probe), dramas.PROBE_TIMEOUT * 3)
-            online, error = True, ''
-        except Exception as exc:
-            items, online, error = [], False, str(exc) or '这台服务连不上'
-        nets = await dramas.diagnostics(svc['base']) if online else {}
-        reports = await dramas.diagnose_many(svc['base'], items) if (probe and online) else []
-        for item, extra in zip(items, reports or [{} for _ in items]):
-            row = {'id': item['id'], 'title': item['title'], 'version': item['version'],
-                   'caps': item['caps'], 'categories': len(item['categories']),
-                   'health': dramas.health_of(svc['base'], item['id']),
-                   'net': nets.get(item['id']) or {}}
-            row.update(extra)
-            rows.append(row)
-        report.append({'id': svc['id'], 'name': svc['name'], 'base': svc['base'],
-                       'online': online, 'error': error, 'providers': rows})
-    return {'services': report}
-
-
-@app.delete('/api/drama-sources/{sid}')
-def drop_drama_source(sid: str, user=Depends(current_user)):
-    with connect() as c:
-        try:
-            dramas.remove_service(c, sid)
-        except dramas.DramaError as exc:
-            raise HTTPException(exc.status, str(exc))
-    return {'ok': True}
-
-
-@app.get('/api/dramas/{sid}/{provider}')
-async def drama_list(sid: str, provider: str, category: str = '', page: int = 1,
-                     q: str = '', rank: str = '', user=Depends(current_user)):
-    with connect() as c:
-        svc = _drama_svc(c, sid, provider)
-    try:
-        # 列表 + 上游的分页信息（page/pageCount/total）一起给前端，
-        # 免得到处靠「这一页满没满」猜有没有下一页
-        return await dramas.list_items(svc['base'], provider, category, page, q, rank)
-    except dramas.DramaError as exc:
-        raise HTTPException(exc.status, str(exc))
-
-
-@app.get('/api/dramas/{sid}/{provider}/{item_id}')
-async def drama_detail(sid: str, provider: str, item_id: str,
-                       user=Depends(current_user)):
-    with connect() as c:
-        svc = _drama_svc(c, sid, provider)
-    try:
-        return await dramas.detail(svc['base'], provider, item_id)
-    except dramas.DramaError as exc:
-        raise HTTPException(exc.status, str(exc))
-
-
-@app.get('/api/dramas/{sid}/{provider}/{item_id}/source/{episode}')
-async def drama_source(sid: str, provider: str, item_id: str, episode: int,
-                       user=Depends(current_user)):
-    """选集时先问一句这一集是 mp4 还是 HLS，前端才知道该用 <video> 还是 hls.js。"""
-    with connect() as c:
-        svc = _drama_svc(c, sid, provider)
-    try:
-        is_hls = await dramas.probe_stream(svc['base'], provider, item_id, episode)
-    except dramas.DramaError as exc:
-        raise HTTPException(exc.status, str(exc))
-    return {'type': 'hls' if is_hls else 'mp4'}
-
-
-@app.get('/api/dramas/{sid}/{provider}/{item_id}/stream/{episode}')
-async def drama_stream(sid: str, provider: str, item_id: str, episode: int,
-                       request: Request, user=Depends(current_user)):
-    with connect() as c:
-        svc = _drama_svc(c, sid, provider)
-    try:
-        # HLS 不走字节转发：浏览器要的是一份「分片地址已经改写成同源」的播放列表，
-        # 真正的分片由 /api/drama-part 单独代理。
-        if await dramas.probe_stream(svc['base'], provider, item_id, episode):
-            text = await dramas.hls_playlist(svc['base'], provider, item_id, episode)
-            return Response(text, media_type='application/vnd.apple.mpegurl',
-                            headers={'Cache-Control': 'private, max-age=0, must-revalidate',
-                                     'X-Love-Stream': 'hls'})
-        upstream, client = await dramas.proxy(svc['base'], provider, item_id, episode,
-                                              request.headers.get('range', ''))
-    except dramas.DramaError as exc:
-        raise HTTPException(exc.status, str(exc))
-
-    headers = {'Cache-Control': 'private, max-age=0, must-revalidate'}
-    # 拖动进度全靠这几个头原样透传：少一个 Content-Range，浏览器就会当成整段重下
-    for name in ('content-range', 'accept-ranges', 'content-length'):
-        value = upstream.headers.get(name)
-        if value:
-            headers[name] = value
-    # 上游是 video/mp4，这里不猜，直接沿用；缺省按 mp4
-    media_type = upstream.headers.get('content-type') or 'video/mp4'
-
-    async def relay():
-        try:
-            async for chunk in upstream.aiter_bytes(64 * 1024):
-                yield chunk
-        finally:
-            await upstream.aclose()
-            await client.aclose()
-
-    return StreamingResponse(relay(), status_code=upstream.status_code,
-                             media_type=media_type, headers=headers)
-
-
-@app.get('/api/drama-part')
-async def drama_part(request: Request, t: str = '', user=Depends(current_user)):
-    """HLS 分片 / 密钥 / 子列表的统一出口。t 是服务端签发的，客户端造不出来。"""
-    try:
-        upstream, client = await dramas.part_proxy(t, request.headers.get('range', ''))
-    except dramas.DramaError as exc:
-        raise HTTPException(exc.status, str(exc))
-
-    headers = {'Cache-Control': 'private, max-age=3600'}
-    for name in ('content-range', 'accept-ranges', 'content-length'):
-        value = upstream.headers.get(name)
-        if value:
-            headers[name] = value
-    media_type = upstream.headers.get('content-type') or 'application/octet-stream'
-
-    async def relay():
-        try:
-            async for chunk in upstream.aiter_bytes(64 * 1024):
-                yield chunk
-        finally:
-            await upstream.aclose()
-            await client.aclose()
-
-    return StreamingResponse(relay(), status_code=upstream.status_code,
-                             media_type=media_type, headers=headers)
-
-
 class RecordInput(BaseModel):
     kind: str
     body: dict
@@ -1248,15 +931,8 @@ def clean_body(c, kind, data, user_id, previous=None):
                  'category', 'done', 'emoji', 'target', 'completion_post', 'sticker', 'amount',
                  'start', 'cycle', 'length', 'flow', 'symptoms',
                  'color', 'pain', 'sex', 'mood', 'weight', 'discharge', 'temp',
-                 'reply_to', 'pinned', 'location', 'song', 'watch_invite'}
+                 'reply_to', 'pinned', 'location', 'song'}
     body = {k: v for k, v in data.items() if k in permitted}
-    if 'watch_invite' in body:
-        # 一起看邀请卡片：文案与图标全部由前端按主题画，服务端只认一个版本号，
-        # 免得 body 变成任意 HTML / 任意跳转地址的载体。
-        invite = body['watch_invite']
-        if not isinstance(invite, dict) or invite.get('v') != 1:
-            raise HTTPException(422, '邀请卡片格式不正确')
-        body['watch_invite'] = {'v': 1}
     if 'location' in body:
         # 聊天里的「位置」消息：只存经纬度，地名让客户端去地图里显示，
         # 免得把第三方逆地理编码服务写进数据层。
@@ -1620,8 +1296,7 @@ def create_record(body: RecordInput, user=Depends(current_user)):
             event = 'chat' if body.kind == 'chat' else ('note' if body.kind == 'note' else 'activity')
             title = '你们的空间有了新记录'
             if body.kind == 'chat':
-                title = ('TA 邀请你一起看视频，快来' if cleaned.get('watch_invite')
-                         else '收到一条新消息')
+                title = '收到一条新消息'
             db.notice(c, event, title, rid, user['id'])
             # 新通知已入队：立即唤醒后台投递循环，推送不再等下一个轮询周期
             nudge_worker()
@@ -2311,10 +1986,8 @@ def delete_read_notices(user=Depends(current_user)):
 def _sse_probe(token: str, user_id: str, check_session: bool):
     """SSE 心跳探针：同步 sqlite 查询，必须放到线程里执行。
 
-    返回 (revision, private_revision, unread, watch_revision, chat_revision,
-    other_revision)；会话失效返回 None。
-    watch_revision 是「一起看状态」的独立计数器：它变了只意味着对方改了播放状态，
-    客户端据此只拉一次 /api/watch，不必把整站数据重拉一遍。
+    返回 (revision, private_revision, unread, chat_revision, other_revision)；
+    会话失效返回 None。
     chat_revision / other_revision 是「刷新的颗粒度」：聊天变了只重拉聊天窗口，
     别为了一句话把 1000 条非聊天记录和整本相册都搬一遍。
     """
@@ -2324,29 +1997,26 @@ def _sse_probe(token: str, user_id: str, check_session: bool):
         if check_session and not c.execute(
                 'SELECT 1 FROM sessions WHERE token=? AND expires>?', (token, now())).fetchone():
             return None
-        # 一次查询拿六样东西。revision 由触发器维护，是 O(1)，
+        # 一次查询拿五样东西。revision 由触发器维护，是 O(1)，
         # 与库里有多少年的记录无关。
         row = c.execute(
             "SELECT (SELECT value FROM app_state WHERE key='content_revision'),"
             "       (SELECT value FROM user_revisions WHERE user_id=:u),"
             "       (SELECT count(*) FROM notices WHERE user_id=:u AND seen=0),"
-            "       (SELECT value FROM app_state WHERE key='watch_revision'),"
             "       (SELECT value FROM app_state WHERE key='chat_revision'),"
             "       (SELECT value FROM app_state WHERE key='other_revision')",
             {'u': user_id}).fetchone()
-        return (row[0], row[1] or 0, row[2], row[3] or 0, row[4] or 0, row[5] or 0)
+        return (row[0], row[1] or 0, row[2], row[3] or 0, row[4] or 0)
 
 
-def _sse_payload(revision, private_revision, unread, watch_revision, previous,
+def _sse_payload(revision, private_revision, unread, previous,
                  chat_revision=0, other_revision=0):
     """这一轮 SSE 该推什么。
 
     refresh —— 整站数据变了（记录/聊天/照片），客户端要重拉一遍；
-    watch —— 一起看状态变了，客户端只要拉一次 /api/watch；
     chat / other —— 变化具体落在哪一类：
       chat=True 且 other=False 时，客户端只重拉聊天窗口就行（对方发了条消息的场景，
       占全部刷新的绝大多数）；其它组合一律退回整站刷新，宁可多拉不许漏。
-    以前这些变化混在一起推：对方动一下播放状态，我这边就得把整站数据重拉一遍。
     """
     parts = (previous or '').split(':')
 
@@ -2358,15 +2028,14 @@ def _sse_payload(revision, private_revision, unread, watch_revision, previous,
 
     changed = (revision != prev(0)) or (private_revision != prev(1)) \
         or (unread != prev(2))
-    changed_watch = watch_revision != prev(3)
-    if len(parts) < 6:
-        # 签名只有四段（升级瞬间的旧连接）：拿不到分类计数就当作两类都变了，
+    if len(parts) < 5:
+        # 签名只有三段（升级瞬间的旧连接）：拿不到分类计数就当作两类都变了，
         # 让客户端走整站刷新——兼容优先，不能因为缺字段就把变化漏过去。
         chat = other = True
     else:
-        chat = chat_revision != prev(4)
-        other = other_revision != prev(5)
-    return {'refresh': changed, 'watch': changed_watch, 'unread': unread,
+        chat = chat_revision != prev(3)
+        other = other_revision != prev(4)
+    return {'refresh': changed, 'unread': unread,
             'chat': chat, 'other': other}
 
 
@@ -2387,8 +2056,8 @@ async def events(request: Request, user=Depends(current_user)):
             probe = await asyncio.to_thread(_sse_probe, token, user['id'], rounds % 10 == 0)
             if probe is None:
                 break
-            revision, private_revision, unread, watch_revision, chat_revision, other_revision = probe
-            signature = (f'{revision}:{private_revision}:{unread}:{watch_revision}'
+            revision, private_revision, unread, chat_revision, other_revision = probe
+            signature = (f'{revision}:{private_revision}:{unread}'
                          f':{chat_revision}:{other_revision}')
             if previous is None:
                 # 首轮只建立基线，不推 data：EventSource 断线重连很常见（代理空闲超时、
@@ -2398,9 +2067,7 @@ async def events(request: Request, user=Depends(current_user)):
                 previous = signature
                 yield ': ready\n\n'
             elif signature != previous:
-                # 把「整站数据变了」和「一起看状态变了」分开报：
-                # 前者让客户端重拉记录/聊天/照片，后者只让对方拉一次 /api/watch。
-                payload = _sse_payload(revision, private_revision, unread, watch_revision,
+                payload = _sse_payload(revision, private_revision, unread,
                                        previous, chat_revision, other_revision)
                 payload['rev'] = signature
                 yield 'data: ' + dumps(payload) + '\n\n'
@@ -2834,7 +2501,7 @@ def test_webpush(user=Depends(current_user)):
 
 CHANNEL_KINDS = {'smtp', 'bark', 'serverchan', 'pushplus', 'wecom', 'webhook', 'telegram', 'dingtalk', 'feishu', 'ntfy'}
 EVENTS = {'chat', 'comment', 'note', 'activity', 'anniversary', 'wish', 'surprise', 'habit',
-          'backup', 'storage', 'system', 'period', 'watch'}
+          'backup', 'storage', 'system', 'period'}
 
 
 class ChannelInput(BaseModel):
@@ -3484,7 +3151,6 @@ _POSE_AI_BOOT = """<script>
   } catch (e) {}
 })();
 </script>"""
-
 
 
 def _inject_pose_ai_boot(html: str) -> str:

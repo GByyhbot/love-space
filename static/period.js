@@ -6,7 +6,7 @@
    口径：两个人共同维护同一条周期，谁都能记能改，页面看到的完全一样
    （后端 period.visible / db.visible 同口径）。没有「共享 / 私密」也没有「替谁记」。
 
-   ⚠️ 和 app.js 共享全局作用域（classic script），不用 module 的原因见 watch.js 首部。
+   ⚠️ 和 app.js 共享全局作用域（classic script），不用 module 的原因见 app.js 首部。
    ⚠️ 必须排在 app.js 之前加载：navigate('together') 会调 periodPage()。
 
 /* ———— 生理期 ————
