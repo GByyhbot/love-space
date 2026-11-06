@@ -240,7 +240,6 @@ public class MainActivity extends BridgeActivity {
     private void pushImeHeight(final WebView wv, final int px, final int[] lastPx) {
         if (px == lastPx[0]) return;
         lastPx[0] = px;
-        Log.d(TAG, "kb imeHeight=" + px);
         try {
             final int h = px;
             wv.post(new Runnable() {
@@ -248,17 +247,8 @@ public class MainActivity extends BridgeActivity {
                     try {
                         wv.evaluateJavascript(
                                 "(function(){try{if(typeof window.__kbSetNative==='function')window.__kbSetNative("
-                                        + h + ");return 'ok kbh='+document.documentElement.style.getPropertyValue('--kb-h')"
-                                        + "+' shift='+(document.documentElement.style.getPropertyValue('--kb-shift')||'-')"
-                                        + "+' innerH='+window.innerHeight"
-                                        + "+' vvh='+(window.visualViewport?Math.round(window.visualViewport.height):'na')"
-                                        + "+' dpr='+window.devicePixelRatio;}catch(e){return 'err '+e;}})()",
-                                new android.webkit.ValueCallback<String>() {
-                                    @Override public void onReceiveValue(String v) {
-                                        Log.d(TAG, "kb js ret=" + v);
-                                    }
-                                });
-                    } catch (Exception e) { Log.w(TAG, "kb js fail", e); }
+                                        + h + ");}catch(e){}})()", null);
+                    } catch (Exception ignored) {}
                 }
             });
         } catch (Exception ignored) {}
