@@ -66,10 +66,113 @@ def decrypt_blob(raw: bytes, password: str) -> bytes:
         raise ValueError('解密失败：备份密码不正确')
 
 
-def encrypt_file(source: Path, password: str) -> Path:
-    target = source.with_suffix('.zip.enc')
-    target.write_bytes(encrypt_bytes(source.read_bytes(), password))
+def decrypt_file(source: Path, target: Path, password: str) -> Path:
+    """把 .zip.enc 流式解密到 target，避免恢复时把整个包读进内存（同 encrypt_file 的坑）。
+
+    格式：magic + b64(salt) + \\n + b64(nonce) + \\n + ciphertext + tag(16)。"""
+    import base64
+    with open(source, 'rb') as f:
+        if f.read(len(_ENC_MAGIC)) != _ENC_MAGIC:
+            raise ValueError('不是加密的恋爱空间备份')
+        try:
+            salt = base64.b64decode(f.readline().strip())
+            nonce = base64.b64decode(f.readline().strip())
+        except Exception:
+            raise ValueError('加密备份文件已损坏')
+        aad = salt + _ENC_MAGIC
+        key = _aesgcm_key(password, salt)
+        # tag 在文件末尾 16 字节，先把正文长度算出来
+        f.seek(0, os.SEEK_END)
+        total = f.tell()
+        f.seek(0)
+        f.read(len(_ENC_MAGIC))
+        f.readline()
+        f.readline()
+        body_start = f.tell()
+        body_len = total - body_start - 16
+        if body_len < 0:
+            raise ValueError('加密备份文件已损坏')
+        f.seek(total - 16)
+        tag = f.read(16)
+        f.seek(body_start)
+        _cipher, dec = _gcm_decryptor(key, nonce, tag, aad)
+        chunk = 4 * 1024 * 1024
+        remaining = body_len
+        try:
+            with open(target, 'wb') as out:
+                while remaining > 0:
+                    block = f.read(min(chunk, remaining))
+                    if not block:
+                        break
+                    remaining -= len(block)
+                    out.write(dec.update(block))
+                out.write(dec.finalize())   # GCM 校验失败会在这里抛 InvalidTag
+        except Exception:
+            target.unlink(missing_ok=True)
+            raise ValueError('解密失败：备份密码不正确')
     return target
+
+
+def encrypt_file(source: Path, password: str) -> Path:
+    """把 source 加密成 source.zip.enc，**分块流式**读写，不把整个包读进内存。
+
+    🔴 2026-11-07 事故根因就在这里：旧实现是
+        target.write_bytes(encrypt_bytes(source.read_bytes(), password))
+    三步同时占内存 —— read_bytes 读入 975MB、AESGCM.encrypt 内部再生成一份密文、
+    encrypt_bytes 里 `_ENC_MAGIC + b64 + ... + encrypted` 拼接又复制一份，
+    峰值接近 3× 包体。容器 Memory 上限 2GiB，进程在 2.08GB 时被内核 OOM kill，
+    表现是「备份永远失败、日志里什么都没有」（还没 print 就被杀了）。
+
+    AES-GCM 本身是流式算法（Cipher + encryptor.update 可增量喂数据），
+    所以完全可以边读边写：内存里只留一个 chunk。
+    格式保持与 encrypt_bytes 完全一致，老包照旧能解。
+    """
+    import base64
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    salt, nonce = os.urandom(16), os.urandom(12)
+    key = _aesgcm_key(password, salt)
+    aad = salt + _ENC_MAGIC
+    target = source.with_suffix('.zip.enc')
+    part = target.with_name(target.name + '.tmp')
+    chunk = 4 * 1024 * 1024      # 4MB：够大不拖慢，够小不占内存
+    try:
+        with open(part, 'wb') as out:
+            # 头部与 encrypt_bytes 逐字节一致：magic + b64(salt) + \n + b64(nonce) + \n
+            out.write(_ENC_MAGIC + base64.b64encode(salt) + b'\n' + base64.b64encode(nonce) + b'\n')
+            # AESGCM 未暴露 encryptor 句柄，但这层封装按 nonce 一次性认证整段数据；
+            # 为了流式，改用底层 Cipher —— 语义与 AESGCM.encrypt 相同（GCM 模式 + aad）。
+            cipher, enc = _gcm_encryptor(key, nonce, aad)
+            with open(source, 'rb') as src:
+                while True:
+                    block = src.read(chunk)
+                    if not block:
+                        break
+                    out.write(enc.update(block))
+            out.write(enc.finalize())
+            out.write(enc.tag)          # GCM 认证标签在 encryptor 上，不在 cipher 上
+        part.replace(target)
+        return target
+    finally:
+        part.unlink(missing_ok=True)
+
+
+def _gcm_encryptor(key: bytes, nonce: bytes, aad: bytes):
+    """返回 (cipher, encryptor)，AES-GCM 模式，与 AESGCM.encrypt 输出格式一致。
+
+    AESGCM.encrypt 的产物是 ciphertext||tag(16)，所以这里 finalize 后再补 tag。"""
+    from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+    cipher = Cipher(algorithms.AES(key), modes.GCM(nonce))
+    enc = cipher.encryptor()
+    enc.authenticate_additional_data(aad)
+    return cipher, enc
+
+
+def _gcm_decryptor(key: bytes, nonce: bytes, tag: bytes, aad: bytes):
+    from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+    cipher = Cipher(algorithms.AES(key), modes.GCM(nonce, tag))
+    d = cipher.decryptor()
+    d.authenticate_additional_data(aad)
+    return cipher, d
 
 
 def decrypt_bytes(source: Path, password: str) -> bytes:
@@ -234,7 +337,9 @@ def restore_backup(source, destination, password=''):
         import tempfile
         with tempfile.TemporaryDirectory(dir=destination.parent) as tmp:
             plain = Path(tmp) / 'decrypted.zip'
-            plain.write_bytes(decrypt_bytes(source, password))
+            # 流式解密：旧写法 plain.write_bytes(decrypt_bytes(source, password))
+            # 会把整个包读进内存，和 encrypt_file 一样会 OOM（2026-11-07 事故同源）。
+            decrypt_file(source, plain, password)
             with zipfile.ZipFile(plain) as archive:
                 _extract_backup(archive, destination, password)
     else:
