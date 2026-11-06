@@ -287,20 +287,80 @@ function syncCompose(){
  if(form&&ta){form.classList.toggle('has-text',!!ta.value.trim());autoGrow(ta);}
  const wt=$('#watch-text');if(wt)autoGrow(wt);
 }
-/* 键盘避让：Chrome 108+ 的 interactive-widget=resizes-content 会让布局视口跟着键盘
-   一起缩，输入栏自然浮在键盘上；旧 WebView 只缩视觉视口，这里用 --kb-h 手动顶上去。 */
-function syncKeyboard(){
- const vv=window.visualViewport;if(!vv)return;
- /* APK + Android 15：系统强制 edge-to-edge，键盘弹出时窗口不缩，innerHeight 与
-    vv.height 都不变 → 下面必然算出 0，把原生键盘高度桥写进去的真值冲掉。
-    原生一旦接管（data-native-kb），这里就彻底让路。 */
- if(document.documentElement.hasAttribute('data-native-kb'))return;
- const hidden=Math.max(0,Math.round(window.innerHeight-vv.height-vv.offsetTop));
- document.documentElement.style.setProperty('--kb-h',hidden>90?hidden+'px':'0px');
+/* 键盘避让：三套环境，一个判据。
+   ── 谁需要顶 ──
+   targetSdk 35 起 Android 15 强制 edge-to-edge，键盘弹出时窗口不缩，innerHeight 与
+   visualViewport.height 都不变，网页自己再也算不出键盘高度 → 靠 APK 原生侧把 IME
+   高度递进来（window.__kbPx / __kbSetNative）。
+   ── 谁不需要顶 ──
+   index.html 的 viewport 带 interactive-widget=resizes-content，一部分 WebView/系统
+   键盘一出来就把布局视口自己缩掉，内容已经让开了；旧机器则是系统 adjustResize。
+   这两种情况下再叠一次原生高度就是「让两次」，输入栏会被一路顶到状态栏底下。
+   ── 判据 ──
+   kbBase（无键盘时的布局高度）减去当前 innerHeight = 布局视口已经被缩掉多少。
+   缩过 → 这台机器会让位，--kb-h 一律 0；没缩 → 才用原生高度或视觉视口差值。
+   只要观测到一次「缩过」就记住这台机器，之后不等观测直接归零。 */
+let kbBase=(Math.round(window.innerHeight)||0);   // 无键盘时的布局高度基线
+let kbNative=0, kbLegacy=0, kbMode='', kbWrote=-1, kbWatch=0, kbWasOpen=0;
+const KB_RESIZE='ls.kbmode.resize';
+try{if(localStorage.getItem(KB_RESIZE)==='1')kbMode='resize';}catch(e){}
+
+function kbWrite(v){
+ if(v<90)v=0;
+ kbWrote=v;
+ document.documentElement.style.setProperty('--kb-h',v?v+'px':'0px');
  /* kb-open 用来给"底部安全区内边距"让位：键盘顶上来时那块安全区已经被键盘占了，
     再留一道 env(safe-area-inset-bottom) 就成了多出来的空白条。 */
- if(document.body)document.body.classList.toggle('kb-open',hidden>90);
+ if(document.body)document.body.classList.toggle('kb-open',v>0);
 }
+
+/* 键盘刚弹出来那一小段（原生写入与布局收缩的先后顺序不固定），开一个 700ms 的
+   看护窗口多确认几轮；只在「刚变成开着」时开一次，不会空转。 */
+function kbArm(open){
+ if(open&&!kbWasOpen)kbWatch=Date.now()+700;
+ kbWasOpen=open?1:0;
+ if(Date.now()<kbWatch)setTimeout(syncKeyboard,120);
+}
+
+function syncKeyboard(){
+ const ih=Math.round(window.innerHeight);
+ if(ih>kbBase)kbBase=ih;                       // 键盘收起时这里就是真基线
+ const vv=window.visualViewport;
+ const vvHidden=vv?Math.max(0,Math.round(ih-vv.height-vv.offsetTop)):0;
+ const shrunk=Math.max(0,kbBase-ih);           // 布局视口已经缩掉的高度
+ const cap=Math.round(ih*0.6);                 // 兜底：键盘不可能占到六成屏以上
+
+ /* 老包（1.6.21 及以前）的原生桥直接把值写进 --kb-h。不是我们写的就读回来记着，
+    我们这个值一直认它，别被自己的写入冲掉（否则每轮都会 432→0 来回跳）。 */
+ const cur=parseFloat(document.documentElement.style.getPropertyValue('--kb-h'))||0;
+ if(Math.abs(cur-kbWrote)>0.5)kbLegacy=cur;
+
+ if(shrunk>90&&kbMode!=='resize'){             // 这台机器会让位，记下来
+  kbMode='resize';
+  try{localStorage.setItem(KB_RESIZE,'1');}catch(e){}
+ }
+ if(kbMode==='resize'){                        // 已经让过位，绝不再叠加
+  kbWrite(0);
+  kbArm(kbLegacy>0);
+  return;
+ }
+
+ let v=Math.max(vvHidden,kbNative,kbLegacy);
+ /* 更早的包连 DPR 都没除就把物理像素写了进来：值超过上限就按 DPR 折回来 */
+ if(kbLegacy>cap)v=Math.max(vvHidden,kbNative,Math.round(kbLegacy/(window.devicePixelRatio||1)));
+ if(v>0&&shrunk>v*0.5)v=0;                     // 观测到缩了：浏览器让过了
+ if(v>cap)v=cap;
+ if(v<90)v=0;
+ kbWrite(v);
+ kbArm(v>0);
+}
+/* 新包的原生桥走这里：传物理像素，换算成 CSS px 由网页统一做（只有这里知道
+   devicePixelRatio，也只有这里知道布局视口有没有被别人缩过）。 */
+window.__kbSetNative=function(px){
+ kbNative=px>0?Math.round(px/(window.devicePixelRatio||1)):0;
+ if(px<=0){const ih=Math.round(window.innerHeight);if(ih>kbBase)kbBase=ih;}
+ syncKeyboard();
+};
 
 /* ── 聊天里直接发文件（相册 / 拍摄 / 录音都走这里）───────────────── */
 async function sendChatFiles(files){
