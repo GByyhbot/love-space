@@ -4,7 +4,6 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
-import android.content.res.Configuration;
 import android.net.ConnectivityManager;
 import android.net.Network;
 import android.net.NetworkCapabilities;
@@ -178,49 +177,48 @@ public class MainActivity extends BridgeActivity {
         setupLocalStorage();
         // ⑤ Android 15 键盘避让：targetSdk 35 强制 edge-to-edge，系统不再随键盘缩窗口，
         //    windowSoftInputMode=adjustResize 形同虚设，键盘直接盖住输入框（Redmi Note 12
-        //    Turbo 实测）。这里手动把 IME inset 应用成 WebView 高度，等效 adjustResize；
+        //    Turbo 实测）。v1.6.15：WebView 平时四边贴满（完整 edge-to-edge，状态栏/手势条
+        //    由网页毛玻璃自绘+避让，系统栏与页面视觉统一），键盘弹出时只缩底边到键盘上沿；
+        //    listener 挂在 WebView 父容器上（挂 WebView 会拦掉 Chromium 的 env()）。
         //    Android 15 以下系统会自己缩，交给系统（不重复处理，避免双重收缩）。
         setupKeyboardResize();
     }
 
-    /** 记录上次给 WebView 设的边距/高度，insets 反复回调但值没变时跳过 setLayoutParams，防止布局抖动。 */
-    private int lastTop = Integer.MIN_VALUE, lastBottom = Integer.MIN_VALUE,
-                lastLeft = Integer.MIN_VALUE, lastRight = Integer.MIN_VALUE,
-                lastHeight = Integer.MIN_VALUE;
+    /** 记录上次给 WebView 设的底部边距，insets 反复回调但值没变时跳过 setLayoutParams，防止布局抖动。 */
+    private int lastBottom = Integer.MIN_VALUE;
 
     private void setupKeyboardResize() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.VANILLA_ICE_CREAM) return;
         View wv = getBridge() == null ? null : getBridge().getWebView();
-        if (wv == null) return;
-        ViewCompat.setOnApplyWindowInsetsListener(wv, (v, windowInsets) -> {
+        if (wv == null || !(wv.getParent() instanceof ViewGroup)) return;
+        ViewGroup parent = (ViewGroup) wv.getParent();
+        // 🔴 listener 必须挂在 WebView 的「父容器」上，而不是 WebView 自己：
+        //    挂在 WebView 上会替代（拦截掉）WebView 内部 Chromium 的 inset 处理，
+        //    网页 env(safe-area-inset-*) 恒为 0，网页就无法自己避让状态栏/手势条；
+        //    挂在父容器上并把 insets 原样返回，insets 会照常分发给 WebView（Chromium
+        //    拿到真实值，网页毛玻璃顶栏能延伸到状态栏后面），我们只趁机改 WebView 边距。
+        ViewCompat.setOnApplyWindowInsetsListener(parent, (v, windowInsets) -> {
             Insets bars = windowInsets.getInsets(
                     WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout());
             Insets ime = windowInsets.getInsets(WindowInsetsCompat.Type.ime());
-            ViewGroup.MarginLayoutParams mlp = (ViewGroup.MarginLayoutParams) v.getLayoutParams();
-            boolean portrait = getResources().getConfiguration().orientation
-                    == Configuration.ORIENTATION_PORTRAIT;
+            ViewGroup.MarginLayoutParams mlp = (ViewGroup.MarginLayoutParams) wv.getLayoutParams();
             // 键盘是否真的弹出（ime 覆盖导航栏才算，别把手势条当键盘）
-            boolean keyboard = portrait && ime.bottom > bars.bottom;
-            // 三边与 Capacitor edgeToEdgeHandler 同款；底部：键盘弹出时顶到键盘上沿。
-            // 不动 height（保持 MATCH_PARENT）——WebView 顶边永远不动，顶部不可能被裁；
-            // MATCH_PARENT + bottomMargin 让 WebView 高度自动收缩，等效 adjustResize。
-            int bottom = keyboard ? ime.bottom : bars.bottom;
-            mlp.leftMargin = bars.left;
-            mlp.rightMargin = bars.right;
-            mlp.topMargin = bars.top;
-            mlp.bottomMargin = bottom;
+            boolean keyboard = ime.bottom > bars.bottom;
+            // v1.6.15：WebView 平时四边贴满屏幕（完整 edge-to-edge），状态栏/手势条
+            // 区域由网页自己铺 + 避让（顶栏毛玻璃、底部 env(safe-area-inset-bottom)），
+            // 视觉上系统栏与页面融为一体。键盘弹出时只把底边缩到键盘上沿
+            // （bottomMargin = ime.bottom，等效 adjustResize）；
+            // 顶边永远不动（topMargin 恒 0）——顶部不可能再被裁。
+            mlp.leftMargin = 0;
+            mlp.rightMargin = 0;
+            mlp.topMargin = 0;
+            mlp.bottomMargin = keyboard ? ime.bottom : 0;
             mlp.height = ViewGroup.LayoutParams.MATCH_PARENT;
-            if (mlp.topMargin != lastTop || mlp.bottomMargin != lastBottom
-                    || mlp.leftMargin != lastLeft || mlp.rightMargin != lastRight
-                    || mlp.height != lastHeight) {
-                v.setLayoutParams(mlp);
-                lastTop = mlp.topMargin;
+            if (mlp.bottomMargin != lastBottom) {
+                wv.setLayoutParams(mlp);
                 lastBottom = mlp.bottomMargin;
-                lastLeft = mlp.leftMargin;
-                lastRight = mlp.rightMargin;
-                lastHeight = mlp.height;
             }
-            return WindowInsetsCompat.CONSUMED;
+            return windowInsets;   // 不消费：继续传给 WebView，Chromium 的 env() 才有真实值
         });
     }
 

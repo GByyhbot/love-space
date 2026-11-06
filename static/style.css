@@ -2136,13 +2136,13 @@ body.figure-full{overflow:hidden;height:100dvh}
    浏览器完全不受影响。Android 15 起强制 edge-to-edge，网页会铺到状态栏下面，
    所以顶栏必须自己让出一条状态栏的高度。
 
-   --safe-top：状态栏高度，由 env() 给出。
-   v1.6.14 起 APK 在 Android 15+ 用原生 topMargin 避让状态栏（MainActivity
-   setupKeyboardResize），且 insets 被 CONSUMED → env() 恒为 0 → 这里必须得 0，
-   否则「原生让一次 + 网页再让一次」双重避让，状态栏和顶栏之间凭空多一段空白
-   （真机截图实测）。早期 clamp(24px,...) 的兜底下限就是那 24px 空白的来源，
-   已去掉——原生接管后网页侧一律 0，浏览器不进这条规则不受影响。 */
-html.is-native-app{--safe-top:env(safe-area-inset-top,0px)}
+   --safe-top：状态栏高度。v1.6.15 起 APK 侧 WebView 四边贴满屏幕（完整 edge-to-edge，
+   原生不再加 topMargin，insets 透传给 Chromium）→ env() 有真实值，网页自己避让一次、
+   顶栏毛玻璃自然延伸到状态栏后面。clamp 的 24px 下限是给拿不到 env() 的老 WebView
+   兜底的（27~36px 的状态栏高度区间，24px 大多数机器够用）；封顶 36px 防个别机型
+   env() 多报把顶栏推下去一大块。⚠️ 这条与原生 MainActivity.setupKeyboardResize()
+   是一对：那边若恢复 topMargin=bars.top，这里就必须归零，否则双重避让出空白。 */
+html.is-native-app{--safe-top:clamp(24px, env(safe-area-inset-top,0px), 36px)}
 
 /* 顶栏用「负上边距抵消主区上内边距 + 自身 padding-top」把自己顶到 y=0，
    这样它的背景始终盖住状态栏那条缝；再 position:sticky 钉在顶部，滚内容时导航栏不动。 */
