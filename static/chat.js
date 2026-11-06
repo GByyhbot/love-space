@@ -292,7 +292,7 @@ function syncCompose(){
       否则壁纸补偿对不上、图会跟着键盘漂。
       2026-11-06 就是在这里改坏主人机的（KbLive 90→10、--kb-shift 改用平滑值、
       kbUp 记忆值把输入栏粘在高位），三处一起回归。 */
-let kbShrink=0,kbNativePx=0,kbBaseH=0;
+let kbShrink=0,kbNativePx=0,kbBaseH=0,kbViewShrink=0;
 /* B 类机器平滑用的状态 */
 let kbSmooth=0,kbRaf=0,kbTarget=0;
 const kbDpr=()=>window.devicePixelRatio||1;
@@ -302,7 +302,13 @@ function syncKeyboard(){
  if(!kbBaseH||ih>kbBaseH)kbBaseH=ih;   /* 基准：见过的最大布局视口高度，换屏/旋转自动跟随 */
  const hidden=Math.max(0,Math.round(ih-vv.height-vv.offsetTop));
  /* 布局视口被键盘缩掉了 → A 类机器，原生桥永久让位 */
- if(Math.round(kbBaseH-ih)>90)kbShrink=1;
+ const viewShrink=Math.max(0,Math.round(kbBaseH-ih));
+ /* 壁纸补偿量：布局视口比基准矮了多少，就是 .chat-panel 被压掉了多少。
+     键盘弹出 → 取当前收缩量；键盘收起（viewShrink 回到 0）→ 自动归零。
+     ⚠️ 别用 hidden 当补偿量：A 类机器的 innerHeight 与 vv.height 同步缩，
+     hidden 只有 0~20，永远到不了 >90，补偿就一直是 0（2026-11-07 背景放大的根因）。 */
+ kbViewShrink=viewShrink>90?viewShrink:0;
+ if(viewShrink>90)kbShrink=1;
 
  /* ── A 类机器：完全沿用 e6cf8d1 的算法，一帧不平滑 ── */
  if(kbShrink||hidden>90){
@@ -328,11 +334,19 @@ function syncKeyboard(){
      · --kb-h   = hidden>90 ? hidden : 0
      · --kb-shift = (kbShrink && hidden>90) ? hidden : 0
    kbShrink 表示"布局视口真的被键盘缩过"；浏览器/老内核只缩视觉视口时
-   kbShrink=0，此时壁纸本来就不会变矮，**绝不能**写 shift，否则会把壁纸拉长。 */
+   kbShrink=0，此时壁纸本来就不会变矮，**绝不能**写 shift，否则会把壁纸拉长。
+   壁纸补偿量用 kbViewShrink。
+   （2026-11-07 修正：之前用 hidden 做补偿量，但 A 类机器的 hidden 只有 0~20，
+   永远满足不了 >90，于是 --kb-shift 恒为 0，壁纸跟着 .chat-panel 一起变矮
+   → background-size:cover 按新的宽高比重算 → **键盘一弹背景就被放大**。
+   .chat-panel 的高度是被「布局视口缩小量」压下去的，补偿量就该用这个量。） */
 function applyKbA(hidden){
  const h=hidden>90?hidden:0;
+ const shrink=kbViewShrink;   /* 布局视口被键盘缩掉多少（CSS px） */
  document.documentElement.style.setProperty('--kb-h',h>0?h+'px':'0px');
- document.documentElement.style.setProperty('--kb-shift',(kbShrink&&hidden>90)?hidden+'px':'0px');
+ document.documentElement.style.setProperty('--kb-shift',shrink>0?shrink+'px':'0px');
+ /* kb-open 只管「底部安全区让位」，条件保持原样（h>90），不掺 shrink ——
+    它会影响 .pick-overlay / .ps-foot 的 padding，改语义等于连带改别的界面。 */
  if(document.body)document.body.classList.toggle('kb-open',h>90);
  noteKbPanel(h);
 }

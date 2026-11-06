@@ -854,10 +854,13 @@ body.chat-full .fn-panel{padding-bottom:calc(14px + env(safe-area-inset-bottom))
 /* 置顶条/筛选条是固定在消息区顶部的横条，别让它们被 flex 拉伸或滚走 */
 .chat-body>.chat-pinned,.chat-body>.chat-search-bar{flex:none}
 .chat-wallpaper{position:absolute;inset:0;z-index:0;background-size:cover;background-position:center;background-repeat:no-repeat;pointer-events:none}
-/* 键盘补偿：布局视口被键盘缩掉时（Android 17 一类机器），.chat-wallpaper 会跟着变矮、
-   cover 重新适配 → 图片视觉上"往上窜"。用 --kb-shift 把层高加回去，尺寸与位置都维持原样，
-   超出的部分落在键盘底下，被 .chat-panel 的 overflow:hidden 裁掉，看不见。
-   --kb-shift 只在真的发生了视口收缩时才非 0（见 chat.js:syncKeyboard），平时这条不生效。 */
+/* 键盘补偿：布局视口被键盘缩掉时（Android 17 一类机器），.chat-panel 会跟着变矮，
+   壁纸层若也一起变矮，background-size:cover 会按新宽高比重新适配 → 照片被放大。
+   这里把层高加回键盘收缩量（--kb-shift），等于始终按「键盘弹出前」的尺寸渲染。
+   多出来的部分落在键盘底下，被 .chat-panel 的 overflow:hidden 裁掉。
+   ⚠️ 上面的 inset:0 与这里的 height 同时存在属 over-constrained（CSS2.1 10.6.4），
+   此时 bottom 被忽略、height 生效 —— 所以这条是有效的，别以为被 inset 盖掉又去改结构。
+   --kb-shift 只在真的发生视口收缩时才非 0（见 chat.js:applyKbA），平时不生效。 */
 .chat-wallpaper{height:calc(100% + var(--kb-shift,0px))}
 .chat-wallpaper::after{content:'';position:absolute;inset:0;background:var(--veil,var(--bg));opacity:var(--chat-bg-dim,.35)}
 /* 照片壁纸用深色遮罩（浅色遮罩会把照片冲成灰白，白字也读不清），但只叠很薄一层：
