@@ -25,6 +25,7 @@ import android.webkit.WebView;
 
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsAnimationCompat;
 import androidx.core.view.WindowInsetsCompat;
 
 import java.io.BufferedReader;
@@ -40,6 +41,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -187,6 +189,21 @@ public class MainActivity extends BridgeActivity {
     /** 记录上次给 WebView 设的底部边距，insets 反复回调但值没变时跳过 setLayoutParams，防止布局抖动。 */
     private int lastBottom = Integer.MIN_VALUE;
 
+    /** 把 WebView 底边缩到 bottom（其余三边恒 0、高度 MATCH_PARENT），带防抖。
+        键盘动画回调与 insets 分发两条路都走这里。 */
+    private void applyBottomMargin(View wv, int bottom) {
+        ViewGroup.MarginLayoutParams mlp = (ViewGroup.MarginLayoutParams) wv.getLayoutParams();
+        mlp.leftMargin = 0;
+        mlp.rightMargin = 0;
+        mlp.topMargin = 0;
+        mlp.bottomMargin = bottom;
+        mlp.height = ViewGroup.LayoutParams.MATCH_PARENT;
+        if (bottom != lastBottom) {
+            wv.setLayoutParams(mlp);
+            lastBottom = bottom;
+        }
+    }
+
     private void setupKeyboardResize() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.VANILLA_ICE_CREAM) return;
         View wv = getBridge() == null ? null : getBridge().getWebView();
@@ -201,7 +218,6 @@ public class MainActivity extends BridgeActivity {
             Insets bars = windowInsets.getInsets(
                     WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout());
             Insets ime = windowInsets.getInsets(WindowInsetsCompat.Type.ime());
-            ViewGroup.MarginLayoutParams mlp = (ViewGroup.MarginLayoutParams) wv.getLayoutParams();
             // 键盘是否真的弹出（ime 覆盖导航栏才算，别把手势条当键盘）
             boolean keyboard = ime.bottom > bars.bottom;
             // v1.6.15：WebView 平时四边贴满屏幕（完整 edge-to-edge），状态栏/手势条
@@ -209,16 +225,23 @@ public class MainActivity extends BridgeActivity {
             // 视觉上系统栏与页面融为一体。键盘弹出时只把底边缩到键盘上沿
             // （bottomMargin = ime.bottom，等效 adjustResize）；
             // 顶边永远不动（topMargin 恒 0）——顶部不可能再被裁。
-            mlp.leftMargin = 0;
-            mlp.rightMargin = 0;
-            mlp.topMargin = 0;
-            mlp.bottomMargin = keyboard ? ime.bottom : 0;
-            mlp.height = ViewGroup.LayoutParams.MATCH_PARENT;
-            if (mlp.bottomMargin != lastBottom) {
-                wv.setLayoutParams(mlp);
-                lastBottom = mlp.bottomMargin;
-            }
+            applyBottomMargin(wv, keyboard ? ime.bottom : 0);
             return windowInsets;   // 不消费：继续传给 WebView，Chromium 的 env() 才有真实值
+        });
+        // 🔴 键盘弹出/收起是 ~300ms 的动画，普通 insets 分发只在动画「首/尾」给值：
+        //    动画期间键盘已经升起而 WebView 还没缩，输入框仍停在屏幕底部，被键盘
+        //    逐渐盖过再「跳」到键盘上沿——真机上就是「输入框在导航栏下方闪过一下」
+        //    （主人录屏确认）。WindowInsetsAnimationCompat 的 onProgress 每帧给 IME
+        //    中间值，底边距跟着逐帧应用，WebView 与键盘动画完全同步，输入框始终
+        //    浮在键盘上沿。挂 WebView 自己（与 insets listener 不冲突，是平行机制）。
+        ViewCompat.setWindowInsetsAnimationCallback(wv, new WindowInsetsAnimationCompat.Callback(
+                WindowInsetsAnimationCompat.Callback.DISPATCH_MODE_CONTINUE_ON_SUBTREE) {
+            @Override
+            public WindowInsetsCompat onProgress(WindowInsetsCompat insets,
+                                                 List<WindowInsetsAnimationCompat> runningAnimations) {
+                applyBottomMargin(wv, insets.getInsets(WindowInsetsCompat.Type.ime()).bottom);
+                return insets;
+            }
         });
     }
 
