@@ -22,6 +22,11 @@ from .db import connect, dumps, now
 from . import period
 from .security import PURPOSE_CHANNEL_CONFIG, cipher, decrypt_with_fallback
 from .backups import BackupRefused, create_backup, storage_lock
+
+# 自动备份失败后的重试间隔：1 小时。
+# 不能让失败的程序每分钟重试（2026-11-07 磁盘被 33 个残包吃满 31G），
+# 也不该直接放弃到第二天，留出自愈窗口。
+BACKUP_RETRY_AFTER = 3600
 from . import notifications
 
 log = logging.getLogger('love.worker')
@@ -494,6 +499,16 @@ def cleanup():
     for path in (db.DATA / 'tmp').glob('*.zip'):
         if now() - path.stat().st_mtime > 86400:
             path.unlink(missing_ok=True)
+    # 备份残包兜底清理：失败的备份会留下 .partial，正常情况下 finally 里已经删了，
+    # 但磁盘写满时连 unlink 都可能失败。这里把超过 1 小时的残包一律清掉，
+    # 避免 2026-11-07 那种「每个残包近 1GB、堆到 31G 吃满磁盘」的事故重演。
+    for path in (db.DATA / 'backups').glob('*.partial'):
+        try:
+            if now() - path.stat().st_mtime > 3600:
+                path.unlink(missing_ok=True)
+                log.warning('清理残留备份包 %s', path.name)
+        except OSError:
+            pass
 
 
 def maintenance():
@@ -517,7 +532,12 @@ def maintenance():
         except Exception as exc:
             # 通知里只能说人话，真实原因（磁盘满 / 权限 / 密钥损坏）进日志
             log.exception('自动备份失败')
+            # 🔴 失败也要推进 last_backup，否则 maintenance 每分钟重跑一遍、
+            # 每次都写一个近 1GB 的残包 —— 2026-11-07 磁盘就是这么被吃满 31G 的。
+            # 但也不能直接推 24 小时（那等于放弃当天的自动备份），
+            # 这里退避 1 小时：既止住风暴，又给磁盘/权限问题留出自愈机会。
             with connect() as c:
+                db.set_setting(c, 'last_backup', now() - 86400 + BACKUP_RETRY_AFTER)
                 day = dt.datetime.now(dt.timezone.utc).date().isoformat()
                 db.notice(c, 'backup', f'自动备份失败（{type(exc).__name__}），请检查存储和目录权限',
                           dedupe='backup-failed:' + day)

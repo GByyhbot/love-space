@@ -84,6 +84,29 @@ def is_encrypted(path: Path) -> bool:
         return False
 
 
+def _estimate_backup_bytes(backups_dir: Path) -> int:
+    """估算一次备份要占多少空间，用于写之前预检。
+
+    构成：媒体文件总大小（zip 里基本压不动，图片/视频已是压缩格式）
+    + 数据库（压缩后很小，按 10MB 粗估）+ 50MB 余量兜底。
+    媒体目录扫不出来（权限/不存在）时给个保守的 2GB，宁可拒绝也不写爆磁盘。"""
+    media_total = 0
+    try:
+        for sub in ('media', 'out', 'bubbles'):
+            folder = db.DATA / sub
+            if not folder.is_dir():
+                continue
+            for path in folder.rglob('*'):
+                try:
+                    if path.is_file():
+                        media_total += path.stat().st_size
+                except OSError:
+                    continue
+    except OSError:
+        return 2 * 1024 ** 3
+    return media_total + 10 * 1048576 + 50 * 1048576
+
+
 def create_backup():
     with storage_lock:
         password = backup_password()
@@ -93,6 +116,15 @@ def create_backup():
             raise BackupRefused('未设置 BACKUP_PASSWORD，已跳过本次备份')
         target = db.DATA / 'backups' / ('backup-' + dt.datetime.now(dt.timezone.utc).strftime('%Y%m%d-%H%M%S-') + db.uid()[:6] + '.zip')
         temp_target = target.with_suffix('.partial')
+        # 空间预检：备份包约等于「数据库 + 全部媒体」的体积，压缩后通常略小。
+        # 曾在磁盘写满时留下 33 个 ~1GB 的 .partial 把 31G 吃干（2026-11-07），
+        # 所以宁可提前拒绝，也不要写到一半失败。
+        need = _estimate_backup_bytes(target.parent)
+        avail = shutil.disk_usage(target.parent).free
+        if avail < need:
+            raise BackupRefused(
+                f'磁盘空间不足，已跳过备份：需要约 {need // 1048576}MB，'
+                f'仅剩 {avail // 1048576}MB')
         with tempfile.TemporaryDirectory(dir=db.DATA / 'tmp') as tmp:
             snapshot = Path(tmp) / 'love.db'
             with connect() as source:
