@@ -287,110 +287,46 @@ function syncCompose(){
  if(form&&ta){form.classList.toggle('has-text',!!ta.value.trim());autoGrow(ta);}
  const wt=$('#watch-text');if(wt)autoGrow(wt);
 }
-/* 键盘避让：三套环境，一个判据。
-   ── 谁需要顶 ──
-   targetSdk 35 起 Android 15 强制 edge-to-edge，键盘弹出时窗口不缩，innerHeight 与
-   visualViewport.height 都不变，网页自己再也算不出键盘高度 → 靠 APK 原生侧把 IME
-   高度递进来（window.__kbPx / __kbSetNative）。
-   ── 谁不需要顶 ──
-   index.html 的 viewport 带 interactive-widget=resizes-content，一部分 WebView/系统
-   键盘一出来就把布局视口自己缩掉，内容已经让开了；旧机器则是系统 adjustResize。
-   这两种情况下再叠一次原生高度就是「让两次」，输入栏会被一路顶到状态栏底下。
-   ── 判据 ──
-   kbBase（无键盘时的布局高度）减去当前 innerHeight = 布局视口已经被缩掉多少。
-   缩过 → 这台机器会让位，--kb-h 一律 0；没缩 → 才用原生高度或视觉视口差值。
-   只要观测到一次「缩过」就记住这台机器，之后不等观测直接归零。 */
-let kbBase=(Math.round(window.innerHeight)||0);   // 无键盘时的布局高度基线
-let kbNative=0, kbLegacy=0, kbWrote=-1, kbWatch=0, kbWasOpen=0;
-/* 这台机器键盘弹出时视觉视口会不会缩（Android 16/17 上是缩的）。一旦观测到，
-   键盘高度就等于「innerHeight - visualViewport.height」，既不用原生也不用预测确认。 */
-let kbShrinkDevice=false;
-
-/* 上一次学到的键盘高度：聚焦瞬间要拿它先把根缩掉，见下面的 kbPredict。 */
-let kbLast=0;
-try{kbLast=parseFloat(localStorage.getItem('ls.kbh'))||0;}catch(e){}
-
-function kbWrite(v){
- if(v<90)v=0;
- kbWrote=v;
- if(v>0){kbLast=v;try{localStorage.setItem('ls.kbh',String(v));}catch(e){}}
- document.documentElement.style.setProperty('--kb-h',v?v+'px':'0px');
- /* kb-open 给 CSS 用：键盘开着时把根容器高度缩掉一个键盘高（见 style.css 末尾），
-    同时让底部安全区内边距让位。 */
- if(document.body)document.body.classList.toggle('kb-open',v>0);
- /* 一起看页的放映区高度是按「页面可视高度」算的（watchFitStage），
-    根高度一变就得重算，否则键盘一弹放映区还占着原来的高度、把聊天区挤没。 */
- if(document.body&&document.body.classList.contains('watch-open')
-    &&typeof watchFitStage==='function')setTimeout(watchFitStage,60);
-}
-
-/* 键盘刚弹出来那一小段，原生写入与浏览器滚动谁先谁后不固定，开一个 700ms 的看护
-   窗口多确认几轮；只在「刚变成开着」时开一次，不会空转。 */
-function kbArm(open){
- if(open&&!kbWasOpen)kbWatch=Date.now()+700;
- kbWasOpen=open?1:0;
- if(Date.now()<kbWatch)setTimeout(syncKeyboard,120);
-}
-
+/* 键盘避让：Chrome 108+ 的 interactive-widget=resizes-content 会让布局视口跟着键盘
+   一起缩，输入栏自然浮在键盘上；旧 WebView 只缩视觉视口，这里用 --kb-h 手动顶上去。 */
+/* 两种机型两条路，各自走已经验证过的那一条，谁也不叠加谁。
+   · 视觉视口会跟着键盘缩的机器（Android 16/17）：浏览器自己会把视觉视口往下滚去
+     露出输入框，网页只要按 1.6.20 的老算法补上和键盘等高的内边距就行。这条路
+     **绝不能**再用原生递来的高度——浏览器滚一次、网页再顶一次，就成了「输入栏
+     被顶到状态栏下面」。
+   · 视觉视口一点都不缩的机器（Android 15 + edge-to-edge）：上面那个差恒为 0，
+     网页自己算不出来，这时才用原生 __kbSetNative 递过来的高度（1.6.21 的行为）。 */
+let kbNativePx=0;   // 原生递来的键盘高度，物理像素
+let kbShrink=0;     // 这台机器的视觉视口会不会跟着键盘缩：0 未知 / 1 会
 function syncKeyboard(){
+ const vv=window.visualViewport;if(!vv)return;
  const ih=Math.round(window.innerHeight);
- if(ih>kbBase)kbBase=ih;                       // 键盘收起时这里就是真基线
- const vv=window.visualViewport;
- /* 注意不要减 offsetTop：那是浏览器自己把视觉视口往下滚的量（键盘弹出后 ≈360），
-    减掉就等于把「键盘占了多高」算小，输入栏会抬不到位。 */
- const vvHidden=vv?Math.max(0,Math.round(ih-vv.height)):0;
- const shrunk=Math.max(0,kbBase-ih);           // 布局视口被别人缩掉了多少
- const cap=Math.round(ih*0.6);                 // 兜底：键盘不可能占到六成屏以上
-
- /* 老包（1.6.21 及以前）的原生桥直接把值写进 --kb-h。不是我们写的就读回来记着，
-    这个值一直认它，否则每轮都会被自己的写入冲成 0 来回跳。 */
- const cur=parseFloat(document.documentElement.style.getPropertyValue('--kb-h'))||0;
- if(Math.abs(cur-kbWrote)>0.5)kbLegacy=cur;
-
- if(vvHidden>90)kbShrinkDevice=true;            // 视觉视口会缩：这台机器自己就能算
- let v;
- if(kbShrinkDevice){
-  /* 唯一真相：视觉视口被键盘顶掉多少，键盘就占多高。键盘收起自动归 0，
-     不会出现「键盘没弹但布局还卡在缩着的状态」（那会留一条黑边）。 */
-  v=vvHidden;
- }else{
-  v=Math.max(kbNative,kbLegacy);
-  /* 更早的包连 DPR 都没除就把物理像素写了进来：值超过上限就按 DPR 折回来 */
-  if(kbLegacy>cap)v=Math.max(kbNative,Math.round(kbLegacy/(window.devicePixelRatio||1)));
-  if(v>0&&shrunk>v*0.5)v=0;                    // 布局视口自己缩过了，别再叠加
- }
- if(v>cap)v=cap;
- if(v<90)v=0;
- kbWrite(v);
- kbArm(v>0);
+ const dropped=Math.max(0,ih-Math.round(vv.height));   // 视觉视口被键盘顶掉多少
+ if(dropped>90)kbShrink=1;
+ /* 1.6.20 的老算法，一字未改 */
+ const hidden=Math.max(0,ih-Math.round(vv.height)-Math.round(vv.offsetTop));
+ /* 只有「网页真算不出来」（视觉视口一点没缩）时，才采用原生高度 */
+ const v=(hidden<90&&!kbShrink&&kbNativePx>90)
+   ?Math.min(ih,Math.round(kbNativePx/(window.devicePixelRatio||1)))
+   :hidden;
+ const k=v<90?0:v;
+ document.documentElement.style.setProperty('--kb-h',k?k+'px':'0px');
+ /* kb-open 用来给"底部安全区内边距"让位：键盘顶上来时那块安全区已经被键盘占了，
+    再留一道 env(safe-area-inset-bottom) 就成了多出来的空白条。 */
+ if(document.body)document.body.classList.toggle('kb-open',k>0);
 }
-/* 新包的原生桥走这里：传物理像素，换算成 CSS px 由网页统一做（只有这里知道
-   devicePixelRatio，也只有这里知道布局视口有没有被别人缩过）。 */
+/* 原生键盘高度桥的入口（MainActivity.pushImeHeight 调）。传物理像素，「换算成
+   CSS px」和「用不用它」都由网页定：只有网页知道 devicePixelRatio，也只有网页
+   知道视觉视口有没有被键盘缩过。 */
 window.__kbSetNative=function(px){
- kbNative=px>0?Math.round(px/(window.devicePixelRatio||1)):0;
- if(px<=0){const ih=Math.round(window.innerHeight);if(ih>kbBase)kbBase=ih;}
- syncKeyboard();
+ const next=px>0?Math.round(px):0;
+ if(next===kbNativePx)return;
+ kbNativePx=next;
+ if(next<=0){syncKeyboard();return;}   // 收起：立即归零
+ /* 弹出：等 90ms 再看。会缩的机器这时视觉视口已经缩了，就该走老算法，
+     不至于抢在浏览器前面把输入栏先顶上去。 */
+ setTimeout(syncKeyboard,90);
 };
-
-/* ── 聚焦预判 ────────────────────────────────────────────────────────
-   WebView 在键盘弹出时，会先把视觉视口往下滚去露出聚焦的输入框（实测量
-   offsetTop≈360，把标题栏、壁纸、一起看页的视频一起滚出屏幕），而且这个滚动
-   在拿到真实 inset 之后再缩根也回不来。所以在输入框刚拿到焦点、键盘还没弹的
-   那一瞬，先按上一次学到的键盘高度把根缩掉——浏览器就没得滚，顶部原地不动。
-   真实 inset 到了 syncKeyboard 会再校准一次；键盘收起时归零。 */
-const KB_FIELD='.chat-compose,.fn-panel,.watch-chat,.modal,.pick-overlay,.compose-field';
-function kbPredict(el){
- if(!kbShrinkDevice||kbWrote>0||kbLast<90)return;
- if(!el||!el.closest||!el.closest(KB_FIELD))return;
- kbWrite(kbLast);
-}
-document.addEventListener('focusin',function(e){kbPredict(e.target);},true);
-document.addEventListener('focusout',function(){
- setTimeout(function(){
-  const a=document.activeElement;
-  if(!a||!/^(INPUT|TEXTAREA)$/.test(a.tagName))kbWrite(0);
- },80);
-},true);
 
 /* ── 聊天里直接发文件（相册 / 拍摄 / 录音都走这里）───────────────── */
 async function sendChatFiles(files){

@@ -243,12 +243,15 @@ public class MainActivity extends BridgeActivity {
     /** 把物理像素的键盘高度交给网页换算成 CSS px 并写入 --kb-h。 */
     private void pushImeHeight(WebView webView, int px) {
         String js = "(function(d){if(!d)return;"
+                // 新前端（1.6.22 起）有这个入口：物理像素原样交过去，"用不用"由网页决定。
+                // 视觉视口会缩的机器（Android 16/17）网页自己算得准，原生值绝不能叠加，
+                // 否则浏览器滚一次 + 网页再顶一次，输入栏会被顶到状态栏下面。
+                + "if(window.__kbSetNative){window.__kbSetNative(" + px + ");return;}"
+                // 旧前端（≤1.6.21）没有这个入口，保持原来的直写行为，别把人卡死。
                 + "var r=window.devicePixelRatio||1;"
-                // 打上接管标记：chat.js 的 syncKeyboard() 在 Android 15 上恒算 0，
-                // 不让路的话会把这里写进去的真值冲回 0。
                 + "d.setAttribute('data-native-kb','1');"
                 + "d.style.setProperty('--kb-h',(Math.round(" + px + "/r))+'px');"
-                + "if(document.body)document.body.classList.toggle('kb-open'," + (px > 90) + ");"
+                + "if(document.body)document.body.classList.toggle('kb-open',(" + px + ">90));"
                 + "})(document.documentElement)";
         webView.evaluateJavascript(js, null);
     }
