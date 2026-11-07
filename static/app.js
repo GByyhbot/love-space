@@ -309,15 +309,12 @@ function renderPage() {
   const ta=$('#chat-text');
   ta.value=localStorage.getItem('chat-text:'+state.me.user.id)||'';
   syncCompose();scrollChat();
-  ta.addEventListener('focus',()=>{
-   const d=$('#sticker-dock');if(d)d.hidden=true;
-   /* 面板让位给键盘：不是直接 hidden，而是随键盘上升逐帧压下去（见 chat.js:fnHandoff），
-      否则面板瞬间消失、键盘还要 200ms 才上来，中间会闪一片空白。 */
-   if(fnShown())fnHandoff();
-   /* 键盘弹出后把输入栏顶回可见区：新版 WebView 靠 interactive-widget 自己缩，
-      旧版只缩视觉视口，这里补一次滚动兜底。 */
-   setTimeout(()=>{try{ta.scrollIntoView({block:'end'});}catch{}},300);
-  });
+  /* 🔴 这里**不再**给 ta 绑 focus：全局 focusin 委托（下方）已经覆盖同一件事，
+     两路同帧各触发一次 fnHandoff() 是纯粹的重复（面板会被连推两次）。
+     委托的另一个好处是输入栏重绘后不用重新绑——节点是新的，直绑的监听器随之丢失。
+     也**不要**在这里补 setTimeout(...ta.scrollIntoView)：那句与真实键盘时长无关
+     （写死 300ms），而且 scrollIntoView 作用在页面滚动容器上，会把整个聊天面板滚一下。
+     键盘避让已经由 --kb-h / 视口收缩负责，它只会多出一个位移源。 */
   $('#chat-file')?.addEventListener('change',e=>{const fs=[...e.target.files];e.target.value='';sendChatFiles(fs);});
   $('#chat-shot')?.addEventListener('change',e=>{const fs=[...e.target.files];e.target.value='';sendChatFiles(fs);});
   applyWallpaper();
@@ -766,6 +763,8 @@ document.addEventListener('click',e=>{const d=$('#sticker-dock');if(d&&!d.hidden
 document.addEventListener('focusin',e=>{
  const t=e.target;
  if(!t||t.id!=='chat-text')return;
+ /* 表情面板与键盘二选一：点输入框就先把表情收掉，否则两块叠在一起 */
+ const d=$('#sticker-dock');if(d&&!d.hidden)d.hidden=true;
  if(fnShown())fnHandoff();
 },true);
 document.addEventListener('change',e=>{
