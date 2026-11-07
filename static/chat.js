@@ -364,6 +364,9 @@ const kbDpr=()=>window.devicePixelRatio||1;
 function syncKeyboard(){
  syncKeyboardCore();
  if(kbObserve)kbObserve();
+ /* 键盘高度的走向要一直盯着：键盘收起时把用户本来要的面板放回来（kbRestore）。
+    挂在统一出口上，A 类 / B 类 / 原生值同步归零三条路都能覆盖。 */
+ kbTrack();
 }
 function syncKeyboardCore(){
  const vv=window.visualViewport;if(!vv)return;
@@ -378,11 +381,6 @@ function syncKeyboardCore(){
      hidden 只有 0~20，永远到不了 >90，补偿就一直是 0（2026-11-07 背景放大的根因）。 */
  kbViewShrink=viewShrink>90?viewShrink:0;
  if(viewShrink>90)kbShrink=1;
- /* A 类机器的键盘高度只能从「布局视口收缩量」拿到（它的 hidden 只有 0~20）。
-    顺手记进 kbPanelH，给功能面板当高度用（见 fnHeight）——面板与键盘等高，
-    互换时输入栏零位移。⚠️ 这一句刻意放在 applyKbA 之外：applyKbA 内部必须
-    与 e6cf8d1 逐字节等价（见上方 🔴），这里只是记一个数字，不碰 --kb-h/--kb-shift。 */
- noteKbPanel(kbViewShrink);
 
  /* ── A 类机器：完全沿用 e6cf8d1 的算法，一帧不平滑 ── */
  if(kbShrink||hidden>90){
@@ -457,6 +455,16 @@ function noteKbPanel(h){
       键盘路径（applyKbA）完全不受影响。 */
 const FN_MS=160;
 let fnH=0,fnRaf=0,fnTrack=0,kbObserve=null;
+/* ── 「面板意图」：键盘顶掉面板只是**暂时**的 ───────────────────────────────
+   用户点 ⊕ 打开面板 → fnIntent=1；再点输入框，键盘把面板压下去（hidden=true），
+   但意图不能丢：键盘收起后必须把面板放回来。这也是微信/QQ 的行为 ——
+   输入栏下面那块地的"主人"由用户最后一次的选择决定，不因为弹过键盘就作废。
+   只有「用户主动收起面板」和「选走某个功能（相册/歌单…）」才清零。
+   🔴 千万别在 fnHold('kb') 收场时顺手清零：那正是本次要修的错误。 */
+let fnIntent=0;
+/* 键盘高度的上一帧读数 + 当前是否在往下走。用来区分「键盘正在升起」（此时面板
+   要让位，绝不能抢回来）和「键盘正在收起」（此时该把面板放回来）。 */
+let kbPrev=0,kbFalling=0;
 function fnPanel(){return $('#chat-fn');}
 function fnShown(){const p=fnPanel();return !!p&&!p.hidden;}
 /* 键盘此刻把输入栏顶起来了多少（CSS px）——注意是「已经生效的量」，不是目标值。
@@ -489,12 +497,12 @@ function fnMeasure(){
 function fnHeight(){
  const vh=window.innerHeight||0;
  const nat=fnMeasure();
- /* 取「内容高」与「这台机器键盘高」的较大者：
-      · 内容更高（小屏/大字号）→ 按内容算，保证四行不被裁
-      · 键盘更高 → 按键盘算，与键盘等高互换时输入栏零位移（内容顶端对齐，下方留白）
-    再夹视口 62%，防极矮屏把聊天区挤没；网格量不到时退回键盘高度。 */
- const base=nat>0?Math.max(nat,kbPanelH):kbPanelH;
- if(base>0)return Math.max(240,Math.min(Math.round(base),Math.round(vh*0.62)));
+ /* 只认内容高度：面板多高是"有四个格子"决定的，跟键盘多高没关系。
+    曾经试过取 max(内容高, 键盘高) —— 好处是与键盘等高互换时输入栏零位移，
+    但代价是弹过一次键盘之后面板被永久撑高 30px（底下一条空白），
+    而且"键盘收起后面板回来"要回到用户上次看到的位置，那才是他要的。 */
+ if(nat>0)return Math.max(240,Math.min(Math.round(nat),Math.round(vh*0.62)));
+ if(kbPanelH>0)return Math.max(240,Math.min(kbPanelH,Math.round(vh*0.62)));
  return Math.max(240,Math.round(vh*0.45));
 }
 function fnMark(on){
@@ -512,6 +520,7 @@ function fnReset(){
  const p=fnPanel();
  if(p)p.hidden=true;
  fnH=0;
+ fnIntent=0;                 /* 换页了：新页面上不该自动弹面板 */
  document.documentElement.style.setProperty('--fn-h','0px');
  fnMark(false);
 }
@@ -530,18 +539,21 @@ function fnSlide(to,ms,done){
 }
 function fnOpen(){
  const p=fnPanel();if(!p)return;
+ fnIntent=1;                 /* 用户亲手打开：键盘收起后要回到这个状态 */
  if(p.hidden){p.hidden=false;fnH=0;document.documentElement.style.setProperty('--fn-h','0px');}
  fnMark(true);
  fnSlide(fnHeight());
 }
 function fnClose(done){
  const p=fnPanel();
+ fnIntent=0;                 /* 用户亲手收起：之后键盘再怎么收放都不许自己弹回来 */
  if(!p||p.hidden){done&&done();return;}
  fnSlide(0,FN_MS,()=>{p.hidden=true;fnH=0;fnMark(false);done&&done();});
 }
 /* 立即收起（选完相册/拍完照/开歌单这类要让位的动作，不需要动画） */
 function fnCloseNow(){
  const p=fnPanel();
+ fnIntent=0;                 /* 用户选走了某个功能，面板的使命已经完成 */
  if(!p)return;
  fnStop();
  p.hidden=true;fnH=0;
@@ -561,12 +573,17 @@ function fnHold(mode){
  const H=mode==='panel'?fnHeight():(fnH>0?fnH:fnHeight());
  const k0=kbNow();
  fnStop();fnTrack=1;
- const t0=performance.now();
+ /* 「对方多久没动了」要拿**上一帧**比，不能拿起始值比：
+   起始值那套只有在键盘从头到尾一动不动时才成立，而真实的「键盘比面板矮」场景里
+   键盘涨到 355 就停住了（起始值是 0），两者差 355 —— 判据永远不成立，
+   面板会卡在 max(0,H-k) 那一条 15px 边上不动（小屏实测踩到）。 */
+ let kLast=k0,tStill=performance.now();
  let stopped=false;
  const stop=()=>{stopped=true;fnTrack=0;kbObserve=null;if(fnRaf){cancelAnimationFrame(fnRaf);fnRaf=0;}};
  const tick=()=>{
   if(stopped)return;
   const k=kbNow();
+  if(Math.abs(k-kLast)>=2){kLast=k;tStill=performance.now();}
   fnWrite(Math.max(0,H-k));
   if(mode==='kb'?k>=H-1:k<=1){
    if(mode==='kb'){                    /* 键盘吃满：面板彻底退场 */
@@ -576,14 +593,22 @@ function fnHold(mode){
    }else if(fnH<H)fnWrite(H);          /* 键盘收干净：面板补满 */
    stop();return;
   }
-  /* 对方压根没动：兜底，别把面板吊在半空。
-     · 让位给键盘却等不到键盘（聚焦失败/被别的窗口抢走）→ 面板照常收掉，等价于旧行为
-     · 等键盘收起却没动静（blur 没生效）→ 直接把面板滑到满，宁可挤一下也不留个空白
-     阈值分开：键盘升起是立刻开始的，等 260ms 还没动静就是真没起来；
-     收起可能被输入法拖慢，给 400ms。 */
-  if(Math.abs(k-k0)<2&&performance.now()-t0>(mode==='kb'?260:400)){
-   if(mode==='panel'){stop();fnSlide(H);}
-   else{stop();fnSlide(0,FN_MS,()=>{p.hidden=true;fnH=0;fnMark(false);});}
+  /* 对方不动了：按「键盘到底在不在」收场，别把面板吊在半空。
+     · 键盘确实杵着（>90）→ 键盘赢，面板让位。键盘比面板矮时（小屏）高度永远到不了
+       H，只能靠这条收尾，否则工具栏会剩一条 15px 的边挂在键盘上
+     · 键盘不在（或只剩一点点）→ 面板就位：mode='kb' 是"点了输入框但键盘没起来"，
+       把他的工具栏还给他；mode='panel' 是键盘收干净了、面板补满
+     静止阈值：键盘真的在（>90）等 260ms 就收场（键盘动画约 200ms）；
+     键盘不在要等 400ms —— 慢机起键盘偶尔超 260ms，宁可多等也别抢错。 */
+  if(performance.now()-tStill>(kbNow()>90?260:400)){
+   stop();
+   if(kbNow()>90){
+    p.hidden=true;fnH=0;
+    document.documentElement.style.setProperty('--fn-h','0px');
+    fnMark(false);
+    return;
+   }
+   fnSlide(H);
   }
  };
  kbObserve=tick;
@@ -595,6 +620,7 @@ function fnHandoff(){fnHold('kb');}
 /* 点 ⊕ 时调：键盘若还开着，面板从「剩余量」接管，逐帧长到满高，输入栏不动 */
 function fnTakeover(){
  const p=fnPanel();if(!p)return;
+ fnIntent=1;                 /* 面板重新上岗（也是键盘收起后自动恢复的目标状态） */
  /* 先显形再量高：fnHeight() 读的是 .fn-grid 的实测高度，display:none 时量出来是 0 */
  p.hidden=false;
  const H=fnHeight();
@@ -604,6 +630,42 @@ function fnTakeover(){
   fnSlide(H);return;
  }
  fnHold('panel');
+}
+/* 键盘收起来了：把用户本来要的面板放回去（不是"重新打开"，是"接着刚才的状态"）。
+   逐帧从剩余高度接管，所以看起来是键盘缩多少面板长多少，输入栏全程不动。
+   🔴 三个前提缺一不可：用户意图是开着的、面板确实不在位、键盘正在往下走。
+      少任何一个都会变成"键盘一弹就被面板抢回去"或者"没点过 ⊕ 也自己弹出来"。 */
+function kbRestore(){
+ if(!fnIntent)return;
+ const p=fnPanel();
+ if(!p)return;
+ if(fnTrack)return;          /* 已经在交接中（fnHold 正在逐帧跑）：别每帧重开一次循环 */
+ /* 面板已经实实在在地立着（高度 >1）就别动它；高度被压到 0 的算"不在位" */
+ if(!p.hidden&&fnH>1)return;
+ if(kbNow()<=1){fnOpenInstant();return;}
+ fnTakeover();
+}
+/* 键盘是一帧跳没的（A 类常见：布局视口一次弹回）→ 面板**直接就位**，不要再滑一遍。
+   滑一遍意味着输入栏先掉到底、中间整片空白，再从底部顶上来 —— 那一帧很难看。
+   键盘是逐帧退的（B 类原生桥）则走 fnTakeover，从剩余高度接管，输入栏一丝不动。 */
+function fnOpenInstant(){
+ const p=fnPanel();if(!p)return;
+ fnIntent=1;
+ p.hidden=false;
+ fnStop();
+ fnH=0;
+ document.documentElement.style.setProperty('--fn-h','0px');
+ fnWrite(fnHeight());        /* 先显形再量高 */
+ fnMark(true);
+}
+/* 键盘高度走向的观察者：挂在 syncKeyboard 的统一出口上（A 类/B 类/原生值归零都经过它）。
+   只负责分辨"在升"还是"在收"，收的那一侧才允许把面板放回来。 */
+function kbTrack(){
+ const k=kbNow();
+ if(k>=kbPrev)kbFalling=0;   /* 升或不动：让位，别抢 */
+ else if(k<kbPrev-1)kbFalling=1;
+ kbPrev=k;
+ if(kbFalling)kbRestore();
 }
 /* 每帧读最新的 kbTarget（不在 rAF 闭包里锁死首帧值）。
    🔴 指数平滑必须配单帧步长封顶：gap 初始就是整段位移（294px），
