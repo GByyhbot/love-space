@@ -1001,8 +1001,13 @@ body.chat-full .chat-panel{padding-bottom:var(--kb-h,0px)}
 /* 撤回系统提示 */
 .chat-recall{text-align:center;font-size:var(--fs-sm);color:var(--muted);margin:10px 0}
 /* ── 5f. 表情面板 ── */
-/* 内嵌面板：位于消息流与输入栏之间，输入框始终可见 */
-.sticker-dock{border-top:1px solid var(--line);background:var(--surface);padding:10px 12px calc(6px + env(safe-area-inset-bottom));flex-shrink:0}
+/* 内嵌面板：位于消息流与输入栏之间，输入框始终可见。
+   🔴 高度必须走 --dock-h 逐帧（与 ⊕ 面板同一个套路），不能 hidden 硬切：
+   dock 高 389px，一帧消失等于 #chat-log 瞬间长高 389，贴底的消息会跟着「啪」地
+   往下掉 389px 再被键盘顶回来（实测 ref.top 一帧 +389）。padding 放内层，否则
+   动画到 0 时外层 padding 仍占 16px，压不干净。 */
+.sticker-dock{border-top:1px solid var(--line);background:var(--surface);padding:0;flex-shrink:0;overflow:hidden;height:var(--dock-h,0px)}
+.sticker-inner{padding:10px 12px calc(6px + env(safe-area-inset-bottom))}
 .sticker-dock .sticker-body{max-height:min(38dvh,320px)}
 .sticker-tabs{display:flex;gap:6px;margin-bottom:12px;overflow-x:auto;scrollbar-width:none}
 .sticker-tabs::-webkit-scrollbar{display:none}

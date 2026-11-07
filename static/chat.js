@@ -527,6 +527,7 @@ function fnReset(){
  fnIntent=0;                 /* 换页了：新页面上不该自动弹面板 */
  document.documentElement.style.setProperty('--fn-h','0px');
  fnMark(false);
+ dockCloseNow();             /* 换页时把表情槽位一起归零，不然 --dock-h 会带到新页面 */
 }
 function fnStop(){if(fnRaf)cancelAnimationFrame(fnRaf);fnRaf=0;fnTrack=0;kbObserve=null;}
 function fnSlide(to,ms,done){
@@ -963,16 +964,116 @@ function chatLocate(){
  },{enableHighAccuracy:true,timeout:8000,maximumAge:300000});
  attempt();
 }
+/* ── 表情 dock 的高度动画 ─────────────────────────────────────────────
+   与 ⊕ 面板同源：一个 CSS 变量 + rAF 逐帧写。聊天区高度因此是平滑变的，
+   #chat-log 的 ResizeObserver 才能逐帧把消息贴回底部。
+   之前是 hidden 硬切，一帧就让 #chat-log 长高 389px，贴底的消息瞬间下坠、
+   再被升起的键盘顶回来（实测 ref.top 一帧 +389，肉眼就是「啪」地弹一下）。 */
+const DOCK_MS=160;
+let dockH=0,dockRaf=0;
+function dockEl(){return $('#sticker-dock');}
+function dockShown(){const d=dockEl();return !!d&&!d.hidden;}
+function dockNat(){
+ const d=dockEl();if(!d)return 0;
+ /* 父级 height:0 不改变子元素的布局高度，所以这里量到的就是「自然高」 */
+ const inner=d.firstElementChild;
+ const h=inner?inner.offsetHeight:0;
+ return h>0?h:Math.round((window.innerHeight||600)*0.4);
+}
+function dockWrite(v){
+ if(v<0.5)v=0;
+ if(Math.abs(v-dockH)<0.01)return;
+ dockH=v;
+ document.documentElement.style.setProperty('--dock-h',v>0?v+'px':'0px');
+}
+function dockSlide(to,ms,done){
+ if(dockRaf)cancelAnimationFrame(dockRaf);
+ const from=dockH,t0=performance.now(),dur=ms||DOCK_MS;
+ const step=now=>{
+  const q=Math.min(1,(now-t0)/dur);
+  const e=1-Math.pow(1-q,3);
+  dockWrite(from+(to-from)*e);
+  if(q<1){dockRaf=requestAnimationFrame(step);return;}
+  dockRaf=0;done&&done();
+ };
+ dockRaf=requestAnimationFrame(step);
+}
+function dockOpen(){
+ const d=dockEl();if(!d)return;
+ if(dockRaf){cancelAnimationFrame(dockRaf);dockRaf=0;}
+ dockH=0;
+ document.documentElement.style.setProperty('--dock-h','0px');
+ d.hidden=false;               /* 先显形再量：display:none 的 offsetHeight 恒为 0 */
+ /* 键盘还开着就点表情：dock 必须跟着键盘往下落一起长起来，否则两者叠在一起，
+    输入栏先被顶到最高再回落。让「dock 高 + 键盘高」恒定在自然高即可。 */
+ if(kbNow()>1){dockHold('open');return;}
+ dockSlide(dockNat());
+}
+function dockClose(done){
+ const d=dockEl();
+ if(!d||d.hidden){done&&done();return;}
+ /* 键盘已经开着：跟着它反向收，两边之和恒定 */
+ if(kbNow()>1){dockHold('close');done&&done();return;}
+ dockSlide(0,DOCK_MS,()=>{
+  d.hidden=true;
+  dockH=0;
+  document.documentElement.style.setProperty('--dock-h','0px');
+  done&&done();
+ });
+}
+/* dock 与键盘的反向互换：dock 高 = 自然高 - 键盘高。
+   dock 388 / 键盘 370 几乎等高，同步走时底部空间只从 388 变到 370（消息漂 18px）；
+   各走各的则先掉出 238px 的真空，消息「啪」地下坠再被顶回（实测）。 */
+function dockHold(mode){
+ const d=dockEl();if(!d||d.hidden)return;
+ const H=dockNat();
+ if(dockRaf){cancelAnimationFrame(dockRaf);dockRaf=0;}
+ let stopped=false,kLast=kbNow(),tStill=performance.now();
+ const zero=()=>{d.hidden=true;dockH=0;document.documentElement.style.setProperty('--dock-h','0px');};
+ const stop=()=>{stopped=true;if(kbObserve===tick)kbObserve=null;if(dockRaf){cancelAnimationFrame(dockRaf);dockRaf=0;}};
+ const tick=()=>{
+  if(stopped)return;
+  const k=kbNow();
+  if(Math.abs(k-kLast)>=2){kLast=k;tStill=performance.now();}
+  dockWrite(Math.max(0,H-k));
+  if(mode==='close'&&k>=H-1){zero();stop();return;}
+  if(mode==='open'&&k<=1){dockWrite(H);stop();return;}
+  /* 键盘停了却没走到底（用户中途收手、或键盘比 dock 矮）：剩下的平滑补齐 */
+  if(performance.now()-tStill>(kbNow()>90?260:400)){
+   stop();
+   if(mode==='close')dockSlide(0,DOCK_MS,zero);
+   else dockSlide(H);
+  }
+ };
+ kbObserve=tick;
+ const raf=()=>{if(stopped)return;tick();if(!stopped)dockRaf=requestAnimationFrame(raf);};
+ dockRaf=requestAnimationFrame(raf);
+}
+function dockCloseNow(){
+ const d=dockEl();
+ if(dockRaf){cancelAnimationFrame(dockRaf);dockRaf=0;}
+ dockH=0;
+ document.documentElement.style.setProperty('--dock-h','0px');
+ if(d)d.hidden=true;
+}
+/* 内容变了（切 tab、加了新表情包）→ 高度要跟上，否则 --dock-h 还是旧值，会被裁 */
+function dockRefit(){
+ const d=dockEl();
+ if(!d||d.hidden||dockRaf||dockH<=0)return;
+ dockWrite(dockNat());
+}
 /* 表情面板：内嵌于输入栏上方（输入框始终可见），点击按钮开合；点 emoji 只插入文本不弹键盘 */
 function stickerPanel(){
  const dock=$('#sticker-dock');if(!dock)return;
- if(!dock.hidden){dock.hidden=true;return;}
+ if(dockShown()){dockClose();return;}
  fnCloseNow();
  state.stickerTab=state.stickerTab||'cute';
- dock.innerHTML=`<div class="sticker-tabs" id="sticker-tabs"></div><div class="sticker-body" id="sticker-body"></div>`;
- dock.hidden=false;
- if(document.activeElement&&document.activeElement.blur)document.activeElement.blur();
+ /* 内容先就位再量高：dockOpen 从 0 滑到「自然高」，量的时候里面必须已经有东西 */
+ if(!dock.querySelector('#sticker-tabs'))
+  dock.innerHTML=`<div class="sticker-inner"><div class="sticker-tabs" id="sticker-tabs"></div><div class="sticker-body" id="sticker-body"></div></div>`;
  renderStickerTabs();
+ dockOpen();
+ if(document.activeElement&&document.activeElement.blur)document.activeElement.blur();
 }
 function renderStickerTabs(){
  const box=$('#sticker-tabs');if(!box)return;
@@ -980,6 +1081,7 @@ function renderStickerTabs(){
  box.innerHTML=tabs.map(([id,label])=>`<button data-action="sticker-tab" data-id="${id}" class="${state.stickerTab===id?'active':''}">${label}</button>`).join('');
  $('#sticker-body').innerHTML=stickerTabHTML(state.stickerTab);
  lazyStickerVideos();
+ dockRefit();          /* 切 tab / 新加表情包后高度可能变，要让 --dock-h 跟上 */
 }
 function stickerTabHTML(tab){
  if(tab==='mine'){

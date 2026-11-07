@@ -754,7 +754,7 @@ if(window.visualViewport){addEventListener('resize',syncKeyboard);window.visualV
 /* ── 相册多选 / 气泡 / 贴纸面板：已拆分到 static/chat.js（原 1258–1541 行）── */
 
 /* 点击表情面板与输入栏以外的区域时收起面板 */
-document.addEventListener('click',e=>{const d=$('#sticker-dock');if(d&&!d.hidden&&!e.target.closest('#sticker-dock')&&!e.target.closest('.chat-compose')&&!e.target.closest('[data-action="sticker-panel"]'))d.hidden=true;},true);
+document.addEventListener('click',e=>{const d=$('#sticker-dock');if(d&&!d.hidden&&!e.target.closest('#sticker-dock')&&!e.target.closest('.chat-compose')&&!e.target.closest('[data-action="sticker-panel"]'))dockClose();},true);
 /* 点输入框 → 面板让位给键盘。
    面板与键盘同高互斥，但**不能**把面板直接藏掉：键盘要 170~200ms 才升上来，
    中间那段时间底部是空的，看起来就是闪一下。改由 fnHandoff() 逐帧按键盘当前
@@ -763,8 +763,12 @@ document.addEventListener('click',e=>{const d=$('#sticker-dock');if(d&&!d.hidden
 document.addEventListener('focusin',e=>{
  const t=e.target;
  if(!t||t.id!=='chat-text')return;
- /* 表情面板与键盘二选一：点输入框就先把表情收掉，否则两块叠在一起 */
- const d=$('#sticker-dock');if(d&&!d.hidden)d.hidden=true;
+ /* 表情面板与键盘二选一：点输入框就先把表情收掉，否则两块叠在一起。
+    🔴 必须走 dockHold('close') 而不是 hidden=true 或固定时长 dockClose：
+    focusin 这一刻键盘还没升（系统要 100~200ms 才弹），固定时长收会先空出一大截，
+    贴底的消息「啪」地下坠 238px 再被升起的键盘顶回去（实测）。
+    hold 是每帧写「dock 高 = 自然高 - 键盘高」，键盘一到就跟着让，总高恒定。 */
+ const d=$('#sticker-dock');if(d&&!d.hidden)dockHold('close');
  if(fnShown())fnHandoff();
 },true);
 document.addEventListener('change',e=>{
