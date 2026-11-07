@@ -229,7 +229,7 @@ function messagesPage() {
   <div class="compose-field"><textarea id="chat-text" name="content" placeholder="发消息" rows="1" maxlength="20000" aria-label="聊天内容" autocomplete="off" enterkeyhint="send"></textarea></div>
   <button type="button" class="compose-ib compose-mic" data-action="chat-voice" aria-label="发语音" title="发语音">${icon('mic')}</button>
   <button type="button" class="compose-ib compose-emoji" data-action="sticker-panel" aria-label="表情" title="表情">${icon('smile')}</button>
-  <button type="button" class="compose-ib compose-plus" data-action="chat-fn" aria-label="更多" title="更多">${icon('plus')}</button>
+  <button type="button" class="compose-ib compose-plus" data-action="chat-fn" aria-label="更多" title="更多" aria-expanded="false">${icon('plus')}${icon('close')}</button>
   <button class="compose-send" type="submit" aria-label="发送消息" title="发送">${icon('send')}</button>
  </form>`;
  /* 面板只有网格：上方输入栏已经有一模一样的语音/表情/关闭，再加一行头就是重复。
@@ -296,7 +296,14 @@ let kbShrink=0,kbNativePx=0,kbBaseH=0,kbViewShrink=0;
 /* B 类机器平滑用的状态 */
 let kbSmooth=0,kbRaf=0,kbTarget=0;
 const kbDpr=()=>window.devicePixelRatio||1;
+/* 三个出口（A 类 / 无键盘 / B 类）都要通知面板换位的钩子，
+   所以套一层：内核跑完统一回调一次。原生值直接归零那种同步跳变
+   （syncKeyboard 里 px<=90 立刻 applyKbB(0)）只有在这里才补得上。 */
 function syncKeyboard(){
+ syncKeyboardCore();
+ if(kbObserve)kbObserve();
+}
+function syncKeyboardCore(){
  const vv=window.visualViewport;if(!vv)return;
  const ih=window.innerHeight;
  if(!kbBaseH||ih>kbBaseH)kbBaseH=ih;   /* 基准：见过的最大布局视口高度，换屏/旋转自动跟随 */
@@ -367,7 +374,156 @@ function noteKbPanel(h){
  if(h>420)h=420;
  if(h===kbPanelH)return;
  kbPanelH=h;
- document.documentElement.style.setProperty('--kb-panel-h',h+'px');
+}
+/* ── 「更多功能」面板：滑入滑出 + 与键盘等高互换 ─────────────────────────────
+   手感目标（照主人给的参照录屏实测）：面板 5~6 帧 ≈170ms 从底部滑出，输入栏随之上移；
+   键盘 ↔ 面板互换时输入栏**一动不动**（两块地等高，只是换了 occupant）。
+
+   为什么高度写 CSS 变量而不是 transform：输入栏必须跟着面板走。面板高度在流内，
+   输入栏天然随它移动；transform 不改变布局高度，输入栏会钉在原地、底下露一片空白。
+
+   互换不靠定时器，而是每帧读「键盘当前高度」k，令 面板高 = max(0, H - k)：
+   键盘涨多少面板就缩多少，两者之和恒等于 H → 输入栏全程不动。A 类（视口跟着缩）
+   与 B 类（靠原生桥推像素）用同一个式子，因为 kbNow() 已经按机型分流。
+
+   🔴 这里只写 --fn-h，**不碰 --kb-h / --kb-shift**：A 类机器那条逐字节等价的
+      键盘路径（applyKbA）完全不受影响。 */
+const FN_MS=160;
+let fnH=0,fnRaf=0,fnTrack=0,fnHoldBottom=false,kbObserve=null;
+function fnPanel(){return $('#chat-fn');}
+function fnShown(){const p=fnPanel();return !!p&&!p.hidden;}
+/* 键盘此刻把输入栏顶起来了多少（CSS px）——注意是「已经生效的量」，不是目标值。
+   A 类：布局视口收缩量就是位移量（--kb-h 恒 0，见 applyKbA）。
+   B 类：以真正落盘的 --kb-h 为准。🔴 绝对不能读 kbNativePx 原生像素：那条路
+        还要经过 kbStep 的指数平滑，读目标值会和实际 padding 差一帧，
+        面板与键盘之和不再恒定 → 输入栏来回抖。 */
+function kbNow(){
+ const ih=window.innerHeight||0;
+ const shrink=kbShrink?Math.max(0,Math.round(kbBaseH-ih)):0;
+ if(shrink>0)return shrink;
+ /* 🔴 不能在这儿再卡 >90 的阈值：键盘上升的头两帧 --kb-h 就是 42、84 这种小值，
+    被过滤掉会让面板晚两帧才开始收，输入栏先被顶上去再弹回来（实测 84px 抖动）。 */
+ return parseFloat(document.documentElement.style.getPropertyValue('--kb-h'))||0;
+}
+/* 面板该有多高：优先用这台机器键盘的真实高度（noteKbPanel 记下的）；
+   键盘还没开过就按视口 45% 估——原来死写 260px，比真机键盘矮一截，
+   首次开面板与键盘不等高，切换时输入栏要挪一下。 */
+function fnHeight(){
+ if(kbPanelH>0)return kbPanelH;
+ const vh=window.innerHeight||0;
+ return Math.max(240,Math.min(400,Math.round(vh*0.45)));
+}
+function fnAtBottom(){const log=$('#chat-log');return !!log&&(log.scrollHeight-log.scrollTop-log.clientHeight<48);}
+function fnMark(on){
+ document.body.classList.toggle('fn-open',on);
+ const b=document.querySelector('.compose-plus');
+ if(b)b.setAttribute('aria-expanded',on?'true':'false');
+}
+function fnWrite(v){
+ if(v<0.5)v=0;
+ if(Math.abs(v-fnH)<0.01)return;
+ fnH=v;
+ document.documentElement.style.setProperty('--fn-h',v>0?v+'px':'0px');
+ /* 面板高度一动，消息区高度跟着变；原本停在底部才把它钉回底部（用户在翻历史就别抢） */
+ if(fnHoldBottom)scrollChat();
+}
+function fnReset(){
+ const p=fnPanel();
+ if(p)p.hidden=true;
+ fnH=0;
+ document.documentElement.style.setProperty('--fn-h','0px');
+ fnMark(false);
+}
+function fnStop(){if(fnRaf)cancelAnimationFrame(fnRaf);fnRaf=0;fnTrack=0;kbObserve=null;}
+function fnSlide(to,ms,done){
+ fnStop();
+ const from=fnH,t0=performance.now(),dur=ms||FN_MS;
+ const step=now=>{
+  const q=Math.min(1,(now-t0)/dur);
+  const e=1-Math.pow(1-q,3);          /* ease-out cubic：与系统面板的减速感接近 */
+  fnWrite(from+(to-from)*e);
+  if(q<1){fnRaf=requestAnimationFrame(step);return;}
+  fnRaf=0;done&&done();
+ };
+ fnRaf=requestAnimationFrame(step);
+}
+function fnOpen(){
+ const p=fnPanel();if(!p)return;
+ fnHoldBottom=fnAtBottom();
+ if(p.hidden){p.hidden=false;fnH=0;document.documentElement.style.setProperty('--fn-h','0px');}
+ fnMark(true);
+ fnSlide(fnHeight());
+}
+function fnClose(done){
+ const p=fnPanel();
+ if(!p||p.hidden){done&&done();return;}
+ fnSlide(0,FN_MS,()=>{p.hidden=true;fnH=0;fnMark(false);done&&done();});
+}
+/* 立即收起（选完相册/拍完照/开歌单这类要让位的动作，不需要动画） */
+function fnCloseNow(){
+ const p=fnPanel();
+ if(!p)return;
+ fnStop();
+ p.hidden=true;fnH=0;
+ document.documentElement.style.setProperty('--fn-h','0px');
+ fnMark(false);
+}
+/* 键盘 ↔ 面板互换的统一实现：面板高度恒等于 max(0, H - 键盘当前高度)，
+   两者之和不变 → 输入栏钉在原地。mode='kb' 是让位给键盘，'panel' 是从键盘手里接管。
+   两路驱动：
+     · B 类机器有 kbStep 的逐帧循环，挂 kbObserve 钩子在它**写完 --kb-h 之后**同帧算，
+       这样读到的是刚写进去的高度，不会慢一帧（慢一帧的后果是输入栏先被顶 42px 再弹回）。
+     · A 类机器没有 kbStep（视口自己缩），只能自己起 rAF；resize 事件先于本帧 rAF 更新
+       innerHeight，所以读到的也是当前值。
+   两路同时打到 tick() 也没关系：tick 用的是绝对公式，同帧重复调用是幂等的。 */
+function fnHold(mode){
+ const p=fnPanel();if(!p)return;
+ const H=mode==='panel'?fnHeight():(fnH>0?fnH:fnHeight());
+ const k0=kbNow();
+ fnStop();fnTrack=1;
+ const t0=performance.now();
+ let stopped=false;
+ const stop=()=>{stopped=true;fnTrack=0;kbObserve=null;if(fnRaf){cancelAnimationFrame(fnRaf);fnRaf=0;}};
+ const tick=()=>{
+  if(stopped)return;
+  const k=kbNow();
+  fnWrite(Math.max(0,H-k));
+  if(mode==='kb'?k>=H-1:k<=1){
+   if(mode==='kb'){                    /* 键盘吃满：面板彻底退场 */
+    p.hidden=true;fnH=0;
+    document.documentElement.style.setProperty('--fn-h','0px');
+    fnMark(false);
+   }else if(fnH<H)fnWrite(H);          /* 键盘收干净：面板补满 */
+   stop();return;
+  }
+  /* 对方压根没动：兜底，别把面板吊在半空。
+     · 让位给键盘却等不到键盘（聚焦失败/被别的窗口抢走）→ 面板照常收掉，等价于旧行为
+     · 等键盘收起却没动静（blur 没生效）→ 直接把面板滑到满，宁可挤一下也不留个空白
+     阈值分开：键盘升起是立刻开始的，等 260ms 还没动静就是真没起来；
+     收起可能被输入法拖慢，给 400ms。 */
+  if(Math.abs(k-k0)<2&&performance.now()-t0>(mode==='kb'?260:400)){
+   if(mode==='panel'){stop();fnSlide(H);}
+   else{stop();fnSlide(0,FN_MS,()=>{p.hidden=true;fnH=0;fnMark(false);});}
+  }
+ };
+ kbObserve=tick;
+ const raf=()=>{if(stopped)return;tick();if(!stopped)fnRaf=requestAnimationFrame(raf);};
+ fnRaf=requestAnimationFrame(raf);
+}
+/* 弹键盘时调：面板把位置让给键盘，逐帧按键盘当前高度压下去，键盘吃满即退场 */
+function fnHandoff(){fnHold('kb');}
+/* 点 ⊕ 时调：键盘若还开着，面板从「剩余量」接管，逐帧长到满高，输入栏不动 */
+function fnTakeover(){
+ const p=fnPanel();if(!p)return;
+ const H=fnHeight();
+ fnHoldBottom=fnAtBottom();
+ p.hidden=false;
+ fnMark(true);
+ if(kbNow()<=1){                        /* 键盘本来就没开：正常滑出 */
+  fnH=0;document.documentElement.style.setProperty('--fn-h','0px');
+  fnSlide(H);return;
+ }
+ fnHold('panel');
 }
 /* 每帧读最新的 kbTarget（不在 rAF 闭包里锁死首帧值）。
    🔴 指数平滑必须配单帧步长封顶：gap 初始就是整段位移（294px），
@@ -377,12 +533,14 @@ const kbMaxStep=42;
 function kbStep(){
  kbRaf=0;
  const gap=kbTarget-kbSmooth;
- if(Math.abs(gap)<0.6){ kbSmooth=kbTarget; applyKbB(kbSmooth); return; }
+ if(Math.abs(gap)<0.6){ kbSmooth=kbTarget; applyKbB(kbSmooth); if(kbObserve)kbObserve(); return; }
  let step=gap*0.85;
  if(step>kbMaxStep)step=kbMaxStep;
  if(step<-kbMaxStep)step=-kbMaxStep;
  kbSmooth+=step;
  applyKbB(kbSmooth);
+ /* 同帧通知面板换位（读到的是刚写进去的 --kb-h，不滞后一帧） */
+ if(kbObserve)kbObserve();
  kbRaf=requestAnimationFrame(kbStep);
 }
 /* 原生 IME 高度桥的唯一入口（MainActivity.pushImeHeight 调用）。
@@ -639,7 +797,7 @@ function openMap(lat,lng,name){
 function chatLocate(){
  if(!navigator.geolocation)return toast('这台设备不支持定位');
  if(!window.isSecureContext)return toast('定位只允许在 https 页面使用，当前连接不是安全上下文');
- const p=$('#chat-fn');if(p)p.hidden=true;
+ fnCloseNow();
  toast('正在获取位置…');
  /* 首次使用会弹系统权限框，用户点「允许」之后第一次回调仍可能是 PERMISSION_DENIED
     （权限刚落、WebView 还没接住），所以对 code=1 给一次自动重试。 */
@@ -663,7 +821,7 @@ function chatLocate(){
 function stickerPanel(){
  const dock=$('#sticker-dock');if(!dock)return;
  if(!dock.hidden){dock.hidden=true;return;}
- const fn=$('#chat-fn');if(fn)fn.hidden=true;
+ fnCloseNow();
  state.stickerTab=state.stickerTab||'cute';
  dock.innerHTML=`<div class="sticker-tabs" id="sticker-tabs"></div><div class="sticker-body" id="sticker-body"></div>`;
  dock.hidden=false;

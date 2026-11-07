@@ -299,6 +299,9 @@ function renderShell() {
 function renderPage() {
  const pages={home:homePage,timeline:timelinePage,albums:albumsPage,messages:messagesPage,together:togetherPage,personal:personalPage,settings:settingsPage,notices:noticesPage,channels:channelsPage,backups:backupsPage,imports:importsPage,importdetail:importDetailPage,dashboard:dashboardPage,weekly:weeklyPage,figure:figurePage,linkcheck:linkCheckPage};
  $('#page').innerHTML=(pages[state.page] || homePage)();
+ /* 重绘会把 #chat-fn 整个换掉：动画状态（rAF、--fn-h、body.fn-open）必须一起清，
+    否则残留的 rAF 会继续往新节点写高度，body 上还会挂着 fn-open（⊕ 变成 ✕）。 */
+ fnStop();fnReset();
  if(state.page==='timeline'&&state.timelineHasMore)$('#timeline-list')?.insertAdjacentHTML('afterend',`<div class="timeline-more">${button('继续往前翻','load-more-timeline','secondary')}</div>`);
  if(state.page==='messages') {
   const ta=$('#chat-text');
@@ -306,7 +309,9 @@ function renderPage() {
   syncCompose();scrollChat();
   ta.addEventListener('focus',()=>{
    const d=$('#sticker-dock');if(d)d.hidden=true;
-   const p=$('#chat-fn');if(p)p.hidden=true;
+   /* 面板让位给键盘：不是直接 hidden，而是随键盘上升逐帧压下去（见 chat.js:fnHandoff），
+      否则面板瞬间消失、键盘还要 200ms 才上来，中间会闪一片空白。 */
+   if(fnShown())fnHandoff();
    /* 键盘弹出后把输入栏顶回可见区：新版 WebView 靠 interactive-widget 自己缩，
       旧版只缩视觉视口，这里补一次滚动兜底。 */
    setTimeout(()=>{try{ta.scrollIntoView({block:'end'});}catch{}},300);
@@ -752,13 +757,14 @@ if(window.visualViewport){addEventListener('resize',syncKeyboard);window.visualV
 /* 点击表情面板与输入栏以外的区域时收起面板 */
 document.addEventListener('click',e=>{const d=$('#sticker-dock');if(d&&!d.hidden&&!e.target.closest('#sticker-dock')&&!e.target.closest('.chat-compose')&&!e.target.closest('[data-action="sticker-panel"]'))d.hidden=true;},true);
 /* 点输入框 → 面板让位给键盘。
-   功能面板与键盘同高互斥，聚焦输入框就是要用键盘，此刻直接关掉面板即可，
-   键盘与面板在总高度上是等量替换，不需要任何等待（详见 chat-fn 分支注释）。
+   面板与键盘同高互斥，但**不能**把面板直接藏掉：键盘要 170~200ms 才升上来，
+   中间那段时间底部是空的，看起来就是闪一下。改由 fnHandoff() 逐帧按键盘当前
+   高度把面板压下去，两者之和恒定 → 输入栏一动不动（见 chat.js）。
    用 focusin 委托而不是给 #chat-text 绑事件：输入栏每次重绘都会重建节点。 */
 document.addEventListener('focusin',e=>{
  const t=e.target;
  if(!t||t.id!=='chat-text')return;
- const fn=$('#chat-fn');if(fn&&!fn.hidden)fn.hidden=true;
+ if(fnShown())fnHandoff();
 },true);
 document.addEventListener('change',e=>{
  if(e.target.id!=='sticker-file'||!e.target.files[0])return;
@@ -2081,36 +2087,33 @@ async function act(action,id,el) {
  if(action==='notice-detail'){closeModal();const detail=await api('/records/'+id);const unread=state.notices.filter(n=>n.record_id===id&&!n.seen);if(unread.length){try{await post('/notices/read?record_id='+encodeURIComponent(id));await refresh();}catch{}}if(detail.kind==='chat')return navigate('messages');openModal('这一刻的故事',recordCard(detail),{wide:true});return;}
  if(action==='chat-attachment')return composer('chat');
  /* ── 输入栏「更多功能」面板 ───────────────────────────────── */
- if(action==='chat-fn'){const p=$('#chat-fn');if(!p)return;
-  const d=$('#sticker-dock');if(d)d.hidden=true;
-  /* 功能面板与键盘是「同高互斥」的两块区域（面板高度 = --kb-panel-h，
-     由 chat.js 记录该机键盘实际高度，见 noteKbPanel）。
-     正因为高度相同，切换时容器总高度守恒，**不需要等任何一边的动画完成**：
-       · 键盘开着 → 收键盘 + 开面板，同一帧完成
-       · 键盘没开 → 直接开面板
-     曾写成「先等键盘收干净再开面板」（轮询 --kb-h + 800ms 兜底），
-     那是把互斥做成了先后，凭空多出 200~800ms 延迟，与微信行为不符，已废弃。 */
-  const wasOpen=!p.hidden;
-  if(wasOpen){p.hidden=true;}
-  else{
-   if(document.activeElement&&document.activeElement.blur)document.activeElement.blur();
-   p.hidden=false;
-  }
-  /* 面板开合改变 .chat-body 高度，消息滚动位置要跟着重算，
-     否则同一 scrollTop 在新容器高度下就是「内容整体上移」。
-     ⚠️ 不能在改 hidden 的同一帧 scrollChat：布局还没重算，scrollHeight 是旧值。 */
-  requestAnimationFrame(scrollChat);
-  return;}
- if(action==='chat-fn-close'){const p=$('#chat-fn');if(p)p.hidden=true;return;}
- if(action==='chat-pick'){const p=$('#chat-fn');if(p)p.hidden=true;return id==='camera'?$('#chat-shot')?.click():chatAlbumPick();}
- if(action==='chat-voice'){const p=$('#chat-fn');if(p)p.hidden=true;return chatVoiceToggle();}
+if(action==='chat-fn'){const p=$('#chat-fn');if(!p)return;
+ const d=$('#sticker-dock');if(d)d.hidden=true;
+ /* 功能面板与键盘是「同高互斥」的两块区域（面板高度 = 该机键盘实际高度，
+    由 chat.js:noteKbPanel 记录）。
+   两件事必须分开做，否则就是主人说的「点加号先降高度再弹面板」：
+     · 键盘没开 → fnOpen()：面板 170ms 从底部滑出，输入栏跟着上移
+     · 键盘开着 → 先 blur 收键盘，再 fnTakeover()：面板**从键盘剩余的高度接管**，
+       键盘落多少面板长多少，两者之和恒定，输入栏一下都不动
+   曾经写成「先等键盘收干净再开面板」（轮询 --kb-h + 800ms 兜底），凭空多出
+   200~800ms 延迟；后来改成同帧硬切，面板瞬间出现、输入栏瞬移——都不是要的手感。 */
+ const wasOpen=!p.hidden;
+ if(wasOpen){fnClose();}
+ else{
+  if(document.activeElement&&document.activeElement.blur)document.activeElement.blur();
+  fnTakeover();
+ }
+ return;}
+ if(action==='chat-fn-close'){fnCloseNow();return;}
+ if(action==='chat-pick'){fnCloseNow();return id==='camera'?$('#chat-shot')?.click():chatAlbumPick();}
+ if(action==='chat-voice'){fnCloseNow();return chatVoiceToggle();}
  if(action==='chat-locate')return chatLocate();
  if(action==='chat-open-map'){
   const lat=parseFloat(el.dataset.lat||''),lng=parseFloat(el.dataset.lng||'');
   if(!isFinite(lat)||!isFinite(lng))return toast('这条位置信息不完整');
   return openMap(lat,lng,'我们的位置');
  }
- if(action==='chat-song'){const p=$('#chat-fn');if(p)p.hidden=true;return songPicker();}
+ if(action==='chat-song'){fnCloseNow();return songPicker();}
  if(action==='song-tab'){state.songTab=id;$$('.ss-tab').forEach(b=>b.classList.toggle('active',b.dataset.id===id));return renderSongPane();}
  if(action==='song-toggle')return songToggle(el);
  if(action==='song-try')return songTry(el);

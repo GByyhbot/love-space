@@ -711,6 +711,13 @@ button.mood-row.no-mood .mood-bubble.empty{color:var(--primary-dark)}
 .compose-ib{width:var(--ctrl-h);height:var(--ctrl-h);min-width:var(--ctrl-h);flex:none;border-radius:50%;display:grid;place-items:center;color:var(--ink-2);background:transparent;border:0;transition:background var(--speed),color var(--speed)}
 .compose-ib:hover{background:var(--soft);color:var(--primary-dark)}
 .compose-ib .icon{width:22px;height:22px}
+/* ⊕ 在面板展开时变成 ✕（和微信/QQ 一致：同一个位置表达「再点一下收起」）。
+   两个图标都渲染在 DOM 里，只切显示，不重建节点——重建会让点击瞬间掉焦点、
+   也会打断面板滑动的合成层。 */
+.compose-plus .icon{display:block}
+.compose-plus .icon+.icon{display:none}
+body.fn-open .compose-plus .icon{display:none}
+body.fn-open .compose-plus .icon+.icon{display:block}
 .compose-field{flex:1;min-width:0;display:flex;align-items:center;background:var(--soft);border:1px solid var(--line);border-radius:20px;padding:2px 12px;min-height:var(--ctrl-h)}
 /* 选 .compose-field textarea 而不是 .chat-compose textarea：文件末尾的
    `:root.dark textarea` 特异性也是 (0,1,1)，靠后就会把这里的透明背景盖成深色块
@@ -731,13 +738,21 @@ button.mood-row.no-mood .mood-bubble.empty{color:var(--primary-dark)}
    ⚠️ 必须 position:relative + z-index:1：.chat-wallpaper 是 inset:0 的绝对定位层
    （z-index:0），普通流内元素（这里原本没有定位）会被它整个盖住——面板"点了没反应"
    就是这个原因，只剩几个自身定位的小圆钮从壁纸上透出来。 */
-.fn-panel{position:relative;z-index:1;border-top:1px solid var(--line);background:var(--surface);padding:10px 14px calc(14px + env(safe-area-inset-bottom))}
-/* 面板高度与键盘对齐（微信式）：展开时聊天区按固定量收窄，收起时收回，
-   高度可预测、没有「先按内容撑开再跳一下」的抖动。
-   --kb-panel-h 由 chat.js 在键盘弹出时记录该机键盘实际高度，
-   键盘没开过（或浏览器）时回落到 260px，足够放下 4 列图标。 */
-body.chat-full .fn-panel{height:var(--kb-panel-h,260px);overflow:hidden}
-.fn-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px 8px}
+.fn-panel{position:relative;z-index:1;border-top:1px solid var(--line);background:var(--surface);display:flex;align-items:flex-start;overflow:hidden;padding:0;flex:none}
+/* 高度由 chat.js 逐帧写 --fn-h 驱动（0 ↔ 该机键盘高度），开合就是一次 170ms 左右的滑动。
+   align-items:flex-start + overflow:hidden：内容粘在面板**上沿**（也就是输入栏下沿），
+   面板长高时内容随之一起上移，多出来的高度留在下方——和微信/QQ 的手感一致。
+   ⚠️ 别改成 flex-end：那样内容会顶到面板最下沿、上方空一大块，而且滑动时是最后一排
+   图标先从底部冒出来（我们第二排只有「音乐」一个），看起来像漏了东西。
+   ⚠️ 也不能用 transform 平移代替：输入栏必须跟着面板走，面板高度在流内输入栏才天然
+   随它移动；transform 不改布局高度，输入栏会钉在原地、底下露一片空白。
+   ⚠️ 面板自身 padding 必须为 0，内边距全部挪到 .fn-grid：box-sizing 是 border-box，
+   高度归零时 padding 仍会撑出 24px 的细条，滑动收尾会留一道毛边。
+   ⚠️ [hidden] 必须显式写 display:none：上面给了 display:flex，会盖掉 UA 的
+   [hidden]{display:none}，不收尾就会「关了还在」。 */
+.fn-panel[hidden]{display:none}
+body.chat-full .fn-panel{height:var(--fn-h,0px)}
+.fn-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px 8px;width:100%;padding:10px 14px calc(14px + env(safe-area-inset-bottom))}
 .fn-tile{display:flex;flex-direction:column;align-items:center;gap:7px;background:transparent;border:0;padding:0;color:var(--ink-2)}
 .fn-tile b{font-size:var(--fs-sm);font-weight:500;line-height:1.2;color:var(--ink-2)}
 /* 不用 aspect-ratio：老 WebView（内嵌 Android 6/7）不认，高度会塌成 0 */
@@ -841,10 +856,11 @@ body.chat-full .fn-panel{height:var(--kb-panel-h,260px);overflow:hidden}
    单纯上移会让底部露出空白、且内部可视高度不会随之收窄，与 padding 不等价；
    要等价就得同时改高度（仍是布局属性），收益归零却引入风险。故保留 padding。 */
 body.chat-full .chat-panel{padding-bottom:var(--kb-h,0px)}
-/* ⚠️ 功能面板不再吃 --kb-h：面板展开前一定先收键盘（见 app.js:chat-fn），
-   此时 --kb-h 已归零，再叠一层只会让面板高度在键盘收起过程中反复变化、
-   加重重排。面板高度改由 --kb-panel-h 固定，与键盘高度对齐。 */
-body.chat-full .fn-panel{padding-bottom:calc(14px + env(safe-area-inset-bottom))}
+/* ⚠️ 功能面板不吃 --kb-h：它与键盘是「等高互斥」的两块地，切换时由 chat.js 逐帧
+   把面板高度压成 max(0, 键盘高度 - 键盘当前高度)，两者之和恒等于 H，输入栏因此
+   一动不动。面板自身高度见上方 body.chat-full .fn-panel（--fn-h）。
+   曾经写死 padding-bottom 让面板吃满整块高度——现在内边距已经挪进 .fn-grid，
+   这里再叠一层会在面板高度归零时留一道 14px 的空白。 */
 /* ── 聊天壁纸：底图铺满整个聊天面板（标题栏和输入栏也压在图上） ──
    .chat-wallpaper 挂到 .chat-panel 上绝对定位铺满，::after 是压在图上的遮罩（--chat-bg-dim 控制强度）。
    底图不随消息滚动，标题栏/输入栏改成半透明玻璃让图透出来，文字对比度靠气泡自身背景兜底。 */
