@@ -739,22 +739,27 @@ body.fn-open .compose-plus .icon+.icon{display:block}
    （z-index:0），普通流内元素（这里原本没有定位）会被它整个盖住——面板"点了没反应"
    就是这个原因，只剩几个自身定位的小圆钮从壁纸上透出来。 */
 .fn-panel{position:relative;z-index:1;border-top:1px solid var(--line);background:var(--surface);display:flex;align-items:flex-start;overflow:hidden;padding:0;flex:none}
-/* 高度由 chat.js 逐帧写 --fn-h 驱动（0 ↔ 该机键盘高度），开合就是一次 170ms 左右的滑动。
+/* 高度由 chat.js 逐帧写 --fn-h 驱动（0 ↔ .fn-grid 的实测高度，四行 16 格约 382px），
+   开合就是一次 160ms 的滑动。
    align-items:flex-start + overflow:hidden：内容粘在面板**上沿**（也就是输入栏下沿），
    面板长高时内容随之一起上移，多出来的高度留在下方——和微信/QQ 的手感一致。
-   ⚠️ 别改成 flex-end：那样内容会顶到面板最下沿、上方空一大块，而且滑动时是最后一排
-   图标先从底部冒出来（我们第二排只有「音乐」一个），看起来像漏了东西。
+   ⚠️ 别改成 flex-end：那样内容会顶到面板最下沿、上方空一大块，滑动时是最后一排
+   图标先从底部冒出来，看起来像漏了内容。
    ⚠️ 也不能用 transform 平移代替：输入栏必须跟着面板走，面板高度在流内输入栏才天然
    随它移动；transform 不改布局高度，输入栏会钉在原地、底下露一片空白。
    ⚠️ 面板自身 padding 必须为 0，内边距全部挪到 .fn-grid：box-sizing 是 border-box，
    高度归零时 padding 仍会撑出 24px 的细条，滑动收尾会留一道毛边。
    ⚠️ [hidden] 必须显式写 display:none：上面给了 display:flex，会盖掉 UA 的
-   [hidden]{display:none}，不收尾就会「关了还在」。 */
+   [hidden]{display:none}，不收尾就会「关了还在」。
+   🔴 面板高度必须 ≥ .fn-grid 的实测高度，否则第 3、4 行被 overflow:hidden 直接裁掉。
+      改格子数量/字号/间距后，务必在真机或 1200×2670(dpr3.25) 下确认四行都完整可见。 */
 .fn-panel[hidden]{display:none}
 body.chat-full .fn-panel{height:var(--fn-h,0px)}
 .fn-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px 8px;width:100%;padding:10px 14px calc(14px + env(safe-area-inset-bottom))}
-.fn-tile{display:flex;flex-direction:column;align-items:center;gap:7px;background:transparent;border:0;padding:0;color:var(--ink-2)}
-.fn-tile b{font-size:var(--fs-sm);font-weight:500;line-height:1.2;color:var(--ink-2)}
+.fn-tile{display:flex;flex-direction:column;align-items:center;gap:7px;background:transparent;border:0;padding:0;min-width:0;color:var(--ink-2)}
+/* 标签一律单行：换行会让那一行比别的行高，四行总高跟着变，面板高度是按实测值算的
+   （chat.js:fnHeight），行高一抖面板就跟着抖。overflow 兜住极端窄屏上的裁字。 */
+.fn-tile b{font-size:var(--fs-sm);font-weight:500;line-height:1.2;color:var(--ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
 /* 不用 aspect-ratio：老 WebView（内嵌 Android 6/7）不认，高度会塌成 0 */
 .fn-ico{width:56px;height:56px;display:grid;place-items:center;border-radius:16px;background:var(--soft);color:var(--primary-dark)}
 .fn-tile:hover .fn-ico{background:var(--soft-strong)}

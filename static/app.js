@@ -2124,7 +2124,7 @@ if(action==='chat-fn'){const p=$('#chat-fn');if(!p)return;
  if(action==='chat-song-golist'){closeModal();return navigate('together','music');}
  /* 实时通话需要 WebRTC + 信令，属于独立一轮的量，这里明说而不是假装点了没反应 */
  if(action==='chat-call')return toast('实时通话还没接（要 WebRTC + 信令服务），先用语音说两句');
- if(action==='chat-bg')return chatBgForm();
+ if(action==='chat-bg'){fnCloseNow();return chatBgForm();}
  if(action==='chat-to-draft')return composer('post',null,{...r.body,mediaObjects:r.media});
  if(action==='retry-chat'){const p=pendingChats().find(p=>p.client_id===id);if(p){await sendChat(p.body,p.client_id);await refresh();}return;}
  if(action==='recall-chat')return confirmAction('撤回这条悄悄话？','撤回后双方都不会再看到这条消息。',async()=>{await post('/records/'+id+'/recall');await refresh();return toast('已撤回');});
@@ -2137,7 +2137,7 @@ if(action==='chat-fn'){const p=$('#chat-fn');if(!p)return;
  /* 置顶走独立端点：整体 PUT 会经过 clean_body 白名单，把 recalled 这类字段洗掉（等于偷偷取消撤回） */
  if(action==='chat-pin'){try{const r=await post('/records/'+id+'/pin');await refresh();toast(r.pinned?'已置顶这条消息':'已取消置顶');}catch(err){toast(err.message);}return;}
  if(action==='chat-jump'){const node=$('#msg-'+id);if(!node)return toast('这条消息不在最近加载的范围里');node.scrollIntoView({block:'center'});node.classList.add('flash');setTimeout(()=>node.classList.remove('flash'),1400);return;}
- if(action==='chat-search')return openSearchPanel('chat');
+ if(action==='chat-search'){fnCloseNow();return openSearchPanel('chat');}
  if(action==='chat-search-clear'){state.chatSearch='';renderPage();setTimeout(scrollChat,20);return;}
  if(action==='sticker-panel')return stickerPanel();
  if(action==='sticker-tab'){state.stickerTab=id;return renderStickerTabs();}

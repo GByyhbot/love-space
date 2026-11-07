@@ -233,14 +233,30 @@ function messagesPage() {
   <button class="compose-send" type="submit" aria-label="发送消息" title="发送">${icon('send')}</button>
  </form>`;
  /* 面板只有网格：上方输入栏已经有一模一样的语音/表情/关闭，再加一行头就是重复。
-     点 ⊕ 再点一次即可收起，选完任一项也会自动收起。 */
+     点 ⊕ 再点一次即可收起，选完任一项也会自动收起。
+     16 个格子（4 行 × 4 个）按「发什么 → 分享什么 → 一起记什么 → 更多」四段分组，
+     每行语义一致，手指形成肌肉记忆后不用找。标签一律 ≤4 字且不换行（见 style.css
+     的 .fn-tile b），换行会让某一排比别的排高、四行总高跟着抖。
+     ⚠️ 加格子必须同步改 chat.js 的 fnHeight()：面板高度是按 .fn-grid 的实测高度算的，
+     内容一多，高度自动跟着长，不用手写数字 —— 但也别再加到 5 行，会高过键盘。 */
  const fnPanel=`<div id="chat-fn" class="fn-panel" hidden>
   <div class="fn-grid">
    <button type="button" class="fn-tile" data-action="chat-pick" data-id="media"><span class="fn-ico">${icon('image')}</span><b>相册</b></button>
    <button type="button" class="fn-tile" data-action="chat-pick" data-id="camera"><span class="fn-ico">${icon('camera')}</span><b>拍摄</b></button>
-   <button type="button" class="fn-tile" data-action="chat-call"><span class="fn-ico">${icon('phone')}</span><b>发起通话</b></button>
+   <button type="button" class="fn-tile" data-action="chat-voice"><span class="fn-ico">${icon('mic')}</span><b>语音</b></button>
+   <button type="button" class="fn-tile" data-action="sticker-panel"><span class="fn-ico">${icon('smile')}</span><b>表情</b></button>
    <button type="button" class="fn-tile" data-action="chat-locate"><span class="fn-ico">${icon('location')}</span><b>位置</b></button>
    <button type="button" class="fn-tile" data-action="chat-song"><span class="fn-ico">${icon('music')}</span><b>音乐</b></button>
+   <button type="button" class="fn-tile" data-action="chat-search"><span class="fn-ico">${icon('search')}</span><b>搜消息</b></button>
+   <button type="button" class="fn-tile" data-action="chat-bg"><span class="fn-ico">${icon('photo')}</span><b>聊天背景</b></button>
+   <button type="button" class="fn-tile" data-action="tool-calendar"><span class="fn-ico">${icon('calendar')}</span><b>共同年历</b></button>
+   <button type="button" class="fn-tile" data-action="tool-quest"><span class="fn-ico">${icon('check')}</span><b>恋爱清单</b></button>
+   <button type="button" class="fn-tile" data-action="tool-wish"><span class="fn-ico">${icon('star')}</span><b>共同愿望</b></button>
+   <button type="button" class="fn-tile" data-action="tool-ledger"><span class="fn-ico">${icon('book')}</span><b>共同账本</b></button>
+   <button type="button" class="fn-tile" data-action="tool-period"><span class="fn-ico">${icon('heart')}</span><b>生理期</b></button>
+   <button type="button" class="fn-tile" data-nav="dashboard"><span class="fn-ico">${icon('grid')}</span><b>数据看板</b></button>
+   <button type="button" class="fn-tile" data-nav="weekly"><span class="fn-ico">${icon('clock')}</span><b>回忆周报</b></button>
+   <button type="button" class="fn-tile" data-nav="figure"><span class="fn-ico">${icon('film')}</span><b>情侣摆拍</b></button>
   </div>
  </div>`;
  return `<section class="chat-panel${bgOn?' has-wallpaper':''}${immersive?' immersive':''}${skinAttrs.cls}"${skinAttrs.style}>${chatWallpaper()}<header class="chat-header"><button class="icon-btn" data-action="chat-back" aria-label="返回">${icon('back')}</button>${partner?avatar(partner.id):'<span class="avatar">♡</span>'}<div><h3>${partner?esc(partner.name):'等待另一半加入'}</h3><small>我们的悄悄话 · 仅彼此可见</small></div><button class="icon-btn" data-action="chat-search" aria-label="搜索消息" title="搜索消息" style="margin-left:auto">${icon('search')}</button><button class="icon-btn" data-action="chat-bg" aria-label="聊天背景" title="聊天背景">${icon('photo')}</button><button class="icon-btn" data-nav="imports" aria-label="聊天记录">${icon('book')}</button></header><div class="chat-body">${pinnedBar}${searchBar}<div id="chat-log" class="chat-log" aria-live="polite">${chatRows()}</div></div><div id="sticker-dock" class="sticker-dock" hidden></div>${replyBar}${composeBar}${fnPanel}<input id="chat-file" type="file" accept="image/*,video/*" multiple hidden><input id="chat-shot" type="file" accept="image/*" capture="environment" hidden></section>`;
@@ -362,6 +378,11 @@ function syncKeyboardCore(){
      hidden 只有 0~20，永远到不了 >90，补偿就一直是 0（2026-11-07 背景放大的根因）。 */
  kbViewShrink=viewShrink>90?viewShrink:0;
  if(viewShrink>90)kbShrink=1;
+ /* A 类机器的键盘高度只能从「布局视口收缩量」拿到（它的 hidden 只有 0~20）。
+    顺手记进 kbPanelH，给功能面板当高度用（见 fnHeight）——面板与键盘等高，
+    互换时输入栏零位移。⚠️ 这一句刻意放在 applyKbA 之外：applyKbA 内部必须
+    与 e6cf8d1 逐字节等价（见上方 🔴），这里只是记一个数字，不碰 --kb-h/--kb-shift。 */
+ noteKbPanel(kbViewShrink);
 
  /* ── A 类机器：完全沿用 e6cf8d1 的算法，一帧不平滑 ── */
  if(kbShrink||hidden>90){
@@ -451,13 +472,30 @@ function kbNow(){
     被过滤掉会让面板晚两帧才开始收，输入栏先被顶上去再弹回来（实测 84px 抖动）。 */
  return parseFloat(document.documentElement.style.getPropertyValue('--kb-h'))||0;
 }
-/* 面板该有多高：优先用这台机器键盘的真实高度（noteKbPanel 记下的）；
-   键盘还没开过就按视口 45% 估——原来死写 260px，比真机键盘矮一截，
-   首次开面板与键盘不等高，切换时输入栏要挪一下。 */
+/* 面板该多高：按 .fn-grid 的**实测**高度算（4 行 16 格实测 370px，比原来死写的 260 高一大截）。
+   拿实测值而不是写死数字，是因为标签换行、字号、安全区、窄屏媒体查询都会改变行高；
+   写死就一定会把最后一行裁掉。面板是 overflow:hidden + flex-start，超出的行直接消失，
+   表现为「点了 ⊕ 只看见两行多」。
+   🔴 量之前必须已经 p.hidden=false：display:none 的元素 offsetHeight 恒为 0，
+      在 fnOpen/fnTakeover 里必须**先显形再量**。 */
+let fnNatural=0;
+function fnMeasure(){
+ const g=$('.fn-grid');
+ if(!g)return 0;
+ const h=g.offsetHeight;
+ if(h>0)fnNatural=h;
+ return fnNatural;
+}
 function fnHeight(){
- if(kbPanelH>0)return kbPanelH;
  const vh=window.innerHeight||0;
- return Math.max(240,Math.min(400,Math.round(vh*0.45)));
+ const nat=fnMeasure();
+ /* 取「内容高」与「这台机器键盘高」的较大者：
+      · 内容更高（小屏/大字号）→ 按内容算，保证四行不被裁
+      · 键盘更高 → 按键盘算，与键盘等高互换时输入栏零位移（内容顶端对齐，下方留白）
+    再夹视口 62%，防极矮屏把聊天区挤没；网格量不到时退回键盘高度。 */
+ const base=nat>0?Math.max(nat,kbPanelH):kbPanelH;
+ if(base>0)return Math.max(240,Math.min(Math.round(base),Math.round(vh*0.62)));
+ return Math.max(240,Math.round(vh*0.45));
 }
 function fnMark(on){
  document.body.classList.toggle('fn-open',on);
@@ -557,8 +595,9 @@ function fnHandoff(){fnHold('kb');}
 /* 点 ⊕ 时调：键盘若还开着，面板从「剩余量」接管，逐帧长到满高，输入栏不动 */
 function fnTakeover(){
  const p=fnPanel();if(!p)return;
- const H=fnHeight();
+ /* 先显形再量高：fnHeight() 读的是 .fn-grid 的实测高度，display:none 时量出来是 0 */
  p.hidden=false;
+ const H=fnHeight();
  fnMark(true);
  if(kbNow()<=1){                        /* 键盘本来就没开：正常滑出 */
   fnH=0;document.documentElement.style.setProperty('--fn-h','0px');
