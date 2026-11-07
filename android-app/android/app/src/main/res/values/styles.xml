@@ -21,7 +21,15 @@
     </style>
 
 
+    <!-- 🔴 Activity 实际用的是这个主题（Manifest android:theme 指的就是它），
+         所以 opt-out 必须写在这里。AppTheme.NoActionBar 里那条从来没过生效：
+         既没有 postSplashScreenTheme、也没调 installSplashScreen()，
+         Activity 会一直停在 Launch 主题上，NoActionBar 根本没人用。
+         实验目的：opt-out 后窗口恢复「随键盘缩」的行为（targetSdk 35 才有效）。 -->
     <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
         <item name="android:background">@drawable/splash</item>
+        <item name="android:windowOptOutEdgeToEdgeEnforcement">true</item>
+        <item name="android:statusBarColor">#FCF8F9</item>
+        <item name="android:windowLightStatusBar">true</item>
     </style>
 </resources>
