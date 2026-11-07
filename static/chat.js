@@ -495,7 +495,11 @@ function fnMeasure(){
  return fnNatural;
 }
 function fnHeight(){
- const vh=window.innerHeight||0;
+ /* 🔴 算上限用的视口高度必须取「没有键盘时」的那个：A 类机器键盘开着时 innerHeight
+    只剩 400 出头，拿它算 62% 会把面板压到 265px —— 从键盘点 ⊕ 接管时，键盘让出的
+    396 只补回 265，输入栏一帧掉 130px（实测，就是"先键盘再工具栏会跳"的主因）。
+    kbBaseH 是见过的最大布局视口高度（没键盘时的高度），有它就一定不会偏小。 */
+ const vh=Math.max(window.innerHeight||0,kbBaseH||0);
  const nat=fnMeasure();
  /* 只认内容高度：面板多高是"有四个格子"决定的，跟键盘多高没关系。
     曾经试过取 max(内容高, 键盘高) —— 好处是与键盘等高互换时输入栏零位移，
