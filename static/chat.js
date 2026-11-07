@@ -251,31 +251,46 @@ function scrollChat(){const log=$('#chat-log');if(log)log.scrollTop=log.scrollHe
    就跟着变。什么都不做的话 scrollTop 不变 → 内容留在原地、最后几行被底部那块吃掉，
    看起来就是「输入栏上去了，消息没跟」。参照录屏里消息是跟输入栏一起上移的。
 
-   这里盯住 #chat-log 的高度，每变一次就把 scrollTop 补偿同样的量：
-     · 本来就停在底部 → 补偿后仍停在底部（消息与输入栏一起走）
-     · 正在往上翻历史 → 内容整体上移同样多，与底边的相对位置不变（不会突然跳到底部）
+   这里盯住 #chat-log 的高度，按「离底部多少」把内容重新贴回去（不是按增量补 scrollTop）：
+     · 本来就停在底部 → 收起/展开后仍停在底部（消息与输入栏一起走）
+     · 正在往上翻历史 → 与底边的相对位置不变（不会突然跳到底部）
+
+   🔴 为什么不能用增量（scrollTop += 旧高 - 新高）：
+      容器**变高**时浏览器会先把超过新上限的 scrollTop 自己夹下来，我们再减一次就补了
+      双份 —— 实测面板收起后固定多出 104px，最后一条消息被切掉一截。按「距底」写是
+      绝对定位，夹紧与否都不受影响。
 
    为什么用 ResizeObserver 而不是在各处手动 scrollChat：会改这个高度的入口有四条
    ——键盘（A 类机靠 100dvh 缩、B 类机靠 --kb-h 的 padding）、面板滑动、面板↔键盘
    互换、表情 dock 展开。盯住「高度」这一处就全覆盖了，也不必在两条键盘路径里各插一次，
    更不会因为漏掉某条路而出现「有的场景跟、有的场景不跟」。
    RO 老 WebView 没有（Chrome 64 以下），届时退化成不补偿——也就是原来那种表现。 */
-let chatLogRO=null,chatLogH=0;
+let chatLogRO=null,chatLogH=0,chatLogBase=0;
+function chatLogFromBottom(el){return Math.max(0,el.scrollHeight-el.clientHeight-el.scrollTop);}
 function watchChatLog(){
  const log=$('#chat-log');
  if(chatLogRO){chatLogRO.disconnect();chatLogRO=null;}
  if(!log||typeof ResizeObserver!=='function')return;
+ chatLogH=log.clientHeight;
+ chatLogBase=chatLogFromBottom(log);
  let first=true;
  chatLogRO=new ResizeObserver(()=>{
   const el=$('#chat-log');
   if(!el)return;
   const h=el.clientHeight;
   /* 首次回调只记基线：挂上去那一刻布局可能还没算完，拿它做差会凭空滚一下 */
-  if(first){first=false;chatLogH=h;return;}
-  if(chatLogH&&h!==chatLogH)el.scrollTop+=chatLogH-h;
+  if(first){first=false;chatLogH=h;chatLogBase=chatLogFromBottom(el);return;}
+  if(h===chatLogH)return;
+  const max=Math.max(0,el.scrollHeight-h);
+  el.scrollTop=Math.max(0,max-chatLogBase);
   chatLogH=h;
  });
  chatLogRO.observe(log);
+ /* 用户自己滚、以及程序写入 scrollTop 之后更新基准（写入会触发 scroll，取到的值一致，幂等） */
+ log.addEventListener('scroll',()=>{
+  const el=$('#chat-log');
+  if(el)chatLogBase=chatLogFromBottom(el);
+ },{passive:true});
 }
 
 
