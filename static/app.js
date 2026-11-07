@@ -302,6 +302,8 @@ function renderPage() {
  /* 重绘会把 #chat-fn 整个换掉：动画状态（rAF、--fn-h、body.fn-open）必须一起清，
     否则残留的 rAF 会继续往新节点写高度，body 上还会挂着 fn-open（⊕ 变成 ✕）。 */
  fnStop();fnReset();
+ /* 消息区高度监听统一在这里挂/换：不在聊天页时它自己 disconnect 掉，不留野观察者 */
+ watchChatLog();
  if(state.page==='timeline'&&state.timelineHasMore)$('#timeline-list')?.insertAdjacentHTML('afterend',`<div class="timeline-more">${button('继续往前翻','load-more-timeline','secondary')}</div>`);
  if(state.page==='messages') {
   const ta=$('#chat-text');

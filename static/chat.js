@@ -246,6 +246,37 @@ function messagesPage() {
  return `<section class="chat-panel${bgOn?' has-wallpaper':''}${immersive?' immersive':''}${skinAttrs.cls}"${skinAttrs.style}>${chatWallpaper()}<header class="chat-header"><button class="icon-btn" data-action="chat-back" aria-label="返回">${icon('back')}</button>${partner?avatar(partner.id):'<span class="avatar">♡</span>'}<div><h3>${partner?esc(partner.name):'等待另一半加入'}</h3><small>我们的悄悄话 · 仅彼此可见</small></div><button class="icon-btn" data-action="chat-search" aria-label="搜索消息" title="搜索消息" style="margin-left:auto">${icon('search')}</button><button class="icon-btn" data-action="chat-bg" aria-label="聊天背景" title="聊天背景">${icon('photo')}</button><button class="icon-btn" data-nav="imports" aria-label="聊天记录">${icon('book')}</button></header><div class="chat-body">${pinnedBar}${searchBar}<div id="chat-log" class="chat-log" aria-live="polite">${chatRows()}</div></div><div id="sticker-dock" class="sticker-dock" hidden></div>${replyBar}${composeBar}${fnPanel}<input id="chat-file" type="file" accept="image/*,video/*" multiple hidden><input id="chat-shot" type="file" accept="image/*" capture="environment" hidden></section>`;
 }
 function scrollChat(){const log=$('#chat-log');if(log)log.scrollTop=log.scrollHeight;}
+/* ── 消息区始终「贴着」底边那块 ─────────────────────────────────────────────
+   输入栏下面那块（键盘 / 功能面板 / 表情 dock）一变高变矮，消息区的 clientHeight
+   就跟着变。什么都不做的话 scrollTop 不变 → 内容留在原地、最后几行被底部那块吃掉，
+   看起来就是「输入栏上去了，消息没跟」。参照录屏里消息是跟输入栏一起上移的。
+
+   这里盯住 #chat-log 的高度，每变一次就把 scrollTop 补偿同样的量：
+     · 本来就停在底部 → 补偿后仍停在底部（消息与输入栏一起走）
+     · 正在往上翻历史 → 内容整体上移同样多，与底边的相对位置不变（不会突然跳到底部）
+
+   为什么用 ResizeObserver 而不是在各处手动 scrollChat：会改这个高度的入口有四条
+   ——键盘（A 类机靠 100dvh 缩、B 类机靠 --kb-h 的 padding）、面板滑动、面板↔键盘
+   互换、表情 dock 展开。盯住「高度」这一处就全覆盖了，也不必在两条键盘路径里各插一次，
+   更不会因为漏掉某条路而出现「有的场景跟、有的场景不跟」。
+   RO 老 WebView 没有（Chrome 64 以下），届时退化成不补偿——也就是原来那种表现。 */
+let chatLogRO=null,chatLogH=0;
+function watchChatLog(){
+ const log=$('#chat-log');
+ if(chatLogRO){chatLogRO.disconnect();chatLogRO=null;}
+ if(!log||typeof ResizeObserver!=='function')return;
+ let first=true;
+ chatLogRO=new ResizeObserver(()=>{
+  const el=$('#chat-log');
+  if(!el)return;
+  const h=el.clientHeight;
+  /* 首次回调只记基线：挂上去那一刻布局可能还没算完，拿它做差会凭空滚一下 */
+  if(first){first=false;chatLogH=h;return;}
+  if(chatLogH&&h!==chatLogH)el.scrollTop+=chatLogH-h;
+  chatLogH=h;
+ });
+ chatLogRO.observe(log);
+}
 
 
 /* ── 表情包：内置 emoji 两组（日常 / 涩涩）+ 个人自定义表情包（存本机，上传即存服务器媒体库） ── */
@@ -389,7 +420,7 @@ function noteKbPanel(h){
    🔴 这里只写 --fn-h，**不碰 --kb-h / --kb-shift**：A 类机器那条逐字节等价的
       键盘路径（applyKbA）完全不受影响。 */
 const FN_MS=160;
-let fnH=0,fnRaf=0,fnTrack=0,fnHoldBottom=false,kbObserve=null;
+let fnH=0,fnRaf=0,fnTrack=0,kbObserve=null;
 function fnPanel(){return $('#chat-fn');}
 function fnShown(){const p=fnPanel();return !!p&&!p.hidden;}
 /* 键盘此刻把输入栏顶起来了多少（CSS px）——注意是「已经生效的量」，不是目标值。
@@ -413,7 +444,6 @@ function fnHeight(){
  const vh=window.innerHeight||0;
  return Math.max(240,Math.min(400,Math.round(vh*0.45)));
 }
-function fnAtBottom(){const log=$('#chat-log');return !!log&&(log.scrollHeight-log.scrollTop-log.clientHeight<48);}
 function fnMark(on){
  document.body.classList.toggle('fn-open',on);
  const b=document.querySelector('.compose-plus');
@@ -424,8 +454,6 @@ function fnWrite(v){
  if(Math.abs(v-fnH)<0.01)return;
  fnH=v;
  document.documentElement.style.setProperty('--fn-h',v>0?v+'px':'0px');
- /* 面板高度一动，消息区高度跟着变；原本停在底部才把它钉回底部（用户在翻历史就别抢） */
- if(fnHoldBottom)scrollChat();
 }
 function fnReset(){
  const p=fnPanel();
@@ -449,7 +477,6 @@ function fnSlide(to,ms,done){
 }
 function fnOpen(){
  const p=fnPanel();if(!p)return;
- fnHoldBottom=fnAtBottom();
  if(p.hidden){p.hidden=false;fnH=0;document.documentElement.style.setProperty('--fn-h','0px');}
  fnMark(true);
  fnSlide(fnHeight());
@@ -516,7 +543,6 @@ function fnHandoff(){fnHold('kb');}
 function fnTakeover(){
  const p=fnPanel();if(!p)return;
  const H=fnHeight();
- fnHoldBottom=fnAtBottom();
  p.hidden=false;
  fnMark(true);
  if(kbNow()<=1){                        /* 键盘本来就没开：正常滑出 */
