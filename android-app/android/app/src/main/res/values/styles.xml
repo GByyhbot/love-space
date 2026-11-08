@@ -21,15 +21,14 @@
     </style>
 
 
-    <!-- 🔴 Activity 实际用的是这个主题（Manifest android:theme 指的就是它），
-         所以 opt-out 必须写在这里。AppTheme.NoActionBar 里那条从来没过生效：
-         既没有 postSplashScreenTheme、也没调 installSplashScreen()，
-         Activity 会一直停在 Launch 主题上，NoActionBar 根本没人用。
-         实验目的：opt-out 后窗口恢复「随键盘缩」的行为（targetSdk 35 才有效）。 -->
+    <!-- ⚠️ 这里曾经加过 windowOptOutEdgeToEdgeEnforcement 做实验，结论是**没用**：
+         属性确实生效了（窗口的 pfl 里 EDGE_TO_EDGE_ENFORCED 消失，系统桌面/IME 都还有），
+         但窗口依然不随键盘缩（frame 恒 [0,0][1080,2400]，mAppBounds 底部不减键盘高度），
+         因为本 App 的 decorView 一直带着 LAYOUT_FULLSCREEN —— 来源是 @capacitor/status-bar
+         的 StatusBarConfig.overlaysWebView 默认 true。它比 edge-to-edge 更早接管了布局。
+         要真正恢复 adjustResize 得先关掉 overlaysWebView，代价是失去沉浸式状态栏。
+         详见 .workbuddy/memory/2026-11-08.md。 -->
     <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
         <item name="android:background">@drawable/splash</item>
-        <item name="android:windowOptOutEdgeToEdgeEnforcement">true</item>
-        <item name="android:statusBarColor">#FCF8F9</item>
-        <item name="android:windowLightStatusBar">true</item>
     </style>
 </resources>
