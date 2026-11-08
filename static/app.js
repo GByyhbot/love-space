@@ -1872,6 +1872,7 @@ function photoBodyHtml(){
 function renderPhotoModal(){
  const photos = state.photos || [];
  if (!photos.length) return;
+ lbFromAlbum = true;
  openModal('收藏的瞬间', `<div class="lightbox-body">${photoBodyHtml()}</div>`, {wide:true});
  preloadPhoto(photos[photoIndex - 1]?.id);
  preloadPhoto(photos[photoIndex + 1]?.id);
@@ -1924,6 +1925,10 @@ function updatePhotoModal(){
    交叉淡出。不用手写 FLIP，也不用测量两个元素的坐标。
    不支持（老 WebView）就静默退回原来的直接切换，行为完全不变。 */
 const VT_NAME = 'lb-photo';
+/* 当前查看器是从相册进来的、还是从某条记录（聊天消息/留言/通知）进来的。
+   photoIndex 是相册专用的全局下标，从记录进来时它还是上一次看相册的遗留值，
+   拿它去找缩略图会飞到一张不相干的图上，所以退场必须按来源分流。 */
+let lbFromAlbum = false;
 function vtOk(){ return typeof document.startViewTransition === 'function'; }
 function vtClear(){
  const img = $('.lightbox-image');
@@ -1982,7 +1987,7 @@ function photoReturnEl(){
 }
 function closePhotoViewer(){
  const img = $('.lightbox-image');
- if(!vtOk() || !img) return closeModal();
+ if(!vtOk() || !img || !lbFromAlbum) return closeModal();
  const el = photoReturnEl();
  if(!el) return closeModal();
  /* focusReturn 是打开前那个缩略图按钮；转场期间 focus 会让浏览器去滚它，
@@ -2013,6 +2018,7 @@ function mediaViewerHtml(innerOnly=false){
 function recordMediaModal(mid){
  const {ids,title}=recordMediaIds(mid);
  mediaViewer.ids=ids; mediaViewer.i=Math.max(0,ids.indexOf(mid));
+ lbFromAlbum = false;
  openModal(title, mediaViewerHtml(), {wide:true});
 }
 function moveMediaViewer(step){
