@@ -1918,10 +1918,84 @@ function updatePhotoModal(){
    · 不在相册里的（聊天消息、留言、导入记录里带的图）→ 按**它所属的那条记录**单独看。
    以前只有第一条，聊天里的图在相册里查不到，idx 变 -1 落到第一张，
    于是"点聊天里的照片"会莫名其妙跳到收藏相册的第一张。 */
+/* ── 「一镜到底」：缩略图 → 全屏 ─────────────────────────────────────
+   View Transitions 是 WebView 111+ 的系统能力：给新旧两张图同一个
+   view-transition-name，浏览器自己把前者的矩形插值到后者，中间做形变 +
+   交叉淡出。不用手写 FLIP，也不用测量两个元素的坐标。
+   不支持（老 WebView）就静默退回原来的直接切换，行为完全不变。 */
+const VT_NAME = 'lb-photo';
+function vtOk(){ return typeof document.startViewTransition === 'function'; }
+function vtClear(){
+ const img = $('.lightbox-image');
+ if(img) img.style.viewTransitionName = '';
+ document.querySelectorAll('[data-action="photo"]').forEach(b => { if(b.style.viewTransitionName) b.style.viewTransitionName = ''; });
+}
+/* 大图先解码再转场：否则转场截到的是空白 <img>，会先淡出一块白再出图。
+   带上限，图片慢的时候不让点击没反应。 */
+function vtWarm(id, ms = 400){
+ return new Promise(res => {
+  const im = new Image(); let done = false;
+  const fin = () => { if(done) return; done = true; res(); };
+  im.onload = () => { const p = im.decode ? im.decode().catch(() => {}) : Promise.resolve(); p.then(fin, fin); };
+  im.onerror = fin;
+  im.src = `/media/${id}?preview=true`;
+  if(im.complete && im.naturalWidth) fin();
+  setTimeout(fin, ms);
+ });
+}
 function photoModal(mid){
  const idx = (state.photos || []).findIndex(p => p.id === mid);
- if(idx >= 0){ photoIndex = idx; renderPhotoModal(); return; }
- recordMediaModal(mid);
+ if(idx < 0) return recordMediaModal(mid);
+ photoIndex = idx;
+ const src = [...document.querySelectorAll('[data-action="photo"]')].find(b => b.dataset.id === mid);
+ if(!vtOk() || !src) return renderPhotoModal();
+ src.style.viewTransitionName = VT_NAME;
+ vtWarm(state.photos[idx].id).then(() => {
+ /* 🔴 回调里必须先把缩略图的 name 摘掉。View Transitions 的「旧快照」在回调
+    **之前**采样（这时缩略图带 name，正好当起点），「新快照」在回调**之后**采样；
+    如果新 DOM 里缩略图和新大图同时叫 lb-photo，浏览器会直接报
+    "Unexpected duplicate view-transition-name" 并把整个转场 abort —— 缩略图
+    还在页面上（相册没被卸载），不摘就一定撞。 */
+ const t = document.startViewTransition(() => {
+  if(src.style.viewTransitionName) src.style.viewTransitionName = '';
+  renderPhotoModal();
+  const img = $('.lightbox-image');
+  if(img) img.style.viewTransitionName = VT_NAME;
+ });
+ t.ready.catch(() => {});          /* abort 时 ready 会 reject，不接就是 unhandled */
+ t.finished.then(vtClear, vtClear);
+ });
+ return;
+}
+/* 反向：关掉看图器时让图飞回它来的那个缩略图。
+   只有「来源缩略图还在当前视口里」才做——从聊天消息/通知点进来的图，相册页根本
+   不在当前页；缩略图也可能已经滚出屏幕。这两种情况硬飞会让图窜到屏幕外，
+   比直接关更难看，所以一律退回普通关闭。 */
+function photoReturnEl(){
+ const p = (state.photos || [])[photoIndex];
+ if(!p) return null;
+ const el = [...document.querySelectorAll('[data-action="photo"]')].find(b => b.dataset.id === p.id);
+ if(!el) return null;
+ const r = el.getBoundingClientRect();
+ if(r.width < 4 || r.bottom < 0 || r.top > (window.innerHeight || 0)) return null;
+ return el;
+}
+function closePhotoViewer(){
+ const img = $('.lightbox-image');
+ if(!vtOk() || !img) return closeModal();
+ const el = photoReturnEl();
+ if(!el) return closeModal();
+ /* focusReturn 是打开前那个缩略图按钮；转场期间 focus 会让浏览器去滚它，
+    快照跟着位移 → 图会歪着飞。转场这条路直接把焦点交还省掉。 */
+ focusReturn = null;
+ img.style.viewTransitionName = VT_NAME;
+ const t = document.startViewTransition(() => {
+  img.style.viewTransitionName = '';
+  closeModal();
+  el.style.viewTransitionName = VT_NAME;
+ });
+ t.ready.catch(() => {});
+ t.finished.then(vtClear, vtClear);
 }
 /* 单条记录内的图片查看器：只在这条消息/这条动态的图之间左右翻，不串到别人的相册 */
 const mediaViewer = {ids:[], i:0};
@@ -1974,7 +2048,7 @@ async function act(action,id,el) {
  if(action==='week-copy'){const w=state.weekly;if(!w)return;const text=[`${w.label}的回忆周报（${w.start} 至 ${w.end}）`,w.message,`记录 ${w.total} 条 · 照片 ${w.photos} 张 · 有记录 ${w.days_active} 天`,`喜欢 ${w.likes} 次 · 留言与评论 ${w.comments} 条`].join('\n');try{await navigator.clipboard.writeText(text);toast('周报文字已复制');}catch{toast('复制失败，请手动选择文字');}return;}
  if(action==='toggle-dark'){const pref=localStorage.getItem(DARK_KEY)||'auto';const isDark=document.documentElement.classList.contains('dark');localStorage.setItem(DARK_KEY,isDark?'off':'on');applyDarkMode();const btn=el||$('#dark-toggle');if(btn)btn.innerHTML=icon(document.documentElement.classList.contains('dark')?'sun':'moon');return;}
  if(action==='open-search'){openSearchPanel();return;}
- if(action==='close-modal')return closeModal();
+ if(action==='close-modal')return closePhotoViewer();
  if(action==='record-audio')return;
  if(action==='compose')return composer();
  if(action==='upload-album')return composer('post',null,{album:state.album||''});
@@ -2222,7 +2296,7 @@ document.addEventListener('submit',async e=>{if(e.target.id!=='chat-form')return
  }catch(err){toast(err.message);}finally{btn.disabled=false;}});
 document.addEventListener('input',e=>{if(e.target.id==='chat-text'){localStorage.setItem('chat-text:'+state.me.user.id,e.target.value);syncCompose();}if(e.target.id==='filter-q'){state.filters={...(state.filters||{}),q:e.target.value};clearTimeout(state.filterTimer);state.filterTimer=setTimeout(async()=>{const pos=$('#filter-q')?.selectionStart;try{await loadTimeline(true);renderPage();$('#filter-q')?.focus();$('#filter-q')?.setSelectionRange(pos,pos);}catch(err){toast(err.message);}},250);}});
 document.addEventListener('change',e=>{const map={'filter-author':'author','filter-date':'date','filter-media':'media'};if(map[e.target.id]){state.filters={...(state.filters||{}),[map[e.target.id]]:e.target.value};state.timelineCursor=null;loadTimeline(true).then(renderPage).catch(err=>toast(err.message));}});
-document.addEventListener('keydown',e=>{if(e.key==='Escape'){const menu=$('.more-menu[open]');if(menu){menu.removeAttribute('open');$('summary',menu)?.focus();}}if(e.key==='Escape'&&$('.modal'))closeModal();if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing&&e.target?.id==='chat-text'){e.preventDefault();const form=e.target.form||$('#chat-form'),btn=form&&$('button[type=submit]',form);if(form&&btn&&!btn.disabled)form.requestSubmit();}if(e.key==='Tab'&&$('.modal')){const els=$$('button,input,textarea,select,a[href]',$('.modal')).filter(el=>!el.disabled),first=els[0],last=els.at(-1);if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}}});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){const menu=$('.more-menu[open]');if(menu){menu.removeAttribute('open');$('summary',menu)?.focus();}}if(e.key==='Escape'&&$('.modal'))closePhotoViewer();if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing&&e.target?.id==='chat-text'){e.preventDefault();const form=e.target.form||$('#chat-form'),btn=form&&$('button[type=submit]',form);if(form&&btn&&!btn.disabled)form.requestSubmit();}if(e.key==='Tab'&&$('.modal')){const els=$$('button,input,textarea,select,a[href]',$('.modal')).filter(el=>!el.disabled),first=els[0],last=els.at(-1);if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}}});
 // —— Android APK 系统通知桥（浏览器/PWA 无 Capacitor 时自动跳过，零影响）——
 /* 原生环境识别不能只赌 window.Capacitor：APK 是「远程加载模式」（server.url 指向线上站），
    Capacitor 的桥接脚本只注入由它本地服务器提供的页面，远程页面里 window.Capacitor 常常是空的，

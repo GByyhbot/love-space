@@ -1244,6 +1244,12 @@ body.cal-full{overflow:hidden;height:100dvh}
   overscroll-behavior:contain;-webkit-user-select:none;user-select:none}
 .lightbox-image{display:block;width:auto;height:auto;max-width:100%;max-height:100%;border-radius:0;
   transform-origin:center center;will-change:transform;cursor:zoom-in;-webkit-user-drag:none}
+/* 「一镜到底」：缩略图 → 全屏。View Transitions 用同一套伪元素给新旧两张图插值，
+   这里只定时长/缓动；不支持的浏览器（老 WebView）压根不会产生这些伪元素，无副作用。
+   整页默认也有一次淡入淡出（root 组），保留它——遮罩跟着一起淡进来比硬切自然，
+   只需要把时长压到跟图片同一档，免得图先落位、遮罩还在慢慢淡。 */
+::view-transition-group(lb-photo){animation-duration:.28s;animation-timing-function:cubic-bezier(.22,.8,.28,1)}
+::view-transition-old(root),::view-transition-new(root){animation-duration:.24s;animation-timing-function:ease-out}
 .lightbox-image.zoomed{cursor:grab}
 .lightbox-image.zoomed:active{cursor:grabbing}
 .lightbox-video{display:block;width:100%;max-height:70vh;border-radius:var(--radius-s);background:#000}
