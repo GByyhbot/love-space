@@ -381,6 +381,9 @@ function syncKeyboardCore(){
     缩放期间 hidden 按 0 处理，免得把手势缩放误判成键盘弹起/收起 */
  const zoomed=(vv.scale||1)>1.01;
  const hidden=zoomed?0:Math.max(0,Math.round(ih-vv.height-vv.offsetTop));
+ /* 诊断记录：真机原始数字（跳动分析用，见文件底部 kbRec 说明） */
+ kbRec({t:tms(),ev:'vv',ih,vh:Math.round(vv.height),vo:Math.round(vv.offsetTop),
+        sc:+(vv.scale||1).toFixed(2),hid:hidden,nat:Math.round(kbNativePx/kbDpr())});
  /* 布局视口被键盘缩掉了 → A 类机器，原生桥永久让位 */
  const viewShrink=Math.max(0,Math.round(kbBaseH-ih));
  /* 壁纸补偿量：布局视口比基准矮了多少，就是 .chat-panel 被压掉了多少。
@@ -438,6 +441,7 @@ function applyKbA(hidden){
     它会影响 .pick-overlay / .ps-foot 的 padding，改语义等于连带改别的界面。 */
  if(document.body)document.body.classList.toggle('kb-open',h>90);
  noteKbPanel(h);
+ kbRec({t:tms(),ev:'A',v:h});
 }
 /* B 类机器落盘：--kb-shift 恒 0（这类机型视口不缩，壁纸本来就不动，不需要补偿）。 */
 function applyKbB(v){
@@ -446,6 +450,7 @@ function applyKbB(v){
  document.documentElement.style.setProperty('--kb-shift','0px');
  if(document.body)document.body.classList.toggle('kb-open',h>90);
  noteKbPanel(h);
+ kbRec({t:tms(),ev:'B',v:h});
 }
 /* 记住这台机器键盘的实际高度，给「更多功能」面板当高度用（见 style.css:.fn-panel）。
    只增不减：键盘收起时 h 归零，不能把已记下的高度清掉，否则下次开面板又回落 260。
@@ -710,7 +715,24 @@ function kbStep(){
 /* 原生 IME 高度桥的唯一入口（MainActivity.pushImeHeight 调用）。
    原生只传**物理像素**，"换算成 CSS px"和"用不用"都由这里决定。
    收到的值先存起来再触发一次同步，判据与网页自算走同一条路。 */
-window.__kbSetNative=function(px){kbNativePx=Number(px)||0;syncKeyboard();};
+window.__kbSetNative=function(px){kbNativePx=Number(px)||0;kbRec({t:tms(),ev:'nat',v:Number(px)||0});syncKeyboard();};
+/* ── 键盘诊断记录器（2026-11-10）────────────────────────────
+   键盘跳动修了三轮仍是推测：VM 对拍验证的是「代码符合推测」，不是「推测符合真机」。
+   这里把每次键盘事件的**真机原始数字**记进环形缓冲（600 条 ≈ 最近两三次开关），
+   设置页「复制键盘诊断数据」导出给开发侧据实分析。
+   记录项：时间 / innerHeight / vv.height / vv.offsetTop / 缩放比 / hidden /
+   原生桥推送值 / 本次落盘的 --kb-h 与写入路径（A=引擎原始值 B=平滑）。
+   成本：每事件一次 getComputedStyle + 数组 push，键盘动画期间每帧一次，可忽略。 */
+let kbRing=[];
+window.__kbRing=kbRing;
+function tms(){return Math.round(performance.now());}
+function kbRec(o){
+ if(kbRing.length>=600)kbRing.shift();
+ try{
+  o.sa=getComputedStyle(document.documentElement).getPropertyValue('--safe-area-inset-bottom').trim();
+ }catch{}
+ kbRing.push(o);
+}
 /* 引擎仲裁：聚焦输入框后 600ms，视觉视口若自己缩了 >90px，说明 insets 流通、
    Chromium 在管键盘（Capacitor8/targetSdk36 的正常路径）→ kbVvWorks=1，原生桥永久让位。
    600ms 的取值：足够键盘动画走完、也足够"会报告的引擎"触发 resize；
