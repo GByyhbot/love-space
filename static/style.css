@@ -2102,8 +2102,17 @@ html.is-native-app body.chat-immersive .shell.chat-full .chat-panel.immersive .c
 /* —— 顶栏 / 输入栏不透明纯色（微信/QQ 那种观感，主人明确要的）——
    底色跟着主题走（--bg / --surface），状态栏颜色由原生 setBackgroundColor 同步，
    于是状态栏与顶栏连成一体，也不再需要担心状态栏图标和壁纸颜色打架。
-   只对 APK 生效，浏览器不受影响。 */
+   只对 APK 生效，浏览器不受影响。
+
+   ⚠️ 这里必须用**实色**，不能沿用 base 里那条 color-mix 88% + backdrop-blur：
+   半透明毛玻璃叠在 --bg 上，看起来比 --bg 略深/略浅，和系统画的实色状态栏
+   拼在一起就是一条看得见的接缝（2026-11-09 主人反馈「状态栏和主题不统一」）。 */
+html.is-native-app .topbar{
+  background:var(--bg);
+  -webkit-backdrop-filter:none;backdrop-filter:none;
+}
 html.is-native-app .chat-panel,
+html.is-native-app .chat-header,
 html.is-native-app .chat-panel.immersive .chat-header{
   background:var(--surface);
 }

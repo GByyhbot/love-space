@@ -136,7 +136,27 @@ function syncMetaThemeColor() {
 }
 // —— Android APK 状态栏适配：颜色跟随明暗主题（浏览器/PWA 无 Capacitor 时跳过）——
 const _SB=(window.Capacitor&&window.Capacitor.Plugins)?window.Capacitor.Plugins.StatusBar:null;
-async function syncStatusBar(){if(!_SB)return;try{const dark=document.documentElement.classList.contains('dark');await _SB.setOverlaysWebView({overlay:false});await _SB.setStyle({style:dark?'Dark':'Light'});await _SB.setBackgroundColor({color:themeBgColor()});}catch{}}
+/* 状态栏颜色必须等于**当前页最顶上那条不透明栏**的颜色，否则顶栏和状态栏之间一定有一条接缝：
+     · 聊天全屏页（body.chat-full）没有 .topbar，顶上是 .chat-header，实色 --surface；
+     · 其它页面顶上是 .topbar，实色 --bg。
+   --bg 与 --surface 在本项目里从来不是同一个色（浅色 #FAF8F9 vs #FFFFFF，
+   深色 #231B1D vs #32262A），所以不能固定取 --bg —— 那正是「状态栏和主题不统一」的成因。 */
+function statusBarColor(){
+ const key=(document.body&&document.body.classList.contains('chat-full'))?'--surface':'--bg';
+ const c=getComputedStyle(document.documentElement).getPropertyValue(key).trim();
+ return /^#[0-9a-fA-F]{6}$/.test(c)?c:(document.documentElement.classList.contains('dark')?'#211a1e':'#f8e9ef');
+}
+/* 已下发的组合，避免切页/重渲染时反复调插件（renderShell 可能一分钟内跑几十次） */
+let _sbApplied='';
+async function syncStatusBar(){
+ if(!_SB)return;
+ const dark=document.documentElement.classList.contains('dark');
+ const color=statusBarColor();
+ const sig=color+(dark?'|d':'|l');
+ if(sig===_sbApplied)return;
+ _sbApplied=sig;
+ try{await _SB.setOverlaysWebView({overlay:false});await _SB.setStyle({style:dark?'Dark':'Light'});await _SB.setBackgroundColor({color});}catch{}
+}
 /* APK 上让聊天页延伸到状态栏底下：其它页面内容不该被状态栏压住，所以只在
    「聊天页 + 照片壁纸」时才开 overlay，离开立刻恢复。浏览器/PWA 无此插件，自动跳过。 */
 /* 2026-11-09：不再把内容铺到状态栏底下。
@@ -293,6 +313,9 @@ function renderShell() {
  $('#app').innerHTML=`<div class="shell${state.page==='messages'?' chat-full':''}${state.page==='figure'?' figure-full':''}"><aside class="sidebar"><div class="brand"><img src="/static/icon.svg" alt=""><div><strong>恋爱空间</strong><small>LOVE, EVERY DAY</small></div></div><nav class="nav" aria-label="主要导航">${navHtml.join('')}</nav><div class="sidebar-bottom"><div class="little-note"><span>❀</span><br>把喜欢，写进每一天。<br>little things, lasting love</div><button class="profile-btn" data-nav="personal">${avatar(state.me.user.id)}<div><strong>${esc(state.me.user.name)}</strong><small>我的小角落 ${icon('arrow')}</small></div></button></div></aside><main class="main"><header class="topbar${toolsSub?' has-back':''}">${toolsSub?`<button class="nav-back topbar-back" data-action="tools-back" aria-label="回到我们">${icon('back')}</button>`:''}<span class="desktop-date">${new Date().toLocaleDateString('zh-CN',{timeZone:state.me.space.timezone,month:'long',day:'numeric',weekday:'long'})} · 今天也要好好相爱</span><div class="topbar-right"><span class="pill">${icon('lock')} 双人私密空间</span><button class="icon-btn" id="dark-toggle" data-action="toggle-dark" aria-label="切换深浅色">${icon(document.documentElement.classList.contains('dark')?'sun':'moon')}</button><button class="icon-btn" data-action="open-search" aria-label="搜索">${icon('search')}</button><button class="icon-btn" data-nav="messages" aria-label="私聊">${icon('chat')}${state.me.chat_unread&&state.page!=='messages'?`<span class="badge">${state.me.chat_unread>99?'99+':state.me.chat_unread}</span>`:''}</button><button class="icon-btn" data-nav="notices" aria-label="通知">${icon('bell')}${state.me.unread?`<span class="badge">${state.me.unread>99?'99+':state.me.unread}</span>`:''}</button><details class="more-menu account-menu"><summary class="mobile-profile" aria-label="打开账号菜单" title="账号菜单">${avatar(state.me.user.id)}</summary><div class="menu-pop account-popover"><div class="account-menu-heading"><strong>${esc(state.me.user.name)}</strong><small>我的账号</small></div><button data-action="profile">${icon('edit')} 账号资料</button><button data-nav="personal">${icon('lock')} 个人小角落</button><button data-nav="settings">${icon('gear')} 设置</button><button data-action="logout" class="danger account-logout">${icon('arrow')} 退出登录</button></div></details></div></header>${!state.online?'<div class="offline-banner">网络暂时断开，正在等待重连。未发送的文字会为你保留。</div>':''}<div id="page"></div><p class="footer-note">♡ 有你在，平凡的日子也闪闪发光。</p></main></div>`;
  renderPage();
  if(keepScroll>0)window.scrollTo({top:keepScroll});
+ /* 顶栏颜色随页面变（聊天页 --surface / 其它页 --bg），状态栏要跟着走，
+    否则从其它页进聊天页会留下一条色差。值没变时 syncStatusBar 内部会直接返回。 */
+ syncStatusBar();
 }
 
 function renderPage() {
