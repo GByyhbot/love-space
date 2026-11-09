@@ -134,38 +134,31 @@ function themeBgColor() {
 function syncMetaThemeColor() {
  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', themeBgColor());
 }
-// —— Android APK 状态栏适配：颜色跟随明暗主题（浏览器/PWA 无 Capacitor 时跳过）——
+// —— Android APK 状态栏适配 ——
+// edge-to-edge：状态栏本体透明，颜色由网页顶栏自己画（见 style.css 末尾 is-native-app 块），
+// 所以这里只剩「告知原生当前深浅色来切图标」这一件事。
+// 浏览器/PWA 无 Capacitor 也没有 LoveTheme，静默跳过。
 const _SB=(window.Capacitor&&window.Capacitor.Plugins)?window.Capacitor.Plugins.StatusBar:null;
-/* 状态栏颜色必须等于**当前页最顶上那条不透明栏**的颜色，否则顶栏和状态栏之间一定有一条接缝：
-     · 聊天全屏页（body.chat-full）没有 .topbar，顶上是 .chat-header，实色 --surface；
-     · 其它页面顶上是 .topbar，实色 --bg。
-   --bg 与 --surface 在本项目里从来不是同一个色（浅色 #FAF8F9 vs #FFFFFF，
-   深色 #231B1D vs #32262A），所以不能固定取 --bg —— 那正是「状态栏和主题不统一」的成因。 */
-function statusBarColor(){
- const key=(document.body&&document.body.classList.contains('chat-full'))?'--surface':'--bg';
- const c=getComputedStyle(document.documentElement).getPropertyValue(key).trim();
- return /^#[0-9a-fA-F]{6}$/.test(c)?c:(document.documentElement.classList.contains('dark')?'#211a1e':'#f8e9ef');
-}
 /* 已下发的组合，避免切页/重渲染时反复调原生（renderShell 可能一分钟内跑几十次）。
    只在**确实成功**时才记，失败留着重试。 */
 let _sbApplied='';
 async function syncStatusBar(){
  const dark=document.documentElement.classList.contains('dark');
- const color=statusBarColor();
- const sig=color+(dark?'|d':'|l');
+ const sig=dark?'d':'l';
  if(sig===_sbApplied)return;
  let ok=false;
- /* ① 首选原生直连：window.LoveTheme 是 APK 注入的同步接口。
-      本应用远程加载页面，Capacitor 的插件对象不一定在页面里拿得到（拿不到就会
-      静默跳过所有调用，状态栏永远停在 styles.xml 的默认色）。原生直连没这个风险。 */
+ /* ① 首选原生直连：window.LoveTheme 是 APK 注入的同步接口。*/
  try{
-  if(window.LoveTheme&&typeof window.LoveTheme.setStatusBar==='function'){
-   ok=!!window.LoveTheme.setStatusBar(color,!dark);
+  if(window.LoveTheme&&typeof window.LoveTheme.setStatusBarMode==='function'){
+   window.LoveTheme.setStatusBarMode(dark);ok=true;
   }
  }catch{}
- /* ② 退回 Capacitor 插件（浏览器里两边都没有，静默跳过） */
+ /* ② 退回 Capacitor 插件：只切图标深浅。
+      🔴 绝不能再调 setOverlaysWebView(false) / setBackgroundColor —— 前者会摘掉
+      LAYOUT_FULLSCREEN 让内容缩回状态栏下面（键盘缩放也可能跟着失效），
+      后者会把网页画好的那块盖掉。*/
  if(!ok&&_SB){
-  try{await _SB.setOverlaysWebView({overlay:false});await _SB.setStyle({style:dark?'Dark':'Light'});await _SB.setBackgroundColor({color});ok=true;}catch{}
+  try{await _SB.setStyle({style:dark?'Dark':'Light'});ok=true;}catch{}
  }
  if(ok)_sbApplied=sig;
 }

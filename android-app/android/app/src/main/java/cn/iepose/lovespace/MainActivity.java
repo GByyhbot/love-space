@@ -132,8 +132,7 @@ public class MainActivity extends BridgeActivity {
             if (remembered == null || remembered.isEmpty()) remembered = SPACE_URL;
             currentUrl = remembered;
             WebView wv = getBridge().getWebView();
-            // 主题桥：网页把当前主题色交给原生去染状态栏。必须赶在页面脚本执行前注入，
-            // 否则首帧会先显示 styles.xml 里的默认色再跳。见 ThemeBridge / StatusBarTheme。
+            // 主题桥：网页告知深浅色，原生据此切状态栏图标。见 ThemeBridge / StatusBarTheme。
             if (wv != null) {
                 try {
                     wv.addJavascriptInterface(new ThemeBridge(this), "LoveTheme");
@@ -167,6 +166,8 @@ public class MainActivity extends BridgeActivity {
         //    等 super 返回再绑，首个页面请求已经走过隧道了。
         bypassTunnelNetwork();
         super.onCreate(savedInstanceState);
+        // ⓪'' 状态栏：edge-to-edge + 本体透明，颜色由网页自己画（见 StatusBarTheme）
+        StatusBarTheme.init(this);
         // ⓪' 网络变化（切 WiFi/流量、隧道开关）时重新择优绑定
         watchNetworkChange();
         // ① 首次打开权限引导（通知权限等）

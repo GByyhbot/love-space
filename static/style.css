@@ -2067,7 +2067,7 @@ body.figure-full{overflow:hidden;height:100dvh}
    （截图量出状态栏实际占 32px，env 却报 48px）。 */
 html.is-native-app{--safe-top:clamp(0px, env(safe-area-inset-top,0px), 36px)}
 html.is-native-app .main{padding-top:calc(var(--safe-top,0px) + 6px)}
-html.is-native-app .shell.chat-full .main{padding-top:var(--safe-top,0px)}
+html.is-native-app .shell.chat-full .main{padding-top:0}   /* 聊天页：让面板铺到 y=0，状态栏那块由 .chat-header 画 */
 html.is-native-app .auth-page{padding-top:calc(var(--safe-top,0px) + 18px)}
 html.is-native-app .topbar{
   position:sticky;top:0;z-index:15;
@@ -2096,8 +2096,7 @@ html.is-native-app .shell.figure-full .topbar{margin-top:0}
    不带壁纸时保持原样（主区让位）：那种情况头部是浅色的，而 App 的状态栏图标是白的，
    铺上去就看不见了——只有深色壁纸 + 顶部渐变才撑得住白图标。
    body.chat-immersive 由 app.js 的 renderShell 按 chatBgIsPhoto() 打上，不用 :has()（旧 WebView 不支持）。 */
-html.is-native-app body.chat-immersive .shell.chat-full .main{padding-top:0}
-html.is-native-app body.chat-immersive .shell.chat-full .chat-panel.immersive .chat-header{padding-top:calc(var(--safe-top,0px) + 6px)}
+html.is-native-app .shell.chat-full .chat-header{padding-top:calc(var(--safe-top,0px) + 14px)}
 
 /* —— 顶栏 / 输入栏不透明纯色（微信/QQ 那种观感，主人明确要的）——
    底色跟着主题走（--bg / --surface），状态栏颜色由原生 setBackgroundColor 同步，
@@ -2116,9 +2115,6 @@ html.is-native-app .chat-header,
 html.is-native-app .chat-panel.immersive .chat-header{
   background:var(--surface);
 }
-/* .chat-panel.immersive .chat-header 原本是透明的、靠壁纸透上来（padding 也只有 6px），
-   这里要一起盖掉；padding 补回 14px，与其它页顶栏对齐。 */
-html.is-native-app .chat-panel.immersive .chat-header{padding-top:14px}
 html.is-native-app .chat-compose{background:var(--surface)}
 
 /* —— 自定义清单表单（questPage 里的「写下你们自己的」） —— */
