@@ -377,7 +377,10 @@ function syncKeyboardCore(){
  const vv=window.visualViewport;if(!vv)return;
  const ih=window.innerHeight;
  if(!kbBaseH||ih>kbBaseH)kbBaseH=ih;   /* 基准：见过的最大布局视口高度，换屏/旋转自动跟随 */
- const hidden=Math.max(0,Math.round(ih-vv.height-vv.offsetTop));
+ /* 双指缩放同样会缩小视觉视口，但那不是键盘（observerviewport.com）：
+    缩放期间 hidden 按 0 处理，免得把手势缩放误判成键盘弹起/收起 */
+ const zoomed=(vv.scale||1)>1.01;
+ const hidden=zoomed?0:Math.max(0,Math.round(ih-vv.height-vv.offsetTop));
  /* 布局视口被键盘缩掉了 → A 类机器，原生桥永久让位 */
  const viewShrink=Math.max(0,Math.round(kbBaseH-ih));
  /* 壁纸补偿量：布局视口比基准矮了多少，就是 .chat-panel 被压掉了多少。
@@ -721,6 +724,7 @@ document.addEventListener('focusin',e=>{
  setTimeout(()=>{
   if(document.activeElement!==t)return;            /* 已移开焦点：别误判 */
   if(kbVvWorks)return;                             /* 已确认过：不再重复 */
+  if((vv.scale||1)>1.01)return;                    /* 双指缩放中：这不是键盘 */
   if(full - vv.height > 90){ kbVvWorks=1; syncKeyboard(); }
  },600);
 },true);
