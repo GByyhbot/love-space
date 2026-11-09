@@ -146,16 +146,28 @@ function statusBarColor(){
  const c=getComputedStyle(document.documentElement).getPropertyValue(key).trim();
  return /^#[0-9a-fA-F]{6}$/.test(c)?c:(document.documentElement.classList.contains('dark')?'#211a1e':'#f8e9ef');
 }
-/* 已下发的组合，避免切页/重渲染时反复调插件（renderShell 可能一分钟内跑几十次） */
+/* 已下发的组合，避免切页/重渲染时反复调原生（renderShell 可能一分钟内跑几十次）。
+   只在**确实成功**时才记，失败留着重试。 */
 let _sbApplied='';
 async function syncStatusBar(){
- if(!_SB)return;
  const dark=document.documentElement.classList.contains('dark');
  const color=statusBarColor();
  const sig=color+(dark?'|d':'|l');
  if(sig===_sbApplied)return;
- _sbApplied=sig;
- try{await _SB.setOverlaysWebView({overlay:false});await _SB.setStyle({style:dark?'Dark':'Light'});await _SB.setBackgroundColor({color});}catch{}
+ let ok=false;
+ /* ① 首选原生直连：window.LoveTheme 是 APK 注入的同步接口。
+      本应用远程加载页面，Capacitor 的插件对象不一定在页面里拿得到（拿不到就会
+      静默跳过所有调用，状态栏永远停在 styles.xml 的默认色）。原生直连没这个风险。 */
+ try{
+  if(window.LoveTheme&&typeof window.LoveTheme.setStatusBar==='function'){
+   ok=!!window.LoveTheme.setStatusBar(color,!dark);
+  }
+ }catch{}
+ /* ② 退回 Capacitor 插件（浏览器里两边都没有，静默跳过） */
+ if(!ok&&_SB){
+  try{await _SB.setOverlaysWebView({overlay:false});await _SB.setStyle({style:dark?'Dark':'Light'});await _SB.setBackgroundColor({color});ok=true;}catch{}
+ }
+ if(ok)_sbApplied=sig;
 }
 /* APK 上让聊天页延伸到状态栏底下：其它页面内容不该被状态栏压住，所以只在
    「聊天页 + 照片壁纸」时才开 overlay，离开立刻恢复。浏览器/PWA 无此插件，自动跳过。 */

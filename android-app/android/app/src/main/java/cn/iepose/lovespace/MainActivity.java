@@ -132,6 +132,15 @@ public class MainActivity extends BridgeActivity {
             if (remembered == null || remembered.isEmpty()) remembered = SPACE_URL;
             currentUrl = remembered;
             WebView wv = getBridge().getWebView();
+            // 主题桥：网页把当前主题色交给原生去染状态栏。必须赶在页面脚本执行前注入，
+            // 否则首帧会先显示 styles.xml 里的默认色再跳。见 ThemeBridge / StatusBarTheme。
+            if (wv != null) {
+                try {
+                    wv.addJavascriptInterface(new ThemeBridge(this), "LoveTheme");
+                } catch (Throwable t) {
+                    Log.w(TAG, "addJavascriptInterface(ThemeBridge) failed", t);
+                }
+            }
             if (wv != null && !remembered.equals(SPACE_URL)) {
                 // super.load() 已经把默认线路发了一发，这里先掐掉，别白等它。
                 wv.stopLoading();
