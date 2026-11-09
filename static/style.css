@@ -2101,22 +2101,27 @@ html.is-native-app .shell.figure-full .topbar{margin-top:0}
    body.chat-immersive 由 app.js 的 renderShell 按 chatBgIsPhoto() 打上，不用 :has()（旧 WebView 不支持）。 */
 html.is-native-app .shell.chat-full .chat-header{padding-top:calc(var(--safe-top,0px) + 14px)}
 
-/* —— 顶栏 / 输入栏不透明纯色（微信/QQ 那种观感，主人明确要的）——
-   底色跟着主题走（--bg / --surface），状态栏颜色由原生 setBackgroundColor 同步，
-   于是状态栏与顶栏连成一体，也不再需要担心状态栏图标和壁纸颜色打架。
-   只对 APK 生效，浏览器不受影响。
-
-   ⚠️ 这里必须用**实色**，不能沿用 base 里那条 color-mix 88% + backdrop-blur：
-   半透明毛玻璃叠在 --bg 上，看起来比 --bg 略深/略浅，和系统画的实色状态栏
-   拼在一起就是一条看得见的接缝（2026-11-09 主人反馈「状态栏和主题不统一」）。 */
+/* —— 顶栏 / 状态栏：沉浸式 + 半透明毛玻璃（2026-11-10 主人定的观感）——
+   edge-to-edge 下状态栏本体透明、顶栏延伸到 y=0，所以「顶栏半透明 + blur」
+   天然等于「状态栏半透明」：状态栏透出来的就是顶栏的毛玻璃。
+   实色方案（昨天那版）与系统画的实色状态栏拼不出接缝，但观感是"色块"；
+   半透明方案里内容/壁纸从 bars 后面透出来，沉浸感更足。
+   老 WebView 用实色兜底（color-mix 不支持时回落），只损失半透明不影响布局。
+   聊天页头部压在壁纸上，半透明 + blur = 壁纸透出的毛玻璃；底部输入栏仍是实色
+   （主人只点名了顶栏/状态栏，底部要跟随时改这一处即可）。 */
 html.is-native-app .topbar{
-  background:var(--bg);
-  -webkit-backdrop-filter:none;backdrop-filter:none;
+  background:var(--bg);                                       /* 老 WebView 兜底：实色 */
+  background:color-mix(in srgb,var(--bg) 80%,transparent);     /* 半透明毛玻璃 */
+  -webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);
 }
-html.is-native-app .chat-panel,
+html.is-native-app .chat-panel{
+  background:var(--surface);
+}
 html.is-native-app .chat-header,
 html.is-native-app .chat-panel.immersive .chat-header{
   background:var(--surface);
+  background:color-mix(in srgb,var(--surface) 80%,transparent);
+  -webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);
 }
 html.is-native-app .chat-compose{background:var(--surface)}
 
