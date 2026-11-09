@@ -169,10 +169,18 @@ public class MainActivity extends BridgeActivity {
         // ④ 打开本地存储：聊天背景图按 media id 缓存进 IndexedDB，省得每次进聊天都重下一遍。
         //    WebSettings 的 database/domStorage 默认未必开启，不开的话 JS 侧 indexedDB.open 会直接失败。
         setupLocalStorage();
-        // ⑤ 键盘高度桥：targetSdk 35 起系统强制 edge-to-edge 且不再随键盘缩窗口，
-        //    WebView 侧的 innerHeight / visualViewport 可能都不变（Android 15 实测），
-        //    网页算不出键盘高度 → 输入框被键盘遮住。这里把 IME 高度主动喂给网页。
-        setupImeHeightBridge();
+        // ⑤ 键盘避让。两条路**互斥**，只能装一个：
+        //    · 新：原生缩容器 —— 让 WebView 的布局视口跟着键盘真实缩小，
+        //      Chromium 自己把 innerHeight / vv.height / dvh 全部算对，
+        //      网页端直接走主人机已经在跑的 A 类路径，不需要任何高度补偿。
+        //    · 旧：IME 高度桥 —— 窗口尺寸不动，把高度喂给网页自己补 padding。
+        //    同时装会让网页在首帧同时看到"视口缩了"和"原生给了高度"，判错就是双份位移。
+        boolean kbHandled = KeyboardAvoidance.install(this,
+                getBridge() == null ? null : getBridge().getWebView());
+        if (!kbHandled) setupImeHeightBridge();
+        else Log.i(TAG, "键盘避让由原生缩容器接管，老 IME 高度桥未安装");
+        // ⑥ 窗口诊断探针：只读，不改任何窗口标志。见 WindowProbe.java 的说明。
+        WindowProbe.install(this, getBridge() == null ? null : getBridge().getWebView());
     }
 
     /**
