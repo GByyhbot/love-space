@@ -633,6 +633,7 @@ button.mood-row.no-mood .mood-bubble.empty{color:var(--primary-dark)}
 .chat-header>div{min-width:0;flex:1}
 .chat-header h3,.chat-header small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .chat-header .icon-btn,.chat-header .avatar{flex-shrink:0}
+.chat-header .avatar{width:32px;height:32px;font-size:var(--fs-md)}   /* 头像缩小一档（基准 40） */
 .chat-header small{display:block;color:var(--muted);margin-top:2px}
 .chat-header .link-btn{margin-left:auto}
 /* 窄屏上「返回 + 头像 + 三颗功能键」已经吃掉一半宽度，副标题只剩三十来像素，
@@ -2099,7 +2100,7 @@ html.is-native-app .shell.figure-full .topbar{margin-top:0}
    不带壁纸时保持原样（主区让位）：那种情况头部是浅色的，而 App 的状态栏图标是白的，
    铺上去就看不见了——只有深色壁纸 + 顶部渐变才撑得住白图标。
    body.chat-immersive 由 app.js 的 renderShell 按 chatBgIsPhoto() 打上，不用 :has()（旧 WebView 不支持）。 */
-html.is-native-app .shell.chat-full .chat-header{padding-top:calc(var(--safe-top,0px) + 14px)}
+html.is-native-app .shell.chat-full .chat-header{padding-top:calc(var(--safe-top,0px) + 6px)}   /* 主人要头部贴近状态栏 */
 
 /* —— 顶栏 / 状态栏：沉浸式 + 半透明毛玻璃（2026-11-10 主人定的观感）——
    edge-to-edge 下状态栏本体透明、顶栏延伸到 y=0，所以「顶栏半透明 + blur」
