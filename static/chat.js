@@ -355,6 +355,11 @@ function syncCompose(){
       2026-11-06 就是在这里改坏主人机的（KbLive 90→10、--kb-shift 改用平滑值、
       kbUp 记忆值把输入栏粘在高位），三处一起回归。 */
 let kbShrink=0,kbNativePx=0,kbBaseH=0,kbViewShrink=0;
+/* 🔴 引擎仲裁（1.7.5）：Capacitor8/targetSdk36 下 insets 流进 WebView，Chromium 会自己缩
+   视觉视口（走 A 类分支）。此时原生桥的平滑值与 A 类的原始值**交替写 --kb-h**，
+   帧级错拍就是键盘/输入栏跳动的根源（1.7.4 实测）。检测到引擎活着后，原生桥永久让位，
+   全程单驱动。检测逻辑见下方 focusin 监听（600ms 仲裁窗口，社区同款做法）。 */
+let kbVvWorks=0;
 /* B 类机器平滑用的状态 */
 let kbSmooth=0,kbRaf=0,kbTarget=0;
 const kbDpr=()=>window.devicePixelRatio||1;
@@ -382,15 +387,19 @@ function syncKeyboardCore(){
  kbViewShrink=viewShrink>90?viewShrink:0;
  if(viewShrink>90)kbShrink=1;
 
- /* ── A 类机器：完全沿用 e6cf8d1 的算法，一帧不平滑 ── */
- if(kbShrink||hidden>90){
+ /* ── A 类机器：完全沿用 e6cf8d1 的算法，一帧不平滑 ──
+    kbVvWorks：引擎自己会缩视觉视口 → 全程走这条**原始值**路径（含 hidden=0 的收尾），
+    原生桥的平滑值不得再写 --kb-h，否则两套驱动帧级错拍 = 跳动。 */
+ if(kbShrink||kbVvWorks||hidden>90){
   kbTarget=0;kbSmooth=0;
   if(kbRaf){cancelAnimationFrame(kbRaf);kbRaf=0;}
   applyKbA(hidden);
   return;
  }
 
- /* ── B 类机器：原生值才是唯一来源 ── */
+ /* ── B 类机器：原生值才是唯一来源 ──
+    🔴 引擎仲裁：kbVvWorks（引擎自己缩视觉视口）时走不到这里——上面的 A 类分支
+    已经整段接管（含 hidden=0 的收尾），原生桥永久让位，保证 --kb-h 只有一个写入者。 */
  const px=kbNativePx/kbDpr();
  if(px<=90){                    /* 键盘真的没开（或已收起）：立刻归零 */
   kbTarget=0;kbSmooth=0;
@@ -413,7 +422,12 @@ function syncKeyboardCore(){
    → background-size:cover 按新的宽高比重算 → **键盘一弹背景就被放大**。
    .chat-panel 的高度是被「布局视口缩小量」压下去的，补偿量就该用这个量。） */
 function applyKbA(hidden){
- const h=hidden>90?hidden:0;
+ /* 🔴 kbVvWorks（引擎自缩视觉视口，Capacitor8/insets 流通）时 hidden 是引擎逐帧给的
+    **真实键盘高度**，从第一帧起就平滑 —— 绝不能套 >90 阈值：349px 的键盘前 5 帧
+    hidden 只有 17~87，全被阈值吞成 0，到 90+ 一帧跳到 104 —— 这就是 1.7.4 的跳动
+    （对拍 kb-arbitration-harness.js 实测：旧版前 5 帧 0≠17/35/52/70/87）。
+    >90 阈值只对老 A 类（布局视口同缩、hidden 只有 0~20 的机器）保留，滤抖动用。 */
+ const h=kbVvWorks?Math.max(0,hidden):(hidden>90?hidden:0);
  const shrink=kbViewShrink;   /* 布局视口被键盘缩掉多少（CSS px） */
  document.documentElement.style.setProperty('--kb-h',h>0?h+'px':'0px');
  document.documentElement.style.setProperty('--kb-shift',shrink>0?shrink+'px':'0px');
@@ -694,6 +708,22 @@ function kbStep(){
    原生只传**物理像素**，"换算成 CSS px"和"用不用"都由这里决定。
    收到的值先存起来再触发一次同步，判据与网页自算走同一条路。 */
 window.__kbSetNative=function(px){kbNativePx=Number(px)||0;syncKeyboard();};
+/* 引擎仲裁：聚焦输入框后 600ms，视觉视口若自己缩了 >90px，说明 insets 流通、
+   Chromium 在管键盘（Capacitor8/targetSdk36 的正常路径）→ kbVvWorks=1，原生桥永久让位。
+   600ms 的取值：足够键盘动画走完、也足够"会报告的引擎"触发 resize；
+   不会误判——URL 栏类工具条只占 5~10%，真键盘占 35~50%（WebView 里没有 URL 栏）。
+   引擎沉默的机器（老内核）kbVvWorks 保持 0，原生桥照旧接管，行为与 1.7.3 前一致。 */
+document.addEventListener('focusin',e=>{
+ const t=e.target;
+ if(!t||!t.matches||!t.matches('textarea,input:not([type=checkbox],[type=radio],[type=hidden])'))return;
+ const vv=window.visualViewport;if(!vv)return;
+ const full=Math.max(vv.height,kbBaseH||0);
+ setTimeout(()=>{
+  if(document.activeElement!==t)return;            /* 已移开焦点：别误判 */
+  if(kbVvWorks)return;                             /* 已确认过：不再重复 */
+  if(full - vv.height > 90){ kbVvWorks=1; syncKeyboard(); }
+ },600);
+},true);
 
 /* ── 聊天里直接发文件（相册 / 拍摄 / 录音都走这里）───────────────── */
 async function sendChatFiles(files){
