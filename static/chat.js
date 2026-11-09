@@ -428,12 +428,14 @@ function syncKeyboardCore(){
    → background-size:cover 按新的宽高比重算 → **键盘一弹背景就被放大**。
    .chat-panel 的高度是被「布局视口缩小量」压下去的，补偿量就该用这个量。） */
 function applyKbA(hidden){
- /* 🔴 kbVvWorks（引擎自缩视觉视口，Capacitor8/insets 流通）时 hidden 是引擎逐帧给的
-    **真实键盘高度**，从第一帧起就平滑 —— 绝不能套 >90 阈值：349px 的键盘前 5 帧
-    hidden 只有 17~87，全被阈值吞成 0，到 90+ 一帧跳到 104 —— 这就是 1.7.4 的跳动
-    （对拍 kb-arbitration-harness.js 实测：旧版前 5 帧 0≠17/35/52/70/87）。
-    >90 阈值只对老 A 类（布局视口同缩、hidden 只有 0~20 的机器）保留，滤抖动用。 */
- const h=kbVvWorks?Math.max(0,hidden):(hidden>90?hidden:0);
+ /* 🔴 真机数据定案（kbdiag-1.txt，2026-11-10）：这台机器键盘弹出时**窗口一步 resize**
+    （ih 821→449），resize 过渡的 1~2 帧 Chromium 报出瞬时错误状态 vv.height=76 →
+    hidden=373，旧代码照单全收写成 --kb-h=373 —— 内容多顶 373px、一帧后回落，
+    30ms 全高尖峰，每次开键盘必现（真机记录 24.7s/27.1s 两次开键盘两次尖峰）。
+    所以：kbShrink（布局视口已缩）时 --kb-h 必须恒 0 —— resize 已经做了全部工作，
+    过渡帧的 vv 和原生桥值都不可信（nat 同期 1211→0→1211 乱跳）。
+    --kb-h 只服务「引擎只缩视觉视口、布局没动」的 kbVvWorks 机器。 */
+ const h=(kbVvWorks&&!kbShrink)?Math.max(0,hidden):0;
  const shrink=kbViewShrink;   /* 布局视口被键盘缩掉多少（CSS px） */
  document.documentElement.style.setProperty('--kb-h',h>0?h+'px':'0px');
  document.documentElement.style.setProperty('--kb-shift',shrink>0?shrink+'px':'0px');
