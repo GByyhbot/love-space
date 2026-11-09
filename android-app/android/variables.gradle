@@ -1,7 +1,13 @@
 ext {
     minSdkVersion = 23
     compileSdkVersion = 35
-    targetSdkVersion = 35
+    /* 🔴 targetSdk 必须停在 34，不要升到 35。
+       Android 15 对 targetSdk 35 的应用**强制 edge-to-edge**：内容铺到状态栏下，
+       窗口不再随键盘缩，`setDecorFitsSystemWindows(true)` 被系统忽略。
+       我们要的是「微信/QQ 那种顶栏底栏不透明纯色 + 系统自己处理键盘」，
+       只有 targetSdk < 35 才能让系统重新按老规矩留出状态栏并 adjustResize。
+       升 35 的后果：状态栏那条缝又得自己补，键盘又得自己算 —— 前两轮就是这么坏的。 */
+    targetSdkVersion = 34
     androidxActivityVersion = '1.9.2'
     androidxAppCompatVersion = '1.7.0'
     androidxCoordinatorLayoutVersion = '1.2.0'

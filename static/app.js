@@ -139,18 +139,17 @@ const _SB=(window.Capacitor&&window.Capacitor.Plugins)?window.Capacitor.Plugins.
 async function syncStatusBar(){if(!_SB)return;try{const dark=document.documentElement.classList.contains('dark');await _SB.setOverlaysWebView({overlay:false});await _SB.setStyle({style:dark?'Dark':'Light'});await _SB.setBackgroundColor({color:themeBgColor()});}catch{}}
 /* APK 上让聊天页延伸到状态栏底下：其它页面内容不该被状态栏压住，所以只在
    「聊天页 + 照片壁纸」时才开 overlay，离开立刻恢复。浏览器/PWA 无此插件，自动跳过。 */
+/* 2026-11-09：不再把内容铺到状态栏底下。
+   改由系统让出状态栏 + 顶栏底栏不透明纯色（和微信/QQ 一致，见 style.css 末尾那段），
+   状态栏颜色由 syncStatusBar() 跟着主题走。
+   以前「聊天页 + 照片壁纸」会开 overlay 让壁纸延伸到状态栏后面，那套正是要靠
+   --safe-top 手动补偿的来源，一并废掉。
+   函数保留：renderShell 里有调用点，且从旧包（可能已开过 overlay）切回来时要负责关掉。 */
 let _sbOverlay = false;
 async function syncStatusBarOverlay(){
- if(!_SB)return;
- const want = state.page === 'messages' && chatBgIsPhoto();
- if(want === _sbOverlay)return;
- _sbOverlay = want;
- try{
-  if(!want){await syncStatusBar();return;}
-  await _SB.setOverlaysWebView({overlay:true});
-  await _SB.setBackgroundColor({color:'#00000000'});
-  await _SB.setStyle({style:'Dark'});
- }catch{}
+ if(!_SB || !_sbOverlay) return;
+ _sbOverlay = false;
+ await syncStatusBar();
 }
 function applyDarkMode() {
   const pref = localStorage.getItem(DARK_KEY) || 'auto';

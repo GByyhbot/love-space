@@ -7,10 +7,23 @@
     "url": "https://love.yangyuhui.xyz",
     "androidScheme": "https",
     "cleartext": true,
-    "allowNavigation": ["love.yangyuhui.xyz", "love-space.iepose.cn", "love.350921.xyz", "love-space.yangyuhui.xyz", "192.168.31.95"]
+    "allowNavigation": [
+      "love.yangyuhui.xyz",
+      "love-space.iepose.cn",
+      "love.350921.xyz",
+      "love-space.yangyuhui.xyz",
+      "192.168.31.95"
+    ]
   },
   "android": {
     "allowMixedContent": true,
     "backgroundColor": "#FCF8F9"
+  },
+  "plugins": {
+    "StatusBar": {
+      "overlaysWebView": false,
+      "style": "LIGHT",
+      "backgroundColor": "#FCF8F9"
+    }
   }
 }

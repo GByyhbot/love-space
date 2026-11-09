@@ -2043,16 +2043,29 @@ body.figure-full{overflow:hidden;height:100dvh}
 
 /* ════════════ 原生 App：状态栏避让 + 顶栏钉住 ════════════
    只对 APK 生效（app.js 按 UA 里的 LoveSpaceApp/ 标记给 <html> 加 .is-native-app），
-   浏览器完全不受影响。Android 15 起强制 edge-to-edge，网页会铺到状态栏下面，
-   所以顶栏必须自己让出一条状态栏的高度。
+   浏览器完全不受影响。
 
-   --safe-top：状态栏高度。有刘海/挖孔的机器由 env() 给出真实值，取不到按 24px 兜底。
-   但实测有的机器 env() 会多报一截（截图量出状态栏实际占 32px，env 却报 48px），
-   所以用 clamp 封顶 36px，否则顶栏会被推下去一大块。
+   ── 历史（2026-11-09 之前）──────────────────────────────
+   Android 15 起对 targetSdk 35 的应用强制 edge-to-edge，网页会铺到状态栏下面，
+   所以下面这一组规则用 --safe-top 手动给状态栏让位；键盘也靠原生喂 IME 高度、
+   网页自己算 padding 顶上去。两套补偿互相纠缠，一直很难改。
 
-   顶栏用「负上边距抵消主区上内边距 + 自身 padding-top」把自己顶到 y=0，
-   这样它的背景始终盖住状态栏那条缝；再 position:sticky 钉在顶部，滚内容时导航栏不动。 */
-html.is-native-app{--safe-top:clamp(24px, env(safe-area-inset-top,0px), 36px)}
+   ── 现在（2026-11-09 起）──────────────────────────────
+   把窗口交还给系统：targetSdk 回到 34 + StatusBar.overlaysWebView=false +
+   windowSoftInputMode=adjustResize。系统会自己留出状态栏、自己随键盘缩窗口，
+   WebView 的布局视口跟着缩，Chromium 把 innerHeight / vv.height / dvh 全算对，
+   **键盘不再需要任何自定义逻辑**。代价是顶栏底栏必须不透明纯色（微信/QQ 就是这个样子）。
+
+   关键：--safe-top 的下限从 24px 改成 0。
+     · 系统让出状态栏时 env(safe-area-inset-top) = 0 → --safe-top = 0 → 下面这组补偿
+       自动归零（否则顶栏会被白白推下去 24px）；
+     · 万一某些机型仍强制 edge-to-edge，env() 会给出真实状态栏高度 → 补偿照旧生效。
+   不需要任何 JS 判断、也不需要往 <html> 上加类名 —— env() 的语义本身就对得上，
+   而且首帧就是准的（页面还有 CSP script-src 'self'，内联脚本会被拦掉）。
+
+   --safe-top：状态栏高度。clamp 封顶 36px，因为实测有的机器 env() 多报一截
+   （截图量出状态栏实际占 32px，env 却报 48px）。 */
+html.is-native-app{--safe-top:clamp(0px, env(safe-area-inset-top,0px), 36px)}
 html.is-native-app .main{padding-top:calc(var(--safe-top,0px) + 6px)}
 html.is-native-app .shell.chat-full .main{padding-top:var(--safe-top,0px)}
 html.is-native-app .auth-page{padding-top:calc(var(--safe-top,0px) + 18px)}
@@ -2085,6 +2098,19 @@ html.is-native-app .shell.figure-full .topbar{margin-top:0}
    body.chat-immersive 由 app.js 的 renderShell 按 chatBgIsPhoto() 打上，不用 :has()（旧 WebView 不支持）。 */
 html.is-native-app body.chat-immersive .shell.chat-full .main{padding-top:0}
 html.is-native-app body.chat-immersive .shell.chat-full .chat-panel.immersive .chat-header{padding-top:calc(var(--safe-top,0px) + 6px)}
+
+/* —— 顶栏 / 输入栏不透明纯色（微信/QQ 那种观感，主人明确要的）——
+   底色跟着主题走（--bg / --surface），状态栏颜色由原生 setBackgroundColor 同步，
+   于是状态栏与顶栏连成一体，也不再需要担心状态栏图标和壁纸颜色打架。
+   只对 APK 生效，浏览器不受影响。 */
+html.is-native-app .chat-panel,
+html.is-native-app .chat-panel.immersive .chat-header{
+  background:var(--surface);
+}
+/* .chat-panel.immersive .chat-header 原本是透明的、靠壁纸透上来（padding 也只有 6px），
+   这里要一起盖掉；padding 补回 14px，与其它页顶栏对齐。 */
+html.is-native-app .chat-panel.immersive .chat-header{padding-top:14px}
+html.is-native-app .chat-compose{background:var(--surface)}
 
 /* —— 自定义清单表单（questPage 里的「写下你们自己的」） —— */
 .quest-custom-form{display:grid;gap:10px}
