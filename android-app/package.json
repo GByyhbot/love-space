@@ -2,7 +2,7 @@
   "name": "lovespace-apk",
   "version": "1.1.8",
   "private": true,
-  "description": "恋爱空间 Android APK 原生壳（Capacitor 7 远程加载模式）",
+  "description": "恋爱空间 Android APK 原生壳（Capacitor 8 远程加载模式）",
   "scripts": {
     "cap": "cap",
     "assets": "capacitor-assets generate --android",
@@ -12,14 +12,14 @@
     "postinstall": "python patches/apply_background_mode_patch.py"
   },
   "dependencies": {
-    "@anuradev/capacitor-background-mode": "^7.0.2",
-    "@capacitor/android": "^7.0.0",
-    "@capacitor/core": "^7.0.0",
-    "@capacitor/local-notifications": "^7.0.7",
-    "@capacitor/status-bar": "^7.0.6"
+    "@anuradev/capacitor-background-mode": "^8.1.0",
+    "@capacitor/android": "^8.6.0",
+    "@capacitor/core": "^8.6.0",
+    "@capacitor/local-notifications": "^8.3.1",
+    "@capacitor/status-bar": "^8.0.4"
   },
   "devDependencies": {
     "@capacitor/assets": "^3.0.0",
-    "@capacitor/cli": "^7.0.0"
+    "@capacitor/cli": "^8.6.0"
   }
 }

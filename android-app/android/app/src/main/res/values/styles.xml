@@ -13,11 +13,10 @@
         <item name="windowActionBar">false</item>
         <item name="windowNoTitle">true</item>
         <item name="android:background">@null</item>
-        <!-- targetSdk 35 强制 edge-to-edge 导致内容顶进状态栏；opt-out 后 WebView 从状态栏下方布局。
-             状态栏底色/图标深浅由 JS 侧 StatusBar 插件按明暗主题动态覆盖，此处为默认浅色兜底 -->
-        <item name="android:windowOptOutEdgeToEdgeEnforcement">true</item>
-        <item name="android:statusBarColor">#FCF8F9</item>
-        <item name="android:windowLightStatusBar">true</item>
+        <!-- Capacitor 8 / targetSdk 36：edge-to-edge 强制且不可退出，安全区与状态栏
+             由核心 SystemBars 插件接管（insetsHandling=css 注入 safe-area 变量），
+             这里不再写 statusBarColor / windowLightStatusBar / windowOptOutEdgeToEdgeEnforcement，
+             写了也会被忽略或与 SystemBars 打架。 -->
     </style>
 
 

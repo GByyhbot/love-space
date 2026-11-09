@@ -2065,7 +2065,10 @@ body.figure-full{overflow:hidden;height:100dvh}
 
    --safe-top：状态栏高度。clamp 封顶 36px，因为实测有的机器 env() 多报一截
    （截图量出状态栏实际占 32px，env 却报 48px）。 */
-html.is-native-app{--safe-top:clamp(0px, env(safe-area-inset-top,0px), 36px)}
+/* Capacitor 8 的 SystemBars（insetsHandling=css）会在 Android 上注入
+   --safe-area-inset-* 变量：老 WebView（Chromium<140）的 env() 不可靠时也能拿到正确值；
+   新 WebView 上注入值与 env() 一致。优先用注入值，env 作兜底。 */
+html.is-native-app{--safe-top:clamp(0px, var(--safe-area-inset-top, env(safe-area-inset-top, 0px)), 48px)}
 html.is-native-app .main{padding-top:calc(var(--safe-top,0px) + 6px)}
 html.is-native-app .shell.chat-full .main{padding-top:0}   /* 聊天页：让面板铺到 y=0，状态栏那块由 .chat-header 画 */
 html.is-native-app .auth-page{padding-top:calc(var(--safe-top,0px) + 18px)}

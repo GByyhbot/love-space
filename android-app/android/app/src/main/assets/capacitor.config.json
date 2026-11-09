@@ -2,7 +2,7 @@
 	"appId": "cn.iepose.lovespace",
 	"appName": "恋爱空间",
 	"webDir": "www",
-	"appendUserAgent": "LoveSpaceApp/1.7.3",
+	"appendUserAgent": "LoveSpaceApp/1.7.4",
 	"server": {
 		"url": "https://love.yangyuhui.xyz",
 		"androidScheme": "https",
@@ -20,10 +20,9 @@
 		"backgroundColor": "#FCF8F9"
 	},
 	"plugins": {
-		"StatusBar": {
-			"overlaysWebView": true,
-			"style": "LIGHT",
-			"backgroundColor": "#00000000"
+		"SystemBars": {
+			"insetsHandling": "css",
+			"style": "DEFAULT"
 		}
 	}
 }

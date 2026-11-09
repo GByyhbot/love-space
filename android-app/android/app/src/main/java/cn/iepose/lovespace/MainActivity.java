@@ -132,14 +132,6 @@ public class MainActivity extends BridgeActivity {
             if (remembered == null || remembered.isEmpty()) remembered = SPACE_URL;
             currentUrl = remembered;
             WebView wv = getBridge().getWebView();
-            // 主题桥：网页告知深浅色，原生据此切状态栏图标。见 ThemeBridge / StatusBarTheme。
-            if (wv != null) {
-                try {
-                    wv.addJavascriptInterface(new ThemeBridge(this), "LoveTheme");
-                } catch (Throwable t) {
-                    Log.w(TAG, "addJavascriptInterface(ThemeBridge) failed", t);
-                }
-            }
             if (wv != null && !remembered.equals(SPACE_URL)) {
                 // super.load() 已经把默认线路发了一发，这里先掐掉，别白等它。
                 wv.stopLoading();
@@ -166,8 +158,6 @@ public class MainActivity extends BridgeActivity {
         //    等 super 返回再绑，首个页面请求已经走过隧道了。
         bypassTunnelNetwork();
         super.onCreate(savedInstanceState);
-        // ⓪'' 状态栏：edge-to-edge + 本体透明，颜色由网页自己画（见 StatusBarTheme）
-        StatusBarTheme.init(this);
         // ⓪' 网络变化（切 WiFi/流量、隧道开关）时重新择优绑定
         watchNetworkChange();
         // ① 首次打开权限引导（通知权限等）
@@ -179,18 +169,10 @@ public class MainActivity extends BridgeActivity {
         // ④ 打开本地存储：聊天背景图按 media id 缓存进 IndexedDB，省得每次进聊天都重下一遍。
         //    WebSettings 的 database/domStorage 默认未必开启，不开的话 JS 侧 indexedDB.open 会直接失败。
         setupLocalStorage();
-        // ⑤ 键盘避让。两条路**互斥**，只能装一个：
-        //    · 新：原生缩容器 —— 让 WebView 的布局视口跟着键盘真实缩小，
-        //      Chromium 自己把 innerHeight / vv.height / dvh 全部算对，
-        //      网页端直接走主人机已经在跑的 A 类路径，不需要任何高度补偿。
-        //    · 旧：IME 高度桥 —— 窗口尺寸不动，把高度喂给网页自己补 padding。
-        //    同时装会让网页在首帧同时看到"视口缩了"和"原生给了高度"，判错就是双份位移。
-        boolean kbHandled = KeyboardAvoidance.install(this,
-                getBridge() == null ? null : getBridge().getWebView());
-        if (!kbHandled) setupImeHeightBridge();
-        else Log.i(TAG, "键盘避让由原生缩容器接管，老 IME 高度桥未安装");
-        // ⑥ 窗口诊断探针：只读，不改任何窗口标志。见 WindowProbe.java 的说明。
-        WindowProbe.install(this, getBridge() == null ? null : getBridge().getWebView());
+        // ⑤ 键盘兜底桥：Capacitor 8 / targetSdk 36 下，正常路径是 insets 流到 WebView、
+        //    Chromium 自己缩视觉视口（网页走 A 类路径）。这一桥只在 insets 没到位时才用得上
+        //    （旁路读取 ime() 高度喂给网页，原样下发不拦截），留着不碍事，删了就没退路。
+        setupImeHeightBridge();
     }
 
     /**

@@ -135,10 +135,11 @@ function syncMetaThemeColor() {
  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', themeBgColor());
 }
 // —— Android APK 状态栏适配 ——
-// edge-to-edge：状态栏本体透明，颜色由网页顶栏自己画（见 style.css 末尾 is-native-app 块），
-// 所以这里只剩「告知原生当前深浅色来切图标」这一件事。
-// 浏览器/PWA 无 Capacitor 也没有 LoveTheme，静默跳过。
-const _SB=(window.Capacitor&&window.Capacitor.Plugins)?window.Capacitor.Plugins.StatusBar:null;
+// Capacitor 8：SystemBars 核心插件接管 edge-to-edge 与安全区（insetsHandling=css
+// 会往页面注入 --safe-area-inset-* 变量），这里只负责把图标深浅告诉它。
+// 浏览器/PWA 无 Capacitor，静默跳过。
+const _SB=(window.Capacitor&&window.Capacitor.Plugins)?window.Capacitor.Plugins.SystemBars:null;
+const _SBLegacy=(window.Capacitor&&window.Capacitor.Plugins)?window.Capacitor.Plugins.StatusBar:null;
 /* 已下发的组合，避免切页/重渲染时反复调原生（renderShell 可能一分钟内跑几十次）。
    只在**确实成功**时才记，失败留着重试。 */
 let _sbApplied='';
@@ -146,20 +147,12 @@ async function syncStatusBar(){
  const dark=document.documentElement.classList.contains('dark');
  const sig=dark?'d':'l';
  if(sig===_sbApplied)return;
+ const style=dark?'Dark':'Light';
  let ok=false;
- /* ① 首选原生直连：window.LoveTheme 是 APK 注入的同步接口。*/
- try{
-  if(window.LoveTheme&&typeof window.LoveTheme.setStatusBarMode==='function'){
-   window.LoveTheme.setStatusBarMode(dark);ok=true;
-  }
- }catch{}
- /* ② 退回 Capacitor 插件：只切图标深浅。
-      🔴 绝不能再调 setOverlaysWebView(false) / setBackgroundColor —— 前者会摘掉
-      LAYOUT_FULLSCREEN 让内容缩回状态栏下面（键盘缩放也可能跟着失效），
-      后者会把网页画好的那块盖掉。*/
- if(!ok&&_SB){
-  try{await _SB.setStyle({style:dark?'Dark':'Light'});ok=true;}catch{}
- }
+ try{ if(_SB){await _SB.setStyle({style});ok=true;} }catch{}
+ /* 老包兜底：Capacitor 7 的 StatusBar 插件在 Android 15+ 只能切图标，
+    底色本来就不归它管（edge-to-edge 下是透明的）。 */
+ if(!ok&&_SBLegacy){ try{await _SBLegacy.setStyle({style});ok=true;}catch{} }
  if(ok)_sbApplied=sig;
 }
 /* APK 上让聊天页延伸到状态栏底下：其它页面内容不该被状态栏压住，所以只在
