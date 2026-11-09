@@ -39,8 +39,13 @@ import java.util.Locale;
 final class WindowProbe {
     static final String TAG = "LoveSpace/Win";
 
-    /** 总开关。发正式包前改回 false，避免刷屏。 */
-    static final boolean ENABLED = true;
+    /**
+     * 总开关。发正式包前改回 false，避免刷屏。
+     *
+     * 🔴 2026-11-09：实测发现每帧一条 Log.i 在键盘动画里就是几十条输出，
+     * 与逐帧改布局叠加会明显掉帧。**探针只能单独用于诊断，不能和逐帧改动同时开**。
+     */
+    static final boolean ENABLED = false;
 
     private WindowProbe() {}
 

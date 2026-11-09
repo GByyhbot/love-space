@@ -57,8 +57,14 @@ final class KeyboardAvoidance {
     /**
      * 总开关。<b>打开时老的原生高度桥不再安装，两者只能二选一</b>——
      * 同时生效会让网页同时收到"视口缩了"和"原生给了高度"，判据一旦在首帧判错就是双份位移。
+     *
+     * 🔴 2026-11-09 真机实测：<b>这个方案会剧烈抖动，已关闭</b>。
+     * 原因是两套布局驱动同时在工作且不同步：原生每帧 setPadding 缩 WebView，
+     * 网页端 syncKeyboard 每帧据 viewShrink 改 --kb-shift（壁纸补偿），
+     * 两次 relayout 的时序错开 → 视觉上就是来回拉扯。
+     * 要重试必须先把网页端的补偿摘掉（让只有一方动），否则一定再抖。
      */
-    static final boolean ENABLED = true;
+    static final boolean ENABLED = false;
 
     private KeyboardAvoidance() {}
 
