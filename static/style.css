@@ -2117,12 +2117,13 @@ html.is-native-app .topbar{
 html.is-native-app .chat-panel{
   background:var(--surface);
 }
-html.is-native-app .chat-header,
-html.is-native-app .chat-panel.immersive .chat-header{
-  background:var(--surface);
-  background:color-mix(in srgb,var(--surface) 80%,transparent);
-  -webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);
-}
+/* 🔴 聊天页头部/状态栏：无色（2026-11-10 主人定的），不在这里画任何主题色——
+   交给基础规则：
+   · 照片壁纸（body.chat-immersive）→ 基础规则的黑色渐隐 scrim
+     （.chat-panel.immersive .chat-header，rgba(8,6,12,.66)→0），专为壁纸可读性设计；
+   · 无壁纸 → 头部透明，聊天背景/面板底色直接透出。
+   状态栏本体本来就是透明的（edge-to-edge），透出来的与头部一致。
+   底部输入栏仍跟主题走实色（主人未点名）。 */
 html.is-native-app .chat-compose{background:var(--surface)}
 
 /* —— 自定义清单表单（questPage 里的「写下你们自己的」） —— */

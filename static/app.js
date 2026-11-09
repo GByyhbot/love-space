@@ -145,9 +145,13 @@ const _SBLegacy=(window.Capacitor&&window.Capacitor.Plugins)?window.Capacitor.Pl
 let _sbApplied='';
 async function syncStatusBar(){
  const dark=document.documentElement.classList.contains('dark');
- const sig=dark?'d':'l';
+ /* 聊天页 + 照片壁纸：头部是黑色渐隐 scrim（深色），图标必须强制浅色才看得清——
+    这是历史行为（原 syncStatusBarOverlay 的规则），不跟主题深浅走。
+    其余页面跟随主题。 */
+ const immersive=state.page==='messages'&&chatBgIsPhoto();
+ const sig=immersive?'i':(dark?'d':'l');
  if(sig===_sbApplied)return;
- const style=dark?'Dark':'Light';
+ const style=immersive?'Dark':(dark?'Dark':'Light');
  let ok=false;
  try{ if(_SB){await _SB.setStyle({style});ok=true;} }catch{}
  /* 老包兜底：Capacitor 7 的 StatusBar 插件在 Android 15+ 只能切图标，
