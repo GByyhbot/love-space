@@ -2625,3 +2625,33 @@ body.kb-open .pick-overlay{padding-bottom:0}
    聊天页贴底锚定（watchChatLog：RO + 距底基准）依赖「渲染后高度稳定」，
    与 c-v 的按需渲染天然冲突。渲染跳过的收益对 200 行本就有限，回退保稳。
    第二阶段（真·节点回收）的评估不变：待真机内存度量后再议。 */
+
+/* ── 全局动效令牌（sw 288）：三档时长 + 三条统一曲线 ───────────────
+   微反馈 120ms / 状态切换 220ms / 面板与转场 320ms；
+   进场 ease-out、退场 ease-in、弹性回弹超调 ≤8%。 */
+:root{
+  --dur-1:120ms;--dur-2:220ms;--dur-3:320ms;
+  --ease-out:cubic-bezier(.22,.7,.3,1);
+  --ease-in:cubic-bezier(.55,.06,.68,.19);
+  --ease-spring:cubic-bezier(.34,1.4,.64,1);
+}
+/* 扫光改匀速 linear：光带扫过应是恒速，ease 的两头减速会显得「粘」 */
+.timeline-skeleton::after{animation:sk-sweep 1.4s linear infinite}
+/* 骨架 → 内容交叉：骨架整体淡出让位，卡片按 --dur-3 / 40ms 错开浮现 */
+.timeline-skeleton.sk-out{animation:sk-out var(--dur-1) var(--ease-in) both}
+@keyframes sk-out{to{opacity:0}}
+.pre-reveal{opacity:0}
+#timeline-list>.card.reveal-in{animation:card-rise var(--dur-3) var(--ease-out) both}
+/* 无限滚动滑入沿用 --dur-3 */
+#timeline-list>.card.slide-in{animation:card-slide var(--dur-3) var(--ease-out) both}
+#timeline-list.reveal>.card{animation:card-rise var(--dur-3) var(--ease-out) both}
+/* blur-up 曲线统一（时长 500ms 为当初验收定死的参数，保留） */
+.photo-item img{transition:filter .5s var(--ease-out),transform .5s var(--ease-out)}
+/* 弹窗出入场同一条路径：进 = 淡入 + scale .97→1（320ms ease-out），
+   出 = .closing（120ms ease-in 淡出缩回），JS 走完再清 DOM */
+.modal{animation:pop-in var(--dur-3) var(--ease-out)}
+.modal-overlay{animation:fade-in var(--dur-1) var(--ease-out)}
+.modal-overlay.closing{animation:modal-out var(--dur-1) var(--ease-in) both;pointer-events:none}
+.modal-overlay.closing .modal{animation:modal-shrink var(--dur-1) var(--ease-in) both}
+@keyframes modal-out{to{opacity:0}}
+@keyframes modal-shrink{to{opacity:0;transform:scale(.98)}}

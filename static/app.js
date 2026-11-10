@@ -41,7 +41,7 @@ const paths = {
  game:'M7 9h10a4 4 0 0 1 4 4v2a3 3 0 0 1-5 2l-1-1H9l-1 1a3 3 0 0 1-5-2v-2a4 4 0 0 1 4-4Zm0 3v3M5.5 12.5h3M16 12h.01M18 14h.01'
 };
 const icon = name => `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="${paths[name] || paths.heart}"/></svg>`;
-const state = {page:'home', tab:'', me:null, records:[], photos:[], notices:[], channels:[], deliveries:[], webpush:null, nativePush:null, dashboard:null, weekly:null, weekOffset:0, periodDay:'', timelinePosts:[],timelineCursor:null,timelineHasMore:false,timelineSkeleton:false,timelineReveal:false,timelineAutoLoaded:false,stream:null, online:navigator.onLine, linkRoutes:null, linkProbing:false};
+const state = {page:'home', tab:'', me:null, records:[], photos:[], notices:[], channels:[], deliveries:[], webpush:null, nativePush:null, dashboard:null, weekly:null, weekOffset:0, periodDay:'', timelinePosts:[],timelineCursor:null,timelineHasMore:false,timelineSkeleton:false,timelineAutoLoaded:false,stream:null, online:navigator.onLine, linkRoutes:null, linkProbing:false};
 let modalCleanup = null, focusReturn = null, refreshing = false;
 
 function clearUserLocalData(userId) {
@@ -241,10 +241,16 @@ async function boot() {
   state.page=location.hash.slice(1).split('/')[0] || 'home';
   if (!['home','timeline','albums','messages','together','personal','settings','notices','channels','backups','imports','importdetail','dashboard','weekly','figure','linkcheck'].includes(state.page)) state.page='home';
   await refreshData();
-  /* 首屏进时光页：先画骨架屏再补数据，别让用户对着白页等接口。
-     loadTimeline 返回后立即重绘并给卡片挂 60ms 错开的浮现动画。 */
-  if(state.page==='timeline'&&state.timelinePosts.length===0){state.timelineSkeleton=true;renderShell();await loadTimeline(true);state.timelineSkeleton=false;state.timelineReveal=true;}
-  renderShell(); connectEvents(); connectNtfy(); syncNativePush(); startKeepAlive();
+  /* 首屏进时光页：先画骨架屏再补数据。数据到达后 revealTimeline() 在骨架原地
+     交叉换内容（骨架淡出 + 卡片错开浮现），不走整页重绘。 */
+  let revealed=false;
+  if(state.page==='timeline'&&state.timelinePosts.length===0){
+   state.timelineSkeleton=true;renderShell();
+   await loadTimeline(true);state.timelineSkeleton=false;
+   if(state.page==='timeline'){revealTimeline();revealed=true;}
+  }
+  if(!revealed)renderShell();
+  connectEvents(); connectNtfy(); syncNativePush(); startKeepAlive();
  } catch(e) {$('#app').innerHTML=empty('暂时无法连接空间',e.message,'reload','重新连接');}
 }
 
@@ -362,7 +368,7 @@ function renderPage() {
    直接从深链进来（#timeline）时 history 里没有上一页，这时候 history.back()
    会把整个 App 关掉，必须回落到 navigate。 */
 let navDepth=0;
-async function navigate(page,tab='') {if(!state.me)return;if(page!=='messages')state.chatReturn={page,tab};if(page==='messages'&&state.me){state.me.chat_unread=0;post('/notices/read?event=chat').catch(()=>{});/* 进聊天不主动弹输入法：先把上一页可能还活着的焦点交还，再渲染 */if(document.activeElement&&document.activeElement.blur)document.activeElement.blur();}state.page=page;state.tab=tab;if(location.hash!=='#'+page){location.hash=page;navDepth++;}try{if(page==='timeline'){if(state.timelinePosts.length===0){state.timelineSkeleton=true;renderShell();window.scrollTo({top:0});await loadTimeline(true);state.timelineSkeleton=false;state.timelineReveal=true;}else await loadTimeline(true);}await loadSpecial();renderShell();window.scrollTo({top:0});}catch(e){toast(e.message);}}
+async function navigate(page,tab='') {if(!state.me)return;if(page!=='messages')state.chatReturn={page,tab};if(page==='messages'&&state.me){state.me.chat_unread=0;post('/notices/read?event=chat').catch(()=>{});/* 进聊天不主动弹输入法：先把上一页可能还活着的焦点交还，再渲染 */if(document.activeElement&&document.activeElement.blur)document.activeElement.blur();}state.page=page;state.tab=tab;if(location.hash!=='#'+page){location.hash=page;navDepth++;}try{if(page==='timeline'&&state.timelinePosts.length===0){state.timelineSkeleton=true;renderShell();window.scrollTo({top:0});await loadTimeline(true);state.timelineSkeleton=false;if(state.page==='timeline'&&location.hash==='#'+page){revealTimeline();window.scrollTo({top:0});}return;}if(page==='timeline')await loadTimeline(true);await loadSpecial();renderShell();window.scrollTo({top:0});}catch(e){toast(e.message);}}
 /* 返回上一页：走浏览器后退，**不要**再 push 一条新的 hash。
    以前聊天里「返回」写的是 navigate('messages')，等于在历史里又压了一条 #messages，
    于是栈变成 [ #home, #messages, #messages ]——安卓实体返回键每按一次就在这两个界面
@@ -776,12 +782,26 @@ function timelineSkeletonCards(){
 /* 时光页信息流的收尾三件套：骨架换真容时给卡片挂 60ms 错开的浮现动画；
    距底部约一屏时经 IntersectionObserver 预取下一页（rootMargin 100% ≈ 一屏）。
    只追加新卡片、不整页重绘，滚动位置天然不跳。 */
+/* 骨架 → 内容的交叉过渡：卡片先以 pre 态入列（不可见），骨架 120ms 淡出让位，
+   卡片自上而下 40ms 错开浮现。内容硬换是「廉价感」主源之一（动效库：骨架换内容要衔接）。 */
+function revealTimeline(){
+ const list=$('#timeline-list');if(!list)return;
+ const sk=list.querySelector('.timeline-skeleton');
+ const t=document.createElement('template');t.innerHTML=state.timelinePosts.map(recordCard).join('');
+ [...t.content.children].forEach(el=>el.classList.add('pre-reveal'));
+ list.append(t.content);
+ paintTimelineExtras();
+ requestAnimationFrame(()=>requestAnimationFrame(()=>{
+  if(sk)sk.classList.add('sk-out');
+  [...list.querySelectorAll('.pre-reveal')].forEach((el,i)=>{
+   el.style.animationDelay=Math.min(i*40,600)+'ms';
+   el.classList.remove('pre-reveal');el.classList.add('reveal-in');
+  });
+  setTimeout(()=>{if(sk)sk.remove();},180);
+ }));
+}
 function paintTimelineExtras(){
  const list=$('#timeline-list');if(!list)return;
- if(state.timelineReveal){state.timelineReveal=false;
-  list.classList.add('reveal');
-  [...list.children].forEach((el,i)=>el.style.animationDelay=Math.min(i*60,720)+'ms');
- }
  setupTimelineScroll();
 }
 function setupTimelineScroll(){
@@ -1391,7 +1411,7 @@ function backupsPage(){const s=state.storage||{};const fmt=b=>b>=1073741824?(b/1
 /* 图片/视频查看器要占满视口，靠 .viewer 这个显式 class 定样式
    （不用 CSS :has()，旧 WebView 不支持时会把舞台高度算塌） */
 function openModal(title,content,{wide=false,sheet=false,cleanup=null}={}) {
- closeModal(); focusReturn=document.activeElement;
+ closeModal(); clearTimeout(modalCloseTimer);modalCloseTimer=null; focusReturn=document.activeElement;
  const viewer = wide && /class="lightbox-body"/.test(content);
  /* 片源浏览是沉浸式影院层：只要内容根节点带 ws-cinema，弹窗就自动全屏、深色、
     返回键换成箭头。跟 viewer 一样靠内容自报身份，调用方不用多传一个参数。 */
@@ -1406,10 +1426,18 @@ function openModal(title,content,{wide=false,sheet=false,cleanup=null}={}) {
  if(ov&&!cinema&&!viewer)ov.addEventListener('click',e=>{if(e.target===ov)closeModal();});
  modalCleanup=cleanup;document.body.style.overflow='hidden';setTimeout(()=>$('.modal input:not([type=checkbox]),.modal textarea,.modal button')?.focus(),50);
 }
+let modalCloseTimer=null;
 function closeModal(){
  /* 弹窗里试听的那首歌：弹窗一关就停，别让"关掉界面的声音"继续响（气泡里的播放不受影响） */
  if(songCur&&songCur.kind==='preview'){try{songAudio.pause();}catch{}songReset();}
- if(modalCleanup){modalCleanup();modalCleanup=null;}$('#modal-root').innerHTML='';document.body.style.overflow='';focusReturn?.focus?.();}
+ if(modalCleanup){modalCleanup();modalCleanup=null;}
+ /* 关闭沿打开的原路退回（淡出 + 轻微缩回），走完再清 DOM——硬拆是「廉价感」来源之一。 */
+ const ov=$('#modal-root .modal-overlay');
+ if(ov&&!matchMedia('(prefers-reduced-motion: reduce)').matches){
+  ov.classList.add('closing');clearTimeout(modalCloseTimer);
+  modalCloseTimer=setTimeout(()=>{modalCloseTimer=null;$('#modal-root').innerHTML='';document.body.style.overflow='';},150);
+ }else{$('#modal-root').innerHTML='';document.body.style.overflow='';}
+ focusReturn?.focus?.();}
 /* 全局搜索：在顶栏搜索图标或聊天页放大镜打开，对已加载的记录做标题+正文本地模糊匹配。
    不新拉后端接口——state.records 里已有非聊天记录（含私信）与最近 200 条聊天，够覆盖常见场景。
    scope='chat' 时只搜聊天，供聊天页内搜索用。 */
