@@ -2603,3 +2603,11 @@ body.kb-open .pick-overlay{padding-bottom:0}
   backdrop-filter:none;
 }
 .chat-panel.immersive .chat-time button{background:rgba(22,17,24,.62)}
+
+/* ── 长列表渲染跳过（content-visibility，sw 285）────────────────
+   屏外卡片跳过 layout/paint，只按 contain-intrinsic-size 占位；
+   auto 关键字让内核记住渲染后的真实高度，滚过一遍后占位即精确。
+   屏内只有 layout+style 包含、无 paint 裁剪，卡片内的弹出菜单不受影响。
+   不支持的旧内核直接忽略本条，零风险。 */
+#timeline-list>.card{content-visibility:auto;contain-intrinsic-size:auto 190px}
+.photo-item{content-visibility:auto;contain-intrinsic-size:auto 150px}
