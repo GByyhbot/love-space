@@ -41,7 +41,7 @@ const paths = {
  game:'M7 9h10a4 4 0 0 1 4 4v2a3 3 0 0 1-5 2l-1-1H9l-1 1a3 3 0 0 1-5-2v-2a4 4 0 0 1 4-4Zm0 3v3M5.5 12.5h3M16 12h.01M18 14h.01'
 };
 const icon = name => `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="${paths[name] || paths.heart}"/></svg>`;
-const state = {page:'home', tab:'', me:null, records:[], photos:[], notices:[], channels:[], deliveries:[], webpush:null, nativePush:null, dashboard:null, weekly:null, weekOffset:0, periodDay:'', timelinePosts:[],timelineCursor:null,timelineHasMore:false,stream:null, online:navigator.onLine, linkRoutes:null, linkProbing:false};
+const state = {page:'home', tab:'', me:null, records:[], photos:[], notices:[], channels:[], deliveries:[], webpush:null, nativePush:null, dashboard:null, weekly:null, weekOffset:0, periodDay:'', timelinePosts:[],timelineCursor:null,timelineHasMore:false,timelineSkeleton:false,timelineReveal:false,timelineAutoLoaded:false,stream:null, online:navigator.onLine, linkRoutes:null, linkProbing:false};
 let modalCleanup = null, focusReturn = null, refreshing = false;
 
 function clearUserLocalData(userId) {
@@ -240,7 +240,11 @@ async function boot() {
   history.replaceState(null,'',location.pathname+location.hash);
   state.page=location.hash.slice(1).split('/')[0] || 'home';
   if (!['home','timeline','albums','messages','together','personal','settings','notices','channels','backups','imports','importdetail','dashboard','weekly','figure','linkcheck'].includes(state.page)) state.page='home';
-  await refreshData(); if(state.page==='timeline')await loadTimeline(true); renderShell(); connectEvents(); connectNtfy(); syncNativePush(); startKeepAlive();
+  await refreshData();
+  /* 首屏进时光页：先画骨架屏再补数据，别让用户对着白页等接口。
+     loadTimeline 返回后立即重绘并给卡片挂 60ms 错开的浮现动画。 */
+  if(state.page==='timeline'&&state.timelinePosts.length===0){state.timelineSkeleton=true;renderShell();await loadTimeline(true);state.timelineSkeleton=false;state.timelineReveal=true;}
+  renderShell(); connectEvents(); connectNtfy(); syncNativePush(); startKeepAlive();
  } catch(e) {$('#app').innerHTML=empty('暂时无法连接空间',e.message,'reload','重新连接');}
 }
 
@@ -328,7 +332,8 @@ function renderPage() {
  fnStop();fnReset();
  /* 消息区高度监听统一在这里挂/换：不在聊天页时它自己 disconnect 掉，不留野观察者 */
  watchChatLog();
- if(state.page==='timeline'&&state.timelineHasMore)$('#timeline-list')?.insertAdjacentHTML('afterend',`<div class="timeline-more">${button('继续往前翻','load-more-timeline','secondary')}</div>`);
+ if(state.page==='timeline')paintTimelineExtras();
+ if(state.page==='albums')setupBlurUp();
  if(state.page==='messages') {
   const ta=$('#chat-text');
   ta.value=localStorage.getItem('chat-text:'+state.me.user.id)||'';
@@ -357,7 +362,7 @@ function renderPage() {
    直接从深链进来（#timeline）时 history 里没有上一页，这时候 history.back()
    会把整个 App 关掉，必须回落到 navigate。 */
 let navDepth=0;
-async function navigate(page,tab='') {if(!state.me)return;if(page!=='messages')state.chatReturn={page,tab};if(page==='messages'&&state.me){state.me.chat_unread=0;post('/notices/read?event=chat').catch(()=>{});/* 进聊天不主动弹输入法：先把上一页可能还活着的焦点交还，再渲染 */if(document.activeElement&&document.activeElement.blur)document.activeElement.blur();}state.page=page;state.tab=tab;if(location.hash!=='#'+page){location.hash=page;navDepth++;}try{if(page==='timeline')await loadTimeline(true);await loadSpecial();renderShell();window.scrollTo({top:0});}catch(e){toast(e.message);}}
+async function navigate(page,tab='') {if(!state.me)return;if(page!=='messages')state.chatReturn={page,tab};if(page==='messages'&&state.me){state.me.chat_unread=0;post('/notices/read?event=chat').catch(()=>{});/* 进聊天不主动弹输入法：先把上一页可能还活着的焦点交还，再渲染 */if(document.activeElement&&document.activeElement.blur)document.activeElement.blur();}state.page=page;state.tab=tab;if(location.hash!=='#'+page){location.hash=page;navDepth++;}try{if(page==='timeline'){if(state.timelinePosts.length===0){state.timelineSkeleton=true;renderShell();window.scrollTo({top:0});await loadTimeline(true);state.timelineSkeleton=false;state.timelineReveal=true;}else await loadTimeline(true);}await loadSpecial();renderShell();window.scrollTo({top:0});}catch(e){toast(e.message);}}
 /* 返回上一页：走浏览器后退，**不要**再 push 一条新的 hash。
    以前聊天里「返回」写的是 navigate('messages')，等于在历史里又压了一条 #messages，
    于是栈变成 [ #home, #messages, #messages ]——安卓实体返回键每按一次就在这两个界面
@@ -706,6 +711,27 @@ document.addEventListener('error',e=>{
  if(!box.classList||!(box.classList.contains('cs-cover')||box.classList.contains('sp-cover')))return;
  box.innerHTML=icon('music');
 },true);
+/* 相册 blur-up 的清晰化：小图一到先画 8×8 取平均色当主色底，
+   再摘掉 .blur-up（CSS 侧 500ms 过渡：blur(20px)→0、1.04→1）。
+   挂捕获阶段 document load 委托——相册每次重绘都重建节点，逐个绑会跟丢。 */
+document.addEventListener('load',e=>{
+ const img=e.target;
+ if(!img||img.tagName!=='IMG'||!img.classList.contains('blur-up'))return;
+ const item=img.closest('.photo-item');
+ if(item&&!item.dataset.ph){
+  item.dataset.ph='1';
+  try{
+   const c=document.createElement('canvas');c.width=c.height=8;
+   const x=c.getContext('2d');
+   x.drawImage(img,0,0,8,8);
+   const d=x.getImageData(0,0,8,8).data;
+   let r=0,g=0,b=0;const n=d.length/4;
+   for(let i=0;i<d.length;i+=4){r+=d[i];g+=d[i+1];b+=d[i+2];}
+   item.style.setProperty('--ph',`rgb(${r/n|0},${g/n|0},${b/n|0})`);
+  }catch(_){/* 画布被污染等意外就退回纯色占位，不影响清晰化 */}
+ }
+ requestAnimationFrame(()=>img.classList.remove('blur-up'));
+},true);
 /* 纪念日序数：把所有年度重复的纪念日按日期排好，给每个标上「今年第几个」 */
 function anniversaryOrdinals(){
  const items=recordsOf('anniversary').filter(r=>r.body.annual===true||r.body.annual==='lunar');
@@ -738,11 +764,71 @@ function timelinePage() {
  const f=state.filters||{},posts=state.timelinePosts||[];
  const active=[['author','作者'],['date','日期'],['media','类型']].filter(([k])=>f[k]).length+(f.q?1:0);
  const chips=[f.q?`<span class="filter-chip">“${esc(f.q)}”</span>`:'',f.author?`<span class="filter-chip">${esc(person(f.author).name)}</span>`:'',f.date?`<span class="filter-chip">${esc(f.date)}</span>`:'',f.media?`<span class="filter-chip">${{image:'照片',video:'视频',audio:'语音'}[f.media]}</span>`:''].join('');
- return `${heading('时光慢慢，爱意满满','那些一起走过的日子，都在这里。','compose','记录此刻','edit')}<div class="filters"><input id="filter-q" placeholder="搜索我们的故事…" value="${esc(f.q||'')}" aria-label="搜索动态"><details class="filter-box" ${(['author','date','media'].some(k=>f[k]))?'open':''}><summary>${icon('calendar')} 筛选${active?`<span class="filter-chip">${active}</span>`:''}</summary><div class="filter-body">${chips}<select id="filter-author" aria-label="按作者筛选"><option value="">两个人的时光</option>${state.me.users.map(u=>`<option value="${u.id}" ${f.author===u.id?'selected':''}>${esc(u.name)}</option>`).join('')}</select><input id="filter-date" type="date" value="${esc(f.date||'')}" aria-label="按日期筛选"><select id="filter-media" aria-label="按类型筛选"><option value="">所有记录</option>${[['image','照片'],['video','视频'],['audio','语音']].map(([id,label])=>`<option value="${id}" ${f.media===id?'selected':''}>${label}</option>`).join('')}</select>${active?button('清除筛选','clear-filters','small secondary'):''}</div></details></div><div id="timeline-list">${posts.length?posts.map(recordCard).join(''):empty(f.q||active?'没有符合条件的记录':'这一页，留给新的故事',f.q||active?'换个条件，或清除筛选再试试。':'可以发照片、文字、视频，或者留下一段声音。','compose')}</div>`;
+ const listHtml=posts.length?posts.map(recordCard).join(''):(state.timelineSkeleton?timelineSkeletonCards():empty(f.q||active?'没有符合条件的记录':'这一页，留给新的故事',f.q||active?'换个条件，或清除筛选再试试。':'可以发照片、文字、视频，或者留下一段声音。','compose'));
+ return `${heading('时光慢慢，爱意满满','那些一起走过的日子，都在这里。','compose','记录此刻','edit')}<div class="filters"><input id="filter-q" placeholder="搜索我们的故事…" value="${esc(f.q||'')}" aria-label="搜索动态"><details class="filter-box" ${(['author','date','media'].some(k=>f[k]))?'open':''}><summary>${icon('calendar')} 筛选${active?`<span class="filter-chip">${active}</span>`:''}</summary><div class="filter-body">${chips}<select id="filter-author" aria-label="按作者筛选"><option value="">两个人的时光</option>${state.me.users.map(u=>`<option value="${u.id}" ${f.author===u.id?'selected':''}>${esc(u.name)}</option>`).join('')}</select><input id="filter-date" type="date" value="${esc(f.date||'')}" aria-label="按日期筛选"><select id="filter-media" aria-label="按类型筛选"><option value="">所有记录</option>${[['image','照片'],['video','视频'],['audio','语音']].map(([id,label])=>`<option value="${id}" ${f.media===id?'selected':''}>${label}</option>`).join('')}</select>${active?button('清除筛选','clear-filters','small secondary'):''}</div></details></div><div id="timeline-list">${listHtml}</div><div id="timeline-sentinel" class="timeline-sentinel" aria-hidden="true"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>`;
+}
+/* 信息流骨架屏：形状对齐真实卡片（34px 圆头像、名字/日期两行、标题条、正文条、16:10 图片块）。
+   扫光不落在每个块上，整条列表共用一道 1.5s 的斜向光带（.timeline-skeleton::after），免得各闪各的。 */
+function timelineSkeletonCards(){
+ const card=`<article class="card sk-card" aria-hidden="true"><div class="card-header"><span class="avatar sk-avatar"></span><div><b class="sk-line" style="width:86px;height:15px;margin:2px 0 4px"></b><b class="sk-line" style="width:112px;height:11px;margin:0"></b></div></div><b class="sk-line" style="width:42%;height:15px"></b><b class="sk-line" style="width:100%"></b><b class="sk-line" style="width:68%"></b><div class="sk-media"></div></article>`;
+ return `<div class="timeline-skeleton">${card}${card}${card}</div>`;
+}
+/* 时光页信息流的收尾三件套：骨架换真容时给卡片挂 60ms 错开的浮现动画；
+   距底部约一屏时经 IntersectionObserver 预取下一页（rootMargin 100% ≈ 一屏）。
+   只追加新卡片、不整页重绘，滚动位置天然不跳。 */
+function paintTimelineExtras(){
+ const list=$('#timeline-list');if(!list)return;
+ if(state.timelineReveal){state.timelineReveal=false;
+  list.classList.add('reveal');
+  [...list.children].forEach((el,i)=>el.style.animationDelay=Math.min(i*60,720)+'ms');
+ }
+ setupTimelineScroll();
+}
+function setupTimelineScroll(){
+ if(window.__tlIO){window.__tlIO.disconnect();window.__tlIO=null;}
+ const sent=$('#timeline-sentinel');if(!sent||!state.timelineHasMore)return;
+ if(!('IntersectionObserver' in window)){sent.classList.add('manual');sent.innerHTML=button('继续往前翻','load-more-timeline','secondary');return;}
+ window.__tlIO=new IntersectionObserver(es=>{if(es.some(x=>x.isIntersecting)){window.__tlIO.disconnect();window.__tlIO=null;loadMoreTimeline();}},{rootMargin:'0px 0px 100% 0px'});
+ window.__tlIO.observe(sent);
+}
+async function loadMoreTimeline(){
+ if(state.timelineLoading||!state.timelineHasMore)return;
+ state.timelineAutoLoaded=true;
+ const sent=$('#timeline-sentinel');if(!sent)return;
+ sent.classList.add('loading');
+ try{
+  const list=$('#timeline-list');
+  const domIds=new Set([...list.querySelectorAll('[data-record]')].map(el=>el.dataset.record));
+  await loadTimeline(false);
+  const fresh=state.timelinePosts.filter(r=>!domIds.has(r.id));
+  if(fresh.length){
+   const t=document.createElement('template');t.innerHTML=fresh.map(recordCard).join('');
+   [...t.content.children].forEach((el,i)=>{el.classList.add('slide-in');el.style.animationDelay=Math.min(i*50,500)+'ms';});
+   list.append(t.content);
+  }
+ }catch(e){toast(e.message);}
+ finally{
+  const s=$('#timeline-sentinel');
+  if(s)s.classList.remove('loading');
+  setupTimelineScroll();
+  if(!state.timelineHasMore&&s)s.outerHTML='<div class="timeline-end">没有更多了</div>';
+ }
 }
 /* 照片格子：相册页的「按相册」和「按时间」共用一份，避免两套 markup 走偏 */
 function photoGrid(list){
- return `<div class="photo-grid">${list.map(p=>`<button class="photo-item" data-action="photo" data-id="${p.id}"><img loading="lazy" src="/media/${p.id}?preview=true" alt="${esc(p.caption||p.name)}"><span>${esc(p.date||'属于我们的瞬间')}</span></button>`).join('')}</div>`;
+ /* blur-up：图片框尺寸由 aspect-ratio 提前占死，加载前后布局不跳。
+   src 先挂在 data-src 上，距进入视口 300px 才真正发请求（setupBlurUp）。 */
+ return `<div class="photo-grid">${list.map(p=>`<button class="photo-item" data-action="photo" data-id="${p.id}"><img class="blur-up" loading="lazy" decoding="async" data-src="/media/${p.id}?preview=true" alt="${esc(p.caption||p.name)}"><span>${esc(p.date||'属于我们的瞬间')}</span></button>`).join('')}</div>`;
+}
+/* blur-up 收尾：给视口外 300px 内的占位图真正派 src；观察器挂在全局，
+   每次重绘先断旧的再挂新的，不留野观察者。不支持 IO 的老 WebView 直接全量加载。 */
+function setupBlurUp(){
+ if(window.__buIO){window.__buIO.disconnect();window.__buIO=null;}
+ const imgs=[...document.querySelectorAll('img.blur-up[data-src]')];
+ if(!imgs.length)return;
+ if(!('IntersectionObserver' in window)){imgs.forEach(im=>{im.src=im.dataset.src;im.removeAttribute('data-src');});return;}
+ window.__buIO=new IntersectionObserver(es=>{es.forEach(en=>{if(!en.isIntersecting)return;const im=en.target;im.src=im.dataset.src;im.removeAttribute('data-src');window.__buIO.unobserve(im);});},{rootMargin:'300px 0px'});
+ imgs.forEach(im=>window.__buIO.observe(im));
 }
 /* 相册两种看法：按手工分类（原来的方式），或按月份自动归组。
    照片上传时没存 EXIF 拍摄地，「按地点」做不了真地图，所以按时间这条线做扎实：

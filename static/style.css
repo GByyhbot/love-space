@@ -2557,3 +2557,34 @@ body.kb-open .pick-overlay{padding-bottom:0}
 .chat-panel.skin-on.skin-light .chat-bubble .cs-track{background:rgba(255,255,255,.3)}
 .chat-panel.skin-on.skin-light .chat-bubble .cs-track i{background:#fff}
 
+
+/* ── 信息流骨架屏 / 无限滚动 / 相册 blur-up（v282）────────────────── */
+/* 骨架屏：形状对齐真实卡片。块只给底色，扫光由整条列表共用的一道斜向光带负责 */
+.sk-line{display:block;height:12px;border-radius:7px;background:var(--soft);margin:10px 0}
+.sk-avatar{background:var(--soft)}
+.sk-media{margin-top:14px;border-radius:12px;background:var(--soft);aspect-ratio:16/10;max-height:360px}
+.timeline-skeleton{position:relative}
+.timeline-skeleton::after{content:'';position:absolute;top:0;bottom:0;left:0;width:55%;
+ background:linear-gradient(100deg,rgba(255,255,255,0) 0%,rgba(255,255,255,.55) 50%,rgba(255,255,255,0) 100%);
+ transform:translateX(-110%);animation:sk-sweep 1.5s ease-in-out infinite;pointer-events:none;border-radius:inherit}
+:root.dark .timeline-skeleton::after{background:linear-gradient(100deg,rgba(255,255,255,0) 0%,rgba(255,255,255,.09) 50%,rgba(255,255,255,0) 100%)}
+@keyframes sk-sweep{to{transform:translateX(240%)}}
+/* 骨架换真容：卡片自上而下每张错开 60ms（delay 由 paintTimelineExtras 写入）淡入上移 8px */
+#timeline-list.reveal>.card{animation:card-rise .45s cubic-bezier(.22,.7,.3,1) both}
+@keyframes card-rise{from{opacity:0;transform:translateY(8px)}}
+/* 无限滚动追加的新卡片：自下方 24px 滑入淡入，每张错开 50ms */
+#timeline-list>.card.slide-in{animation:card-slide .45s cubic-bezier(.22,.7,.3,1) both}
+@keyframes card-slide{from{opacity:0;transform:translateY(24px)}}
+/* 底部加载哨兵：3 个依次跳动的小圆点，只在拉取时亮 */
+.timeline-sentinel{display:flex;justify-content:center;align-items:center;height:44px;margin:8px 0 18px}
+.timeline-sentinel .dot{width:8px;height:8px;border-radius:50%;background:var(--primary);opacity:0;margin:0 4px}
+.timeline-sentinel.loading .dot{animation:dot-jump 1s ease-in-out infinite}
+.timeline-sentinel.loading .dot:nth-child(2){animation-delay:.15s}
+.timeline-sentinel.loading .dot:nth-child(3){animation-delay:.3s}
+.timeline-sentinel.manual{height:auto}
+@keyframes dot-jump{0%,100%{opacity:.25;transform:translateY(0)}50%{opacity:1;transform:translateY(-6px)}}
+.timeline-end{text-align:center;color:var(--muted);font-size:var(--fs-sm);padding:4px 0 24px}
+/* 相册 blur-up：图片框尺寸由 aspect-ratio 占死，加载前后布局不跳。
+   .blur-up 期间 20px 高斯 + 1.04 倍放大（藏住小图的像素感），主色底取自图片本身（--ph 由 JS 写入） */
+.photo-item img{background:var(--ph,var(--soft));transition:filter .5s ease,transform .5s ease}
+.photo-item img.blur-up{filter:blur(20px);transform:scale(1.04);color:transparent}
