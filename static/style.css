@@ -2727,3 +2727,25 @@ html.vt-from-right::view-transition-new(root){animation-name:vt-in-right}
 }
 @keyframes sheet-spring{from{transform:translate3d(0,100%,0)}}
 @keyframes sheet-down{to{transform:translate3d(0,102%,0)}}
+
+/* ── 底部导航悬浮 Dock（sw 296）────────────────────────────────
+   参考游戏中心式底部栏：脱离屏幕边缘 10px、大圆角、毛玻璃，图标在上文字在下，
+   选中胶囊（水滴动效沿用 sw 294）浮在 Dock 内。主题自适应：
+   浅色=白玻璃，深色=黑玻璃。FAB 上浮一半突出 Dock 顶。 */
+@media (max-width:640px){
+  :root{--dock-bg:rgba(255,255,255,.9);--dock-line:rgba(0,0,0,.06);--dock-shadow:rgba(90,50,70,.28)}
+  :root.dark{--dock-bg:rgba(28,22,30,.78);--dock-line:rgba(255,255,255,.09);--dock-shadow:rgba(0,0,0,.55)}
+  .sidebar{inset:auto 10px calc(10px + env(safe-area-inset-bottom));height:auto;padding:8px 8px;
+    border:1px solid var(--dock-line);border-radius:28px;background:var(--dock-bg);
+    backdrop-filter:blur(18px) saturate(1.25);-webkit-backdrop-filter:blur(18px) saturate(1.25);
+    box-shadow:0 12px 34px var(--dock-shadow)}
+  .nav{gap:2px}
+  .nav button{min-height:56px;padding:8px 2px;border-radius:16px;gap:3px}
+  .nav .nav-pill{border-radius:18px;overflow:hidden}
+  :root.dark .nav .nav-pill i{background:rgba(255,255,255,.14)}
+  .nav .nav-fab{width:52px;height:52px;border-radius:50%;margin-top:-18px;
+    box-shadow:0 8px 22px rgba(0,0,0,.30),0 0 0 4px var(--dock-bg)}
+  .main{padding-bottom:120px}
+  .shell.figure-full .main{padding-bottom:calc(96px + env(safe-area-inset-bottom) + 14px)}
+  .shell.cal-full .main{padding-bottom:calc(96px + env(safe-area-inset-bottom) + 6px)}
+}
