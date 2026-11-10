@@ -50,5 +50,6 @@
 ## 五、P1-3 聊天节点窗口化：分期决策
 
 - **现状**：#chat-log 最多 200 条消息（API 上限）≈ 2000~3000 个 DOM 节点。
-- **第一阶段（本轮，sw 286）**：给 `.chat-line` 加 `content-visibility:auto` —— 屏外行跳过 layout/paint，渲染成本已与节点回收等价，且**完全不破坏 paintChat 键控对账**（DOM 结构不动）。
-- **第二阶段（暂缓）**：真·节点回收（保留 ~150 行、翻历史时回收远端 + 滚动锚点补偿）需要改 paintChat 的对账模型（对账要求节点在场），收益仅剩内存占用。等主人机实测「200 条消息下内存/帧率是否真的吃紧」再决定，避免为不存在的瓶颈引入回归风险。度量方法：Chrome DevTools → Performance monitor（DOM Node 数 / JS heap）翻历史前后对比。
+- **第一阶段（sw 286 已试、sw 287 回退）**：给 `.chat-line` 加 `content-visibility:auto` 后实测翻车——屏外行只占估高（76px），渐进渲染时 scrollHeight 持续漂移：`scrollChat` 的 `scrollTop=scrollHeight` 在估高上贴底，行渲染出真实高度后内容高度又变，贴底失效（自动化实测 `nearBottom=false`、贴纸停播、IO 门控全乱）。聊天页贴底锚定（watchChatLog：ResizeObserver + 距底基准）依赖「渲染完成后高度稳定」这一前提，与按需渲染天然冲突。**渲染跳过对 200 行的收益本就有限，回退保稳。**
+- **第二阶段（真·节点回收，暂缓）**：需改 paintChat 对账模型（对账要求节点在场）+ 滚动锚点补偿，收益仅剩内存占用。等真机实测「200 条消息下内存/帧率是否吃紧」再决定。度量方法：Chrome DevTools → Performance monitor（DOM Node 数 / JS heap），翻历史前后对比。
+- 时光流 / 相册网格的 `content-visibility:auto`（sw 285）**保留**：窗口滚动 + IO 驱动、无自定义贴底锚定，回归全绿。
