@@ -49,7 +49,7 @@ function chatRows() {
      src 是在线搜来的 30 秒试听地址（走同源 /api/music/stream 转发）。两个都有就优先本地文件。 */
   const song=r.body.song&&r.body.song.title?r.body.song:null;
   const songCard=song?songCardMarkup(song):'';
-  const inner=songCard?`<div class="chat-bubble song">${quote}${songCard}</div>`:locCard?`<div class="chat-bubble loc">${quote}${locCard}</div>`:sticker?`<div class="chat-sticker${sticker.endsWith('.webm')?' video':''}">${sticker.endsWith('.webm')?`<video src="${esc(sticker)}" autoplay loop muted playsinline></video>`:`<img src="${esc(sticker)}" alt="贴纸" loading="lazy">`}</div>`:`<div class="chat-bubble${voiceOnly?' voice':''}${r.body.pinned?' pinned':''}">${quote}<span style="white-space:pre-wrap">${esc(r.body.content)}</span>${mediaMarkup(r.media)}</div>`;
+  const inner=songCard?`<div class="chat-bubble song">${quote}${songCard}</div>`:locCard?`<div class="chat-bubble loc">${quote}${locCard}</div>`:sticker?`<div class="chat-sticker${sticker.endsWith('.webm')?' video':''}">${sticker.endsWith('.webm')?`<video src="${esc(sticker)}" loop muted playsinline></video>`:`<img src="${esc(sticker)}" alt="贴纸" loading="lazy">`}</div>`:`<div class="chat-bubble${voiceOnly?' voice':''}${r.body.pinned?' pinned':''}">${quote}<span style="white-space:pre-wrap">${esc(r.body.content)}</span>${mediaMarkup(r.media)}</div>`;
   return `${tl?`<div class="chat-day">${tl}</div>`:''}<div class="chat-line ${mine?'mine':''}" id="msg-${r.id}">${avatar(r.author)}<div>${inner}${ops?`<div class="chat-time">${ops}</div>`:''}</div></div>`;
  }).join('');
  const pend=pending.map(p=>`<div class="chat-line mine pending">${avatar(state.me.user.id)}<div><div class="chat-bubble">${esc(p.body.content||'一个附件')}</div><div class="chat-time">尚未发送 <button data-action="retry-chat" data-id="${p.client_id}">点击重试</button></div></div></div>`).join('');
@@ -95,6 +95,24 @@ function paintChat(log) {
  }
  /* 多出来的行（撤回、搜索过滤后消失）从尾部删掉 */
  while (log.children.length > want.length) log.removeChild(log.lastChild);
+ watchChatVideos(log);
+}
+/* 贴纸视频只播可视区：以前 chatRows 给每条 webm 贴纸都写 autoplay loop，
+   滚出屏幕也在解码，200 条历史里贴纸一多解码器直接吃满。改成 IO 门控：
+   进视口（rootMargin 80px）才 play，离开就 pause。
+   🔴 #chat-log 会被整页重绘换成新节点，IO 的 root 必须跟着换：
+   缓存了旧 root 的观察器对 detached 容器永远报不相交，贴纸会全部停住。 */
+let chatVidIO=null,chatVidRoot=null;
+function watchChatVideos(log){
+ if(!('IntersectionObserver' in window)||!log)return;
+ if(!chatVidIO||chatVidRoot!==log){
+  if(chatVidIO)chatVidIO.disconnect();
+  chatVidRoot=log;
+  chatVidIO=new IntersectionObserver(es=>es.forEach(e=>{
+   if(e.isIntersecting)e.target.play().catch(()=>{});else e.target.pause();
+  }),{root:log,rootMargin:'80px'});
+ }
+ log.querySelectorAll('.chat-sticker video').forEach(v=>{if(!v._io){v._io=1;chatVidIO.observe(v);}});
 }
 /* 聊天壁纸：预设用 CSS 渐变/纹理，'photo' 用自己上传的照片。
    dim 是压在图上的遮罩强度（百分比）——它存在的意义只有一个：保证气泡文字在任何底图上都读得清。
@@ -261,7 +279,7 @@ function messagesPage() {
  </div>`;
  return `<section class="chat-panel${bgOn?' has-wallpaper':''}${immersive?' immersive':''}${skinAttrs.cls}"${skinAttrs.style}>${chatWallpaper()}<header class="chat-header"><button class="icon-btn" data-action="chat-back" aria-label="返回">${icon('back')}</button>${partner?avatar(partner.id):'<span class="avatar">♡</span>'}<div><h3>${partner?esc(partner.name):'等待另一半加入'}</h3><small>我们的悄悄话 · 仅彼此可见</small></div><button class="icon-btn" data-action="chat-search" aria-label="搜索消息" title="搜索消息" style="margin-left:auto">${icon('search')}</button><button class="icon-btn" data-action="chat-bg" aria-label="聊天背景" title="聊天背景">${icon('photo')}</button><button class="icon-btn" data-nav="imports" aria-label="聊天记录">${icon('book')}</button></header><div class="chat-body">${pinnedBar}${searchBar}<div id="chat-log" class="chat-log" aria-live="polite">${chatRows()}</div></div><div id="sticker-dock" class="sticker-dock" hidden></div>${replyBar}${composeBar}${fnPanel}<input id="chat-file" type="file" accept="image/*,video/*" multiple hidden><input id="chat-shot" type="file" accept="image/*" capture="environment" hidden></section>`;
 }
-function scrollChat(){const log=$('#chat-log');if(log)log.scrollTop=log.scrollHeight;}
+function scrollChat(){const log=$('#chat-log');if(log){log.scrollTop=log.scrollHeight;watchChatVideos(log);}}
 /* ── 消息区始终「贴着」底边那块 ─────────────────────────────────────────────
    输入栏下面那块（键盘 / 功能面板 / 表情 dock）一变高变矮，消息区的 clientHeight
    就跟着变。什么都不做的话 scrollTop 不变 → 内容留在原地、最后几行被底部那块吃掉，
@@ -730,11 +748,14 @@ window.__kbRing=kbRing;
 function tms(){return Math.round(performance.now());}
 function kbRec(o){
  if(kbRing.length>=600)kbRing.shift();
- try{
-  o.sa=getComputedStyle(document.documentElement).getPropertyValue('--safe-area-inset-bottom').trim();
- }catch{}
+ /* --safe-area 只在变化时才有诊断价值：动画期间每帧 getComputedStyle 会触发
+    提前的样式重算（--kb-h 每帧在写，样式表是脏的），限到最多 400ms 一次。 */
+ const n=o.t||tms();
+ if(kbSaAt===0||n-kbSaAt>400){kbSaAt=n;try{kbSa=getComputedStyle(document.documentElement).getPropertyValue('--safe-area-inset-bottom').trim();}catch{}}
+ o.sa=kbSa;
  kbRing.push(o);
 }
+let kbSaAt=0,kbSa='';
 /* 引擎仲裁：聚焦输入框后 600ms，视觉视口若自己缩了 >90px，说明 insets 流通、
    Chromium 在管键盘（Capacitor8/targetSdk36 的正常路径）→ kbVvWorks=1，原生桥永久让位。
    600ms 的取值：足够键盘动画走完、也足够"会报告的引擎"触发 resize；
