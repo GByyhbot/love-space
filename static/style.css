@@ -1949,13 +1949,7 @@ body.cal-full{overflow:hidden;height:100dvh}
 .card.kind-album{background:linear-gradient(165deg,var(--tint-blue),var(--surface) 72%)}
 .card.kind-mood{background:linear-gradient(165deg,var(--tint-rose),var(--surface) 72%)}
 .card.kind-note,.card.kind-diary,.card.kind-post,.card.kind-surprise,.card.kind-question,.card.kind-draft,.card.kind-period{background:linear-gradient(165deg,rgba(var(--primary-rgb),.04),var(--surface) 72%)}
-.card.kind-anniversary::before,.card.kind-wish::before,.card.kind-quest::before,.card.kind-habit::before,.card.kind-ledger::before,.card.kind-music::before,.card.kind-album::before,.card.kind-mood::before,.card.kind-note::before,.card.kind-diary::before,.card.kind-post::before,.card.kind-surprise::before,.card.kind-question::before,.card.kind-draft::before,.card.kind-period::before{content:'';position:absolute;left:0;top:16px;bottom:16px;width:3px;border-radius:0 3px 3px 0;opacity:.85}
-.card.kind-anniversary::before{background:var(--amber)}
-.card.kind-wish::before,.card.kind-music::before{background:var(--fertile)}
-.card.kind-quest::before,.card.kind-habit::before,.card.kind-mood::before{background:var(--primary)}
-.card.kind-ledger::before{background:var(--green)}
-.card.kind-album::before{background:var(--info)}
-.card.kind-note::before,.card.kind-diary::before,.card.kind-post::before,.card.kind-surprise::before,.card.kind-question::before,.card.kind-draft::before,.card.kind-period::before{background:var(--primary-dark)}
+
 
 /* D. 首页侧栏卡片细微 tint */
 .home-aside>.card.mood-card{background:linear-gradient(165deg,var(--tint-rose),var(--surface) 72%)}
@@ -2681,26 +2675,6 @@ html.vt-page::view-transition-new(root){animation:vt-page-in .28s var(--ease-out
 .card-footer button.just-liked{animation:heart-pop var(--dur-2) var(--ease-spring)}
 @keyframes heart-pop{35%{transform:scale(1.32)}}
 
-/* ── 卡片竖条光效（sw 291）──────────────────────────────────────
-   原 3px 实色竖条偏「硬贴」。改成两层的动态光条：
-   · 底层(::before)保持类型色不变；
-   · 上层(::after)：① 底部渐隐——条的下端融进卡片背景，不再是突兀的矩形；
-     ② 一道白光沿条缓慢下扫（4.2s 一循环、58% 时间休止），与骨架屏扫光同一套语言。
-   动画只刷 3px 宽的窄条，paint 面积极小；系统减动效时全局规则停掉动画，
-   光带停靠在条外，静置为纯渐变条。 */
-.card.kind-anniversary::after,.card.kind-wish::after,.card.kind-quest::after,.card.kind-habit::after,.card.kind-ledger::after,.card.kind-music::after,.card.kind-album::after,.card.kind-mood::after,.card.kind-note::after,.card.kind-diary::after,.card.kind-post::after,.card.kind-surprise::after,.card.kind-question::after,.card.kind-draft::after,.card.kind-period::after{
-  content:'';position:absolute;left:0;top:16px;bottom:16px;width:3px;border-radius:0 3px 3px 0;
-  background-image:linear-gradient(180deg,rgba(255,255,255,0),rgba(255,255,255,.65) 50%,rgba(255,255,255,0)),
-                   linear-gradient(180deg,rgba(255,255,255,0) 25%,var(--surface) 88%);
-  background-size:100% 64px,100% 100%;
-  background-repeat:no-repeat;
-  background-position:0 -64px,0 0;
-  animation:bar-sweep 4.2s ease-in-out infinite;
-  pointer-events:none}
-@keyframes bar-sweep{0%,58%{background-position:0 -64px,0 0}92%,100%{background-position:0 calc(100% + 64px),0 0}}
-/* 时光流相邻卡片错峰：光带不同步扫，避免一排条同时发光 */
-#timeline-list>.card:nth-child(2n)::after{animation-delay:1.3s}
-#timeline-list>.card:nth-child(2n+1)::after{animation-delay:.65s}
 
 /* ── 看图器切换引擎（sw 292）────────────────────────────────────
    ghost：切换时从侧面滑入的那张图，与主图同款 sizing，绝对定位铺满舞台居中；
