@@ -2655,3 +2655,9 @@ body.kb-open .pick-overlay{padding-bottom:0}
 .modal-overlay.closing .modal{animation:modal-shrink var(--dur-1) var(--ease-in) both}
 @keyframes modal-out{to{opacity:0}}
 @keyframes modal-shrink{to{opacity:0;transform:scale(.98)}}
+
+/* ── 页面切换转场（sw 289）：只在导航时挂 html.vt-page，旧页轻退、新页从下 10px 淡进 ── */
+html.vt-page::view-transition-old(root){animation:vt-page-out .2s var(--ease-in) both}
+html.vt-page::view-transition-new(root){animation:vt-page-in .28s var(--ease-out) both}
+@keyframes vt-page-out{to{opacity:0;transform:translateY(-6px)}}
+@keyframes vt-page-in{from{opacity:0;transform:translateY(10px)}}

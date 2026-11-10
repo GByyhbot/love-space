@@ -41,7 +41,7 @@ const paths = {
  game:'M7 9h10a4 4 0 0 1 4 4v2a3 3 0 0 1-5 2l-1-1H9l-1 1a3 3 0 0 1-5-2v-2a4 4 0 0 1 4-4Zm0 3v3M5.5 12.5h3M16 12h.01M18 14h.01'
 };
 const icon = name => `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="${paths[name] || paths.heart}"/></svg>`;
-const state = {page:'home', tab:'', me:null, records:[], photos:[], notices:[], channels:[], deliveries:[], webpush:null, nativePush:null, dashboard:null, weekly:null, weekOffset:0, periodDay:'', timelinePosts:[],timelineCursor:null,timelineHasMore:false,timelineSkeleton:false,timelineAutoLoaded:false,stream:null, online:navigator.onLine, linkRoutes:null, linkProbing:false};
+const state = {page:'home', tab:'', me:null, records:[], photos:[], notices:[], channels:[], deliveries:[], webpush:null, nativePush:null, dashboard:null, weekly:null, weekOffset:0, periodDay:'', timelinePosts:[],timelineCursor:null,timelineHasMore:false,timelineSkeleton:false,timelineAutoLoaded:false,vtNext:false,stream:null, online:navigator.onLine, linkRoutes:null, linkProbing:false};
 let modalCleanup = null, focusReturn = null, refreshing = false;
 
 function clearUserLocalData(userId) {
@@ -368,7 +368,20 @@ function renderPage() {
    直接从深链进来（#timeline）时 history 里没有上一页，这时候 history.back()
    会把整个 App 关掉，必须回落到 navigate。 */
 let navDepth=0;
-async function navigate(page,tab='') {if(!state.me)return;if(page!=='messages')state.chatReturn={page,tab};if(page==='messages'&&state.me){state.me.chat_unread=0;post('/notices/read?event=chat').catch(()=>{});/* 进聊天不主动弹输入法：先把上一页可能还活着的焦点交还，再渲染 */if(document.activeElement&&document.activeElement.blur)document.activeElement.blur();}state.page=page;state.tab=tab;if(location.hash!=='#'+page){location.hash=page;navDepth++;}try{if(page==='timeline'&&state.timelinePosts.length===0){state.timelineSkeleton=true;renderShell();window.scrollTo({top:0});await loadTimeline(true);state.timelineSkeleton=false;if(state.page==='timeline'&&location.hash==='#'+page){revealTimeline();window.scrollTo({top:0});}return;}if(page==='timeline')await loadTimeline(true);await loadSpecial();renderShell();window.scrollTo({top:0});}catch(e){toast(e.message);}}
+/* 页面级 View Transition：复用看图器的基建（startViewTransition 已有 vtOk 判能力），
+   只包导航本身。旧页轻退、新页从下方 10px 淡进（CSS 挂 html.vt-page 生效）。
+   SSE/refresh 的重绘不经过这里，不会被误快照；聊天页/摆拍页（iframe）不转场。 */
+function renderShellVT(){
+ const doc=document.documentElement;
+ const ok=state.vtNext&&typeof document.startViewTransition==='function'
+  &&!doc.classList.contains('reduced-motion')&&!matchMedia('(prefers-reduced-motion: reduce)').matches;
+ state.vtNext=false;
+ if(!ok){renderShell();window.scrollTo({top:0});return;}
+ doc.classList.add('vt-page');
+ const vt=document.startViewTransition(()=>{renderShell();window.scrollTo({top:0});});
+ Promise.resolve(vt.finished).catch(()=>{}).finally(()=>doc.classList.remove('vt-page'));
+}
+async function navigate(page,tab='') {if(!state.me)return;const prevPage=state.page;if(page!=='messages')state.chatReturn={page,tab};if(page==='messages'&&state.me){state.me.chat_unread=0;post('/notices/read?event=chat').catch(()=>{});/* 进聊天不主动弹输入法：先把上一页可能还活着的焦点交还，再渲染 */if(document.activeElement&&document.activeElement.blur)document.activeElement.blur();}state.page=page;state.tab=tab;state.vtNext=prevPage!==page&&prevPage!=='messages'&&page!=='messages'&&prevPage!=='figure'&&page!=='figure';if(location.hash!=='#'+page){location.hash=page;navDepth++;}try{if(page==='timeline'&&state.timelinePosts.length===0){state.timelineSkeleton=true;renderShellVT();await loadTimeline(true);state.timelineSkeleton=false;if(state.page==='timeline'&&location.hash==='#'+page){revealTimeline();window.scrollTo({top:0});}return;}if(page==='timeline')await loadTimeline(true);await loadSpecial();renderShellVT();}catch(e){toast(e.message);}}
 /* 返回上一页：走浏览器后退，**不要**再 push 一条新的 hash。
    以前聊天里「返回」写的是 navigate('messages')，等于在历史里又压了一条 #messages，
    于是栈变成 [ #home, #messages, #messages ]——安卓实体返回键每按一次就在这两个界面
