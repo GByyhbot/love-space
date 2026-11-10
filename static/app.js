@@ -353,6 +353,9 @@ function renderPage() {
   $('#chat-file')?.addEventListener('change',e=>{const fs=[...e.target.files];e.target.value='';sendChatFiles(fs);});
   $('#chat-shot')?.addEventListener('change',e=>{const fs=[...e.target.files];e.target.value='';sendChatFiles(fs);});
   applyWallpaper();
+  /* 刚发出的那条消息：挂在节点上弹一下（气泡 spring 放大），一发一收不重播 */
+  const jid=state.justSent;state.justSent=null;
+  if(jid){const row=document.getElementById('msg-'+jid);if(row)row.classList.add('just-sent');}
  }
  if(state.page==='importdetail') initImportLog();
  syncStatusBarOverlay();
@@ -705,6 +708,41 @@ document.addEventListener('click',e=>{
  document.querySelectorAll('.chat-line.tap-ops').forEach(x=>{if(x!==line)x.classList.remove('tap-ops');});
  line.classList.toggle('tap-ops');
 });
+/* ── 长按消息浮起（呈现层，不碰键盘/面板逻辑，附录 B-2）──────────
+   按住 480ms → 气泡 scale 1.02 + 抬升阴影 + 操作行展开（复用 tap-ops）。
+   独立小状态：lpTimer/lpFired 两个局部变量，不建全局状态机。 */
+let lpTimer=null,lpFired=null,lpX=0,lpY=0;
+document.addEventListener('pointerdown',e=>{
+ if(state.page!=='messages')return;
+ const line=e.target.closest&&e.target.closest('.chat-line');
+ if(!line||line.classList.contains('pending'))return;
+ if(e.target.closest('button,a,input,textarea,summary,[data-voice-play],.chat-sticker,.chat-quote'))return;
+ lpFired=null;lpX=e.clientX;lpY=e.clientY;
+ lpTimer=setTimeout(()=>{lpTimer=null;lpFired=line;
+  try{getSelection().removeAllRanges();}catch{}
+  document.querySelectorAll('.chat-line.tap-ops').forEach(x=>{if(x!==line)x.classList.remove('tap-ops','msg-lift');});
+  line.classList.add('tap-ops','msg-lift');
+ },480);
+},true);
+['pointerup','pointercancel','pointermove'].forEach(ev=>document.addEventListener(ev,e=>{
+ if(!lpTimer)return;
+ if(ev==='pointermove'&&Math.hypot(e.clientX-lpX,e.clientY-lpY)<8)return; /* 手指微动不算滚走 */
+ clearTimeout(lpTimer);lpTimer=null;
+},true));
+document.addEventListener('click',e=>{
+ if(!lpFired)return;
+ /* 长按后的那次 click 不再当 tap 处理，否则抬起时操作行又收回去 */
+ if(lpFired.contains(e.target)){e.preventDefault();e.stopPropagation();lpFired=null;}
+},true);
+document.addEventListener('click',()=>{
+ if(lpFired)return;
+ document.querySelectorAll('.chat-line.msg-lift').forEach(x=>x.classList.remove('msg-lift'));
+});
+document.addEventListener('contextmenu',e=>{
+ if(state.page!=='messages')return;
+ const line=e.target.closest&&e.target.closest('.chat-line');
+ if(line&&!e.target.closest('input,textarea'))e.preventDefault();
+},true);
 document.addEventListener('click',e=>{
  const chip=e.target.closest('[data-voice-play]');if(!chip)return;
  const audio=chip.querySelector('audio');if(!audio)return;
@@ -2194,9 +2232,37 @@ function channelForm() {
 
 async function sendChat(body,clientId=uuid()) {
  const pending=pendingChats();if(!pending.some(p=>p.client_id===clientId)){pending.push({client_id:clientId,body});setPending(pending);}
- try {await post('/records',{kind:'chat',body,client_id:clientId});setPending(pendingChats().filter(p=>p.client_id!==clientId));}catch(e){paintChat($('#chat-log'));scrollChat();throw e;}
+ if(state.chatFailed)delete state.chatFailed[clientId];
+ /* 就地重绘 pending 行：发送中的点阵态立即可见（以前只在失败后才出现） */
+ paintChat($('#chat-log'));scrollChat();
+ try {const rec=await post('/records',{kind:'chat',body,client_id:clientId});state.justSent=rec&&rec.id;setPending(pendingChats().filter(p=>p.client_id!==clientId));}catch(e){state.chatFailed=state.chatFailed||{};state.chatFailed[clientId]=true;paintChat($('#chat-log'));scrollChat();throw e;}
 }
 
+/* 点赞爆点：粒子从按钮中心喷出，带重力、逐粒淡出（动效库：粒子有来源有退场，
+   全站只此一处、画在同一个 canvas 上）。尊重系统减动效设置。 */
+let likeBurstCv=null;
+function likeBurst(x,y){
+ if(matchMedia('(prefers-reduced-motion: reduce)').matches||document.hidden)return;
+ if(!likeBurstCv){likeBurstCv=document.createElement('canvas');likeBurstCv.className='like-burst';document.body.append(likeBurstCv);}
+ const cv=likeBurstCv,dpr=Math.min(2,window.devicePixelRatio||1);
+ cv.width=innerWidth*dpr;cv.height=innerHeight*dpr;
+ cv.style.cssText='position:fixed;inset:0;z-index:300;pointer-events:none';
+ const ctx=cv.getContext('2d');ctx.scale(dpr,dpr);
+ const col=getComputedStyle(document.documentElement).getPropertyValue('--primary').trim()||'#e56b8c';
+ const parts=[];for(let i=0;i<9;i++){const a=-Math.PI/2+(i-4)*.3;const sp=110+Math.random()*80;
+  parts.push({x:x,y:y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp-50,r:2+Math.random()*2.5,life:1});}
+ let last=performance.now();
+ (function tick(now){
+  const dt=Math.min(.05,(now-last)/1000);last=now;
+  ctx.clearRect(0,0,innerWidth,innerHeight);
+  let alive=0;
+  for(const p of parts){p.life-=dt*1.7;if(p.life<=0)continue;alive++;
+   p.vy+=300*dt;p.x+=p.vx*dt;p.y+=p.vy*dt;
+   ctx.globalAlpha=Math.max(0,p.life);ctx.fillStyle=col;
+   ctx.beginPath();ctx.arc(p.x,p.y,p.r*(0.4+p.life*0.6)+0.4,0,7);ctx.fill();}
+  if(alive)requestAnimationFrame(tick);else{cv.remove();likeBurstCv=null;}
+ })(last);
+}
 async function act(action,id,el) {
  const r=state.records.find(x=>x.id===id);
  if(action==='reload')return boot();
@@ -2248,7 +2314,13 @@ async function act(action,id,el) {
  if(action==='edit-record')return recordForm(r.kind,r);
  if(action==='delete-record')return confirmAction('暂时收起这份回忆？',r.kind==='album'?'只删除相册分类，里面的照片仍会保留在全部照片中。':'记录会进入作者的回收站，三十天内可以恢复。',async()=>{await del('/records/'+id);if(state.album===id)state.album='';});
  if(action==='restore'){await post('/records/'+id+'/restore');await refresh();return toast('回忆已恢复');}
- if(action==='like'){await post('/records/'+id+'/like');return refresh();}
+ if(action==='like'){
+  const liked=r&&r.likes.includes(state.me.user.id);
+  await post('/records/'+id+'/like');
+  /* 点赞（非取消）才有反馈：按钮本体弹性放大 + 一次粒子从按钮中心喷出 */
+  if(!liked&&el){try{el.animate([{transform:'scale(1)'},{transform:'scale(1.3)',offset:.35},{transform:'scale(1)'}],{duration:220,easing:'cubic-bezier(.34,1.4,.64,1)'});}catch{}const rc=el.getBoundingClientRect();likeBurst(rc.left+rc.width/2,rc.top+rc.height/2);}
+  return refresh();
+ }
  if(action==='comment')return simpleForm('留一句温柔的回应','<label>你的回复<textarea name="content" required maxlength="5000"></textarea></label>',data=>post('/records/'+id+'/comments',data),'发送回复');
  if(action==='delete-comment')return confirmAction('删除这条回复？','删除后无法恢复。',()=>del('/comments/'+id));
  if(action==='answer'){const old=(r.answers||[]).find(a=>a.author===state.me.user.id);return simpleForm(r.body.title,`<label>我的答案<textarea name="content" required maxlength="5000">${esc(old?.content||'')}</textarea></label>`,data=>post('/records/'+id+'/answer',data));}

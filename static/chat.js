@@ -52,7 +52,11 @@ function chatRows() {
   const inner=songCard?`<div class="chat-bubble song">${quote}${songCard}</div>`:locCard?`<div class="chat-bubble loc">${quote}${locCard}</div>`:sticker?`<div class="chat-sticker${sticker.endsWith('.webm')?' video':''}">${sticker.endsWith('.webm')?`<video src="${esc(sticker)}" loop muted playsinline></video>`:`<img src="${esc(sticker)}" alt="贴纸" loading="lazy">`}</div>`:`<div class="chat-bubble${voiceOnly?' voice':''}${r.body.pinned?' pinned':''}">${quote}<span style="white-space:pre-wrap">${esc(r.body.content)}</span>${mediaMarkup(r.media)}</div>`;
   return `${tl?`<div class="chat-day">${tl}</div>`:''}<div class="chat-line ${mine?'mine':''}" id="msg-${r.id}">${avatar(r.author)}<div>${inner}${ops?`<div class="chat-time">${ops}</div>`:''}</div></div>`;
  }).join('');
- const pend=pending.map(p=>`<div class="chat-line mine pending">${avatar(state.me.user.id)}<div><div class="chat-bubble">${esc(p.body.content||'一个附件')}</div><div class="chat-time">尚未发送 <button data-action="retry-chat" data-id="${p.client_id}">点击重试</button></div></div></div>`).join('');
+ const pend=pending.map(p=>{
+  /* 发送三态的呈现层：发送中=三个跳动点；失败=标红 + 重试。不改协议只改呈现（附录 B-2）。 */
+  const failed=state.chatFailed&&state.chatFailed[p.client_id];
+  return `<div class="chat-line mine pending ${failed?'failed':'sending'}">${avatar(state.me.user.id)}<div><div class="chat-bubble">${esc(p.body.content||'一个附件')}</div><div class="chat-time">${failed?`<span class="snd-fail">未发出</span> <button data-action="retry-chat" data-id="${p.client_id}">点击重试</button>`:`<span class="snd-dots" aria-label="发送中"><i></i><i></i><i></i></span>`}</div></div></div>`;
+ }).join('');
  if(q&&!chats.length)return `<div class="chat-no-match">最近 200 条里没有「${esc(state.chatSearch)}」，试试清掉筛选。</div>`;
  return rows+pend||empty('今天，有什么想对 TA 说？','说说日常，也说说想念。');
 }
@@ -96,6 +100,8 @@ function paintChat(log) {
  /* 多出来的行（撤回、搜索过滤后消失）从尾部删掉 */
  while (log.children.length > want.length) log.removeChild(log.lastChild);
  watchChatVideos(log);
+ const jid=state.justSent;state.justSent=null;
+ if(jid){const row=document.getElementById('msg-'+jid);if(row)row.classList.add('just-sent');}
 }
 /* 贴纸视频只播可视区：以前 chatRows 给每条 webm 贴纸都写 autoplay loop，
    滚出屏幕也在解码，200 条历史里贴纸一多解码器直接吃满。改成 IO 门控：

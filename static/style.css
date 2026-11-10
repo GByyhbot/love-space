@@ -2661,3 +2661,22 @@ html.vt-page::view-transition-old(root){animation:vt-page-out .2s var(--ease-in)
 html.vt-page::view-transition-new(root){animation:vt-page-in .28s var(--ease-out) both}
 @keyframes vt-page-out{to{opacity:0;transform:translateY(-6px)}}
 @keyframes vt-page-in{from{opacity:0;transform:translateY(10px)}}
+
+/* ── 聊天发送三态（sw 290）：发送中点阵 / 失败摇头 / 发出弹跳 ── */
+.snd-dots{display:inline-flex;gap:3px;align-items:center;height:14px}
+.snd-dots i{width:4px;height:4px;border-radius:50%;background:var(--muted);animation:dot-jump 1s ease-in-out infinite}
+.snd-dots i:nth-child(2){animation-delay:.15s}
+.snd-dots i:nth-child(3){animation-delay:.3s}
+.chat-line.pending.sending .chat-bubble{opacity:.72}
+.chat-line.pending.failed .chat-bubble{animation:shake-once .32s var(--ease-out)}
+@keyframes shake-once{20%{transform:translateX(-4px)}45%{transform:translateX(4px)}70%{transform:translateX(-2px)}}
+.snd-fail{color:var(--danger)}
+.chat-line.just-sent .chat-bubble{animation:bubble-pop var(--dur-2) var(--ease-spring) both}
+@keyframes bubble-pop{from{transform:scale(.94);opacity:.5}}
+/* 长按消息：气泡浮起（1.02 + 抬升阴影），松手沿同一过渡落回 */
+.chat-line .chat-bubble{transition:transform var(--dur-2) var(--ease-out),box-shadow var(--dur-2) var(--ease-out)}
+.chat-line.msg-lift{user-select:none}
+.chat-line.msg-lift .chat-bubble{transform:scale(1.02);box-shadow:var(--shadow-lift)}
+/* 点赞爱心弹性（粒子由 JS canvas 喷出） */
+.card-footer button.just-liked{animation:heart-pop var(--dur-2) var(--ease-spring)}
+@keyframes heart-pop{35%{transform:scale(1.32)}}

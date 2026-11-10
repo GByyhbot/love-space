@@ -139,7 +139,9 @@ def run():
                         '(s) => document.querySelector("#chat-log")?.textContent.includes(s)',
                         arg=stamp, timeout=15000)
                     ok(True, '输入框发消息成功')
-                    ok(page.evaluate("() => document.querySelector('#chat-text').value === ''"),
+                    ok(page.wait_for_function(
+                        "() => document.querySelector('#chat-text').value === ''",
+                        timeout=15000) is not None,
                        '发送后输入框已清空')
 
                     # ---- 4. 发一条带图的聊天：后面要靠它验证附件节点复用 ----
