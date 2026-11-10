@@ -2701,3 +2701,14 @@ html.vt-page::view-transition-new(root){animation:vt-page-in .28s var(--ease-out
 /* 时光流相邻卡片错峰：光带不同步扫，避免一排条同时发光 */
 #timeline-list>.card:nth-child(2n)::after{animation-delay:1.3s}
 #timeline-list>.card:nth-child(2n+1)::after{animation-delay:.65s}
+
+/* ── 看图器切换引擎（sw 292）────────────────────────────────────
+   ghost：切换时从侧面滑入的那张图，与主图同款 sizing，绝对定位铺满舞台居中；
+   跟手态(.lb-drag)关掉一切过渡才是 1:1 跟手；动画态(.lb-anim)交给内联 transition。 */
+.lb-ghost{position:absolute;inset:0;margin:auto;pointer-events:none;
+  transition:transform var(--dur-3) var(--ease-out)}
+.lb-drag .lb-ghost,.lb-drag .lightbox-image{transition:none!important}
+.lightbox-wrap.lb-anim .lightbox-image{will-change:transform,opacity}
+/* 计数换字：数字轻滚一下，不硬换 */
+.lightbox-count.tick{animation:count-tick var(--dur-2) var(--ease-out)}
+@keyframes count-tick{from{opacity:0;transform:translateY(6px)}}

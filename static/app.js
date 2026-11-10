@@ -1991,6 +1991,8 @@ document.addEventListener('pointerdown', e => {
   const [a, b] = [...lbPts.values()];
   lbPinch = { d: Math.hypot(a.x - b.x, a.y - b.y), s: lbZoom.s };
   lbDrag = null;
+  /* 第二根手指落下：进行中的切图/关闭手势作废，转入捏合 */
+  if(lbSwipe)lbSwipeCancel();
  }
 });
 
@@ -2003,13 +2005,45 @@ document.addEventListener('pointermove', e => {
   if(lbPinch.d > 8) lbScaleTo(lbPinch.s * (d / lbPinch.d), (a.x + b.x) / 2, (a.y + b.y) / 2);
   return;
  }
- if(!lbDrag || lbZoom.s <= 1.01) return;
+ if(!lbDrag) return;
  const dx = e.clientX - lbDrag.x, dy = e.clientY - lbDrag.y;
- if(!lbDrag.moved && Math.abs(dx) + Math.abs(dy) < 5) return;
+ if(lbZoom.s > 1.01){
+  /* 放大后的平移（原逻辑不变） */
+  if(!lbDrag.moved && Math.abs(dx) + Math.abs(dy) < 5) return;
+  lbDrag.moved = true;
+  lbZoom.x = lbDrag.ox + dx;
+  lbZoom.y = lbDrag.oy + dy;
+  lbApply();
+  return;
+ }
+ /* 未放大：横向拖=1:1 跟手换图，下拖=1:1 跟手关闭（sw 292） */
+ if(lbSwitching) return;
+ const img = lbImgEl();
+ if(!img) return;
+ if(!lbDrag.moved && Math.abs(dx) + Math.abs(dy) < 8) return;
  lbDrag.moved = true;
- lbZoom.x = lbDrag.ox + dx;
- lbZoom.y = lbDrag.oy + dy;
- lbApply();
+ const ids = lbIds();
+ if(!lbSwipe){
+  if(Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 10){
+   const dir = dx < 0 ? 1 : -1, ni = lbIndex() + dir;
+   if(ni < 0 || ni >= ids.length) lbSwipe = { axis: 'none' };
+   else { lbSwipe = { axis: 'x', dir }; lbSwipeStart(dir, `/media/${ids[ni]}?preview=true`); }
+  } else if(Math.abs(dy) > Math.abs(dx) && dy > 0){
+   lbSwipe = { axis: 'y' }; lbDismissStart();
+  } else return;
+ }
+ if(!lbSwipe || lbSwipe.axis === 'none') return;
+ lbSamp = lbSamp || [];lbSamp.push({ x: e.clientX, y: e.clientY, t: Date.now() });
+ if(lbSamp.length > 3) lbSamp.shift();
+ const stage = lbStageEl(), sw = stage.clientWidth;
+ if(lbSwipe.axis === 'x'){
+  img.style.transform = `translate3d(${dx}px,0,0)`;
+  if(lbGhost) lbGhost.style.transform = `translate3d(${lbSwipe.dir > 0 ? sw + dx : -sw + dx}px,0,0)`;
+ } else {
+  const d = Math.max(0, dy);
+  img.style.transform = `translate3d(0,${d}px,0) scale(${1 - Math.min(d / 2400, .12)})`;
+  if(lbSwipe.ov) lbSwipe.ov.style.background = `rgba(24,16,26,${Math.max(.12, 1 - d / 460)})`;
+ }
 });
 
 function lbPointerEnd(e, allowTap){
@@ -2017,12 +2051,50 @@ function lbPointerEnd(e, allowTap){
  if(lbPts.has(e.pointerId)) lbPts.delete(e.pointerId);
  if(lbPts.size < 2) lbPinch = null;
  if(lbPts.size === 0) lbDrag = null;
- if(!allowTap || !d || d.moved || Date.now() - d.t > 320) return;
- const now = Date.now();
- if(now - lbTap.t < 340 && Math.hypot(e.clientX - lbTap.x, e.clientY - lbTap.y) < 44){
-  lbTap.t = 0;
-  lbToggle(e.clientX, e.clientY);
- } else lbTap = { t: now, x: e.clientX, y: e.clientY };
+ if(allowTap && d && !d.moved && Date.now() - d.t < 320){
+  const now = Date.now();
+  if(now - lbTap.t < 340 && Math.hypot(e.clientX - lbTap.x, e.clientY - lbTap.y) < 44){
+   lbTap.t = 0;
+   lbToggle(e.clientX, e.clientY);
+  } else lbTap = { t: now, x: e.clientX, y: e.clientY };
+ }
+ /* 手势收尾：按「距离 + 速度」判定提交还是弹回（动效库：绝不直接跳位） */
+ if(!lbSwipe) return;
+ const s = lbSwipe;lbSwipe = null;
+ const img = lbImgEl(), stage = lbStageEl();
+ if(!img || !stage){ lbSwipeCancel(); return; }
+ let vx = 0, vy = 0;
+ if(lbSamp && lbSamp.length >= 2){
+  const a = lbSamp[0], b = lbSamp[lbSamp.length - 1], dt = Math.max(1, b.t - a.t);
+  vx = (b.x - a.x) / dt; vy = (b.y - a.y) / dt;
+ }
+ lbSamp = null;
+ if(s.axis === 'x'){
+  const dx = e.clientX - d.x;
+  const prog = s.dir === 1 ? -dx : dx;
+  const commit = prog > stage.clientWidth * .28 || (vx * s.dir < -.5 && Math.abs(dx) > 20);
+  stage.classList.remove('lb-drag');stage.classList.add('lb-anim');
+  img.style.transition = 'transform var(--dur-3) var(--ease-out),opacity var(--dur-3) var(--ease-out)';
+  if(commit){
+   img.style.transform = `translate3d(${s.dir > 0 ? -stage.clientWidth : stage.clientWidth}px,0,0)`;
+   img.style.opacity = .35;
+   if(lbGhost) lbGhost.style.transform = 'translate3d(0,0,0)';
+   const ni = lbIndex() + s.dir;
+   lbSetIndex(ni);lbUpdateUI();
+   setTimeout(() => lbReveal(`/media/${lbIds()[ni]}?preview=true`), 320);
+  } else lbSwipeCancel();
+ } else if(s.axis === 'y'){
+  const dy = e.clientY - d.y;
+  const commit = dy > 130 || vy > .6;
+  if(commit){
+   lbSwitching = true;stage.classList.remove('lb-drag');stage.classList.add('lb-anim');
+   img.style.transition = 'transform .22s var(--ease-in),opacity .22s var(--ease-in)';
+   img.style.transform = 'translate3d(0,70vh,0)';img.style.opacity = 0;
+   /* 关闭路径没有 lbReveal 收尾，状态在这里手动复位，否则重开后翻页全被锁死 */
+   setTimeout(() => { lbSwitching=false;lbSwipe=null;lbGhost=null;lbSamp=null;
+    if(s.ov) s.ov.style.background = ''; closeModal(); }, 230);
+  } else lbSwipeCancel();
+ }
 }
 document.addEventListener('pointerup', e => lbPointerEnd(e, true));
 document.addEventListener('pointercancel', e => lbPointerEnd(e, false));
@@ -2030,7 +2102,9 @@ document.addEventListener('pointercancel', e => lbPointerEnd(e, false));
    同时按这张图的长宽比把外壳宽度收拢，别让竖图两边空着一大片黑 */
 document.addEventListener('load', e => {
  const t = e.target;
- if(t && t.classList && t.classList.contains('lightbox-image')){ lbReset(); lbFitFrame(); }
+ if(!t || !t.classList || !t.classList.contains('lightbox-image') || t.classList.contains('lb-ghost')) return;
+ if(lbSwitching) return; /* 切换动画未收尾前不让 lbApply 抢写 transform */
+ lbReset(); lbFitFrame();
 }, true);
 
 function lbFitFrame(pass){
@@ -2066,42 +2140,96 @@ function renderPhotoModal(){
  preloadPhoto(photos[photoIndex - 1]?.id);
  preloadPhoto(photos[photoIndex + 1]?.id);
 }
-function updatePhotoModal(){
- const photos = state.photos || [];
- if (!photos.length) return;
- if (photoIndex < 0) photoIndex = 0;
- if (photoIndex >= photos.length) photoIndex = photos.length - 1;
- const body = $('.lightbox-body');
- if (!body) { renderPhotoModal(); return; }
- const p = photos[photoIndex];
- // 原地换图：保持 <img> 元素稳定，避免弹窗 collapse→expand 的闪烁
- const img = $('.lightbox-image', body);
- if (img) { img.src = `/media/${p.id}?preview=true`; img.alt = p.caption || '我们的照片'; }
- // 文案
- const caption = (p.caption || '').trim();
- let cap = $('.lightbox-caption', body);
- if (caption) {
-  if (!cap) { cap = document.createElement('p'); cap.className = 'lightbox-caption'; $('.lightbox-wrap', body).after(cap); }
-  cap.textContent = caption;
- } else if (cap) cap.remove();
- // 计数
- const cnt = $('.lightbox-count', body);
- if (cnt) cnt.textContent = `${photoIndex + 1} / ${photos.length}`;
- // 上/下一张箭头
- const wrap = $('.lightbox-wrap', body);
- if (wrap) {
-  wrap.querySelectorAll('.photo-arrow').forEach(b => b.remove());
-  if (photoIndex > 0) wrap.insertAdjacentHTML('beforeend', `<button type="button" class="photo-arrow left" data-action="photo-prev" aria-label="上一张">${icon('back')}</button>`);
-  if (photoIndex < photos.length - 1) wrap.insertAdjacentHTML('beforeend', `<button type="button" class="photo-arrow right" data-action="photo-next" aria-label="下一张">${icon('arrow')}</button>`);
+/* ── 看图器切换引擎（sw 292，两个查看器共用）──────────────────────
+   相册查看器（photoIndex/state.photos）与记录媒体查看器（mediaViewer.ids）
+   以前各自 src 硬换。现在统一：
+   · 按钮翻页 / 手势滑动走同一套动画——旧图带亮度衰减滑向一侧（-45%），
+     新图从另一侧整幅滑入（视差式，两侧位移不同，动效库「画廊滑动」）；
+   · 未放大时横向拖动 1:1 跟手换图、纵向下拉 1:1 跟手关闭（背景同步变暗），
+     松手按「距离 + 速度」判定提交还是弹回，绝不直接跳位；
+   · 只动 transform/opacity；放大师（s>1.01）保持原有平移/捏合；
+   · 一镜到底（VT）只在进出场用，与切换互不干扰。 */
+let lbSwitching=false,lbSwipe=null,lbGhost=null,lbSamp=null;
+function lbIds(){ return lbFromAlbum ? (state.photos||[]).map(p=>p.id) : (mediaViewer.ids||[]); }
+function lbIndex(){ return lbFromAlbum ? photoIndex : mediaViewer.i; }
+function lbSetIndex(v){ if(lbFromAlbum) photoIndex=v; else mediaViewer.i=v; }
+function lbCaption(){ if(!lbFromAlbum) return ''; const p=(state.photos||[])[lbIndex()]; return ((p&&p.caption)||'').trim(); }
+/* 文案/计数/箭头/下载链接的统一刷新：两个查看器共用一份 */
+function lbUpdateUI(){
+ const body=$('.lightbox-body'); if(!body)return;
+ const ids=lbIds(),i=lbIndex(),id=ids[i];
+ const cnt=$('.lightbox-count',body);
+ if(cnt&&ids.length>1){cnt.textContent=`${i+1} / ${ids.length}`;cnt.classList.remove('tick');void cnt.offsetWidth;cnt.classList.add('tick');}
+ const cap=lbCaption();
+ let capEl=$('.lightbox-caption',body);
+ if(cap){ if(!capEl){capEl=document.createElement('p');capEl.className='lightbox-caption';$('.lightbox-wrap',body).after(capEl);} capEl.textContent=cap; }
+ else if(capEl)capEl.remove();
+ const wrap=$('.lightbox-wrap',body);
+ if(wrap){
+  wrap.querySelectorAll('.photo-arrow').forEach(b=>b.remove());
+  const prevAct=lbFromAlbum?'photo-prev':'mv-prev',nextAct=lbFromAlbum?'photo-next':'mv-next';
+  if(i>0)wrap.insertAdjacentHTML('beforeend',`<button type="button" class="photo-arrow left" data-action="${prevAct}" aria-label="上一张">${icon('back')}</button>`);
+  if(i<ids.length-1)wrap.insertAdjacentHTML('beforeend',`<button type="button" class="photo-arrow right" data-action="${nextAct}" aria-label="下一张">${icon('arrow')}</button>`);
  }
- // 下载原文件 + 回到这条时光
- const dl = $('.photo-detail-actions a[download]', body);
- if (dl) dl.setAttribute('href', `/media/${p.id}?download=true`);
- const back = $('.photo-detail-actions [data-action="notice-detail"]', body);
- if (back) back.setAttribute('data-id', p.record_id || '');
- // 预加载相邻，保证连续切换零等待
- preloadPhoto(photos[photoIndex - 1]?.id);
- preloadPhoto(photos[photoIndex + 1]?.id);
+ const dl=$('.photo-detail-actions a[download]',body);
+ if(dl)dl.setAttribute('href',`/media/${id}?download=true`);
+ const back=$('.photo-detail-actions [data-action="notice-detail"]',body);
+ if(back)back.setAttribute('data-id',lbFromAlbum?((state.photos||[])[i]||{}).record_id||'':'');
+ preloadPhoto(ids[i-1]);preloadPhoto(ids[i+1]);
+}
+/* 动画收尾：真图已换上新 src 且解码完成后，摘掉 ghost、复位缩放、重算外框 */
+function lbReveal(srcUrl){
+ const img=lbImgEl(),ghost=$('.lb-ghost'),wrap=lbStageEl();
+ const fin=()=>{ if(ghost)ghost.remove(); lbGhost=null;lbSwipe=null;lbSamp=null;
+  if(img){img.style.transition='';img.style.opacity='';}
+  if(wrap)wrap.classList.remove('lb-anim','lb-drag');
+  lbSwitching=false;lbReset();lbFitFrame(); };
+ img.src=srcUrl;
+ const p=img.decode?img.decode().catch(()=>{}):Promise.resolve();
+ Promise.race([p,new Promise(r=>setTimeout(r,600))]).then(fin);
+}
+/* 按钮 / 键盘翻页：与手势提交同一套动画 */
+function lbGo(dir){
+ if(lbSwitching||lbZoom.s>1.01)return;
+ const ids=lbIds(),i=lbIndex(),ni=i+dir;
+ if(ni<0||ni>=ids.length)return;
+ const stage=lbStageEl(),img=lbImgEl();
+ if(!stage||!img)return;
+ lbSwitching=true;stage.classList.add('lb-anim');
+ const ghost=document.createElement('img');
+ ghost.className='lightbox-image lb-ghost';ghost.alt='';ghost.draggable=false;
+ ghost.src=`/media/${ids[ni]}?preview=true`;
+ ghost.style.transform=`translate3d(${dir>0?100:-100}%,0,0)`;
+ stage.appendChild(ghost);
+ requestAnimationFrame(()=>{ghost.style.transform='translate3d(0,0,0)';
+  img.style.transition='transform var(--dur-3) var(--ease-out),opacity var(--dur-3) var(--ease-out)';
+  img.style.transform=`translate3d(${dir>0?-45:45}%,0,0)`;img.style.opacity=.35;});
+ lbSetIndex(ni);lbUpdateUI();
+ setTimeout(()=>lbReveal(`/media/${ids[ni]}?preview=true`),330);
+ preloadPhoto(ids[ni+dir]);
+}
+/* 手势铺场：先放 ghost 在目标侧、舞台进入「跟手」态（关掉过渡才 1:1 跟手） */
+function lbSwipeStart(dir,url){
+ const stage=lbStageEl();stage.classList.add('lb-drag');
+ const ghost=document.createElement('img');
+ ghost.className='lightbox-image lb-ghost';ghost.alt='';ghost.draggable=false;ghost.src=url;
+ const sw=stage.clientWidth;
+ ghost.style.transform=`translate3d(${dir>0?sw:-sw}px,0,0)`;
+ stage.appendChild(ghost);lbGhost=ghost;lbSwipe.dir=dir;lbSwipe.sw=sw;
+}
+function lbDismissStart(){ lbStageEl().classList.add('lb-drag'); lbSwipe.ov=$('.modal-overlay'); }
+/* 弹回：没过阈值的滑动沿原路回位，ghost 退场 */
+function lbSwipeCancel(){
+ const img=lbImgEl(),s=lbSwipe;
+ if(lbGhost){const g=lbGhost;g.style.transition='transform var(--dur-2) var(--ease-out)';
+  g.style.transform=`translate3d(${s&&s.axis==='x'?(s.dir>0?s.sw:-s.sw):0}px,0,0)`;
+  setTimeout(()=>g.remove(),240);}
+ if(img){img.style.transition='transform var(--dur-2) var(--ease-out),opacity var(--dur-2) var(--ease-out)';
+  img.style.transform='';img.style.opacity='';
+  setTimeout(()=>{img.style.transition='';img.style.opacity='';},240);}
+ const ov=$('.modal-overlay');if(ov&&s&&s.ov)ov.style.background='';
+ lbStageEl().classList.remove('lb-drag');
+ lbSwipe=null;lbGhost=null;lbSamp=null;
 }
 /* 图片查看器分两条路：
    · state.photos 里的（时光/相册照片）→ 原「收藏的瞬间」，可以翻遍整个相册；
@@ -2209,15 +2337,6 @@ function recordMediaModal(mid){
  mediaViewer.ids=ids; mediaViewer.i=Math.max(0,ids.indexOf(mid));
  lbFromAlbum = false;
  openModal(title, mediaViewerHtml(), {wide:true});
-}
-function moveMediaViewer(step){
- const {ids}=mediaViewer;
- if(!ids.length)return;
- mediaViewer.i=Math.min(ids.length-1,Math.max(0,mediaViewer.i+step));
- const body=$('.lightbox-body');
- if(!body)return recordMediaModal(ids[mediaViewer.i]);
- // 原地换内容，别重开弹窗——重开会有一次 collapse→expand 的闪烁
- body.innerHTML=mediaViewerHtml(true);
 }
 function videoModal(id){
  const m = (state.records || []).flatMap(r => r.media || []).find(x => x.id === id);
@@ -2334,9 +2453,10 @@ async function act(action,id,el) {
  if(action==='anniversary-memories'){state.filters={date:el.dataset.date};return navigate('timeline');}
  if(action==='photo')return photoModal(id);
  if(action==='video')return videoModal(id);
- if(action==='mv-prev')return moveMediaViewer(-1);
- if(action==='mv-next')return moveMediaViewer(1);
- if(action==='photo-prev'||action==='photo-next'){photoIndex += action==='photo-next' ? 1 : -1; return updatePhotoModal();}
+ if(action==='photo-prev')return lbGo(-1);
+ if(action==='photo-next')return lbGo(1);
+ if(action==='mv-prev')return lbGo(-1);
+ if(action==='mv-next')return lbGo(1);
  if(action==='lb-in')return lbStep(1.6);
  if(action==='lb-out')return lbStep(1/1.6);
  if(action==='lb-fit')return lbReset();
@@ -2534,7 +2654,7 @@ document.addEventListener('submit',async e=>{if(e.target.id!=='chat-form')return
  }catch(err){toast(err.message);}finally{btn.disabled=false;}});
 document.addEventListener('input',e=>{if(e.target.id==='chat-text'){localStorage.setItem('chat-text:'+state.me.user.id,e.target.value);syncCompose();}if(e.target.id==='filter-q'){state.filters={...(state.filters||{}),q:e.target.value};clearTimeout(state.filterTimer);state.filterTimer=setTimeout(async()=>{const pos=$('#filter-q')?.selectionStart;try{await loadTimeline(true);renderPage();$('#filter-q')?.focus();$('#filter-q')?.setSelectionRange(pos,pos);}catch(err){toast(err.message);}},250);}});
 document.addEventListener('change',e=>{const map={'filter-author':'author','filter-date':'date','filter-media':'media'};if(map[e.target.id]){state.filters={...(state.filters||{}),[map[e.target.id]]:e.target.value};state.timelineCursor=null;loadTimeline(true).then(renderPage).catch(err=>toast(err.message));}});
-document.addEventListener('keydown',e=>{if(e.key==='Escape'){const menu=$('.more-menu[open]');if(menu){menu.removeAttribute('open');$('summary',menu)?.focus();}}if(e.key==='Escape'&&$('.modal'))closePhotoViewer();if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing&&e.target?.id==='chat-text'){e.preventDefault();const form=e.target.form||$('#chat-form'),btn=form&&$('button[type=submit]',form);if(form&&btn&&!btn.disabled)form.requestSubmit();}if(e.key==='Tab'&&$('.modal')){const els=$$('button,input,textarea,select,a[href]',$('.modal')).filter(el=>!el.disabled),first=els[0],last=els.at(-1);if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}}});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){const menu=$('.more-menu[open]');if(menu){menu.removeAttribute('open');$('summary',menu)?.focus();}}if(e.key==='Escape'&&$('.modal'))closePhotoViewer();if((e.key==='ArrowLeft'||e.key==='ArrowRight')&&$('.lightbox-body')){e.preventDefault();lbGo(e.key==='ArrowRight'?1:-1);return;}if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing&&e.target?.id==='chat-text'){e.preventDefault();const form=e.target.form||$('#chat-form'),btn=form&&$('button[type=submit]',form);if(form&&btn&&!btn.disabled)form.requestSubmit();}if(e.key==='Tab'&&$('.modal')){const els=$$('button,input,textarea,select,a[href]',$('.modal')).filter(el=>!el.disabled),first=els[0],last=els.at(-1);if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}}});
 // —— Android APK 系统通知桥（浏览器/PWA 无 Capacitor 时自动跳过，零影响）——
 /* 原生环境识别不能只赌 window.Capacitor：APK 是「远程加载模式」（server.url 指向线上站），
    Capacitor 的桥接脚本只注入由它本地服务器提供的页面，远程页面里 window.Capacitor 常常是空的，
