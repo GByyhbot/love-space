@@ -2588,3 +2588,18 @@ body.kb-open .pick-overlay{padding-bottom:0}
    .blur-up 期间 20px 高斯 + 1.04 倍放大（藏住小图的像素感），主色底取自图片本身（--ph 由 JS 写入） */
 .photo-item img{background:var(--ph,var(--soft));transition:filter .5s ease,transform .5s ease}
 .photo-item img.blur-up{filter:blur(20px);transform:scale(1.04);color:transparent}
+
+/* ── 键盘/面板动画区去毛玻璃（卡帧修复，sw 283）────────────────
+   backdrop-filter 每帧都要重读背后内容再模糊；键盘/面板动画期间输入栏、
+   面板每帧都在动，嵌套毛玻璃是 Android WebView 掉帧的典型来源。
+   这些块背景本来就是半透明色，去掉模糊观感变化很小（chat-time button
+   底色相应加深补可读性）；顶栏和回复条不动，模糊保留。 */
+.chat-panel.has-wallpaper .chat-compose,
+.chat-panel.immersive .chat-compose .compose-field,
+.chat-panel.immersive .chat-compose .compose-ib,
+.chat-panel.immersive .fn-panel,
+.chat-panel.immersive .chat-time button{
+  -webkit-backdrop-filter:none;
+  backdrop-filter:none;
+}
+.chat-panel.immersive .chat-time button{background:rgba(22,17,24,.62)}
