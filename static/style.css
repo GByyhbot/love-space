@@ -2616,4 +2616,12 @@ body.kb-open .pick-overlay{padding-bottom:0}
    屏外消息行跳过 layout/paint（200 条 ≈ 三千节点，滚动/键盘重排只算屏内）。
    paintChat 键控对账不受影响（DOM 结构不动）。真·节点回收（第二阶段）待真机
    内存度量后再议，见 docs/backdrop-filter-audit.md 第五节。 */
-.chat-line{content-visibility:auto;contain-intrinsic-size:auto 76px}
+/* .chat-line{content-visibility:auto;contain-intrinsic-size:auto 76px} ← 已回退，见文末说明 */
+
+/* ── 回退聊天行 content-visibility（sw 287 实测）────────────────
+   .chat-line 的 c-v 让屏外行只占估高，渐进渲染时 scrollHeight 持续漂移：
+   scrollChat 的 scrollTop=scrollHeight 在估高上贴底 → 行渲染出真实高度后
+   内容又长/缩，贴底失效（实测 nearBottom=false、贴纸停播）。
+   聊天页贴底锚定（watchChatLog：RO + 距底基准）依赖「渲染后高度稳定」，
+   与 c-v 的按需渲染天然冲突。渲染跳过的收益对 200 行本就有限，回退保稳。
+   第二阶段（真·节点回收）的评估不变：待真机内存度量后再议。 */
