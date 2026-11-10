@@ -322,8 +322,9 @@ function renderShell() {
  if(parseFloat(document.documentElement.style.getPropertyValue('--kb-h'))>90)document.body.classList.add('kb-open');
  applyCustomColor(state.me.space.theme,state.me.space.custom_color);
  syncMetaThemeColor();
- $('#app').innerHTML=`<div class="shell${state.page==='messages'?' chat-full':''}${state.page==='figure'?' figure-full':''}"><aside class="sidebar"><div class="brand"><img src="/static/icon.svg" alt=""><div><strong>恋爱空间</strong><small>LOVE, EVERY DAY</small></div></div><nav class="nav" aria-label="主要导航">${navHtml.join('')}</nav><div class="sidebar-bottom"><div class="little-note"><span>❀</span><br>把喜欢，写进每一天。<br>little things, lasting love</div><button class="profile-btn" data-nav="personal">${avatar(state.me.user.id)}<div><strong>${esc(state.me.user.name)}</strong><small>我的小角落 ${icon('arrow')}</small></div></button></div></aside><main class="main"><header class="topbar${toolsSub?' has-back':''}">${toolsSub?`<button class="nav-back topbar-back" data-action="tools-back" aria-label="回到我们">${icon('back')}</button>`:''}<span class="desktop-date">${new Date().toLocaleDateString('zh-CN',{timeZone:state.me.space.timezone,month:'long',day:'numeric',weekday:'long'})} · 今天也要好好相爱</span><div class="topbar-right"><span class="pill">${icon('lock')} 双人私密空间</span><button class="icon-btn" id="dark-toggle" data-action="toggle-dark" aria-label="切换深浅色">${icon(document.documentElement.classList.contains('dark')?'sun':'moon')}</button><button class="icon-btn" data-action="open-search" aria-label="搜索">${icon('search')}</button><button class="icon-btn" data-nav="messages" aria-label="私聊">${icon('chat')}${state.me.chat_unread&&state.page!=='messages'?`<span class="badge">${state.me.chat_unread>99?'99+':state.me.chat_unread}</span>`:''}</button><button class="icon-btn" data-nav="notices" aria-label="通知">${icon('bell')}${state.me.unread?`<span class="badge">${state.me.unread>99?'99+':state.me.unread}</span>`:''}</button><details class="more-menu account-menu"><summary class="mobile-profile" aria-label="打开账号菜单" title="账号菜单">${avatar(state.me.user.id)}</summary><div class="menu-pop account-popover"><div class="account-menu-heading"><strong>${esc(state.me.user.name)}</strong><small>我的账号</small></div><button data-action="profile">${icon('edit')} 账号资料</button><button data-nav="personal">${icon('lock')} 个人小角落</button><button data-nav="settings">${icon('gear')} 设置</button><button data-action="logout" class="danger account-logout">${icon('arrow')} 退出登录</button></div></details></div></header>${!state.online?'<div class="offline-banner">网络暂时断开，正在等待重连。未发送的文字会为你保留。</div>':''}<div id="page"></div><p class="footer-note">♡ 有你在，平凡的日子也闪闪发光。</p></main></div>`;
+ $('#app').innerHTML=`<div class="shell${state.page==='messages'?' chat-full':''}${state.page==='figure'?' figure-full':''}"><aside class="sidebar"><div class="brand"><img src="/static/icon.svg" alt=""><div><strong>恋爱空间</strong><small>LOVE, EVERY DAY</small></div></div><nav class="nav" aria-label="主要导航"><span class="nav-pill" aria-hidden="true"><i></i></span>${navHtml.join('')}</nav><div class="sidebar-bottom"><div class="little-note"><span>❀</span><br>把喜欢，写进每一天。<br>little things, lasting love</div><button class="profile-btn" data-nav="personal">${avatar(state.me.user.id)}<div><strong>${esc(state.me.user.name)}</strong><small>我的小角落 ${icon('arrow')}</small></div></button></div></aside><main class="main"><header class="topbar${toolsSub?' has-back':''}">${toolsSub?`<button class="nav-back topbar-back" data-action="tools-back" aria-label="回到我们">${icon('back')}</button>`:''}<span class="desktop-date">${new Date().toLocaleDateString('zh-CN',{timeZone:state.me.space.timezone,month:'long',day:'numeric',weekday:'long'})} · 今天也要好好相爱</span><div class="topbar-right"><span class="pill">${icon('lock')} 双人私密空间</span><button class="icon-btn" id="dark-toggle" data-action="toggle-dark" aria-label="切换深浅色">${icon(document.documentElement.classList.contains('dark')?'sun':'moon')}</button><button class="icon-btn" data-action="open-search" aria-label="搜索">${icon('search')}</button><button class="icon-btn" data-nav="messages" aria-label="私聊">${icon('chat')}${state.me.chat_unread&&state.page!=='messages'?`<span class="badge">${state.me.chat_unread>99?'99+':state.me.chat_unread}</span>`:''}</button><button class="icon-btn" data-nav="notices" aria-label="通知">${icon('bell')}${state.me.unread?`<span class="badge">${state.me.unread>99?'99+':state.me.unread}</span>`:''}</button><details class="more-menu account-menu"><summary class="mobile-profile" aria-label="打开账号菜单" title="账号菜单">${avatar(state.me.user.id)}</summary><div class="menu-pop account-popover"><div class="account-menu-heading"><strong>${esc(state.me.user.name)}</strong><small>我的账号</small></div><button data-action="profile">${icon('edit')} 账号资料</button><button data-nav="personal">${icon('lock')} 个人小角落</button><button data-nav="settings">${icon('gear')} 设置</button><button data-action="logout" class="danger account-logout">${icon('arrow')} 退出登录</button></div></details></div></header>${!state.online?'<div class="offline-banner">网络暂时断开，正在等待重连。未发送的文字会为你保留。</div>':''}<div id="page"></div><p class="footer-note">♡ 有你在，平凡的日子也闪闪发光。</p></main></div>`;
  renderPage();
+ navPillSync(false);
  if(keepScroll>0)window.scrollTo({top:keepScroll});
  /* 顶栏颜色随页面变（聊天页 --surface / 其它页 --bg），状态栏要跟着走，
     否则从其它页进聊天页会留下一条色差。值没变时 syncStatusBar 内部会直接返回。 */
@@ -374,17 +375,56 @@ let navDepth=0;
 /* 页面级 View Transition：复用看图器的基建（startViewTransition 已有 vtOk 判能力），
    只包导航本身。旧页轻退、新页从下方 10px 淡进（CSS 挂 html.vt-page 生效）。
    SSE/refresh 的重绘不经过这里，不会被误快照；聊天页/摆拍页（iframe）不转场。 */
+/* 底部导航水滴胶囊（sw 294）：双弹簧分别驱动左右边缘——移动方向的前沿
+   用快弹簧（带 ≤8% 过冲）先到，后沿晚 60ms 用慢弹簧跟上，途中自然拉长；
+   拉长时内层高度压扁到 75% 再回，像水滴被拉开；新选中的图标先缩到 0.72 再弹回。
+   只在手机底部导航生效（桌面侧栏 display:none），SSE 重绘时瞬移不播动画。 */
+const NAV_ORDER=['home','timeline','albums','together'];
+function navPillSync(animate,oldRect){
+ const nav=$('.nav'),pill=$('.nav-pill');
+ if(!nav||!pill)return;
+ const btn=nav.querySelector('.nav button.active');
+ if(!btn||!btn.offsetWidth){pill.classList.remove('on');return;}
+ pill.classList.add('on');
+ const x=btn.offsetLeft,w=btn.offsetWidth,top=btn.offsetTop,h=btn.offsetHeight;
+ const put=()=>{pill.style.width=w+'px';pill.style.height=h+'px';pill.style.top=top+'px';pill.style.transform=`translate3d(${x}px,0,0)`;};
+ if(!animate||!oldRect){
+  pill.style.transition='none';put();void pill.offsetWidth;pill.style.transition='';
+  return;
+ }
+ const navR=nav.getBoundingClientRect();
+ const oldX=oldRect.left-navR.left,oldW=oldRect.width;
+ const dirRight=x>=oldX;
+ pill.style.transition='none';pill.style.width=oldW+'px';pill.style.transform=`translate3d(${oldX}px,0,0)`;pill.style.top=top+'px';pill.style.height=h+'px';void pill.offsetWidth;
+ /* 前沿快弹簧先到、后沿慢弹簧晚 60ms 跟上：向右时前沿是右缘（width 快），向左时是左缘（transform 快） */
+ pill.style.transition=dirRight
+  ?'width .36s var(--ease-spring),transform .46s cubic-bezier(.45,.05,.35,1) .06s'
+  :'transform .36s var(--ease-spring),width .46s cubic-bezier(.45,.05,.35,1) .06s';
+ put();
+ const inner=pill.firstElementChild;
+ if(inner){inner.style.animation='none';void inner.offsetWidth;inner.style.animation='pill-squash .42s var(--ease-out)';}
+ const ic=btn.querySelector('.icon');
+ if(ic){ic.style.animation='none';void ic.offsetWidth;ic.style.animation='nav-icon-pop .38s var(--ease-spring)';}
+}
 function renderShellVT(){
  const doc=document.documentElement;
  const ok=state.vtNext&&typeof document.startViewTransition==='function'
   &&!doc.classList.contains('reduced-motion')&&!matchMedia('(prefers-reduced-motion: reduce)').matches;
  state.vtNext=false;
- if(!ok){renderShell();window.scrollTo({top:0});return;}
- doc.classList.add('vt-page');
+ if(!ok){renderShell();window.scrollTo({top:0});navPillSync(false);return;}
+ /* 水滴胶囊从旧位置流向新位置：先记下旧矩形，新 DOM 就位后沿方向播放 */
+ const oldPill=(()=>{const pl=$('.nav-pill');if(!pl||!pl.classList.contains('on'))return null;
+  const r=pl.getBoundingClientRect();return{left:r.left,width:r.width};})();
+ doc.classList.add('vt-page');if(state.vtDir)doc.classList.add(state.vtDir);
  const vt=document.startViewTransition(()=>{renderShell();window.scrollTo({top:0});});
- Promise.resolve(vt.finished).catch(()=>{}).finally(()=>doc.classList.remove('vt-page'));
+ Promise.resolve(vt.finished).catch(()=>{}).finally(()=>doc.classList.remove('vt-page','vt-from-left','vt-from-right'));
+ setTimeout(()=>navPillSync(true,oldPill),30);
 }
-async function navigate(page,tab='') {if(!state.me)return;const prevPage=state.page;if(page!=='messages')state.chatReturn={page,tab};if(page==='messages'&&state.me){state.me.chat_unread=0;post('/notices/read?event=chat').catch(()=>{});/* 进聊天不主动弹输入法：先把上一页可能还活着的焦点交还，再渲染 */if(document.activeElement&&document.activeElement.blur)document.activeElement.blur();}state.page=page;state.tab=tab;state.vtNext=prevPage!==page&&prevPage!=='messages'&&page!=='messages'&&prevPage!=='figure'&&page!=='figure';if(location.hash!=='#'+page){location.hash=page;navDepth++;}try{if(page==='timeline'&&state.timelinePosts.length===0){state.timelineSkeleton=true;renderShellVT();await loadTimeline(true);state.timelineSkeleton=false;if(state.page==='timeline'&&location.hash==='#'+page){revealTimeline();window.scrollTo({top:0});}return;}if(page==='timeline')await loadTimeline(true);await loadSpecial();renderShellVT();}catch(e){toast(e.message);}}
+async function navigate(page,tab='') {if(!state.me)return;const prevPage=state.page;if(page!=='messages')state.chatReturn={page,tab};if(page==='messages'&&state.me){state.me.chat_unread=0;post('/notices/read?event=chat').catch(()=>{});/* 进聊天不主动弹输入法：先把上一页可能还活着的焦点交还，再渲染 */if(document.activeElement&&document.activeElement.blur)document.activeElement.blur();}state.page=page;state.tab=tab;state.vtNext=prevPage!==page&&prevPage!=='messages'&&page!=='messages'&&prevPage!=='figure'&&page!=='figure';
+/* 页面内容沿点击方向轻推：都在底部导航序列里时，新页从点击的那一侧淡入（26px，250ms） */
+const di=NAV_ORDER.indexOf(page),pi=NAV_ORDER.indexOf(prevPage);
+state.vtDir=(di>=0&&pi>=0&&di!==pi)?(di>pi?'vt-from-right':'vt-from-left'):'';
+if(location.hash!=='#'+page){location.hash=page;navDepth++;}try{if(page==='timeline'&&state.timelinePosts.length===0){state.timelineSkeleton=true;renderShellVT();await loadTimeline(true);state.timelineSkeleton=false;if(state.page==='timeline'&&location.hash==='#'+page){revealTimeline();window.scrollTo({top:0});}return;}if(page==='timeline')await loadTimeline(true);await loadSpecial();renderShellVT();}catch(e){toast(e.message);}}
 /* 返回上一页：走浏览器后退，**不要**再 push 一条新的 hash。
    以前聊天里「返回」写的是 navigate('messages')，等于在历史里又压了一条 #messages，
    于是栈变成 [ #home, #messages, #messages ]——安卓实体返回键每按一次就在这两个界面
@@ -1470,7 +1510,55 @@ function openModal(title,content,{wide=false,sheet=false,cleanup=null}={}) {
  const closeIco = cinema?icon('back'):icon('close');
  $('#modal-root').innerHTML=`<div class="modal-overlay${sheet?' sheet':''}${cinema?' cinema':''}"><section class="modal ${wide?'wide':''}${sheet?' sheet':''}${viewer?' viewer':''}${cinema?' cinema':''}" role="dialog" aria-modal="true" aria-labelledby="modal-title"><header class="modal-header"><h2 id="modal-title">${esc(title)}</h2><button class="icon-btn" data-action="${cinema?'ws-back':'close-modal'}" aria-label="${cinema?'返回':'关闭'}">${closeIco}</button></header>${content}</section></div>`;
  enhanceNativeControls($('.modal'));
- /* 点遮罩空白处关闭：选片浮层（pick-overlay）一直是这个交互，普通弹窗之前只能点右上角叉。
+ /* 发布弹窗的「退后一步」（附录 B / 动效库 12）：手机宽度下背后页面缩到 0.92、
+   变圆角、压暗；弹窗可拖（把手=头部区域），上拖有阻力、下拖 1:1，
+   超过 1/3 高度或下甩速度够快就关闭，否则弹回。桌面仍是居中弹窗。 */
+ if(sheet){
+  document.body.classList.add('sheet-behind');
+  if(matchMedia('(max-width:640px)').matches)wireSheetDrag($('.modal-overlay'));
+ }
+ /* 发布底部弹窗的拖拽（sw 295）：绑定在头部区域（把手），不碰表单内容。
+   上拖阻力（×0.25）、下拖 1:1；背后页面缩放实时联动（拖一半退一半）；
+   松手：位移 > 1/3 高度或下甩 >1000px/s 关闭，否则弹簧弹回。 */
+function wireSheetDrag(ov){
+ const sheet=$('.modal.sheet',ov),head=$('.modal-header',sheet);
+ if(!sheet||!head||head.dataset.dragBound)return;
+ head.dataset.dragBound='1';
+ const shell=document.querySelector('.shell');
+ let st=null;
+ head.addEventListener('pointerdown',e=>{
+  if(e.target.closest('button,input,textarea,select,label,a'))return;
+  st={y0:e.clientY,cur:0,ly:e.clientY,lt:Date.now(),v:0};
+  sheet.classList.add('sheet-drag');
+  try{head.setPointerCapture(e.pointerId);}catch(_){}
+ });
+ head.addEventListener('pointermove',e=>{
+  if(!st)return;
+  const now=Date.now();st.v=(e.clientY-st.ly)/Math.max(1,now-st.lt);st.ly=e.clientY;st.lt=now;
+  const raw=e.clientY-st.y0,dy=raw<0?raw*.25:raw;st.cur=dy;
+  sheet.style.transform=`translate3d(0,${dy}px,0)`;
+  const p=Math.min(1,Math.abs(dy)/(sheet.offsetHeight||500));
+  if(shell)shell.style.transform=`scale(${(.92+.08*p).toFixed(4)}) translateY(${(6*(1-p)).toFixed(1)}px)`;
+ });
+ const fin=()=>{
+  if(!st)return;const s=st;st=null;
+  sheet.classList.remove('sheet-drag');
+  const Hh=sheet.offsetHeight||500,dy=s.cur;
+  const commit=dy>Hh/3||s.v>1;
+  if(commit){
+   sheet.style.transition='transform .3s cubic-bezier(.55,.06,.68,.19)';
+   sheet.style.transform='translate3d(0,102%,0)';
+   setTimeout(()=>{sheet.style.transform='';sheet.style.transition='';closeModal();},300);
+  }else{
+   sheet.style.transition='transform var(--dur-3) var(--ease-spring)';
+   sheet.style.transform='translate3d(0,0,0)';
+   setTimeout(()=>{sheet.style.transition='';},420);
+  }
+ };
+ head.addEventListener('pointerup',fin);
+ head.addEventListener('pointercancel',fin);
+}
+/* 点遮罩空白处关闭：选片浮层（pick-overlay）一直是这个交互，普通弹窗之前只能点右上角叉。
     影院层（全屏片源浏览）例外——误触一下就丢掉选片进度太坑，必须点返回箭头。
     viewer（看图/看视频）也不做：点画面两侧的黑边容易误关，关它有右上角叉。 */
  const ov=$('.modal-overlay');
@@ -1482,6 +1570,7 @@ function closeModal(){
  /* 弹窗里试听的那首歌：弹窗一关就停，别让"关掉界面的声音"继续响（气泡里的播放不受影响） */
  if(songCur&&songCur.kind==='preview'){try{songAudio.pause();}catch{}songReset();}
  if(modalCleanup){modalCleanup();modalCleanup=null;}
+ document.body.classList.remove('sheet-behind');
  /* 关闭沿打开的原路退回（淡出 + 轻微缩回），走完再清 DOM——硬拆是「廉价感」来源之一。 */
  const ov=$('#modal-root .modal-overlay');
  if(ov&&!matchMedia('(prefers-reduced-motion: reduce)').matches){

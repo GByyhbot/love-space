@@ -2686,3 +2686,44 @@ html.vt-page::view-transition-new(root){animation:vt-page-in .28s var(--ease-out
 /* 计数换字：数字轻滚一下，不硬换 */
 .lightbox-count.tick{animation:count-tick var(--dur-2) var(--ease-out)}
 @keyframes count-tick{from{opacity:0;transform:translateY(6px)}}
+
+/* ── 底部导航水滴胶囊（sw 294）──────────────────────────────────
+   选中项背后的胶囊色块：双弹簧分别驱动左右边缘（移动方向的前沿快、后沿晚 60ms），
+   途中内层压扁到 75% 再回（水滴被拉开）；只作用在手机底部导航，桌面侧栏隐藏。
+   按钮本身保持透明底，胶囊才是选中态的视觉；文字/图标颜色沿用原有过渡。 */
+@media (max-width:640px){
+  .nav{position:relative}
+  .nav .nav-pill{position:absolute;left:0;top:4px;height:44px;width:0;border-radius:14px;
+    opacity:0;z-index:0;pointer-events:none;overflow:hidden}
+  .nav .nav-pill.on{opacity:1}
+  .nav .nav-pill i{display:block;height:100%;background:var(--soft);border-radius:inherit}
+  .nav .nav-pill~button,.nav .nav-pill~.nav-fab{position:relative;z-index:1}
+  .nav button.active{background:transparent;color:var(--primary)}
+}
+@media (min-width:641px){.nav .nav-pill{display:none}}
+.nav button .icon,.nav button span{transition:color var(--dur-2) var(--ease-out)}
+.nav button.active .icon{animation:nav-icon-pop .38s var(--ease-spring)}
+@keyframes nav-icon-pop{0%{transform:scale(.72)}100%{transform:scale(1)}}
+@keyframes pill-squash{0%{transform:scaleY(1)}45%{transform:scaleY(.75)}80%{transform:scaleY(1.05)}100%{transform:scaleY(1)}}
+/* 页面内容沿点击方向轻推淡入（26px，260ms ease-out；旧页快速淡出沿用 vt-page-out） */
+html.vt-from-left::view-transition-new(root){animation-name:vt-in-left}
+html.vt-from-right::view-transition-new(root){animation-name:vt-in-right}
+@keyframes vt-in-left{from{opacity:0;transform:translateX(-26px)}}
+@keyframes vt-in-right{from{opacity:0;transform:translateX(26px)}}
+
+/* ── 发布底部弹窗：弹簧升起 + 背后页面退后一步 + 跟手拖拽（sw 295）──
+   手机宽度下：背后 .shell 缩到 0.92、圆角 30px、压暗（跟随拖动实时联动）；
+   弹窗头部是拖拽把手（上拖 ×0.25 阻力、下拖 1:1，超 1/3 高度或甩速 >1000px/s 关闭）。
+   桌面（>640px）保持居中弹窗，不受影响。 */
+@media (max-width:640px){
+  .shell{transition:transform var(--dur-3) var(--ease-out),border-radius var(--dur-3) var(--ease-out),filter var(--dur-3) var(--ease-out)}
+  body.sheet-behind .shell{transform:scale(.92) translateY(4px);border-radius:30px;overflow:hidden;filter:brightness(.72)}
+  body.sheet-behind{background:var(--viewer-bg)}
+  .modal.sheet{animation:sheet-spring .4s cubic-bezier(.3,1.3,.45,1)}
+  .modal.sheet.sheet-drag{transition:none!important;animation:none!important}
+  .modal-overlay.closing .modal.sheet{animation:sheet-down .3s var(--ease-in) both}
+  .modal.sheet .modal-header{cursor:grab;touch-action:none}
+  .modal.sheet .modal-header:active{cursor:grabbing}
+}
+@keyframes sheet-spring{from{transform:translate3d(0,100%,0)}}
+@keyframes sheet-down{to{transform:translate3d(0,102%,0)}}
