@@ -125,6 +125,7 @@ class ChatSong {
 class ChatBody {
   const ChatBody({
     this.content = '',
+    this.title = '',
     this.mediaIds = const [],
     this.sticker,
     this.replyToId,
@@ -135,6 +136,9 @@ class ChatBody {
     this.song,
   });
   final String content;
+
+  /// kind=music 等的标题字段（聊天 body 里通常没有；通用解析容错）
+  final String title;
   final List<String> mediaIds;
   final String? sticker;
   final String? replyToId;
@@ -154,6 +158,7 @@ class ChatBody {
     final song = j['song'];
     return ChatBody(
       content: (j['content'] ?? '').toString(),
+      title: (j['title'] ?? '').toString(),
       mediaIds: ((j['media'] ?? const []) as List).map((e) => e.toString()).toList(),
       sticker: j['sticker']?.toString(),
       replyToId: reply is Map ? (reply['id'] ?? '').toString() : null,
@@ -169,6 +174,7 @@ class ChatBody {
 
   Map<String, dynamic> toJson() => {
         'content': content,
+        if (title.isNotEmpty) 'title': title,
         'media': mediaIds,
         if (sticker != null) 'sticker': sticker,
         if (replyToId != null)
@@ -234,6 +240,7 @@ class ChatRecord {
       body.recalled == o.body.recalled &&
       body.pinned == o.body.pinned &&
       body.content == o.body.content &&
+      body.title == o.body.title &&
       body.sticker == o.body.sticker &&
       body.replyToId == o.body.replyToId &&
       body.replyToText == o.body.replyToText &&

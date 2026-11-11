@@ -474,6 +474,18 @@ class ChatController extends Notifier<ChatState> {
     }, content: text);
   }
 
+  /// 发送共同歌单里的歌（对齐 Web sendSong body：song{title,artist,mid}；
+  /// mid=歌单记录的音频媒体 id，气泡试听走 /media/{mid} preview）
+  Future<void> sendPlaylistSong(
+      {required String title, required String artist, required String mid}) async {
+    final clientId = newChatClientId();
+    await _sendPending(clientId, {
+      'content': '',
+      'media': [],
+      'song': {'title': title, 'artist': artist, 'mid': mid},
+    });
+  }
+
   /// 发送位置消息（Step 8；lat/lng 已按 1e-5 精度取整）
   Future<void> sendLocation(double lat, double lng) async {
     final clientId = newChatClientId();

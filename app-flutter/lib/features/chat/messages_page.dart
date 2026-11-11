@@ -38,6 +38,9 @@ class MessagesPage extends ConsumerStatefulWidget {
 
 class _MessagesPageState extends ConsumerState<MessagesPage> {
   AppLifecycleListener? _lifecycle;
+  // 页面在栈标志的 notifier 提前捕获：dispose 时 ref 已不可用
+  //（unmount 后 ref.read 抛 StateError——复验排查中实证）
+  StateController<bool>? _pageActive;
   final _replyNotifier = ValueNotifier<(String, String)?>(null);
   final _rowKeys = <String, GlobalKey>{};
   final _searchCtrl = TextEditingController();
@@ -49,8 +52,11 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
   @override
   void initState() {
     super.initState();
-    // 页面在栈标志：SSE chat 事件只在页面未打开时才去刷 me 更新角标
-    ref.read(chatPageActiveProvider.notifier).state = true;
+    // 页面在栈标志：SSE chat 事件只在页面未打开时才去刷 me 更新角标。
+    // 微任务包裹：initState 里同步改 provider 会触发 riverpod 的
+    // 「Tried to modify a provider while the widget tree was building」断言
+    _pageActive = ref.read(chatPageActiveProvider.notifier);
+    Future.microtask(() => _pageActive?.state = true);
     Future.microtask(() async {
       final me = ref.read(authProvider.notifier).me;
       final controller = ref.read(chatControllerProvider.notifier);
@@ -66,7 +72,7 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
 
   @override
   void dispose() {
-    ref.read(chatPageActiveProvider.notifier).state = false;
+    _pageActive?.state = false;
     _lifecycle?.dispose();
     _replyNotifier.dispose();
     _searchCtrl.dispose();
@@ -111,9 +117,10 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
       BuildContext rowContext, ChatRecord record, bool mine) async {
     final me = ref.read(authProvider.notifier).me;
     if (me == null) return;
-    final box = rowContext.findRenderObject() as RenderBox?;
-    final overlay =
-        Overlay.of(context).context.findRenderObject() as RenderBox?;
+    final ro = rowContext.findRenderObject();
+    final box = ro is RenderBox ? ro : null;
+    final overlayRo = Overlay.of(context).context.findRenderObject();
+    final overlay = overlayRo is RenderBox ? overlayRo : null;
     if (box == null || overlay == null) return;
     final pos = box.localToGlobal(Offset.zero);
     final size = box.size;
@@ -513,7 +520,14 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
                       immersive: immersive,
                       pressed: _pressedId == record.id,
                       flashTick: _flashId == record.id ? _flashTick : 0,
-                      onLongPress: () => _showActions(context, record, mine),
+                      onLongPress: () {
+                        // 必须传「行级」context：itemBuilder 的 context 的
+                        // renderObject 是 RenderSliverList（非 RenderBox），
+                        // 直接 as RenderBox 会 TypeError 炸掉整个长按链路
+                        // （菜单不弹/缩放不动/撤回入口全失效——复验缺陷 2/3 共同根因）
+                        final rowCtx = _keyFor(record.id).currentContext;
+                        if (rowCtx != null) _showActions(rowCtx, record, mine);
+                      },
                       onJump: _jumpTo,
                     ),
             ),
@@ -768,6 +782,7 @@ class _BubbleRow extends ConsumerWidget {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
       child: GestureDetector(
         onLongPress: onLongPress,
+        behavior: HitTestBehavior.opaque, // 整行热区，防内层透明区域吞长按
         child: Row(
           mainAxisAlignment:
               mine ? MainAxisAlignment.end : MainAxisAlignment.start,
@@ -824,19 +839,19 @@ class _FlashWrapperState extends State<_FlashWrapper>
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    // 高亮底色用 DecoratedBox（不能 Container 负 margin 外扩：margin 非负断言
+    // 会炸掉整行构建——段三复验缺陷 3 根因）
     return AnimatedBuilder(
       animation: _a,
       builder: (context, child) {
         final t = _c.isAnimating ? _a.value : 0.0;
-        return Container(
+        return DecoratedBox(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
             color: t > 0
                 ? theme.colorScheme.primaryContainer.withValues(alpha: 0.9 * t)
                 : null,
           ),
-          padding: const EdgeInsets.all(4),
-          margin: const EdgeInsets.all(-4),
           child: child,
         );
       },

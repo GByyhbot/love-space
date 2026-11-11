@@ -331,8 +331,10 @@ class _SongCardViewState extends ConsumerState<SongCardView> {
   }
 
   Future<void> _toggle() async {
-    final src = widget.song.src;
-    if (src.isEmpty || _loading) return;
+    // Web 口径：mid（歌单本地音频）优先于 src（在线 30s 试听）
+    final hasMid = widget.song.mid.isNotEmpty;
+    final hasSrc = widget.song.src.isNotEmpty;
+    if ((!hasMid && !hasSrc) || _loading) return;
     var player = _player;
     if (player == null) {
       setState(() => _loading = true);
@@ -340,7 +342,11 @@ class _SongCardViewState extends ConsumerState<SongCardView> {
         final base = await ref.read(chatBaseProvider.future);
         final headers = await ref.read(mediaCookieHeadersProvider.future);
         player = AudioPlayer();
-        await player.setUrl(musicStreamUrl(base, src), headers: headers);
+        await player.setUrl(
+            hasMid
+                ? mediaUrl(base, widget.song.mid)
+                : musicStreamUrl(base, widget.song.src),
+            headers: headers);
         player.playerStateStream.listen((st) {
           if (mounted) setState(() => _playing = st.playing);
         });
