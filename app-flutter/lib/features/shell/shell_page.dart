@@ -4,6 +4,7 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../auth/auth_state.dart';
 import '../../core/sse/sse_client.dart';
@@ -29,6 +30,7 @@ class _ShellPageState extends ConsumerState<ShellPage> {
   Widget build(BuildContext context) {
     final me = ref.watch(authProvider.notifier).me;
     final sse = ref.watch(sseProvider);
+    final theme = Theme.of(context);
     final pages = [
       _HomeTab(me: me, sse: sse),
       const _PlaceholderTab(title: '时光', note: '阶段 2 · 条目 4 迁移'),
@@ -39,10 +41,17 @@ class _ShellPageState extends ConsumerState<ShellPage> {
       appBar: AppBar(
         title: Text(const ['首页', '时光', '相册', '我们'][_tab]),
         actions: [
+          // 头像入口 → 账号资料页（对齐 Web 账号菜单：资料/邀请/退出都在那里）
           IconButton(
-            icon: const Icon(Icons.logout),
-            tooltip: '退出登录',
-            onPressed: () => ref.read(authProvider.notifier).logout(),
+            tooltip: '账号资料',
+            onPressed: () => context.go('/profile'),
+            icon: CircleAvatar(
+              radius: 14,
+              backgroundColor: theme.colorScheme.primaryContainer,
+              child: Text((me?.user.name.isEmpty ?? true)
+                      ? '?' : me!.user.name.characters.first,
+                  style: TextStyle(fontSize: 13, color: theme.colorScheme.onPrimaryContainer)),
+            ),
           ),
         ],
       ),
@@ -117,7 +126,7 @@ class _HomeTab extends StatelessWidget {
             Text(me?.spaceName.isEmpty == false ? me!.spaceName : '我们的空间',
                 style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 6),
-            Text('已登录：${me?.userName ?? '…'}',
+            Text('已登录：${me?.user.name ?? '…'}',
                 style: Theme.of(context).textTheme.bodyMedium),
             const SizedBox(height: 4),
             Text('未读：通知 ${me?.unread ?? 0} · 私聊 ${me?.chatUnread ?? 0}',

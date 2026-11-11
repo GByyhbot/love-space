@@ -11,13 +11,50 @@ import '../../core/config.dart';
 
 enum AuthPhase { checking, out, authed }
 
+class SpaceUser {
+  const SpaceUser({required this.id, required this.name, required this.username, this.avatar = '', this.admin = false});
+  final String id;
+  final String name;
+  final String username;
+  final String avatar;
+  final bool admin;
+
+  factory SpaceUser.fromJson(Map<String, dynamic> j) => SpaceUser(
+        id: (j['id'] ?? '').toString(),
+        name: (j['name'] ?? '').toString(),
+        username: (j['username'] ?? '').toString(),
+        avatar: (j['avatar'] ?? '').toString(),
+        admin: j['admin'] == 1 || j['admin'] == true,
+      );
+}
+
 class MeData {
-  const MeData({required this.userName, required this.spaceName, this.unread = 0, this.chatUnread = 0});
-  final String userName;
+  const MeData({
+    required this.user,
+    required this.users,
+    required this.spaceName,
+    this.unread = 0,
+    this.chatUnread = 0,
+    this.paired = false,
+  });
+  final SpaceUser user;
+  final List<SpaceUser> users;
   final String spaceName;
   final int unread;
   final int chatUnread;
+  /// 空间是否已绑定两人（users.length==2；未绑定时账号页显示邀请入口）
+  final bool paired;
+
+  SpaceUser? byId(String id) {
+    for (final u in users) {
+      if (u.id == id) return u;
+    }
+    return null;
+  }
 }
+
+/// 认证页三态（对齐 Web renderAuth：未初始化 → setup；带邀请 token → join；其余 login）
+enum AuthMode { login, setup, join }
 
 class AuthNotifier extends Notifier<AuthPhase> {
   MeData? me;
@@ -44,13 +81,19 @@ class AuthNotifier extends Notifier<AuthPhase> {
         stage = '解析 me 响应';
         if (r.statusCode != 200) return false;
         final j = r.data as Map<String, dynamic>;
-        final user = (j['user'] ?? {}) as Map<String, dynamic>;
+        final user = SpaceUser.fromJson((j['user'] ?? {}) as Map<String, dynamic>);
+        final users = ((j['users'] ?? []) as List)
+            .whereType<Map>()
+            .map((u) => SpaceUser.fromJson(u.cast<String, dynamic>()))
+            .toList();
         final space = (j['space'] ?? {}) as Map<String, dynamic>;
         me = MeData(
-          userName: (user['name'] ?? '').toString(),
+          user: user,
+          users: users,
           spaceName: (space['name'] ?? '').toString(),
           unread: (j['unread'] as num?)?.toInt() ?? 0,
           chatUnread: (j['chat_unread'] as num?)?.toInt() ?? 0,
+          paired: users.length >= 2,
         );
         return true;
       });
@@ -78,13 +121,40 @@ class AuthNotifier extends Notifier<AuthPhase> {
     await Future.microtask(_bootstrap);
   }
 
-  /// 登录：成功返回 null，失败返回服务端中文文案。
-  /// 成功后：从 jar 取回会话 token → secure_storage 存正本 + 全线路播种
-  /// （换线免登录的前提，见 api_client.seedSessionToAllRoutes）。
-  Future<String?> login(String username, String password) async {
+  /// 从响应体提取服务端中文文案（validateStatus<500 时 4xx 走正常响应）
+  String? _detailOf(Object? data) {
+    if (data is Map && data['detail'] != null) return data['detail'].toString();
+    if (data is List && data.isNotEmpty) {
+      final first = data.first;
+      if (first is Map && first['msg'] != null) return first['msg'].toString();
+    }
+    return null;
+  }
+
+  /// 三态认证提交（对齐 Web renderAuth → POST /api/{mode}）：
+  /// login：username/password；setup/join：再加 name（与邀请 token）。
+  /// 成功后与登录同款：token 存正本 + 全线路播种（join/setup 产生的会话同样有效）。
+  Future<String?> submitAuth(
+    AuthMode mode, {
+    required String username,
+    required String password,
+    String? name,
+    String? token,
+  }) async {
     try {
       final dio = await ref.read(dioProvider.future);
-      await dio.post('/api/login', data: {'username': username, 'password': password});
+      final data = <String, dynamic>{'username': username, 'password': password};
+      if (name != null && name.isNotEmpty) data['name'] = name;
+      if (token != null && token.isNotEmpty) data['token'] = token;
+      final path = switch (mode) {
+        AuthMode.login => '/api/login',
+        AuthMode.setup => '/api/setup',
+        AuthMode.join => '/api/join',
+      };
+      final r = await dio.post(path, data: data);
+      if ((r.statusCode ?? 500) >= 400) {
+        return _detailOf(r.data) ?? '提交失败，请重试';
+      }
       final jar = await ref.read(cookieJarProvider.future);
       final base = await ref.read(baseProvider.future);
       final cookies = await jar.loadForRequest(Uri.parse('$base/'));
@@ -103,6 +173,61 @@ class AuthNotifier extends Notifier<AuthPhase> {
       return errorDetail(e);
     } catch (e) {
       return errorDetail(e);
+    }
+  }
+
+  /// 账号资料保存（PUT /api/profile）：昵称必填；头像传媒体 id（空串=不修改）；
+  /// 改密码时 old/new 成对传。服务端改密后会话立即失效（login_required=true）→ 回登录页。
+  /// 返回 null=成功；'RELOGIN'=改密成功需重新登录；其余为错误文案。
+  Future<String?> updateProfile({
+    required String name,
+    String? avatarId,
+    String? oldPassword,
+    String? newPassword,
+  }) async {
+    try {
+      final dio = await ref.read(dioProvider.future);
+      final data = <String, dynamic>{'name': name, 'avatar': avatarId ?? ''};
+      if ((oldPassword ?? '').isNotEmpty) data['old_password'] = oldPassword;
+      if ((newPassword ?? '').isNotEmpty) data['new_password'] = newPassword;
+      final r = await dio.put('/api/profile', data: data);
+      if ((r.statusCode ?? 500) >= 400) {
+        return _detailOf(r.data) ?? '保存失败，请重试';
+      }
+      if (r.data is Map && r.data['login_required'] == true) {
+        forceOut();
+        return 'RELOGIN';
+      }
+      await Future.microtask(_bootstrap);
+      return null;
+    } on DioException catch (e) {
+      final respData = e.response?.data;
+      if (respData is Map && respData['detail'] != null) {
+        return respData['detail'].toString();
+      }
+      return errorDetail(e);
+    } catch (e) {
+      return errorDetail(e);
+    }
+  }
+
+  /// 生成邀请（POST /api/invite）：返回 (token, null)；已绑定等业务错误返回 (null, 文案)。
+  Future<(String?, String?)> createInvite() async {
+    try {
+      final dio = await ref.read(dioProvider.future);
+      final r = await dio.post('/api/invite');
+      if ((r.statusCode ?? 500) >= 400) {
+        return (null, _detailOf(r.data) ?? '生成邀请失败');
+      }
+      return ((r.data as Map)['token'].toString(), null);
+    } on DioException catch (e) {
+      final respData = e.response?.data;
+      if (respData is Map && respData['detail'] != null) {
+        return (null, respData['detail'].toString());
+      }
+      return (null, errorDetail(e));
+    } catch (e) {
+      return (null, errorDetail(e));
     }
   }
 

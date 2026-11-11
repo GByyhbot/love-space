@@ -20,6 +20,48 @@ import '../config.dart';
 /// 会话失效全局回调（由认证层注册：置登录态 → 路由跳登录页）
 void Function()? onUnauthorized;
 
+/// 公开端点状态（无需登录态）：initialized / setup_token_required 决定认证页三态
+class SpaceStatus {
+  const SpaceStatus({required this.initialized, required this.setupTokenRequired});
+  final bool initialized;
+  final bool setupTokenRequired;
+
+  factory SpaceStatus.fromJson(Map<String, dynamic> j) => SpaceStatus(
+        initialized: j['initialized'] == true,
+        setupTokenRequired: j['setup_token_required'] == true,
+      );
+}
+
+final statusProvider = FutureProvider<SpaceStatus>((ref) async {
+  final d = Dio(BaseOptions(
+    connectTimeout: const Duration(seconds: 6),
+    receiveTimeout: const Duration(seconds: 6),
+    ))..httpClientAdapter = directAdapter();
+  final r = await d.get('/api/status');
+  return SpaceStatus.fromJson(r.data as Map<String, dynamic>);
+});
+
+/// 上传媒体文件（头像等）：multipart 字段名 file（与 Web uploadFile 一致），
+/// 返回 {id, mime, name, status=pending}，转码由服务端 worker 异步完成
+Future<String> uploadMedia(Dio dio, String filename, List<int> bytes) async {
+  final form = FormData.fromMap({
+    'file': MultipartFile.fromBytes(bytes, filename: filename),
+  });
+  final r = await dio.post('/api/media', data: form);
+  return (r.data as Map)['id'].toString();
+}
+
+/// 拉取媒体字节（走共享 dio：Cookie 自动附带；账号页头像用，阶段 4 换
+/// cached_network_image 统一缓存）
+Future<List<int>> fetchMediaBytes(Dio dio, String mid, {bool preview = true}) async {
+  final r = await dio.get<List<int>>(
+    '/media/$mid',
+    queryParameters: preview ? {'preview': 'true'} : null,
+    options: Options(responseType: ResponseType.bytes),
+  );
+  return r.data ?? const [];
+}
+
 /// 会话 token 的加密落盘（secure_storage）：CookieJar 的 per-host 文件在真机上
 /// 观测到偶发丢失（2026-11-11 小米 15：5 次恢复成功、1 次 me 401），这里存一份
 /// 正本，冷启动/换线时据此自愈播种——参照旧壳 MainActivity 的 seedCookie 做法。
