@@ -10,7 +10,6 @@
 library;
 
 import 'dart:io';
-import 'dart:math';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
@@ -20,8 +19,8 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/chat/chat_media.dart';
+import '../../core/chat/keyboard_metrics.dart';
 import '../../core/chat/chat_models.dart';
-// quoteSnippet（引用截 60）随上行引入
 import '../../core/chat/chat_state.dart';
 import '../auth/auth_state.dart';
 import 'album_picker_sheet.dart';
@@ -64,7 +63,12 @@ class _ChatComposeState extends ConsumerState<ChatCompose> {
   bool _recording = false;
   bool _hasText = false;
   double _lastInsets = 0;
+  double _prevInsets = -1;
   String _stickerTab = 'cute';
+
+  /// 本机键盘实测高度（落定后持久化；启动先读持久化值，无则用兜底，
+  /// 首次键盘弹出自动纠正——主人定版：不写死、不估算）
+  double? _kbHeight;
 
   @override
   void initState() {
@@ -75,6 +79,10 @@ class _ChatComposeState extends ConsumerState<ChatCompose> {
     });
     _focus.addListener(_onFocusChanged);
     widget.replyNotifier?.addListener(_onReplyChanged);
+    Future.microtask(() async {
+      final stored = await ref.read(keyboardMetricsStoreProvider).load();
+      if (stored != null && mounted) setState(() => _kbHeight = stored);
+    });
   }
 
   void _onReplyChanged() {
@@ -92,19 +100,23 @@ class _ChatComposeState extends ConsumerState<ChatCompose> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     final insets = MediaQuery.of(context).viewInsets.bottom;
-    // 键盘收起（insets 归零）→ 意图面板自动回位 + 占位高度过渡到面板实高
+    // 键盘收起（insets 归零）→ 意图面板自动回位
     if (_lastInsets > 0 && insets == 0) {
       if (_slots.intent != null) _slots.handle(InputSlotEvent.keyboardClosed);
-      if (_occupyHeight != null && mounted) {
-        setState(() => _occupyHeight = null); // 电梯：键盘高度 → 面板实高
-      }
     }
+    // 键盘高度实测（复验 item 2）：连续两帧稳定且超门槛 → 记录并持久化
+    if (insetsStable(_prevInsets, insets) && ((_kbHeight ?? 0) - insets).abs() > 1) {
+      _kbHeight = insets;
+      // ignore: unawaited_futures
+      ref.read(keyboardMetricsStoreProvider).save(insets);
+    }
+    _prevInsets = insets;
     _lastInsets = insets;
   }
 
-  /// 防闪烁占位高度：键盘开着打开面板时先以键盘高度占位（槽位高度不变），
-  /// 键盘收起后由 didChangeDependencies 过渡到面板实高
-  double? _occupyHeight;
+  /// 当前生效的键盘高度：本机实测（本次会话已弹过键盘）→ 持久化值 → 兜底。
+  /// 面板/贴纸坞槽位一律等于该值（高度恒定推导见 keyboard_metrics.dart）
+  double get _effectiveKeyboardHeight => _kbHeight ?? fallbackKeyboardHeight;
 
   @override
   void dispose() {
@@ -123,21 +135,12 @@ class _ChatComposeState extends ConsumerState<ChatCompose> {
   // ── 槽位切换 ───────────────────────────────────────────────────────
 
   void _toggleFn() {
-    setState(() {
-      _slots.handle(InputSlotEvent.toggleFn);
-      // 防闪烁：键盘开着开面板 → 槽位先以键盘高度占位（键盘收起后过渡到实高）
-      _occupyHeight =
-          (_slots.slot != InputSlot.none && _lastInsets > 0) ? _lastInsets : null;
-    });
+    setState(() => _slots.handle(InputSlotEvent.toggleFn));
     if (_slots.slot != InputSlot.none) _focus.unfocus(); // 先记意图再收键盘
   }
 
   void _toggleSticker() {
-    setState(() {
-      _slots.handle(InputSlotEvent.toggleSticker);
-      _occupyHeight =
-          (_slots.slot != InputSlot.none && _lastInsets > 0) ? _lastInsets : null;
-    });
+    setState(() => _slots.handle(InputSlotEvent.toggleSticker));
     if (_slots.slot != InputSlot.none) _focus.unfocus();
   }
 
@@ -386,15 +389,20 @@ class _ChatComposeState extends ConsumerState<ChatCompose> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final maxPanelH = MediaQuery.of(context).size.height * 0.62;
+    final insets = MediaQuery.of(context).viewInsets.bottom;
     final slotOpen = _slots.slot != InputSlot.none;
-    // 槽位高度：面板实高（fn 368 / 坞 348，夹无键盘视口 62%）；键盘开着开面板
-    // 时先以键盘高度占位防闪烁，键盘收起后过渡到实高（电梯式抬升）
-    final double targetPanelH = _slots.slot == InputSlot.fn
-        ? min(368.0, maxPanelH)
-        : min(348.0, maxPanelH);
-    final double slotHeight =
-        !slotOpen ? 0 : (_occupyHeight ?? targetPanelH);
+    // 槽位高度=键盘实测高度（等高推导，见 keyboard_metrics.dart）：
+    // · 面板/坞开：slotHeight = (kbHeight - insets).clamp(0, kbHeight)
+    //   → slotHeight + insets 恒等于 kbHeight，键盘↔面板两两切换时
+    //   输入栏位置逐帧不动（总高度恒定）；
+    // · 从零展开（insets==0）→ 槽位 0 → kbHeight 走抬升动画。
+    final kbHeight = _effectiveKeyboardHeight;
+    final slotHeight = slotHeightFor(
+        slotOpen: slotOpen, insets: insets, kbHeight: kbHeight);
+    // 动画时长：键盘过渡中（insets 变化时）零动画逐帧追踪公式（保证恒等式），
+    // 零展开/收合才走 200ms 电梯动画
+    final animDuration =
+        (slotOpen && insets > 0) ? Duration.zero : const Duration(milliseconds: 200);
     final reply = widget.replyNotifier?.value;
     return Column(mainAxisSize: MainAxisSize.min, children: [
       // 引用底栏（对齐 Web replyBar：「引用：xxx」+ 取消）
@@ -427,12 +435,13 @@ class _ChatComposeState extends ConsumerState<ChatCompose> {
           ]),
         ),
       // 输入栏（层级：消息列表 / 输入栏 / 底部槽位——输入栏恒在面板上方）。
-      // 沉浸式：与顶栏同色系半透明深色层压在照片上（对齐 Web chat-immersive 分层）
+      // 视觉统一（复验 item 3）：默认半透明 surface（透出聊天背景），不纯色实底；
+      // 沉浸式与顶栏同色系半透明深色层压在照片上（对齐 Web chat-immersive 分层）
       Container(
         decoration: BoxDecoration(
           color: widget.immersive
               ? Colors.black54
-              : theme.colorScheme.surface,
+              : theme.colorScheme.surface.withValues(alpha: 0.85),
           border: Border(
               top: BorderSide(
                   color: widget.immersive
@@ -508,31 +517,25 @@ class _ChatComposeState extends ConsumerState<ChatCompose> {
           ]),
         ),
       ),
-      // 底部槽位（键盘/⊕/坞互斥共用）：电梯式抬升——高度动画 + 内容被裁剪
-      // 露出，输入栏贴在面板顶部上方；键盘弹出走原生 resize 标准行为
+      // 底部槽位（键盘/⊕/坞互斥共用）：等高槽位——面板内容钉顶部、被槽位
+      // 裁剪露出（内容超高内部滚动）；键盘过渡期零动画逐帧追踪等高公式
       AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
+        duration: animDuration,
         curve: Curves.easeOutCubic,
         height: slotHeight,
         clipBehavior: Clip.hardEdge,
         decoration: const BoxDecoration(),
-        onEnd: () {
-          // 收合完成后卸载内容，贴纸视频停止解码
-          if (_slots.slot == InputSlot.none && slotHeight == 0 && mounted) {
-            setState(() {});
-          }
-        },
         child: OverflowBox(
           alignment: Alignment.topCenter,
           minHeight: 0,
-          maxHeight: targetPanelH,
+          maxHeight: kbHeight,
           // 宽度沿用父约束（槽位宽度）：这里若给 maxWidth 无界，面板内容
           // 布局直接失败 → 槽位空白（段三真机缺陷 2 根因）
           child: _slots.slot == InputSlot.fn
-              ? _FnPanel(height: targetPanelH, onAction: _onFnAction)
+              ? _FnPanel(height: kbHeight, onAction: _onFnAction)
               : _slots.slot == InputSlot.sticker
                   ? _StickerDock(
-                      height: targetPanelH,
+                      height: kbHeight,
                       tab: _stickerTab,
                       onTab: (t) => setState(() => _stickerTab = t),
                       onEmoji: _insertEmoji,
@@ -577,7 +580,8 @@ class _FnPanel extends StatelessWidget {
     final theme = Theme.of(context);
     return Container(
       height: height,
-      color: theme.colorScheme.surfaceContainerLow,
+      // 视觉统一（复验 item 3）：带透明度底色，不纯色实底
+      color: theme.colorScheme.surfaceContainerLow.withValues(alpha: 0.9),
       child: GridView.count(
         crossAxisCount: 4,
         childAspectRatio: 1.15,
@@ -641,7 +645,8 @@ class _StickerDock extends ConsumerWidget {
     final theme = Theme.of(context);
     return Container(
       height: height,
-      color: theme.colorScheme.surfaceContainerLow,
+      // 视觉统一（复验 item 3）：带透明度底色，不纯色实底
+      color: theme.colorScheme.surfaceContainerLow.withValues(alpha: 0.9),
       child: Column(children: [
         // tabs（对齐 Web renderStickerTabs 顺序与文案）
         SizedBox(

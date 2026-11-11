@@ -11,6 +11,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_client.dart';
+import '../../core/cache/low_freq_cache.dart';
 import '../../core/chat/chat_bubbles.dart';
 import '../../core/chat/chat_media.dart';
 import '../../core/chat/chat_state.dart';
@@ -114,9 +115,17 @@ class _BubbleSkinSheetState extends ConsumerState<_BubbleSkinSheet> {
     setState(() => _saving = true);
     try {
       final dio = await ref.read(dioProvider.future);
-      await dio.put('/api/space', data: applyChatSkinPayload(me.spaceRaw,
-          skin: skin.skin, fg: skin.fg, swap: skin.swap));
+      final payload =
+          applyChatSkinPayload(me.spaceRaw, skin: skin.skin, fg: skin.fg, swap: skin.swap);
+      // [skin-dbg] 诊断埋点：PUT 载荷与服务端回执（复验第二轮取证）
+      debugPrint('[skin-dbg] save: PUT /api/space chat_bubble=${skin.skin} '
+          'fg=${skin.fg} swap=${skin.swap}');
+      final rsp = await dio.put('/api/space', data: payload);
+      debugPrint('[skin-dbg] save: PUT status=${rsp.statusCode}');
       await ref.read(authProvider.notifier).reload();
+      // [skin-dbg] reload 后 me.space 的实际落库值
+      final after = ref.read(authProvider.notifier).me?.spaceRaw['chat_bubble'];
+      debugPrint('[skin-dbg] save: after reload me.space.chat_bubble=$after');
       ref.read(chatUiTickProvider.notifier).state++;
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
@@ -322,7 +331,10 @@ class _BubbleSkinSheetState extends ConsumerState<_BubbleSkinSheet> {
       height: 52,
       decoration: BoxDecoration(
         image: DecorationImage(
-          image: NetworkImage(bubbleSkinUrl(base, packName)),
+          image: CachedNetworkImageProvider(
+              bubbleSkinUrl(base, packName),
+              headers: ref.watch(mediaCookieHeadersProvider).valueOrNull,
+              cacheManager: LowFreqCacheManager.instance),
           centerSlice: const Rect.fromLTWH(42, 42, 44, 28), // 九宫格：slice 42 fill
           fit: BoxFit.cover,
         ),

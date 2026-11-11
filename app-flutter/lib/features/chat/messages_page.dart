@@ -6,8 +6,6 @@
 /// 加载窗口；背景每人一份（chat_bg_users）+ dim 0–80；皮肤九宫格 slice 42。
 library;
 
-import 'dart:typed_data';
-
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart'
@@ -15,6 +13,7 @@ import 'package:flutter/services.dart'
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_client.dart';
+import '../../core/cache/low_freq_cache.dart';
 import '../../core/chat/chat_bubbles.dart';
 import '../../core/chat/chat_media.dart';
 import '../../core/chat/chat_models.dart';
@@ -47,6 +46,7 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
   bool _searchOpen = false;
   String _flashId = '';
   int _flashTick = 0;
+  String _lastSkinLog = '';
   String? _pressedId; // 长按菜单打开中的记录 id（气泡 1.02 微放大）
 
   @override
@@ -125,6 +125,23 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
     final pos = box.localToGlobal(Offset.zero);
     final size = box.size;
     setState(() => _pressedId = record.id);
+    final theme = Theme.of(context);
+    // 菜单配色与聊天页同体系（surface 容器圆角卡片 + 主题色图标）
+    final menuColor = theme.colorScheme.surfaceContainerHighest;
+    final itemIconColor = theme.colorScheme.primary;
+    PopupMenuItem<String> item(String value, IconData icon, String label,
+            {Color? danger}) =>
+        PopupMenuItem(
+          value: value,
+          height: 44,
+          child: Row(children: [
+            Icon(icon, size: 18, color: danger ?? itemIconColor),
+            const SizedBox(width: 10),
+            Text(label,
+                style: theme.textTheme.bodyMedium
+                    ?.copyWith(color: danger ?? theme.colorScheme.onSurface)),
+          ]),
+        );
     final action = await showMenu<String>(
       context: context,
       // 就近展开：气泡下方（超出屏幕时由 showMenu 自适应）
@@ -133,17 +150,18 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
           pos.dy + size.height,
           (overlay.size.width - pos.dx - size.width).clamp(0.0, overlay.size.width - 8),
           0),
+      color: menuColor,
+      elevation: 6,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       items: [
-        const PopupMenuItem(value: 'copy', height: 40, child: Text('复制')),
-        const PopupMenuItem(value: 'reply', height: 40, child: Text('引用')),
-        PopupMenuItem(
-            value: 'pin',
-            height: 40,
-            child: Text(record.body.pinned ? '取消置顶' : '置顶')),
-        const PopupMenuItem(value: 'moment', height: 40, child: Text('记入时光')),
+        item('copy', Icons.copy_rounded, '复制'),
+        item('reply', Icons.reply_rounded, '引用'),
+        item('pin', Icons.push_pin_rounded, record.body.pinned ? '取消置顶' : '置顶'),
+        item('moment', Icons.auto_stories_rounded, '记入时光'),
         // 撤回仅本人且 2 分钟窗口内显示（对齐 Web ops；服务端同口径校验）
         if (canRecallChat(record, me.user.id))
-          const PopupMenuItem(value: 'recall', height: 40, child: Text('撤回')),
+          item('recall', Icons.undo_rounded, '撤回',
+              danger: theme.colorScheme.error),
       ],
     );
     if (mounted) setState(() => _pressedId = null);
@@ -258,12 +276,20 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
     final wp = chatBgOf(me.spaceRaw, me.user.id);
     final skin = ChatSkin.fromSpace(me.spaceRaw);
     final immersive = wp.isPhoto;
+    if (_lastSkinLog != '${skin.skin}|${skin.fg}|${skin.swap}|$immersive') {
+      _lastSkinLog = '${skin.skin}|${skin.fg}|${skin.swap}|$immersive';
+      debugPrint('[skin-dbg] page: chat_bubble=${skin.skin} fg=${skin.fg} '
+          'swap=${skin.swap} base=${ref.watch(chatBaseProvider).valueOrNull} '
+          'spaceRaw.chat_bubble=${me.spaceRaw['chat_bubble']}');
+    }
 
     return Scaffold(
       backgroundColor: immersive ? Colors.black : null,
       appBar: AppBar(
         titleSpacing: 0,
-        backgroundColor: immersive ? Colors.black54 : null,
+        // 视觉统一（复验 item 3）：顶栏透明沉浸（透出聊天背景），与输入栏/
+        // 展开面板同层半透明连成一体；图标文字颜色随明暗切换保证可读
+        backgroundColor: immersive ? Colors.black54 : Colors.transparent,
         foregroundColor: immersive ? Colors.white : null,
         // 状态栏图标亮度随顶栏明暗联动（沉浸式顶栏为深色 → 白图标）
         systemOverlayStyle: immersive
@@ -321,15 +347,25 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
       ),
       body: Stack(children: [
         // 背景层：整屏铺（头部/输入栏压图上，像聊天 App 那样——对齐 Web 挂 .chat-panel）
-        if (wp.isPhoto && ref.watch(chatBaseProvider).valueOrNull != null)
+        if (wp.isPhoto && ref.watch(chatBaseProvider).valueOrNull != null) ...[
           Positioned.fill(
-            child: CachedNetworkImage(
-              imageUrl: mediaUrl(ref.watch(chatBaseProvider).valueOrNull!, wp.media),
-              httpHeaders: ref.watch(mediaCookieHeadersProvider).valueOrNull,
-              fit: BoxFit.cover,
-              errorWidget: (_, _, _) => const SizedBox(),
-            ),
-          )
+            child: Builder(builder: (context) {
+              final base = ref.watch(chatBaseProvider).valueOrNull!;
+              final url = mediaUrl(base, wp.media);
+              final headers = ref.watch(mediaCookieHeadersProvider).valueOrNull;
+              // 低频缓存（item 5）：壁纸落盘 + 槽位删旧留新（URL 含 mid，换图即换键）
+              // ignore: discarded_futures
+              LowFreqCache.retainLatest('wallpaper:${me.user.id}', url, headers: headers);
+              return CachedNetworkImage(
+                imageUrl: url,
+                httpHeaders: headers,
+                cacheManager: LowFreqCacheManager.instance,
+                fit: BoxFit.cover,
+                errorWidget: (_, _, _) => const SizedBox(),
+              );
+            }),
+          ),
+        ]
         else if (wp.hasWallpaper)
           Positioned.fill(child: Container(color: _presetColor(wp.bg))),
         if (wp.isPhoto)
@@ -678,6 +714,19 @@ class _BubbleRow extends ConsumerWidget {
     final (leftSkin, rightSkin) = skin.leftRightUrls;
     final skinName = mine ? rightSkin : leftSkin;
     final lightText = skin.fg == 'light';
+    // [skin-dbg] 诊断埋点：皮肤图请求参数与加载结果（复验第二轮取证，
+    // 证据到手后随最终复验包移除）
+    final skinHeaders = useSkin ? ref.watch(mediaCookieHeadersProvider).valueOrNull : null;
+    if (useSkin) {
+      final skinUrl = bubbleSkinUrl(base, skinName);
+      debugPrint('[skin-dbg] bubble: url=$skinUrl '
+          'cookie=${(skinHeaders?['Cookie'] ?? '').isEmpty ? 'EMPTY' : 'len=${skinHeaders!['Cookie']!.length}'}');
+      // ignore: discarded_futures
+      CachedNetworkImageProvider(skinUrl, headers: skinHeaders,
+          cacheManager: LowFreqCacheManager.instance,
+          errorListener: (e) =>
+              debugPrint('[skin-dbg] bubble load ERROR: $e'));
+    }
 
     // 歌卡 / 位置卡：整条卡片渲染（对齐 Web songCard/locCard 分支）
     Widget? card;
@@ -699,7 +748,10 @@ class _BubbleRow extends ConsumerWidget {
           decoration: useSkin
               ? BoxDecoration(
                   image: DecorationImage(
-                    image: NetworkImage(bubbleSkinUrl(base, skinName)),
+                    image: CachedNetworkImageProvider(
+                        bubbleSkinUrl(base, skinName),
+                        headers: skinHeaders,
+                        cacheManager: LowFreqCacheManager.instance),
                     centerSlice: const Rect.fromLTWH(42, 42, 44, 28),
                   ),
                 )
@@ -988,42 +1040,42 @@ class _ChatAvatar extends ConsumerStatefulWidget {
 }
 
 class _ChatAvatarState extends ConsumerState<_ChatAvatar> {
-  Uint8List? _bytes;
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  Future<void> _load() async {
-    final id = widget.user.avatar;
-    if (id.isEmpty) return;
-    try {
-      final dio = await ref.read(dioProvider.future);
-      final bytes = await fetchMediaBytes(dio, id);
-      if (mounted) setState(() => _bytes = Uint8List.fromList(bytes));
-    } catch (_) {}
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final size = widget.size;
-    if (_bytes != null) {
+    final id = widget.user.avatar;
+    // 低频缓存（item 5）：头像走 LowFreqCacheManager 落盘 + 槽位删旧留新
+    if (id.isNotEmpty && ref.watch(chatBaseProvider).valueOrNull != null) {
+      final base = ref.watch(chatBaseProvider).valueOrNull!;
+      final url = mediaUrl(base, id);
+      final headers = ref.watch(mediaCookieHeadersProvider).valueOrNull;
+      // ignore: discarded_futures
+      LowFreqCache.retainLatest('avatar:${widget.user.id}', url, headers: headers);
       return ClipOval(
-        child: Image.memory(_bytes!,
-            width: size, height: size, fit: BoxFit.cover, gaplessPlayback: true),
+        child: CachedNetworkImage(
+          imageUrl: url,
+          httpHeaders: headers,
+          cacheManager: LowFreqCacheManager.instance,
+          width: size,
+          height: size,
+          fit: BoxFit.cover,
+          placeholder: (_, _) => _fallback(theme, size),
+          errorWidget: (_, _, _) => _fallback(theme, size),
+        ),
       );
     }
-    return CircleAvatar(
-      radius: size / 2,
-      backgroundColor: theme.colorScheme.primaryContainer,
-      child: Text(
-        widget.user.name.isEmpty ? '?' : widget.user.name.characters.first,
-        style: TextStyle(
-            fontSize: size * 0.38, color: theme.colorScheme.onPrimaryContainer),
-      ),
-    );
+    return _fallback(theme, size);
   }
+
+  Widget _fallback(ThemeData theme, double size) => CircleAvatar(
+        radius: size / 2,
+        backgroundColor: theme.colorScheme.primaryContainer,
+        child: Text(
+          widget.user.name.isEmpty ? '?' : widget.user.name.characters.first,
+          style: TextStyle(
+              fontSize: size * 0.38,
+              color: theme.colorScheme.onPrimaryContainer),
+        ),
+      );
 }
