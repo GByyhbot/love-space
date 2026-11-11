@@ -9,6 +9,7 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/sse/sse_client.dart';
@@ -39,7 +40,10 @@ const dailyQuotes = [
 ];
 
 class HomePage extends ConsumerWidget {
-  const HomePage({super.key});
+  const HomePage({super.key, this.onGoTab});
+
+  /// 首页不留死卡片：跳转 shell 其它 tab（1=时光 3=我们），由 shell 注入
+  final void Function(int tab)? onGoTab;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -77,9 +81,11 @@ class HomePage extends ConsumerWidget {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            _Hero(me: me, list: list, dashboard: ref.watch(dashboardProvider).valueOrNull),
+            _Hero(me: me, list: list,
+                dashboard: ref.watch(dashboardProvider).valueOrNull,
+                onGoTab: onGoTab),
             const SizedBox(height: 12),
-            _TodayCard(me: me, list: list),
+            _TodayCard(me: me, list: list, onGoTab: onGoTab),
             const SizedBox(height: 12),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -98,24 +104,29 @@ class HomePage extends ConsumerWidget {
             const SizedBox(height: 16),
             Text('最近的小美好', style: theme.textTheme.titleMedium),
             const SizedBox(height: 8),
-            ..._recentPosts(context, me, list),
+            ..._recentPosts(context, me, list, onGoTab: onGoTab),
           ],
         ),
       ),
     );
   }
 
-  List<Widget> _recentPosts(BuildContext context, MeData me, List<Record> list) {
+  List<Widget> _recentPosts(BuildContext context, MeData me, List<Record> list,
+      {void Function(int tab)? onGoTab}) {
     final theme = Theme.of(context);
     final posts = list.where((r) => r.kind == 'post').toList()
       ..sort((a, b) => b.created.compareTo(a.created));
     final top = posts.take(3).toList();
     if (top.isEmpty) {
       return [
-        Card(child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Text('故事，从这一刻开始——一张照片、一句想说的话，都是值得收藏的小美好。',
-              style: theme.textTheme.bodyMedium),
+        Card(child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () => onGoTab?.call(1), // 空态也可点：去时光页开始记录
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Text('故事，从这一刻开始——点这里去时光页写下第一篇。',
+                style: theme.textTheme.bodyMedium),
+          ),
         )),
       ];
     }
@@ -123,7 +134,10 @@ class HomePage extends ConsumerWidget {
       final author = me.byId(r.author);
       return Card(
         margin: const EdgeInsets.only(bottom: 8),
-        child: Padding(
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () => onGoTab?.call(1), // 详情与点赞评论在时光页（条目 4）
+          child: Padding(
           padding: const EdgeInsets.all(14),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Row(children: [
@@ -157,6 +171,7 @@ class HomePage extends ConsumerWidget {
             ]),
           ]),
         ),
+        ),
       );
     }).toList();
   }
@@ -164,16 +179,19 @@ class HomePage extends ConsumerWidget {
 
 /// ── Hero：两人名 / 相恋天数 / 相恋日期设置 ─────────────────────────
 class _Hero extends ConsumerWidget {
-  const _Hero({required this.me, required this.list, required this.dashboard});
+  const _Hero({required this.me, required this.list, required this.dashboard, this.onGoTab});
   final MeData me;
   final List<Record> list;
   final Dashboard? dashboard;
+  final void Function(int tab)? onGoTab;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final partner = me.users.where((u) => u.id != me.user.id).toList();
-    final names = partner.isNotEmpty
+    final paired = partner.isNotEmpty;
+    // 未绑定时名字区点击 → 账号资料页的邀请卡片（App 无 Web 链接入口，功能等价）
+    final names = paired
         ? '${me.user.name} ♥ ${partner.first.name}'
         : '等你，把另一半邀请进来';
     // 与 Web 一致：since 起算「第几天」= daysBetween+1；dashboard.days_together 服务端口径
@@ -182,27 +200,44 @@ class _Hero extends ConsumerWidget {
         : (dashboard?.daysTogether);
 
     return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          Text(names, textAlign: TextAlign.center, style: theme.textTheme.titleLarge),
-          const SizedBox(height: 10),
-          Row(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-            Text('我们相恋  ', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.outline)),
-            Text(days == null ? '—' : '$days',
-                style: theme.textTheme.displaySmall?.copyWith(color: theme.colorScheme.primary)),
-            Text(' 天', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.outline)),
-          ]),
-          const SizedBox(height: 8),
-          if (me.spaceSince.isEmpty)
-            TextButton(
-              onPressed: () => _editSince(context, ref),
-              child: const Text('设置相恋日期 →'),
-            )
-          else
-            Text('${me.spaceSince} 起 · 今天也要好好相爱', textAlign: TextAlign.center,
-                style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.outline)),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        // 已绑定：整卡可点 → 相恋日期/空间信息设置层（含编辑角标 affordance）；
+        // 未绑定：点卡 → 账号资料页的邀请卡片（App 无 Web 链接入口，功能等价）
+        onTap: () {
+          if (partner.isNotEmpty) {
+            _editSince(context, ref);
+          } else {
+            context.push('/profile');
+          }
+        },
+        child: Stack(children: [
+          Padding(
+            padding: const EdgeInsets.all(18),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              Text(names, textAlign: TextAlign.center, style: theme.textTheme.titleLarge),
+              const SizedBox(height: 10),
+              Row(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                Text('我们相恋  ', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.outline)),
+                Text(days == null ? '—' : '$days',
+                    style: theme.textTheme.displaySmall?.copyWith(color: theme.colorScheme.primary)),
+                Text(' 天', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.outline)),
+              ]),
+              const SizedBox(height: 8),
+              if (me.spaceSince.isEmpty)
+                Text('点这里设置相恋日期 →', textAlign: TextAlign.center,
+                    style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.primary))
+              else
+                Text('${me.spaceSince} 起 · 点卡片可编辑 · 今天也要好好相爱',
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.outline)),
+            ]),
+          ),
+          Positioned(
+            right: 8, top: 8,
+            child: Icon(Icons.edit, size: 16, color: theme.colorScheme.outline),
+          ),
         ]),
       ),
     );
@@ -269,9 +304,10 @@ String _fmtDate(DateTime d) =>
 
 /// ── 今天的心情（两人 mood 行）+ 最近纪念日倒计时 ────────────────────
 class _TodayCard extends ConsumerWidget {
-  const _TodayCard({required this.me, required this.list});
+  const _TodayCard({required this.me, required this.list, this.onGoTab});
   final MeData me;
   final List<Record> list;
+  final void Function(int tab)? onGoTab;
 
   /// 最近纪念日（逐字对齐 Web nextAnniversary：annual=true 按年推进 + 02-29 回退；
   /// lunar 按原样日期近似——与 Web 现状一致；一次性按 date）。
@@ -321,21 +357,32 @@ class _TodayCard extends ConsumerWidget {
           const Divider(height: 24),
           Text('📅 最近纪念日', style: theme.textTheme.titleSmall),
           const SizedBox(height: 8),
-          if (ann != null)
-            Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-              Text('${ann.days}',
-                  style: theme.textTheme.headlineMedium?.copyWith(color: theme.colorScheme.primary)),
-              const SizedBox(width: 8),
-              Expanded(child: Padding(
-                padding: const EdgeInsets.only(bottom: 4),
-                child: Text('天后 · ${(ann.r.body['title'] ?? '纪念日')}\n${ann.due} · 别忘了给彼此一个拥抱',
-                    softWrap: true,
+          // 整区可点 → 「我们」页的纪念日（条目 6 未建前先到 tab 占位页）
+          InkWell(
+            borderRadius: BorderRadius.circular(10),
+            onTap: () => onGoTab?.call(3),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              if (ann != null)
+                Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                  Text('${ann.days}',
+                      style: theme.textTheme.headlineMedium?.copyWith(color: theme.colorScheme.primary)),
+                  const SizedBox(width: 8),
+                  Expanded(child: Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Text('天后 · ${(ann.r.body['title'] ?? '纪念日')}\n${ann.due} · 别忘了给彼此一个拥抱 · 点此查看全部',
+                        softWrap: true,
+                        style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.outline)),
+                  )),
+                  Icon(Icons.chevron_right, color: theme.colorScheme.outline),
+                ])
+              else
+                Text('留一个日子，给仪式感 · 点此去「我们」页添加纪念日。',
                     style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.outline)),
-              )),
-            ])
-          else
-            Text('留一个日子，给仪式感——添加纪念日入口在「我们」页（条目 6）。',
-                style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.outline)),
+              ]),
+            ),
+          ),
         ]),
       ),
     );

@@ -32,7 +32,7 @@ class _ShellPageState extends ConsumerState<ShellPage> {
     final me = ref.watch(authProvider.notifier).me;
     final theme = Theme.of(context);
     final pages = [
-      const HomePage(),
+      HomePage(onGoTab: (tab) => setState(() => _tab = tab)),
       const _PlaceholderTab(title: '时光', note: '阶段 2 · 条目 4 迁移'),
       const _PlaceholderTab(title: '相册', note: '阶段 2 · 条目 5 迁移'),
       const _PlaceholderTab(title: '我们', note: '阶段 2 · 条目 6 迁移'),
