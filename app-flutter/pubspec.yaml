@@ -99,9 +99,3 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
-
-  # path_provider_android 2.3.x 把 Android 实现迁移到 dart:jni（引入 jni/jni_flutter 原生
-  # CMake 模块），其原生构建在中文项目路径下因 GBK/UTF-8 编码错位找不到产物（实测 2026-11-11）。
-  # 钉回 2.2.x 平台通道实现绕开原生构建；仓库若迁移 ASCII 路径可移除此 override。
-dependency_overrides:
-  path_provider_android: 2.2.23
