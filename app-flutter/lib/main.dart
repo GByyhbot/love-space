@@ -22,10 +22,14 @@ final routerProvider = Provider<GoRouter>((ref) {
     refreshListenable: notifier,
     redirect: (context, state) {
       final phase = ref.read(authProvider);
-      final onLogin = state.matchedLocation == '/login';
+      final location = state.matchedLocation;
+      final onLogin = location == '/login';
+      // splash 是 checking 的临时落点：任何非 checking 阶段到达 splash 都必须离开，
+      // 否则冷启动恢复成功（authed）会永远卡在转圈页（2026-11-11 真机事故根因）
+      final onTransient = onLogin || location == '/splash';
       if (phase == AuthPhase.checking) return onLogin ? null : '/splash';
       if (phase == AuthPhase.out) return onLogin ? null : '/login';
-      return onLogin ? '/home' : null;
+      return onTransient ? '/home' : null;
     },
     routes: [
       GoRoute(path: '/splash', builder: (_, _) => const _SplashPage()),
