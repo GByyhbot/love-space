@@ -62,6 +62,112 @@ Future<List<int>> fetchMediaBytes(Dio dio, String mid, {bool preview = true}) as
   return r.data ?? const [];
 }
 
+/// ── 通用记录（records）──────────────────────────────────────────────
+/// 首页（心情/纪念日/最新动态）与后续各页共用；body 按 kind 各自解读。
+class Record {
+  const Record({
+    required this.id,
+    required this.kind,
+    required this.author,
+    required this.body,
+    required this.created,
+    this.clientId = '',
+    this.likes = const [],
+    this.comments = const [],
+    this.media = const [],
+  });
+  final String id;
+  final String kind;
+  final String author;
+  final Map<String, dynamic> body;
+  final double created;
+  final String clientId;
+  final List<String> likes;
+  final List<Map<String, dynamic>> comments;
+  final List<Map<String, dynamic>> media;
+
+  factory Record.fromJson(Map<String, dynamic> j) => Record(
+        id: (j['id'] ?? '').toString(),
+        kind: (j['kind'] ?? '').toString(),
+        author: (j['author'] ?? '').toString(),
+        body: ((j['body'] ?? {}) as Map).cast<String, dynamic>(),
+        created: (j['created'] as num?)?.toDouble() ?? 0,
+        clientId: (j['client_id'] ?? '').toString(),
+        likes: ((j['likes'] ?? []) as List).map((e) => e.toString()).toList(),
+        comments: ((j['comments'] ?? []) as List)
+            .whereType<Map>()
+            .map((c) => c.cast<String, dynamic>())
+            .toList(),
+        media: ((j['media'] ?? []) as List)
+            .whereType<Map>()
+            .map((m) => m.cast<String, dynamic>())
+            .toList(),
+      );
+
+  String get date => (body['date'] ?? '').toString();
+}
+
+/// 首页聚合数据（GET /api/dashboard）
+class Dashboard {
+  const Dashboard({
+    required this.total,
+    required this.daysTogether,
+    required this.likes,
+    required this.comments,
+    required this.photos,
+  });
+  final int total;
+  final int? daysTogether;
+  final int likes;
+  final int comments;
+  final int photos;
+
+  factory Dashboard.fromJson(Map<String, dynamic> j) => Dashboard(
+        total: (j['total'] as num?)?.toInt() ?? 0,
+        daysTogether: (j['days_together'] as num?)?.toInt(),
+        likes: (j['likes'] as num?)?.toInt() ?? 0,
+        comments: (j['comments'] as num?)?.toInt() ?? 0,
+        photos: (j['photos'] as num?)?.toInt() ?? 0,
+      );
+}
+
+/// 首页排除聊天的全部 kind（与 Web records 聚合一致）
+const recordKindsExcludeChat =
+    'post,diary,draft,surprise,anniversary,wish,personal_wish,mood,note,question,habit,quest,ledger,period,music,album';
+
+/// 通用 records 拉取（SSE other 事件 → invalidate 重拉）
+final recordsProvider = FutureProvider<List<Record>>((ref) async {
+  final dio = await ref.watch(dioProvider.future);
+  final r = await dio.get('/api/records', queryParameters: {
+    'kind': recordKindsExcludeChat,
+    'limit': 1000,
+  });
+  return ((r.data ?? []) as List)
+      .whereType<Map>()
+      .map((e) => Record.fromJson(e.cast<String, dynamic>()))
+      .toList();
+});
+
+final dashboardProvider = FutureProvider<Dashboard>((ref) async {
+  final dio = await ref.watch(dioProvider.future);
+  final r = await dio.get('/api/dashboard');
+  return Dashboard.fromJson((r.data ?? {}) as Map<String, dynamic>);
+});
+
+/// 生成 client_id（防重；聊天专章统一实现前，首页先走同款格式）
+String newClientId() => 'fl-${DateTime.now().microsecondsSinceEpoch}';
+
+/// PUT /api/space：全量覆盖语义——以 me.space 原样为基础，只改 name/since
+/// （Web spaceForm 同款约束：name 必填，其余键原样带回，谁也不碰谁）。
+Future<void> updateSpace(Dio dio, Map<String, dynamic> spaceRaw,
+    {required String name, required String since}) async {
+  await dio.put('/api/space', data: {
+    ...spaceRaw,
+    'name': name,
+    'since': since,
+  });
+}
+
 /// 会话 token 的加密落盘（secure_storage）：CookieJar 的 per-host 文件在真机上
 /// 观测到偶发丢失（2026-11-11 小米 15：5 次恢复成功、1 次 me 401），这里存一份
 /// 正本，冷启动/换线时据此自愈播种——参照旧壳 MainActivity 的 seedCookie 做法。

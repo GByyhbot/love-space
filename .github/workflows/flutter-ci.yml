@@ -30,9 +30,12 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
+          # 钉版本与本地一致：新版 Dart 移除了 dart analyze --fatal-infos（exit 64 事故），
+          # 且避免 analyzer 规则漂移导致 CI 与本地结论不一致
+          flutter-version: 3.47.9
           cache: true
       - run: flutter pub get
-      - run: dart analyze --fatal-infos=false
+      - run: flutter analyze
       - run: flutter test
       - run: flutter build apk --debug
       - uses: actions/upload-artifact@v4

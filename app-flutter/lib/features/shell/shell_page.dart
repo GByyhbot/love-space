@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 
 import '../auth/auth_state.dart';
 import '../../core/sse/sse_client.dart';
+import '../home/home_page.dart';
 
 class ShellPage extends ConsumerStatefulWidget {
   const ShellPage({super.key});
@@ -29,10 +30,9 @@ class _ShellPageState extends ConsumerState<ShellPage> {
   @override
   Widget build(BuildContext context) {
     final me = ref.watch(authProvider.notifier).me;
-    final sse = ref.watch(sseProvider);
     final theme = Theme.of(context);
     final pages = [
-      _HomeTab(me: me, sse: sse),
+      const HomePage(),
       const _PlaceholderTab(title: '时光', note: '阶段 2 · 条目 4 迁移'),
       const _PlaceholderTab(title: '相册', note: '阶段 2 · 条目 5 迁移'),
       const _PlaceholderTab(title: '我们', note: '阶段 2 · 条目 6 迁移'),
@@ -113,54 +113,6 @@ class _NavItem extends StatelessWidget {
   }
 }
 
-class _HomeTab extends StatelessWidget {
-  const _HomeTab({required this.me, required this.sse});
-  final MeData? me;
-  final SseState sse;
-
-  @override
-  Widget build(BuildContext context) {
-    return ListView(padding: const EdgeInsets.all(16), children: [
-      Card(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(me?.spaceName.isEmpty == false ? me!.spaceName : '我们的空间',
-                style: Theme.of(context).textTheme.titleLarge),
-            const SizedBox(height: 6),
-            Text('已登录：${me?.user.name ?? '…'}',
-                style: Theme.of(context).textTheme.bodyMedium),
-            const SizedBox(height: 4),
-            Text('未读：通知 ${me?.unread ?? 0} · 私聊 ${me?.chatUnread ?? 0}',
-                style: Theme.of(context).textTheme.bodySmall),
-          ]),
-        ),
-      ),
-      Card(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(children: [
-            Icon(sse.phase == SsePhase.connected ? Icons.sensors_rounded : Icons.sensors_off_rounded,
-                color: sse.phase == SsePhase.connected ? Colors.green : Theme.of(context).colorScheme.outline),
-            const SizedBox(width: 10),
-            Expanded(child: Text(
-              sse.phase == SsePhase.connected
-                  ? '实时通道已连接（SSE，增量事件驱动中）'
-                  : '实时通道：${sse.phase.name}${sse.lastError == null ? '' : ' · ${sse.lastError}'}',
-              style: Theme.of(context).textTheme.bodyMedium,
-            )),
-          ]),
-        ),
-      ),
-      const Card(
-        child: Padding(
-          padding: EdgeInsets.all(16),
-          child: Text('首页其余内容（恋爱天数 / 今日心情 / 纪念日倒计时）在阶段 2 · 条目 2 迁移'),
-        ),
-      ),
-    ]);
-  }
-}
 
 class _PlaceholderTab extends StatelessWidget {
   const _PlaceholderTab({required this.title, required this.note});

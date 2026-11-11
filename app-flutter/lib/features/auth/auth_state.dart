@@ -33,6 +33,8 @@ class MeData {
     required this.user,
     required this.users,
     required this.spaceName,
+    required this.spaceRaw,
+    required this.spaceSince,
     this.unread = 0,
     this.chatUnread = 0,
     this.paired = false,
@@ -40,6 +42,9 @@ class MeData {
   final SpaceUser user;
   final List<SpaceUser> users;
   final String spaceName;
+  /// space 完整原始对象：PUT /api/space 是全量覆盖语义，必须原样带回
+  final Map<String, dynamic> spaceRaw;
+  final String spaceSince;
   final int unread;
   final int chatUnread;
   /// 空间是否已绑定两人（users.length==2；未绑定时账号页显示邀请入口）
@@ -91,6 +96,8 @@ class AuthNotifier extends Notifier<AuthPhase> {
           user: user,
           users: users,
           spaceName: (space['name'] ?? '').toString(),
+          spaceRaw: space,
+          spaceSince: (space['since'] ?? '').toString(),
           unread: (j['unread'] as num?)?.toInt() ?? 0,
           chatUnread: (j['chat_unread'] as num?)?.toInt() ?? 0,
           paired: users.length >= 2,
@@ -119,6 +126,11 @@ class AuthNotifier extends Notifier<AuthPhase> {
     if (state == AuthPhase.checking) return;
     state = AuthPhase.checking;
     await Future.microtask(_bootstrap);
+  }
+
+  /// 已登录态下重新拉取 me（space/profile 变更后刷新全局状态）
+  Future<void> reload() async {
+    await _bootstrap();
   }
 
   /// 从响应体提取服务端中文文案（validateStatus<500 时 4xx 走正常响应）
