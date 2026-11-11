@@ -41,10 +41,12 @@ class _ShellPageState extends ConsumerState<ShellPage> {
       appBar: AppBar(
         title: Text(const ['首页', '时光', '相册', '我们'][_tab]),
         actions: [
-          // 头像入口 → 账号资料页（对齐 Web 账号菜单：资料/邀请/退出都在那里）
+          // 头像入口 → 账号资料页（对齐 Web 账号菜单：资料/邀请/退出都在那里）。
+          // 🔴 阶段 2 通则：二级页一律 push 打开（保留主页在路由栈），
+          // 系统返回手势/返回键回上一页；只有主页根部按返回才退出 App。
           IconButton(
             tooltip: '账号资料',
-            onPressed: () => context.go('/profile'),
+            onPressed: () => context.push('/profile'),
             icon: CircleAvatar(
               radius: 14,
               backgroundColor: theme.colorScheme.primaryContainer,
