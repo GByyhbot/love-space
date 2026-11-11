@@ -18,11 +18,11 @@ import 'package:dio/io.dart';
 import 'package:dio_cookie_manager/dio_cookie_manager.dart';
 import 'package:cookie_jar/cookie_jar.dart';
 
-final ORIGIN = Platform.environment['ORIGIN'] ?? 'http://127.0.0.1:8356';
+final apiOrigin = Platform.environment['ORIGIN'] ?? 'http://127.0.0.1:8356';
 final results = <String, String>{};
 
 Dio directDio({CookieJar? jar, bool authHeader = true, Duration? timeout}) {
-  final dio = Dio(BaseOptions(baseUrl: ORIGIN, connectTimeout: const Duration(seconds: 8), receiveTimeout: timeout ?? const Duration(seconds: 10)));
+  final dio = Dio(BaseOptions(baseUrl: apiOrigin, connectTimeout: const Duration(seconds: 8), receiveTimeout: timeout ?? const Duration(seconds: 10)));
   dio.httpClientAdapter = IOHttpClientAdapter()..createHttpClient = () {
     final h = HttpClient();
     h.findProxy = (uri) => 'DIRECT';   /* 本机代理环境变量在，必须显式直连 */
