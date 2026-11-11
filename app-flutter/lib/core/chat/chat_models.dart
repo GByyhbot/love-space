@@ -57,6 +57,13 @@ class ChatLocation {
   const ChatLocation({required this.lat, required this.lng});
   final double lat;
   final double lng;
+
+  @override
+  bool operator ==(Object other) =>
+      other is ChatLocation && other.lat == lat && other.lng == lng;
+
+  @override
+  int get hashCode => Object.hash(lat, lng);
 }
 
 /// 分享的歌（body.song = {title,artist,mid,src,art,dur}）
@@ -93,6 +100,19 @@ class ChatSong {
         'art': art,
         'dur': dur,
       };
+
+  @override
+  bool operator ==(Object other) =>
+      other is ChatSong &&
+      other.title == title &&
+      other.artist == artist &&
+      other.mid == mid &&
+      other.src == src &&
+      other.art == art &&
+      other.dur == dur;
+
+  @override
+  int get hashCode => Object.hash(title, artist, mid, src, art, dur);
 }
 
 /// 聊天消息 body（服务端 clean_body 白名单内的字段，缺失一律容错为默认值）
@@ -211,8 +231,11 @@ class ChatRecord {
       body.sticker == o.body.sticker &&
       body.replyToId == o.body.replyToId &&
       body.replyToText == o.body.replyToText &&
+      body.location == o.body.location &&
+      body.song == o.body.song &&
       _listEq(body.mediaIds, o.body.mediaIds) &&
-      _listEq(media.map((m) => m.id), o.media.map((m) => m.id));
+      _listEq(media.map((m) => m.id), o.media.map((m) => m.id)) &&
+      _listEq(media.map((m) => m.status), o.media.map((m) => m.status));
 
   static bool _listEq(Iterable<String> a, Iterable<String> b) {
     if (a.length != b.length) return false;
@@ -247,6 +270,23 @@ class ChatRecord {
   }
 }
 
+/// 待发媒体的本机文件引用（pending 队列里媒体先传后发：上传失败可重试重传）
+class ChatLocalFile {
+  const ChatLocalFile({required this.path, required this.name});
+  final String path; // 本机绝对路径（重试时重新读取上传）
+  final String name;
+
+  Map<String, dynamic> toJson() => {'path': path, 'name': name};
+
+  factory ChatLocalFile.fromJson(Map<String, dynamic> j) => ChatLocalFile(
+        path: (j['path'] ?? '').toString(),
+        name: (j['name'] ?? '').toString(),
+      );
+}
+
+/// pending 发送阶段：upload=媒体上传中（气泡可见进度）/ send=记录 POST 中
+enum ChatPendingPhase { upload, send }
+
 /// 待发消息（pending 队列；等价 Web localStorage['pending-chat:<uid>']）
 class ChatPending {
   const ChatPending({
@@ -254,9 +294,108 @@ class ChatPending {
     required this.content,
     required this.createdAt,
     this.failed = false,
+    this.mediaFiles = const [],
+    this.phase = ChatPendingPhase.send,
   });
   final String clientId;
   final String content;
   final double createdAt;
   final bool failed;
+
+  /// 纯文本发送为空；媒体发送时为本机待传文件（重试重新上传）
+  final List<ChatLocalFile> mediaFiles;
+  final ChatPendingPhase phase;
+}
+
+// ── 段二：气泡渲染视觉解析（纯函数，可单测）────────────────────────────
+
+/// 单条聊天记录的渲染形态（段二媒体渲染取代段一占位的判定核心）
+class ChatVisual {
+  const ChatVisual({
+    this.textLines = const [],
+    this.imageMids = const [],
+    this.videoMids = const [],
+    this.voiceMids = const [],
+    this.sticker,
+  });
+
+  /// 文本行（含「[引用] …」占位行——引用跳转属段三）
+  final List<String> textLines;
+
+  /// 图片媒体（/media/{mid}?preview=true，带 Cookie）
+  final List<String> imageMids;
+  final List<String> videoMids;
+
+  /// 语音媒体（voice chip，时长 + 点击整 chip 播放，对齐 Web voice-chip）
+  final List<String> voiceMids;
+
+  /// 非 null → 整条渲染为贴纸（无气泡；对齐 Web chat-sticker）
+  final ChatStickerVisual? sticker;
+
+  bool get isEmpty =>
+      textLines.isEmpty &&
+      imageMids.isEmpty &&
+      videoMids.isEmpty &&
+      voiceMids.isEmpty &&
+      sticker == null;
+}
+
+/// 贴纸视觉参数：内置包走公开静态路径（无需 Cookie），自定义表情走媒体 id（需 Cookie）
+class ChatStickerVisual {
+  const ChatStickerVisual({this.path, this.mid, required this.isVideo});
+  final String? path; // /static/stickers/<包>/<序号>.<ext>
+  final String? mid; // 自定义表情的媒体 id
+  final bool isVideo; // .webm → 循环视频；否则静态图
+}
+
+/// 渲染判定（对齐 static/chat.js chatRows + mediaMarkup 的分流）：
+/// · body.sticker → 贴纸（.webm 视频 / 其余静态图；公开静态无需 Cookie）；
+/// · body.media 单张且 mime 为 image/webp 或 video/webm 且无文本 → 自定义表情贴纸；
+/// · 其余 media 按 mime 分图片/视频/语音；文本（含引用占位）进 textLines。
+ChatVisual chatVisualOf(ChatRecord r) {
+  if (r.body.recalled) return const ChatVisual();
+  final b = r.body;
+  if (b.sticker != null) {
+    return ChatVisual(
+      sticker: ChatStickerVisual(
+          path: b.sticker, isVideo: b.sticker!.endsWith('.webm')),
+    );
+  }
+  final visual = ChatVisual(
+    textLines: [
+      if (b.content.trim().isNotEmpty) b.content,
+      if (b.replyToId != null)
+        ((b.replyToText ?? '').trim().isEmpty
+            ? '[引用]'
+            : '[引用] ${b.replyToText}')
+    ],
+    imageMids: [],
+    videoMids: [],
+    voiceMids: [],
+  );
+  // 自定义表情：单媒体 webp/webm 且无文本 → 贴纸化渲染（对齐 Web sticker-send 发送形态）
+  final isCustomSticker =
+      b.content.trim().isEmpty && b.replyToId == null && b.mediaIds.length == 1 && r.media.length == 1;
+  if (isCustomSticker) {
+    final m = r.media.single;
+    if (m.mime == 'image/webp' || m.mime == 'video/webm') {
+      return ChatVisual(
+        sticker: ChatStickerVisual(
+            mid: m.id, isVideo: m.mime == 'video/webm'),
+      );
+    }
+  }
+  for (final m in r.media) {
+    if (m.id.isEmpty) continue;
+    if (m.mime.startsWith('image/')) {
+      visual.imageMids.add(m.id);
+    } else if (m.mime.startsWith('video/')) {
+      visual.videoMids.add(m.id);
+    } else if (m.mime.startsWith('audio/')) {
+      visual.voiceMids.add(m.id);
+    } else {
+      visual.textLines.add(m.placeholderLabel);
+    }
+  }
+  return visual;
 }

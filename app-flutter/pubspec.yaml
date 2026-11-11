@@ -50,6 +50,20 @@ dependencies:
   path_provider: ^2.1.4
   # 聊天 client_id（uuid v4，与 Web uuid() 同口径）：发送时生成、重试复用同一 id
   uuid: ^4.4.0
+  # 段二媒体（chat-plan Step 5）：视频播放（poster 封面 + preview.mp4，支持 httpHeaders 带 Cookie）
+  video_player: ^2.9.2
+  # 语音 chip 播放（preview.m4a 需 Cookie 头）：just_audio 的 AudioSource.uri(headers:)
+  # 在 Android/iOS 都支持自定义请求头；audioplayers 的 Android 实现传不了头，故选它
+  just_audio: ^0.10.0
+  # 语音消息录制（m4a/AAC-LC，对齐 Web chatVoiceToggle；需 RECORD_AUDIO 权限，已加清单）
+  record: ^5.2.0
+
+# 上游错位修正：record 5.2.1 允许 platform_interface 升到 1.6.0，但其约束的
+# record_linux 0.7.2 没跟上 1.6.0 的接口（缺 startStream/hasPermission 新签名），
+# kernel 编译把 linux 分片也编进来直接挂构建。override 到已适配 1.6.0 的
+# record_linux 1.3.1（仅影响依赖图一致性，Android 运行走 record_android）。
+dependency_overrides:
+  record_linux: 1.3.1
 
 dev_dependencies:
   flutter_test:

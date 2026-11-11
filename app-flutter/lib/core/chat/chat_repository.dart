@@ -50,10 +50,17 @@ List<ChatRecord> parseChatRecords(Object? data) {
 }
 
 /// 发送纯文本消息。服务端幂等：同 (author, client_id) 重发返回既有记录。
-Future<ChatRecord> sendChatText(Dio dio, String content, String clientId) async {
+Future<ChatRecord> sendChatText(Dio dio, String content, String clientId) async =>
+    sendChatBody(dio, {'content': content, 'media': []}, clientId);
+
+/// 发送任意聊天 body（段二扩展：媒体 {content, media:[mid...]}、贴纸
+/// {content:'', sticker:path}；服务端 clean_body 白名单过滤未知字段）。
+/// 幂等：同 (author, client_id) 重发返回既有记录。
+Future<ChatRecord> sendChatBody(
+    Dio dio, Map<String, dynamic> body, String clientId) async {
   final r = await dio.post('/api/records', data: {
     'kind': 'chat',
-    'body': {'content': content, 'media': []},
+    'body': body,
     'client_id': clientId,
   });
   return ChatRecord.fromJson((r.data as Map).cast<String, dynamic>());

@@ -59,6 +59,15 @@ class _MemStore implements ChatPersistence {
 
   @override
   Future<List<ChatPending>> loadPending() async => pendings.values.toList();
+
+  @override
+  Future<void> saveMySticker(String userId, String mid, String name) async {}
+
+  @override
+  Future<void> deleteMySticker(String userId, String mid) async {}
+
+  @override
+  Future<List<(String, String)>> loadMyStickers(String userId) async => const [];
 }
 
 (ProviderContainer, _FakeAdapter) _makeContainer(_MemStore store,

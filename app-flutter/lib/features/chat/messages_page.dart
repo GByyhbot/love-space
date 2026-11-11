@@ -1,9 +1,9 @@
-/// 消息（悄悄话）页 · 段一：文本消息 + 撤回态 + 时间分隔条 + 发送三态 + SSE 对账。
+/// 消息（悄悄话）页 · 段二：文本/媒体（图片/视频/语音/贴纸）渲染 + 发送三态 +
+/// SSE 对账 + 原生输入区（同槽位互斥，见 chat_compose.dart）。
 /// 对照 Web（static/chat.js）：头部「昵称 / 我们的悄悄话 · 仅彼此可见」；空态
 /// 「今天，有什么想对 TA 说？/ 说说日常，也说说想念。」；撤回行「你/对方撤回了一条消息」；
-/// 发送中三点动效 / 失败标红「未发出 · 点击重试」（重试复用同一 client_id）。
-/// 段一渲染边界：媒体/贴纸/歌曲/位置/引用渲染中性占位（chat_models.placeholderLines），
-/// 绝不能崩；完整渲染在段二/段三。pinned 段一忽略（置顶栏属段三）。
+/// 发送中三点动效 / 失败标红「未发出 · 点击重试」（重试复用同一 client_id）；
+/// 媒体按 chatVisualOf 分流渲染（段一占位已替换），pinned 段三处理。
 /// 列表用 reverse ListView：底端=最新，天然贴底跟随、上翻预拉不跳位置。
 library;
 
@@ -18,6 +18,8 @@ import '../../core/chat/chat_state.dart';
 import '../../core/chat/chat_time.dart';
 import '../../core/sse/sse_client.dart';
 import '../auth/auth_state.dart';
+import 'chat_compose.dart';
+import 'media_bubble_widgets.dart';
 
 class MessagesPage extends ConsumerStatefulWidget {
   const MessagesPage({super.key});
@@ -27,7 +29,6 @@ class MessagesPage extends ConsumerStatefulWidget {
 }
 
 class _MessagesPageState extends ConsumerState<MessagesPage> {
-  final _input = TextEditingController();
   AppLifecycleListener? _lifecycle;
 
   @override
@@ -52,16 +53,14 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
   void dispose() {
     ref.read(chatPageActiveProvider.notifier).state = false;
     _lifecycle?.dispose();
-    _input.dispose();
     super.dispose();
   }
 
-  Future<void> _send() async {
-    final text = _input.text.trim();
-    if (text.isEmpty) return;
-    _input.clear();
+  /// 重试失败保持行内「未发出 · 点击重试」三态，另有中文 detail 提示
+  /// （QA 备注：段一此处未 catch，retry 的 rethrow 会成 unhandled async exception）
+  Future<void> _retry(String clientId) async {
     try {
-      await ref.read(chatControllerProvider.notifier).send(text);
+      await ref.read(chatControllerProvider.notifier).retry(clientId);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
@@ -123,7 +122,7 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
       ),
       body: Column(children: [
         Expanded(child: _buildList(context, me, chat)),
-        _buildInputBar(context),
+        const ChatCompose(),
       ]),
     );
   }
@@ -154,8 +153,8 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
           lastTs = record.created;
           if (label != null) items.add(_DividerItem(label));
           items.add(_RecordItem(record, mine: record.author == me.user.id));
-        case ChatPendingRow(:final clientId, :final content, :final failed):
-          items.add(_PendingItem(clientId, content, failed));
+        case ChatPendingRow():
+          items.add(_PendingItem(row));
       }
     }
 
@@ -194,51 +193,10 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
           _RecordItem(:final record, :final mine) => record.body.recalled
               ? _RecallLine(mine: mine)
               : _BubbleRow(me: me, record: record, mine: mine),
-          _PendingItem(:final clientId, :final content, :final failed) =>
-            _PendingBubbleRow(
-                content: content, failed: failed,
-                onRetry: () => ref
-                    .read(chatControllerProvider.notifier)
-                    .retry(clientId)),
+          _PendingItem(:final row) =>
+            _PendingBubbleRow(row: row, onRetry: () => _retry(row.clientId)),
         };
       },
-    );
-  }
-
-  Widget _buildInputBar(BuildContext context) {
-    return SafeArea(
-      top: false,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
-        child: Row(children: [
-          Expanded(
-            child: TextField(
-              controller: _input,
-              minLines: 1,
-              maxLines: 4,
-              textInputAction: TextInputAction.send,
-              onSubmitted: (_) => _send(),
-              // placeholder 对齐 Web composeBar：placeholder="发消息"
-              decoration: InputDecoration(
-                hintText: '发消息',
-                isDense: true,
-                filled: true,
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(20),
-                  borderSide: BorderSide.none,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          IconButton.filled(
-            onPressed: _send,
-            icon: const Icon(Icons.send_rounded, size: 20),
-          ),
-        ]),
-      ),
     );
   }
 }
@@ -261,10 +219,8 @@ class _RecordItem extends _ChatItem {
 }
 
 class _PendingItem extends _ChatItem {
-  const _PendingItem(this.clientId, this.content, this.failed);
-  final String clientId;
-  final String content;
-  final bool failed;
+  const _PendingItem(this.row);
+  final ChatPendingRow row;
 }
 
 // ── 行组件 ─────────────────────────────────────────────────────────
@@ -289,8 +245,7 @@ class _RecallLine extends StatelessWidget {
   }
 }
 
-/// 消息行：文本气泡（我/对方左右分侧 + 头像，头像规则对齐 Web avatar()：
-/// 无图显昵称首字，有图走共享 dio 带 Cookie 取字节——账号页同款模式）
+/// 消息行：按 chatVisualOf 分流——贴纸整条无气泡渲染；其余文本 + 媒体进气泡
 class _BubbleRow extends ConsumerWidget {
   const _BubbleRow({required this.me, required this.record, required this.mine});
   final MeData me;
@@ -300,11 +255,36 @@ class _BubbleRow extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final lines = record.placeholderLines();
+    final visual = chatVisualOf(record);
     final author = mine
         ? me.user
         : (me.byId(record.author) ??
             SpaceUser(id: record.author, name: '?', username: ''));
+
+    // 贴纸：整条无气泡（对齐 Web chat-sticker），按分侧对齐
+    if (visual.sticker != null) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
+        child: Row(
+          mainAxisAlignment:
+              mine ? MainAxisAlignment.end : MainAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            if (mine) ...[
+              StickerView(sticker: visual.sticker!),
+              const SizedBox(width: 6),
+              _ChatAvatar(user: author, size: 34),
+            ] else ...[
+              _ChatAvatar(user: author, size: 34),
+              const SizedBox(width: 6),
+              StickerView(sticker: visual.sticker!),
+            ],
+          ],
+        ),
+      );
+    }
+
+    // 常规气泡：文本行 + 图片/视频/语音媒体
     final bubble = Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
@@ -323,10 +303,45 @@ class _BubbleRow extends ConsumerWidget {
             mine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          for (final line in lines)
+          for (final line in visual.textLines)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 1),
               child: Text(line, style: theme.textTheme.bodyMedium),
+            ),
+          if (visual.imageMids.length == 1)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: MediaImageView(mid: visual.imageMids.first),
+            )
+          else if (visual.imageMids.length > 1)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Wrap(
+                  spacing: 4,
+                  runSpacing: 4,
+                  children: [
+                    for (final mid in visual.imageMids)
+                      MediaImageView(mid: mid, size: 96)
+                  ]),
+            ),
+          if (visual.videoMids.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Wrap(
+                  spacing: 4,
+                  children: [
+                    for (final mid in visual.videoMids)
+                      VideoCardView(mid: mid, size: 180)
+                  ]),
+            ),
+          if (visual.voiceMids.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Wrap(
+                  spacing: 4,
+                  children: [
+                    for (final mid in visual.voiceMids) VoiceChipView(mid: mid)
+                  ]),
             ),
         ],
       ),
@@ -346,21 +361,20 @@ class _BubbleRow extends ConsumerWidget {
   }
 }
 
-/// 待发行：发送中=三点跳动动效；失败=标红「未发出」+「点击重试」
+/// 待发行：上传中=进度百分比；发送中=三点跳动动效；失败=标红「未发出」+「点击重试」
 /// （对齐 Web snd-dots / snd-fail 语义，附录 B·发送三态）
 class _PendingBubbleRow extends StatelessWidget {
-  const _PendingBubbleRow({
-    required this.content,
-    required this.failed,
-    required this.onRetry,
-  });
-  final String content;
-  final bool failed;
+  const _PendingBubbleRow({required this.row, required this.onRetry});
+  final ChatPendingRow row;
   final VoidCallback onRetry;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final summaryLines = <String>[
+      if (row.content.isNotEmpty) row.content,
+      if (row.mediaFiles.isNotEmpty) '[附件] ${row.mediaFiles.length} 个',
+    ];
     final bubble = Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
@@ -372,22 +386,37 @@ class _PendingBubbleRow extends StatelessWidget {
           bottomRight: Radius.circular(4),
         ),
       ),
-      child: Text(content, style: theme.textTheme.bodyMedium),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.end,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+        for (final line in summaryLines)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 1),
+            child: Text(line, style: theme.textTheme.bodyMedium),
+          ),
+      ]),
     );
-    final status = failed
-        ? Row(mainAxisSize: MainAxisSize.min, children: [
-            Text('未发出',
-                style: theme.textTheme.bodySmall
-                    ?.copyWith(color: theme.colorScheme.error)),
-            const SizedBox(width: 6),
-            GestureDetector(
-              onTap: onRetry,
-              child: Text('点击重试',
-                  style: theme.textTheme.bodySmall
-                      ?.copyWith(color: theme.colorScheme.primary)),
-            ),
-          ])
-        : const _SendingDots();
+    final Widget status;
+    if (row.failed) {
+      status = Row(mainAxisSize: MainAxisSize.min, children: [
+        Text('未发出',
+            style: theme.textTheme.bodySmall
+                ?.copyWith(color: theme.colorScheme.error)),
+        const SizedBox(width: 6),
+        GestureDetector(
+          onTap: onRetry,
+          child: Text('点击重试',
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(color: theme.colorScheme.primary)),
+        ),
+      ]);
+    } else if (row.isUploading) {
+      status = Text('上传中 ${(row.progress * 100).clamp(0, 100).round()}%',
+          style: theme.textTheme.bodySmall
+              ?.copyWith(color: theme.colorScheme.outline));
+    } else {
+      status = const _SendingDots();
+    }
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
       child: Column(

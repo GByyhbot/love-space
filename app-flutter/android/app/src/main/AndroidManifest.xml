@@ -2,6 +2,8 @@
     <!-- INTERNET 权限必须在 main 清单声明：debug/profile 清单自带的仅覆盖开发构建，
          release 合并清单若无此条，真机上所有 socket 直接被系统拒绝（2026-11-11 真机事故）。 -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- 语音消息录制必需（段二 chat-plan Step 6；本条目唯一清单改动） -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
     <application
         android:label="love_space"
         android:name="${applicationName}"
