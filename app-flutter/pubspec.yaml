@@ -48,6 +48,8 @@ dependencies:
   # 与服务端 records 模型对齐；理由按方案要求在脚手架提交说明中注明
   drift: ^2.20.0
   path_provider: ^2.1.4
+  # 聊天 client_id（uuid v4，与 Web uuid() 同口径）：发送时生成、重试复用同一 id
+  uuid: ^4.4.0
 
 dev_dependencies:
   flutter_test:

@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import 'features/account/profile_page.dart';
 import 'features/auth/auth_state.dart';
 import 'features/auth/login_page.dart';
+import 'features/chat/messages_page.dart';
 import 'features/shell/shell_page.dart';
 
 void main() {
@@ -36,6 +37,8 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/splash', builder: (_, _) => const _SplashPage()),
       GoRoute(path: '/login', builder: (_, _) => const LoginPage()),
       GoRoute(path: '/home', builder: (_, _) => const ShellPage()),
+      // 聊天（悄悄话）：二级页，Shell AppBar 私聊图标 push 进入（对齐 Web 顶栏入口）
+      GoRoute(path: '/messages', builder: (_, _) => const MessagesPage()),
       GoRoute(path: '/profile', builder: (_, _) => const ProfilePage()),
     ],
   );

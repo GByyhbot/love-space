@@ -1,0 +1,262 @@
+/// 聊天数据模型（对齐服务端 records kind='chat' 的实际返回形态）。
+/// 字段依据 api-samples/03-records.md + app/main.py 实读：
+/// · body: content / media[](媒体 id) / sticker / reply_to{id,text} / pinned /
+///         recalled（服务端撤回时写入并清空 content）/ location{lat,lng} / song{...}
+/// · record 顶层 media[]：{id,name,mime,size,status,preview}（preview 可为 null）
+/// 段一渲染边界：媒体/贴纸/歌曲/位置/引用只渲染中性占位，绝不能崩（完整渲染在段二/三）。
+library;
+
+/// 附件（record.media[] 元素；与 /api/media 返回形态一致）
+class ChatMedia {
+  const ChatMedia({
+    this.id = '',
+    this.name = '',
+    this.mime = '',
+    this.size = 0,
+    this.status = '',
+    this.preview = '',
+  });
+  final String id;
+  final String name;
+  final String mime;
+  final int size;
+
+  /// 服务端 worker 异步转码状态：pending / processing / ready / original
+  final String status;
+  final String preview;
+
+  factory ChatMedia.fromJson(Map<String, dynamic> j) => ChatMedia(
+        id: (j['id'] ?? '').toString(),
+        name: (j['name'] ?? '').toString(),
+        mime: (j['mime'] ?? '').toString(),
+        size: (j['size'] as num?)?.toInt() ?? 0,
+        status: (j['status'] ?? '').toString(),
+        preview: (j['preview'] ?? '').toString(),
+      );
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'name': name,
+        'mime': mime,
+        'size': size,
+        'status': status,
+        'preview': preview.isEmpty ? null : preview,
+      };
+
+  /// 段一占位文案：按 mime 分流（图片/视频/语音/未知附件）
+  String get placeholderLabel {
+    if (mime.startsWith('image/')) return '[图片]';
+    if (mime.startsWith('video/')) return '[视频]';
+    if (mime.startsWith('audio/')) return '[语音]';
+    return '[附件]';
+  }
+}
+
+/// 位置消息（body.location = {lat, lng}）
+class ChatLocation {
+  const ChatLocation({required this.lat, required this.lng});
+  final double lat;
+  final double lng;
+}
+
+/// 分享的歌（body.song = {title,artist,mid,src,art,dur}）
+class ChatSong {
+  const ChatSong({
+    this.title = '',
+    this.artist = '',
+    this.mid = '',
+    this.src = '',
+    this.art = '',
+    this.dur = 0,
+  });
+  final String title;
+  final String artist;
+  final String mid;
+  final String src;
+  final String art;
+  final double dur;
+
+  factory ChatSong.fromJson(Map<String, dynamic> j) => ChatSong(
+        title: (j['title'] ?? '').toString(),
+        artist: (j['artist'] ?? '').toString(),
+        mid: (j['mid'] ?? '').toString(),
+        src: (j['src'] ?? '').toString(),
+        art: (j['art'] ?? '').toString(),
+        dur: (j['dur'] as num?)?.toDouble() ?? 0,
+      );
+
+  Map<String, dynamic> toJson() => {
+        'title': title,
+        'artist': artist,
+        'mid': mid,
+        'src': src,
+        'art': art,
+        'dur': dur,
+      };
+}
+
+/// 聊天消息 body（服务端 clean_body 白名单内的字段，缺失一律容错为默认值）
+class ChatBody {
+  const ChatBody({
+    this.content = '',
+    this.mediaIds = const [],
+    this.sticker,
+    this.replyToId,
+    this.replyToText,
+    this.pinned = false,
+    this.recalled = false,
+    this.location,
+    this.song,
+  });
+  final String content;
+  final List<String> mediaIds;
+  final String? sticker;
+  final String? replyToId;
+  final String? replyToText;
+
+  /// 置顶标记（段一忽略置顶栏渲染，但保留字段供对账更新）
+  final bool pinned;
+
+  /// 服务端撤回时写入 true 并清空 content（app/main.py recall_record）
+  final bool recalled;
+  final ChatLocation? location;
+  final ChatSong? song;
+
+  factory ChatBody.fromJson(Map<String, dynamic> j) {
+    final reply = j['reply_to'];
+    final loc = j['location'];
+    final song = j['song'];
+    return ChatBody(
+      content: (j['content'] ?? '').toString(),
+      mediaIds: ((j['media'] ?? const []) as List).map((e) => e.toString()).toList(),
+      sticker: j['sticker']?.toString(),
+      replyToId: reply is Map ? (reply['id'] ?? '').toString() : null,
+      replyToText: reply is Map ? (reply['text'] ?? '').toString() : null,
+      pinned: j['pinned'] == true,
+      recalled: j['recalled'] == true,
+      location: loc is Map && loc['lat'] is num && loc['lng'] is num
+          ? ChatLocation(lat: (loc['lat'] as num).toDouble(), lng: (loc['lng'] as num).toDouble())
+          : null,
+      song: song is Map ? ChatSong.fromJson(song.cast<String, dynamic>()) : null,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'content': content,
+        'media': mediaIds,
+        if (sticker != null) 'sticker': sticker,
+        if (replyToId != null)
+          'reply_to': {'id': replyToId, 'text': replyToText ?? ''},
+        if (pinned) 'pinned': true,
+        if (recalled) 'recalled': true,
+        if (location != null)
+          'location': {'lat': location!.lat, 'lng': location!.lng},
+        if (song != null) 'song': song!.toJson(),
+      };
+}
+
+/// kind='chat' 的记录（服务端统一 records 模型的聊天投影）
+class ChatRecord {
+  const ChatRecord({
+    required this.id,
+    required this.author,
+    required this.created,
+    required this.updated,
+    required this.body,
+    this.clientId = '',
+    this.media = const [],
+  });
+  final String id;
+  final String author;
+  final double created;
+  final double updated;
+  final ChatBody body;
+  final String clientId;
+  final List<ChatMedia> media;
+
+  factory ChatRecord.fromJson(Map<String, dynamic> j) => ChatRecord(
+        id: (j['id'] ?? '').toString(),
+        author: (j['author'] ?? '').toString(),
+        created: (j['created'] as num?)?.toDouble() ?? 0,
+        updated: (j['updated'] as num?)?.toDouble() ?? 0,
+        body: ChatBody.fromJson(((j['body'] ?? const {}) as Map).cast<String, dynamic>()),
+        clientId: (j['client_id'] ?? '').toString(),
+        media: ((j['media'] ?? const []) as List)
+            .whereType<Map>()
+            .map((m) => ChatMedia.fromJson(m.cast<String, dynamic>()))
+            .toList(),
+      );
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'author': author,
+        'created': created,
+        'updated': updated,
+        'client_id': clientId,
+        'body': body.toJson(),
+        'media': media.map((m) => m.toJson()).toList(),
+      };
+
+  /// 渲染是否与 [o] 相同（对账合并时判断既有行是否需要原地更新）。
+  /// 以 updated 时间戳 + 影响渲染的全部字段为准：撤回/置顶/引用变化都会推 updated。
+  bool rendersSameAs(ChatRecord o) =>
+      id == o.id &&
+      author == o.author &&
+      created == o.created &&
+      updated == o.updated &&
+      clientId == o.clientId &&
+      body.recalled == o.body.recalled &&
+      body.pinned == o.body.pinned &&
+      body.content == o.body.content &&
+      body.sticker == o.body.sticker &&
+      body.replyToId == o.body.replyToId &&
+      body.replyToText == o.body.replyToText &&
+      _listEq(body.mediaIds, o.body.mediaIds) &&
+      _listEq(media.map((m) => m.id), o.media.map((m) => m.id));
+
+  static bool _listEq(Iterable<String> a, Iterable<String> b) {
+    if (a.length != b.length) return false;
+    final bi = b.iterator;
+    for (final x in a) {
+      if (!bi.moveNext() || bi.current != x) return false;
+    }
+    return true;
+  }
+
+  /// 段一渲染行（纯文本 + 中性占位；不含撤回态——撤回行由页面单独渲染）。
+  /// 媒体/贴纸/歌曲/位置/引用绝不抛异常：一律占位字符串。
+  List<String> placeholderLines() {
+    final b = body;
+    final lines = <String>[];
+    if (b.content.trim().isNotEmpty) lines.add(b.content);
+    if (b.replyToId != null) {
+      final text = (b.replyToText ?? '').trim();
+      lines.add(text.isEmpty ? '[引用]' : '[引用] $text');
+    }
+    for (final m in media) {
+      if (m.id.isNotEmpty) lines.add(m.placeholderLabel);
+    }
+    // body.media 引用了但顶层 media 缺项时按数量补占位（兜底，绝不丢行）
+    if (b.mediaIds.length > media.where((m) => m.id.isNotEmpty).length) {
+      lines.add('[附件]');
+    }
+    if (b.sticker != null) lines.add('[贴纸]');
+    if (b.song != null && b.song!.title.isNotEmpty) lines.add('[歌曲] ${b.song!.title}');
+    if (b.location != null) lines.add('[位置]');
+    return lines;
+  }
+}
+
+/// 待发消息（pending 队列；等价 Web localStorage['pending-chat:<uid>']）
+class ChatPending {
+  const ChatPending({
+    required this.clientId,
+    required this.content,
+    required this.createdAt,
+    this.failed = false,
+  });
+  final String clientId;
+  final String content;
+  final double createdAt;
+  final bool failed;
+}

@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_client.dart';
+import '../../core/chat/chat_state.dart' show chatUnreadProvider;
 import '../../core/config.dart';
 
 enum AuthPhase { checking, out, authed }
@@ -102,6 +103,9 @@ class AuthNotifier extends Notifier<AuthPhase> {
           chatUnread: (j['chat_unread'] as num?)?.toInt() ?? 0,
           paired: users.length >= 2,
         );
+        // 聊天未读角标播种（/api/me 的 chat_unread 字段名已在 app/main.py 实读确认）：
+        // 角标挂独立 Notifier（chat_state），变化不必打断 authed 态
+        ref.read(chatUnreadProvider.notifier).set(me!.chatUnread);
         return true;
       });
       final ok = await steps.timeout(AppConfig.bootstrapDeadline);

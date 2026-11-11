@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../auth/auth_state.dart';
+import '../../core/chat/chat_state.dart';
 import '../../core/sse/sse_client.dart';
 import '../home/home_page.dart';
 
@@ -29,6 +30,14 @@ class _ShellPageState extends ConsumerState<ShellPage> {
 
   @override
   Widget build(BuildContext context) {
+    // SSE chat 事件（聊天页未打开时）→ 重拉 me 更新未读角标（Web syncBadge 同口径）；
+    // 页面已打开时由聊天页自己对账 + 清未读，不需要动角标
+    ref.listen(sseEventsProvider, (prev, next) {
+      if (next.value?.chat == true && !ref.read(chatPageActiveProvider)) {
+        ref.read(authProvider.notifier).reload();
+      }
+    });
+    final unread = ref.watch(chatUnreadProvider);
     final me = ref.watch(authProvider.notifier).me;
     final theme = Theme.of(context);
     final pages = [
@@ -41,6 +50,18 @@ class _ShellPageState extends ConsumerState<ShellPage> {
       appBar: AppBar(
         title: Text(const ['首页', '时光', '相册', '我们'][_tab]),
         actions: [
+          // 私聊入口（对齐 Web 顶栏「私聊」图标，带未读角标；>99 显示 99+）。
+          // 🔴 阶段 2 通则：二级页一律 push 打开（保留主页在路由栈），
+          // 返回按钮与系统手势都能回上一页。
+          IconButton(
+            tooltip: '私聊',
+            onPressed: () => context.push('/messages'),
+            icon: Badge(
+              isLabelVisible: unread > 0,
+              label: Text(unread > 99 ? '99+' : '$unread'),
+              child: const Icon(Icons.chat_bubble_outline_rounded),
+            ),
+          ),
           // 头像入口 → 账号资料页（对齐 Web 账号菜单：资料/邀请/退出都在那里）。
           // 🔴 阶段 2 通则：二级页一律 push 打开（保留主页在路由栈），
           // 系统返回手势/返回键回上一页；只有主页根部按返回才退出 App。
