@@ -373,6 +373,11 @@ class ChatController extends Notifier<ChatState> {
     final clean = files.where((f) => f.path.isNotEmpty).toList();
     final text = caption.trim();
     if (clean.isEmpty && text.isEmpty) return;
+    // 数量上限本地预检（入列前拒绝）：超过 30 一个请求都不发——全量上传必撞
+    // 服务端 30 次/300s 限流（QA 回归根因；UI 层 _sendFiles 也先拦）
+    if (clean.length > maxMediaPerRecord) {
+      throw const MediaValidationError('一条消息最多 $maxMediaPerRecord 个附件，先删几张再发');
+    }
     final clientId = newChatClientId();
     final pending = ChatPending(
       clientId: clientId,
@@ -496,6 +501,7 @@ class ChatController extends Notifier<ChatState> {
     try {
       final dio = await ref.read(dioProvider.future);
       // ① 逐个上传（聚合进度：(已完成数 + 当前文件进度) / 总数）
+      // 数量上限已在 sendMedia 入列前拦截，这里不再重复
       final ids = <String>[];
       for (var i = 0; i < files.length; i++) {
         final f = files[i];
@@ -510,9 +516,6 @@ class ChatController extends Notifier<ChatState> {
           _updateRow(clientId, (row) => row.withProgress((i + p) / files.length));
         });
         ids.add(id);
-      }
-      if (ids.length > maxMediaPerRecord) {
-        throw MediaValidationError('一条消息最多 $maxMediaPerRecord 个附件');
       }
       // ② 上传完成 → 发送阶段 → POST 记录
       _updateRow(clientId, (row) => row.withPhase(ChatPendingPhase.send));

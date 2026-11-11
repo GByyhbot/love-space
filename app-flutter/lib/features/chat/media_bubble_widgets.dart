@@ -212,7 +212,11 @@ class StickerView extends ConsumerWidget {
         ? mediaUrl(base, sticker.mid!)
         : '$base${sticker.path ?? ''}';
     if (sticker.isVideo) {
-      return StickerVideoView(url: url);
+      // 自定义表情 video/webm 走 /media/{mid} 需要 Cookie；内置包 /static 公开不带
+      return StickerVideoView(
+          url: url,
+          headers:
+              sticker.mid != null ? ref.watch(mediaCookieHeadersProvider).valueOrNull : null);
     }
     final headers = sticker.mid != null
         ? ref.watch(mediaCookieHeadersProvider).valueOrNull
@@ -233,10 +237,12 @@ class StickerView extends ConsumerWidget {
 }
 
 /// webm 循环视频贴纸：initState 才初始化播放器（ListView.builder 惰性构建，
-/// 滚出屏 dispose → 解码停止），对齐 Web「可视区才解码/播放」
+/// 滚出屏 dispose → 解码停止），对齐 Web「可视区才解码/播放」。
+/// [headers] 供 /media/{mid} 自定义表情带 Cookie；/static 内置包传 null。
 class StickerVideoView extends ConsumerStatefulWidget {
-  const StickerVideoView({super.key, required this.url});
+  const StickerVideoView({super.key, required this.url, this.headers});
   final String url;
+  final Map<String, String>? headers;
 
   @override
   ConsumerState<StickerVideoView> createState() => _StickerVideoState();
@@ -253,7 +259,9 @@ class _StickerVideoState extends ConsumerState<StickerVideoView> {
   }
 
   Future<void> _setup() async {
-    final c = VideoPlayerController.networkUrl(Uri.parse(widget.url));
+    final c = VideoPlayerController.networkUrl(
+        Uri.parse(widget.url),
+        httpHeaders: widget.headers ?? const <String, String>{});
     _controller = c;
     try {
       await c.initialize();

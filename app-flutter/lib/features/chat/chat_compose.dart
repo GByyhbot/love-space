@@ -116,7 +116,9 @@ class _ChatComposeState extends ConsumerState<ChatCompose> {
     }
   }
 
-  /// 本地预检后发送本机文件（白名单 + 250MB；非法文件剔除并提示，不发请求）
+  /// 本地预检后发送本机文件（白名单 + 250MB；非法文件剔除并提示，不发请求）。
+  /// 🔴 数量上限也在本地预检拦截：超 30 个一个请求都不发——否则全量上传
+  /// 必撞服务端 30 次/300s 限流（QA 回归根因）。
   Future<void> _sendFiles(List<ChatLocalFile> files, {String caption = ''}) async {
     final ok = <ChatLocalFile>[];
     for (final f in files) {
@@ -130,6 +132,10 @@ class _ChatComposeState extends ConsumerState<ChatCompose> {
       ok.add(f);
     }
     if (ok.isEmpty) return;
+    if (ok.length > maxMediaPerRecord) {
+      _snack('一条消息最多 $maxMediaPerRecord 个附件，先删几张再发');
+      return;
+    }
     try {
       await ref.read(chatControllerProvider.notifier).sendMedia(ok, caption: caption);
     } catch (e) {
@@ -202,7 +208,9 @@ class _ChatComposeState extends ConsumerState<ChatCompose> {
     }
   }
 
-  /// 点 emoji 只插入文本不弹键盘（对齐 Web insertStickerText）
+  /// 点 emoji 只插入文本不弹键盘（对齐 Web insertStickerText）。
+  /// 光标偏移按码元差计算：replaceRange 在码元层面操作，❤️/☀️/🌧️ 等多码元
+  /// 单字素 emoji 若按字素数算 offset 会落进代理对中间、后续输入错位。
   void _insertEmoji(String em) {
     final value = _input.value;
     final sel = _input.selection;
@@ -212,8 +220,8 @@ class _ChatComposeState extends ConsumerState<ChatCompose> {
     final newText = value.text.replaceRange(start, end, em);
     _input.value = TextEditingValue(
       text: newText,
-      selection:
-          TextSelection.collapsed(offset: start + em.characters.length),
+      selection: TextSelection.collapsed(
+          offset: start + (newText.length - value.text.length)),
     );
   }
 

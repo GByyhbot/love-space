@@ -269,8 +269,7 @@ void main() {
   });
 
   // ── ④ 相册选择器：已上传 id 直发 ─────────────────────────────────
-  test('sendMediaIds：记录 body.content/media 直发（Web sendAlbumPick 语义）', () async {
-    final store = _MemStore();
+  test('sendMediaIds：记录 body.content/media 直发（Web sendAlbumPick 语义）', () async {    final store = _MemStore();
     final adapter = _FakeAdapter((options, _) {
       if (options.uri.path == '/api/records') {
         final body = options.data as Map;
@@ -306,5 +305,30 @@ void main() {
     expect(record.body.mediaIds, ['m9']);
     expect(record.body.content, '说点啥');
     expect(adapter.posts, hasLength(1)); // 无上传，只发记录
+  });
+
+  // ── ⑤ 30 上限：控制器层兜底拒绝（不发任何请求）──────────────────
+  test('超 30 个附件：本地直接拒绝、一个请求都不发（QA 回归根因防御）', () async {
+    final store = _MemStore();
+    final adapter = _FakeAdapter((options, _) => jsonOk(const {}));
+    final dio = Dio(BaseOptions(baseUrl: 'https://test.local'))
+      ..httpClientAdapter = adapter;
+    final container = ProviderContainer(overrides: [
+      dioProvider.overrideWith((ref) async => dio),
+      chatPersistenceProvider.overrideWith((ref) async => store),
+    ]);
+    addTearDown(container.dispose);
+    final files = <ChatLocalFile>[];
+    for (var i = 0; i < 31; i++) {
+      final f = File('${Directory.systemTemp.path}/qa2_cap_$i.png');
+      await f.writeAsBytes([1]);
+      files.add(ChatLocalFile(path: f.path, name: 'qa2_cap_$i.png'));
+    }
+    final controller = container.read(chatControllerProvider.notifier);
+    await controller.bootstrap('u1');
+    await expectLater(controller.sendMedia(files), throwsA(isA<MediaValidationError>()));
+    expect(container.read(chatControllerProvider).rows.whereType<ChatPendingRow>(),
+        isEmpty); // 失败行也被清：一条记录都发不出去
+    expect(adapter.posts, isEmpty); // 一个请求都没有
   });
 }

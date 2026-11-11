@@ -50,6 +50,11 @@ class ChatDatabase extends GeneratedDatabase {
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
+        // 列演进全部由 beforeOpen 的 PRAGMA 守卫 ALTER 完成（幂等），这里保持
+        // no-op——但必须显式提供：drift 对升版打开若没有 onUpgrade 会直接抛
+        // 「didn't provide a migration strategy」，beforeOpen 根本执行不到，
+        // v1→v2 升版打开会永久失败（QA2① 回归根因）。
+        onUpgrade: (m, from, to) async {},
         beforeOpen: (details) async {
           await customStatement(_createChatMessages);
           await customStatement(_createChatPending);
