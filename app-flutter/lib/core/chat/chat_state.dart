@@ -39,6 +39,10 @@ final chatUnreadProvider =
 /// SSE chat 事件只在页面未打开时才触发 me 重拉刷新角标。
 final chatPageActiveProvider = StateProvider<bool>((_) => false);
 
+/// 聊天页本地 UI 时钟：背景/皮肤保存后 bump 一次——me 挂在 AuthNotifier 实例
+/// 字段上（watch 不触发重建），聊天页 watch 这个时钟读最新 space 的 chat_bg*/chat_bubble*
+final chatUiTickProvider = StateProvider<int>((_) => 0);
+
 // ── 持久化抽象（默认 drift 实现；单测换内存实现模拟杀进程）──────────
 
 abstract class ChatPersistence {
@@ -167,6 +171,7 @@ class ChatPendingRow extends ChatRow {
     this.mediaFiles = const [],
     this.phase = ChatPendingPhase.send,
     this.progress = 0,
+    this.mediaIds = const [],
   });
   final String clientId;
 
@@ -174,9 +179,12 @@ class ChatPendingRow extends ChatRow {
   final bool failed;
   final String content;
 
-  /// 非空 → 媒体发送（pending 里存本机文件，重试重新上传）
+  /// 非空 → 媒体发送（pending 里存本机文件，phase=upload 时重试重传）
   final List<ChatLocalFile> mediaFiles;
   final ChatPendingPhase phase;
+
+  /// 已传完的媒体 id（phase=send；重试零重传直接发记录，低危备忘 E1）
+  final List<String> mediaIds;
 
   /// 上传总进度 0..1（多文件聚合）
   final double progress;
@@ -191,6 +199,7 @@ class ChatPendingRow extends ChatRow {
         phase: phase,
         progress: progress,
         failed: failed,
+        mediaIds: mediaIds,
       );
 
   ChatPendingRow withProgress(double progress) => ChatPendingRow(
@@ -200,6 +209,7 @@ class ChatPendingRow extends ChatRow {
         phase: phase,
         failed: failed,
         progress: progress,
+        mediaIds: mediaIds,
       );
 
   ChatPendingRow withPhase(ChatPendingPhase phase) => ChatPendingRow(
@@ -209,6 +219,17 @@ class ChatPendingRow extends ChatRow {
         progress: progress,
         failed: failed,
         phase: phase,
+        mediaIds: mediaIds,
+      );
+
+  ChatPendingRow withMediaIds(List<String> ids) => ChatPendingRow(
+        clientId: clientId,
+        content: content,
+        mediaFiles: mediaFiles,
+        progress: progress,
+        failed: failed,
+        phase: phase,
+        mediaIds: ids,
       );
 }
 
@@ -281,6 +302,7 @@ class ChatController extends Notifier<ChatState> {
                   mediaFiles: p.mediaFiles,
                   phase: p.phase,
                   failed: true,
+                  mediaIds: p.mediaIds,
                 ))
             .toList();
         state = state.copyWith(
@@ -428,8 +450,133 @@ class ChatController extends Notifier<ChatState> {
     await _sendPending(clientId, {'content': text, 'media': ids}, content: text);
   }
 
+  /// 发送带引用的文本（Step 7）：body.reply_to={id, text 截 60 字}
+  Future<void> sendTextReply(String content, String replyId, String replyText) async {
+    final text = content.trim();
+    if (text.isEmpty) return;
+    final clientId = newChatClientId();
+    final pending = ChatPending(
+      clientId: clientId,
+      content: text,
+      createdAt: DateTime.now().millisecondsSinceEpoch / 1000,
+    );
+    try {
+      final store = await ref.read(chatPersistenceProvider.future);
+      await store.upsertPending(pending);
+    } catch (_) {}
+    if (_disposed) return;
+    state = state.copyWith(
+        rows: [...state.rows, ChatPendingRow(clientId: clientId, content: text)]);
+    await _postPendingBody(clientId, {
+      'content': text,
+      'media': [],
+      'reply_to': {'id': replyId, 'text': quoteSnippet(replyText)},
+    }, content: text);
+  }
+
+  /// 发送位置消息（Step 8；lat/lng 已按 1e-5 精度取整）
+  Future<void> sendLocation(double lat, double lng) async {
+    final clientId = newChatClientId();
+    await _sendPending(clientId, {
+      'content': '',
+      'media': [],
+      'location': {'lat': lat, 'lng': lng},
+    });
+  }
+
+  /// 发送在线歌曲（对齐 Web sendOnlineSong body：mid 空、src=30s 试听地址）
+  Future<void> sendOnlineSong({
+    required String title,
+    required String artist,
+    required String src,
+    required String art,
+    required double dur,
+  }) async {
+    final clientId = newChatClientId();
+    await _sendPending(clientId, {
+      'content': '',
+      'media': [],
+      'song': {'title': title, 'artist': artist, 'mid': '', 'src': src, 'art': art, 'dur': dur},
+    });
+  }
+
+  /// 置顶/取消置顶 toggle（POST /api/records/{id}/pin → {ok, pinned}），
+  /// 本地按返回值原地更新该行（对端经 SSE 对账同步）
+  Future<void> pinMessage(String id) async {
+    final dio = await ref.read(dioProvider.future);
+    final r = await dio.post('/api/records/$id/pin');
+    final pinned = ((r.data ?? const {}) as Map)['pinned'] == true;
+    await _patchRecordLocally(id, (rec) => _copyRecord(rec, pinned: pinned));
+  }
+
+  /// 撤回（POST /api/records/{id}/recall → {ok}；资格判定在页面用 canRecallChat），
+  /// 服务端清空 content/media 并置 recalled=true，本地同步
+  Future<void> recallMessage(String id) async {
+    final dio = await ref.read(dioProvider.future);
+    await dio.post('/api/records/$id/recall');
+    await _patchRecordLocally(id, _recalledCopy);
+  }
+
+  /// 记入时光（主人定版=最小发布弹窗）：POST /api/records kind=post
+  Future<void> sendToMoment(String content, String date, List<String> mediaIds) async {
+    final dio = await ref.read(dioProvider.future);
+    await dio.post('/api/records', data: {
+      'kind': 'post',
+      'body': {'content': content, 'date': date, 'media': mediaIds},
+    });
+  }
+
+  /// 本地原地更新一条已确认记录（pin/recall 后即时反馈；SSE 对账幂等）
+  Future<void> _patchRecordLocally(
+      String id, ChatRecord Function(ChatRecord) f) async {
+    if (_disposed) return;
+    final records =
+        state.rows.whereType<ChatRecordRow>().map((r) => r.record).toList();
+    final idx = records.indexWhere((r) => r.id == id);
+    if (idx < 0) return;
+    final updated = f(records[idx]);
+    _applyMerge([updated]);
+    try {
+      final store = await ref.read(chatPersistenceProvider.future);
+      await store.saveRecords([updated]);
+    } catch (_) {}
+  }
+
+  /// 原样复制记录，仅替换 pinned（pin toggle 即时反馈）
+  static ChatRecord _copyRecord(ChatRecord rec, {bool? pinned}) => ChatRecord(
+        id: rec.id,
+        author: rec.author,
+        created: rec.created,
+        updated: DateTime.now().millisecondsSinceEpoch / 1000,
+        body: ChatBody(
+          content: rec.body.content,
+          mediaIds: rec.body.mediaIds,
+          sticker: rec.body.sticker,
+          replyToId: rec.body.replyToId,
+          replyToText: rec.body.replyToText,
+          pinned: pinned ?? rec.body.pinned,
+          recalled: rec.body.recalled,
+          location: rec.body.location,
+          song: rec.body.song,
+        ),
+        clientId: rec.clientId,
+        media: rec.media,
+      );
+
+  /// 撤回态副本（服务端 recall_record：清 content/media、置 recalled=true）
+  static ChatRecord _recalledCopy(ChatRecord rec) => ChatRecord(
+        id: rec.id,
+        author: rec.author,
+        created: rec.created,
+        updated: DateTime.now().millisecondsSinceEpoch / 1000,
+        body: ChatBody(content: '', pinned: rec.body.pinned, recalled: true),
+        clientId: rec.clientId,
+        media: rec.media,
+      );
+
   /// 失败重试：复用同一 client_id（服务端 UNIQUE(author, client_id) 保证不重复）。
-  /// 媒体 pending 重试时文件重新上传；本地文件已丢失则直接失败并抛中文提示。
+  /// 按 phase 分流（低危备忘 E1）：send 相位=已传完待发，直接发记录零重传；
+  /// upload 相位=上传/校验阶段失败，文件重新上传。本地文件丢失抛中文提示。
   Future<void> retry(String clientId) async {
     final row = state.rows
         .whereType<ChatPendingRow>()
@@ -437,31 +584,41 @@ class ChatController extends Notifier<ChatState> {
         .firstOrNull;
     if (row == null || _sendingClientIds.contains(clientId)) return;
     if (!_disposed) state = state.copyWith(rows: _replaceRow(row, false));
-    if (row.mediaFiles.isNotEmpty) {
+    if (row.phase == ChatPendingPhase.send && row.mediaIds.isNotEmpty) {
+      // 已传完：直接 POST 记录（不重传）
+      await _postPendingBody(clientId, {'content': row.content, 'media': row.mediaIds},
+          content: row.content);
+    } else if (row.mediaFiles.isNotEmpty) {
       await _sendPendingMedia(clientId, row.mediaFiles, row.content);
     } else {
       await _postPending(clientId, row.content);
     }
   }
 
-  // ── 发送内部：纯文本 ──────────────────────────────────────────────
+  // ── 发送内部：通用 POST（文本/引用/贴纸/媒体第二段共用）────────────
 
-  Future<void> _postPending(String clientId, String content) async {
+  /// POST /api/records 一条 pending body。失败统一标红并落盘为 [phase]
+  /// 相位（E1：POST 段失败不重置回 upload）。
+  Future<void> _postPendingBody(String clientId, Map<String, dynamic> body,
+      {required String content, ChatPendingPhase phase = ChatPendingPhase.send}) async {
     _sendingClientIds.add(clientId);
     try {
       final dio = await ref.read(dioProvider.future);
-      final record = await sendChatText(dio, content, clientId);
+      final record = await sendChatBody(dio, body, clientId);
       await _finalizeSuccess(clientId, record);
     } catch (e) {
-      // 失败：标红「未发出 · 点击重试」（断网/超时统一失败态）
-      await _failPending(clientId, ChatPendingPhase.send);
+      await _failPending(clientId, phase);
       rethrow;
     } finally {
       _sendingClientIds.remove(clientId);
     }
   }
 
-  // ── 发送内部：通用 body（贴纸/自定义表情）─────────────────────────
+  Future<void> _postPending(String clientId, String content) async =>
+      _postPendingBody(clientId, {'content': content, 'media': []},
+          content: content);
+
+  // ── 发送内部：通用 pending 入列（贴纸/自定义表情/相册 id 直发）────
 
   Future<void> _sendPending(String clientId, Map<String, dynamic> body,
       {String content = ''}) async {
@@ -480,29 +637,20 @@ class ChatController extends Notifier<ChatState> {
           ...state.rows,
           ChatPendingRow(clientId: clientId, content: content)
         ]);
-    _sendingClientIds.add(clientId);
-    try {
-      final dio = await ref.read(dioProvider.future);
-      final record = await sendChatBody(dio, body, clientId);
-      await _finalizeSuccess(clientId, record);
-    } catch (e) {
-      await _failPending(clientId, ChatPendingPhase.send);
-      rethrow;
-    } finally {
-      _sendingClientIds.remove(clientId);
-    }
+    await _postPendingBody(clientId, body, content: content);
   }
 
   // ── 发送内部：媒体两段式 ──────────────────────────────────────────
 
   Future<void> _sendPendingMedia(
       String clientId, List<ChatLocalFile> files, String caption) async {
-    _sendingClientIds.add(clientId);
+    // ① 上传段：失败落盘保持 upload 相位（重试重传全部文件）
+    List<String> ids;
     try {
       final dio = await ref.read(dioProvider.future);
-      // ① 逐个上传（聚合进度：(已完成数 + 当前文件进度) / 总数）
+      // 逐个上传（聚合进度：(已完成数 + 当前文件进度) / 总数）
       // 数量上限已在 sendMedia 入列前拦截，这里不再重复
-      final ids = <String>[];
+      ids = [];
       for (var i = 0; i < files.length; i++) {
         final f = files[i];
         final file = File(f.path);
@@ -517,28 +665,27 @@ class ChatController extends Notifier<ChatState> {
         });
         ids.add(id);
       }
-      // ② 上传完成 → 发送阶段 → POST 记录
-      _updateRow(clientId, (row) => row.withPhase(ChatPendingPhase.send));
-      try {
-        final store = await ref.read(chatPersistenceProvider.future);
-        await store.upsertPending(ChatPending(
-          clientId: clientId,
-          content: caption,
-          createdAt: DateTime.now().millisecondsSinceEpoch / 1000,
-          mediaFiles: files,
-          phase: ChatPendingPhase.send,
-        ));
-      } catch (_) {}
-      final record = await sendChatBody(
-          dio, {'content': caption, 'media': ids}, clientId);
-      await _finalizeSuccess(clientId, record);
     } catch (e) {
-      // 失败：标红（落盘保持 upload 阶段，重试重新上传全部文件）
       await _failPending(clientId, ChatPendingPhase.upload);
       rethrow;
-    } finally {
-      _sendingClientIds.remove(clientId);
     }
+    // ② 上传完成 → send 相位 + 已传 id 落盘（重试零重传，E1）
+    _updateRow(clientId,
+        (row) => row.withPhase(ChatPendingPhase.send).withMediaIds(ids));
+    try {
+      final store = await ref.read(chatPersistenceProvider.future);
+      await store.upsertPending(ChatPending(
+        clientId: clientId,
+        content: caption,
+        createdAt: DateTime.now().millisecondsSinceEpoch / 1000,
+        mediaFiles: files,
+        phase: ChatPendingPhase.send,
+        mediaIds: ids,
+      ));
+    } catch (_) {}
+    // ③ 发送段：失败保持 send 相位（E1：不重置回 upload）
+    await _postPendingBody(clientId, {'content': caption, 'media': ids},
+        content: caption);
   }
 
   /// 成功收尾：清 pending（落盘 + 内存）→ 记录并入列表（按 id 去重、升序）
@@ -576,6 +723,7 @@ class ChatController extends Notifier<ChatState> {
         failed: true,
         mediaFiles: row.mediaFiles,
         phase: phase,
+        mediaIds: row.mediaIds,
       ));
     } catch (_) {}
   }

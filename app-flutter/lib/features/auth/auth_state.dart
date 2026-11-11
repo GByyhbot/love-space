@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_client.dart';
+import '../../core/chat/chat_media.dart' show mediaCookieHeadersProvider;
 import '../../core/chat/chat_state.dart' show chatUnreadProvider;
 import '../../core/config.dart';
 
@@ -106,6 +107,9 @@ class AuthNotifier extends Notifier<AuthPhase> {
         // 聊天未读角标播种（/api/me 的 chat_unread 字段名已在 app/main.py 实读确认）：
         // 角标挂独立 Notifier（chat_state），变化不必打断 authed 态
         ref.read(chatUnreadProvider.notifier).set(me!.chatUnread);
+        // Cookie 媒体请求头换线兜底（低危备忘 E2）：bootstrap 每次确定线路后
+        // 重建媒体头缓存，mediaCookieHeadersProvider 注释与实现从此一致
+        ref.invalidate(mediaCookieHeadersProvider);
         return true;
       });
       final ok = await steps.timeout(AppConfig.bootstrapDeadline);

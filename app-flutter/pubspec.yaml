@@ -57,6 +57,10 @@ dependencies:
   just_audio: ^0.10.0
   # 语音消息录制（m4a/AAC-LC，对齐 Web chatVoiceToggle；需 RECORD_AUDIO 权限，已加清单）
   record: ^5.2.0
+  # 段三（Step 8）：定位发位置消息（lat/lng 1e-5 精度；需 ACCESS_*_LOCATION 权限）
+  geolocator: ^13.0.1
+  # 段三（Step 8）：位置卡片唤起高德地图（androidamap:// scheme，未装回退网页地图）
+  url_launcher: ^6.3.0
 
 # 上游错位修正：record 5.2.1 允许 platform_interface 升到 1.6.0，但其约束的
 # record_linux 0.7.2 没跟上 1.6.0 的接口（缺 startStream/hasPermission 新签名），

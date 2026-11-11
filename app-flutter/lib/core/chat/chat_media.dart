@@ -126,9 +126,18 @@ String mediaUrl(String base, String mid, {bool preview = true, bool poster = fal
   return '$base/media/$mid${params.isEmpty ? '' : '?${params.join('&')}'}';
 }
 
+/// 音乐试听/封面转发 URL（对齐 Web artSrcOf：`/api/music/stream?u=<encodeURIComponent>`）；
+/// `/api/*` 需登录 Cookie，调用方带 mediaCookieHeadersProvider 的头
+String musicStreamUrl(String base, String src) =>
+    '$base/api/music/stream?u=${Uri.encodeQueryComponent(src)}';
+
+/// 气泡皮肤图 URL（公开静态语义同 /static，无需 Cookie——Web 同款直挂 `<img>`）
+String bubbleSkinUrl(String base, String packName) =>
+    '$base/api/bubbles/$packName';
+
 /// 共享 Cookie 头 Provider：cached_network_image 的 httpHeaders /
 /// video_player 的 httpHeaders / just_audio 的 headers 全走这里。
-/// 会话换线后由聊天页重新进入时 invalidate 兜底。
+/// 换线兜底：auth bootstrap 每次确定线路后 invalidate 重建（见 auth_state）。
 final mediaCookieHeadersProvider = FutureProvider<Map<String, String>>((ref) async {
   final jar = await ref.watch(cookieJarProvider.future);
   final base = await ref.watch(baseProvider.future);

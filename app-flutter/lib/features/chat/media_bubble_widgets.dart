@@ -16,6 +16,7 @@ import 'package:video_player/video_player.dart';
 
 import '../../core/chat/chat_media.dart';
 import '../../core/chat/chat_models.dart';
+import '../../core/chat/map_launcher.dart';
 import 'video_player_page.dart';
 
 /// 统一的媒体中性占位（加载中 / 失败 / 数据未就绪）
@@ -302,6 +303,161 @@ class _StickerVideoState extends ConsumerState<StickerVideoView> {
             child: VideoPlayer(_controller!),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// 歌卡（段三 · Step 8，对齐 Web songCardMarkup 语义）：封面 + 歌名 + 歌手 +
+/// 30 秒试听（同源 /api/music/stream 转发，just_audio 带 Cookie 头）。
+/// 点击卡片除按钮区外不触发播放（对齐 Web：试听只走右侧小按钮）。
+class SongCardView extends ConsumerStatefulWidget {
+  const SongCardView({super.key, required this.song});
+  final ChatSong song;
+
+  @override
+  ConsumerState<SongCardView> createState() => _SongCardViewState();
+}
+
+class _SongCardViewState extends ConsumerState<SongCardView> {
+  AudioPlayer? _player;
+  bool _playing = false;
+  bool _loading = false;
+
+  @override
+  void dispose() {
+    _player?.dispose();
+    super.dispose();
+  }
+
+  Future<void> _toggle() async {
+    final src = widget.song.src;
+    if (src.isEmpty || _loading) return;
+    var player = _player;
+    if (player == null) {
+      setState(() => _loading = true);
+      try {
+        final base = await ref.read(chatBaseProvider.future);
+        final headers = await ref.read(mediaCookieHeadersProvider.future);
+        player = AudioPlayer();
+        await player.setUrl(musicStreamUrl(base, src), headers: headers);
+        player.playerStateStream.listen((st) {
+          if (mounted) setState(() => _playing = st.playing);
+        });
+        _player = player;
+      } catch (_) {
+        if (mounted) {
+          ScaffoldMessenger.of(context)
+              .showSnackBar(const SnackBar(content: Text('试听加载失败，稍后再试')));
+        }
+        return;
+      } finally {
+        if (mounted) setState(() => _loading = false);
+      }
+    }
+    if (_playing) {
+      await player.pause();
+    } else {
+      await player.play();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final base = ref.watch(chatBaseProvider).valueOrNull;
+    final headers = ref.watch(mediaCookieHeadersProvider).valueOrNull;
+    return Container(
+      width: 230,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface.withValues(alpha: 0.75),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: theme.colorScheme.outlineVariant),
+      ),
+      child: Row(children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: (base != null && widget.song.art.isNotEmpty)
+              ? CachedNetworkImage(
+                  imageUrl: musicStreamUrl(base, widget.song.art),
+                  httpHeaders: headers,
+                  width: 46, height: 46, fit: BoxFit.cover,
+                  placeholder: (_, _) => _noteIcon(theme),
+                  errorWidget: (_, _, _) => _noteIcon(theme))
+              : _noteIcon(theme),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min, children: [
+            Text(widget.song.title,
+                maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.titleSmall),
+            Text(widget.song.artist,
+                maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodySmall
+                    ?.copyWith(color: theme.colorScheme.outline)),
+          ]),
+        ),
+        IconButton(
+          tooltip: '试听',
+          onPressed: _toggle,
+          icon: Icon(_loading
+              ? Icons.hourglass_top_rounded
+              : (_playing ? Icons.pause_rounded : Icons.play_arrow_rounded),
+              color: theme.colorScheme.primary),
+        ),
+      ]),
+    );
+  }
+
+  Widget _noteIcon(ThemeData theme) => Container(
+        width: 46, height: 46,
+        decoration: BoxDecoration(
+            color: theme.colorScheme.primaryContainer, borderRadius: BorderRadius.circular(8)),
+        child: Icon(Icons.music_note_rounded, color: theme.colorScheme.onPrimaryContainer),
+      );
+}
+
+/// 位置卡片（段三 · Step 8，对齐 Web chat-loc）：「位置 · 点开用高德地图看」
+/// → androidamap:// scheme，未装回退网页地图（openAmap）
+class LocationCardView extends StatelessWidget {
+  const LocationCardView({super.key, required this.location});
+  final ChatLocation location;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return InkWell(
+      borderRadius: BorderRadius.circular(10),
+      onTap: () => openAmap(location.lat, location.lng),
+      child: Container(
+        width: 230,
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surface.withValues(alpha: 0.75),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: theme.colorScheme.outlineVariant),
+        ),
+        child: Row(children: [
+          Container(
+            width: 40, height: 40,
+            decoration: BoxDecoration(
+                color: theme.colorScheme.primaryContainer,
+                borderRadius: BorderRadius.circular(8)),
+            child: Icon(Icons.location_on_rounded, color: theme.colorScheme.primary),
+          ),
+          const SizedBox(width: 10),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min, children: [
+            Text('位置', style: theme.textTheme.titleSmall),
+            Text('点开用高德地图看',
+                style: theme.textTheme.bodySmall
+                    ?.copyWith(color: theme.colorScheme.outline)),
+          ])),
+          Icon(Icons.chevron_right_rounded, color: theme.colorScheme.outline),
+        ]),
       ),
     );
   }

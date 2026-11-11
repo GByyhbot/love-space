@@ -43,7 +43,7 @@ class ChatDatabase extends GeneratedDatabase {
   }
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   Iterable<TableInfo> get allTables => const [];
@@ -72,6 +72,12 @@ class ChatDatabase extends GeneratedDatabase {
             await customStatement(
                 "ALTER TABLE chat_pending ADD COLUMN phase TEXT NOT NULL DEFAULT 'send'");
           }
+          // 段二 v2 → 段三 v3：chat_pending 加 media_ids 列（已传完的媒体 id，
+          // phase=send 时重试零重传——低危备忘 E1）
+          if (!names.contains('media_ids')) {
+            await customStatement(
+                "ALTER TABLE chat_pending ADD COLUMN media_ids TEXT NOT NULL DEFAULT '[]'");
+          }
         },
       );
 
@@ -93,7 +99,8 @@ class ChatDatabase extends GeneratedDatabase {
       created REAL NOT NULL,
       failed INTEGER NOT NULL DEFAULT 0,
       media_json TEXT NOT NULL DEFAULT '[]',
-      phase TEXT NOT NULL DEFAULT 'send'
+      phase TEXT NOT NULL DEFAULT 'send',
+      media_ids TEXT NOT NULL DEFAULT '[]'
     )''';
 
   /// 「我的表情包」（对齐 Web localStorage['stickers:<uid>']：上传即存服务器
@@ -172,11 +179,12 @@ class ChatDatabase extends GeneratedDatabase {
 
   Future<void> savePending(ChatPending p) async {
     await customInsert(
-      'INSERT INTO chat_pending (client_id, content, created, failed, media_json, phase) '
-      'VALUES (?, ?, ?, ?, ?, ?) '
+      'INSERT INTO chat_pending (client_id, content, created, failed, media_json, phase, media_ids) '
+      'VALUES (?, ?, ?, ?, ?, ?, ?) '
       'ON CONFLICT(client_id) DO UPDATE SET content = excluded.content, '
       'created = excluded.created, failed = excluded.failed, '
-      'media_json = excluded.media_json, phase = excluded.phase',
+      'media_json = excluded.media_json, phase = excluded.phase, '
+      'media_ids = excluded.media_ids',
       variables: [
         Variable.withString(p.clientId),
         Variable.withString(p.content),
@@ -185,6 +193,7 @@ class ChatDatabase extends GeneratedDatabase {
         Variable.withString(jsonEncode(p.mediaFiles.map((f) => f.toJson()).toList())),
         Variable.withString(
             p.phase == ChatPendingPhase.upload ? 'upload' : 'send'),
+        Variable.withString(jsonEncode(p.mediaIds)),
       ],
     );
   }
@@ -198,7 +207,7 @@ class ChatDatabase extends GeneratedDatabase {
 
   Future<List<ChatPending>> loadPending() async {
     final rows = await customSelect(
-      'SELECT client_id, content, created, failed, media_json, phase '
+      'SELECT client_id, content, created, failed, media_json, phase, media_ids '
       'FROM chat_pending ORDER BY created ASC',
     ).get();
     return rows.map(_pendingFromRow).toList();
@@ -216,6 +225,9 @@ class ChatDatabase extends GeneratedDatabase {
               .map((f) => ChatLocalFile.fromJson(f.cast<String, dynamic>())))
           .toList(),
       phase: phaseRaw == 'upload' ? ChatPendingPhase.upload : ChatPendingPhase.send,
+      mediaIds: ((jsonDecode((row.data['media_ids'] ?? '[]') as String) as List)
+              .map((e) => e.toString()))
+          .toList(),
     );
   }
 

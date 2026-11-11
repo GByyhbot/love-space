@@ -116,7 +116,9 @@ void main() {
         ]));
     expect(v.sticker, isNull);
     expect(v.imageMids, ['m1']);
-    expect(v.textLines, ['[引用] 原话']);
+    expect(v.quote, isNotNull);
+    expect(v.quote!.$1, 'r0');
+    expect(v.quote!.$2, '原话');
   });
 
   test('撤回优先：recalled → 全空（页面单独渲染撤回行）', () {

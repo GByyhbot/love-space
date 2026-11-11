@@ -28,11 +28,17 @@ class ChatMedia {
   factory ChatMedia.fromJson(Map<String, dynamic> j) => ChatMedia(
         id: (j['id'] ?? '').toString(),
         name: (j['name'] ?? '').toString(),
-        mime: (j['mime'] ?? '').toString(),
+        // mime 归一小写：服务端理论下发小写，但历史数据/上游兼容层不可信
+        // （低危备忘 E3：全部判定处统一 lowercase 后比较）
+        mime: (j['mime'] ?? '').toString().toLowerCase(),
         size: (j['size'] as num?)?.toInt() ?? 0,
         status: (j['status'] ?? '').toString(),
         preview: (j['preview'] ?? '').toString(),
       );
+
+  /// 自定义表情两形态（段二判定复用；mime 已在 fromJson 归一小写）
+  bool get isCustomStickerMedia =>
+      mime == 'image/webp' || mime == 'video/webm';
 
   Map<String, dynamic> toJson() => {
         'id': id,
@@ -296,6 +302,7 @@ class ChatPending {
     this.failed = false,
     this.mediaFiles = const [],
     this.phase = ChatPendingPhase.send,
+    this.mediaIds = const [],
   });
   final String clientId;
   final String content;
@@ -305,6 +312,9 @@ class ChatPending {
   /// 纯文本发送为空；媒体发送时为本机待传文件（重试重新上传）
   final List<ChatLocalFile> mediaFiles;
   final ChatPendingPhase phase;
+
+  /// 已上传完成的媒体 id（phase=send 时存在；重试直接发记录零重传，低危备忘 E1）
+  final List<String> mediaIds;
 }
 
 // ── 段二：气泡渲染视觉解析（纯函数，可单测）────────────────────────────
@@ -317,6 +327,9 @@ class ChatVisual {
     this.videoMids = const [],
     this.voiceMids = const [],
     this.sticker,
+    this.song,
+    this.location,
+    this.quote,
   });
 
   /// 文本行（含「[引用] …」占位行——引用跳转属段三）
@@ -332,12 +345,24 @@ class ChatVisual {
   /// 非 null → 整条渲染为贴纸（无气泡；对齐 Web chat-sticker）
   final ChatStickerVisual? sticker;
 
+  /// 非 null → 整条渲染为歌卡（段三；对齐 Web songCard 分支优先于贴纸）
+  final ChatSong? song;
+
+  /// 非 null → 整条渲染为位置卡片（段三）
+  final ChatLocation? location;
+
+  /// 引用块（段三升级：可点跳回原消息+高亮；id + 原文）
+  final (String, String)? quote;
+
   bool get isEmpty =>
       textLines.isEmpty &&
       imageMids.isEmpty &&
       videoMids.isEmpty &&
       voiceMids.isEmpty &&
-      sticker == null;
+      sticker == null &&
+      song == null &&
+      location == null &&
+      quote == null;
 }
 
 /// 贴纸视觉参数：内置包走公开静态路径（无需 Cookie），自定义表情走媒体 id（需 Cookie）
@@ -355,6 +380,14 @@ class ChatStickerVisual {
 ChatVisual chatVisualOf(ChatRecord r) {
   if (r.body.recalled) return const ChatVisual();
   final b = r.body;
+  // 分支优先级对齐 Web chatRows：songCard → locCard → sticker → 文本+媒体
+  final quote = b.replyToId != null ? (b.replyToId!, (b.replyToText ?? '')) : null;
+  if (b.song != null && b.song!.title.isNotEmpty) {
+    return ChatVisual(quote: quote, song: b.song);
+  }
+  if (b.location != null) {
+    return ChatVisual(quote: quote, location: b.location);
+  }
   if (b.sticker != null) {
     return ChatVisual(
       sticker: ChatStickerVisual(
@@ -362,26 +395,20 @@ ChatVisual chatVisualOf(ChatRecord r) {
     );
   }
   final visual = ChatVisual(
-    textLines: [
-      if (b.content.trim().isNotEmpty) b.content,
-      if (b.replyToId != null)
-        ((b.replyToText ?? '').trim().isEmpty
-            ? '[引用]'
-            : '[引用] ${b.replyToText}')
-    ],
+    textLines: [if (b.content.trim().isNotEmpty) b.content],
     imageMids: [],
     videoMids: [],
     voiceMids: [],
+    quote: quote,
   );
   // 自定义表情：单媒体 webp/webm 且无文本 → 贴纸化渲染（对齐 Web sticker-send 发送形态）
   final isCustomSticker =
       b.content.trim().isEmpty && b.replyToId == null && b.mediaIds.length == 1 && r.media.length == 1;
   if (isCustomSticker) {
     final m = r.media.single;
-    if (m.mime == 'image/webp' || m.mime == 'video/webm') {
+    if (m.isCustomStickerMedia) {
       return ChatVisual(
-        sticker: ChatStickerVisual(
-            mid: m.id, isVideo: m.mime == 'video/webm'),
+        sticker: ChatStickerVisual(mid: m.id, isVideo: m.mime == 'video/webm'),
       );
     }
   }
@@ -398,4 +425,43 @@ ChatVisual chatVisualOf(ChatRecord r) {
     }
   }
   return visual;
+}
+
+// ── 段三：消息操作纯函数（可单测）────────────────────────────────────
+
+/// 引用文本截断（对齐 Web：reply_to.text 存「当时那句话」slice(0,60)——
+/// UTF-16 码元口径，与 JS slice 一致；中文等 BMP 字符计数相同）
+String quoteSnippet(String text, {int max = 60}) {
+  final t = text.trim();
+  if (t.length <= max) return t.isEmpty ? '原消息' : t;
+  return '${t.substring(0, max)}…';
+}
+
+/// 撤回资格：仅本人、2 分钟窗口内（服务端 app/main.py recall_record 同口径：
+/// now() - created > 120 拒绝），已撤回的不再显示撤回项
+bool canRecallChat(ChatRecord r, String myId, {DateTime Function()? now}) {
+  if (r.author != myId || r.body.recalled) return false;
+  final n = (now ?? DateTime.now)();
+  final created = DateTime.fromMillisecondsSinceEpoch((r.created * 1000).round());
+  return n.difference(created).inSeconds <= 120;
+}
+
+/// 置顶栏数据（对齐 Web messagesPage 的 pinned 口径：pinned 且未撤回，
+/// created 降序取最新一条 + 总数）
+({ChatRecord latest, int total})? pinnedBarInfo(List<ChatRecord> records) {
+  final pinned = records
+      .where((r) => r.body.pinned && !r.body.recalled)
+      .toList()
+    ..sort((a, b) => b.created.compareTo(a.created));
+  if (pinned.isEmpty) return null;
+  return (latest: pinned.first, total: pinned.length);
+}
+
+/// 置顶栏摘要（对齐 Web：content slice(0,42) 码元口径，空内容显「一条附件」）
+String pinnedBarText(ChatRecord r) {
+  final c = r.body.content.trim();
+  if (c.isNotEmpty) {
+    return c.length <= 42 ? c : '${c.substring(0, 42)}…';
+  }
+  return '一条附件';
 }

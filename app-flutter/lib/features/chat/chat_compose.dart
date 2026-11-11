@@ -15,21 +15,38 @@ import 'dart:math';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/chat/chat_media.dart';
 import '../../core/chat/chat_models.dart';
+// quoteSnippet（引用截 60）随上行引入
 import '../../core/chat/chat_state.dart';
 import '../auth/auth_state.dart';
 import 'album_picker_sheet.dart';
 import 'input_slots.dart';
 import 'media_bubble_widgets.dart';
+import 'song_picker_sheet.dart';
 import 'sticker_data.dart';
 import 'voice_recorder.dart';
 
 class ChatCompose extends ConsumerStatefulWidget {
-  const ChatCompose({super.key});
+  const ChatCompose({
+    super.key,
+    this.replyNotifier,
+    this.onOpenSearch,
+    this.onOpenWallpaper,
+  });
+
+  /// 引用态（页级持有：长按菜单「引用」设置，发送/取消后清空）
+  final ValueNotifier<(String, String)?>? replyNotifier;
+
+  /// ⊕「搜消息」→ 页面打开页内搜索栏（口径：只筛最近加载的消息）
+  final VoidCallback? onOpenSearch;
+
+  /// ⊕「聊天背景」→ 页面打开背景弹层
+  final VoidCallback? onOpenWallpaper;
 
   @override
   ConsumerState<ChatCompose> createState() => _ChatComposeState();
@@ -53,6 +70,11 @@ class _ChatComposeState extends ConsumerState<ChatCompose> {
       if (has != _hasText) setState(() => _hasText = has);
     });
     _focus.addListener(_onFocusChanged);
+    widget.replyNotifier?.addListener(_onReplyChanged);
+  }
+
+  void _onReplyChanged() {
+    if (mounted) setState(() {});
   }
 
   /// 面板意图：点输入框（获得焦点）→ 键盘临时压掉面板
@@ -66,15 +88,23 @@ class _ChatComposeState extends ConsumerState<ChatCompose> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     final insets = MediaQuery.of(context).viewInsets.bottom;
-    // 键盘收起（insets 归零）→ 意图面板自动回位
-    if (_lastInsets > 0 && insets == 0 && _slots.intent != null) {
-      _slots.handle(InputSlotEvent.keyboardClosed);
+    // 键盘收起（insets 归零）→ 意图面板自动回位 + 占位高度过渡到面板实高
+    if (_lastInsets > 0 && insets == 0) {
+      if (_slots.intent != null) _slots.handle(InputSlotEvent.keyboardClosed);
+      if (_occupyHeight != null && mounted) {
+        setState(() => _occupyHeight = null); // 电梯：键盘高度 → 面板实高
+      }
     }
     _lastInsets = insets;
   }
 
+  /// 防闪烁占位高度：键盘开着打开面板时先以键盘高度占位（槽位高度不变），
+  /// 键盘收起后由 didChangeDependencies 过渡到面板实高
+  double? _occupyHeight;
+
   @override
   void dispose() {
+    widget.replyNotifier?.removeListener(_onReplyChanged);
     _input.dispose();
     _focus.dispose();
     _recorder.dispose();
@@ -89,12 +119,21 @@ class _ChatComposeState extends ConsumerState<ChatCompose> {
   // ── 槽位切换 ───────────────────────────────────────────────────────
 
   void _toggleFn() {
-    setState(() => _slots.handle(InputSlotEvent.toggleFn));
+    setState(() {
+      _slots.handle(InputSlotEvent.toggleFn);
+      // 防闪烁：键盘开着开面板 → 槽位先以键盘高度占位（键盘收起后过渡到实高）
+      _occupyHeight =
+          (_slots.slot != InputSlot.none && _lastInsets > 0) ? _lastInsets : null;
+    });
     if (_slots.slot != InputSlot.none) _focus.unfocus(); // 先记意图再收键盘
   }
 
   void _toggleSticker() {
-    setState(() => _slots.handle(InputSlotEvent.toggleSticker));
+    setState(() {
+      _slots.handle(InputSlotEvent.toggleSticker);
+      _occupyHeight =
+          (_slots.slot != InputSlot.none && _lastInsets > 0) ? _lastInsets : null;
+    });
     if (_slots.slot != InputSlot.none) _focus.unfocus();
   }
 
@@ -109,10 +148,49 @@ class _ChatComposeState extends ConsumerState<ChatCompose> {
     final text = _input.text.trim();
     if (text.isEmpty) return;
     _input.clear();
+    final reply = widget.replyNotifier?.value;
+    widget.replyNotifier?.value = null;
     try {
-      await ref.read(chatControllerProvider.notifier).send(text);
+      if (reply != null) {
+        // 引用发送：body.reply_to={id, text 截 60 字}（quoteSnippet 在控制器内截断）
+        await ref
+            .read(chatControllerProvider.notifier)
+            .sendTextReply(text, reply.$1, reply.$2);
+      } else {
+        await ref.read(chatControllerProvider.notifier).send(text);
+      }
     } catch (e) {
       _snack(errorDetail(e));
+    }
+  }
+
+  /// 定位发位置（对齐 Web chatLocate：权限中文指引 + 1e-5 精度 + 超时/拒签文案）
+  Future<void> _locateAndSend() async {
+    var perm = await Geolocator.checkPermission();
+    if (perm == LocationPermission.denied) {
+      perm = await Geolocator.requestPermission();
+    }
+    if (perm == LocationPermission.denied ||
+        perm == LocationPermission.deniedForever) {
+      _snack('位置权限没给：到「设置 → 应用 → 恋爱空间 → 权限」里打开「位置」，再试一次');
+      if (perm == LocationPermission.deniedForever) {
+        await Geolocator.openAppSettings();
+      }
+      return;
+    }
+    _snack('正在获取位置…');
+    try {
+      final pos = await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(
+              accuracy: LocationAccuracy.high,
+              timeLimit: Duration(seconds: 8)));
+      // 精度 1e-5 取整（对齐 Web Math.round(x*1e5)/1e5）
+      final lat = (pos.latitude * 1e5).round() / 1e5;
+      final lng = (pos.longitude * 1e5).round() / 1e5;
+      await ref.read(chatControllerProvider.notifier).sendLocation(lat, lng);
+      _snack('位置已发送');
+    } catch (_) {
+      _snack('暂时定不到位置——室内、地下室或没开 GPS 都会这样，换个地方再试');
     }
   }
 
@@ -252,11 +330,18 @@ class _ChatComposeState extends ConsumerState<ChatCompose> {
         _toggleVoice();
       case 'sticker-panel': // 表情 → 切到贴纸坞（同槽位互换）
         _toggleSticker();
-      case 'chat-locate':
-      case 'chat-song':
-      case 'chat-search':
-      case 'chat-bg':
-        _snack('条目 3 · 段三开放');
+      case 'chat-locate': // 位置（段三：定位+发送）
+        _pickFunction();
+        _locateAndSend();
+      case 'chat-song': // 音乐（段三：在线搜歌；「从歌单选」不出现，歌单属条目 6）
+        _pickFunction();
+        showSongPicker(context);
+      case 'chat-search': // 搜消息（段三：页内筛选已加载窗口）
+        _pickFunction();
+        widget.onOpenSearch?.call();
+      case 'chat-bg': // 聊天背景（段三：背景弹层）
+        _pickFunction();
+        widget.onOpenWallpaper?.call();
       case 'tool-calendar':
       case 'tool-quest':
       case 'tool-wish':
@@ -298,19 +383,39 @@ class _ChatComposeState extends ConsumerState<ChatCompose> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final maxPanelH = MediaQuery.of(context).size.height * 0.62;
+    final slotOpen = _slots.slot != InputSlot.none;
+    // 槽位高度：面板实高（fn 368 / 坞 348，夹无键盘视口 62%）；键盘开着开面板
+    // 时先以键盘高度占位防闪烁，键盘收起后过渡到实高（电梯式抬升）
+    final double targetPanelH = _slots.slot == InputSlot.fn
+        ? min(368.0, maxPanelH)
+        : min(348.0, maxPanelH);
+    final double slotHeight =
+        !slotOpen ? 0 : (_occupyHeight ?? targetPanelH);
+    final reply = widget.replyNotifier?.value;
     return Column(mainAxisSize: MainAxisSize.min, children: [
-      // 同槽位互斥面板（先占位、键盘收起后显内容——防闪烁走常规 resize 路径）
-      if (_slots.slot == InputSlot.fn)
-        _FnPanel(height: min(368.0, maxPanelH), onAction: _onFnAction),
-      if (_slots.slot == InputSlot.sticker)
-        _StickerDock(
-          height: min(348.0, maxPanelH),
-          tab: _stickerTab,
-          onTab: (t) => setState(() => _stickerTab = t),
-          onEmoji: _insertEmoji,
-          onPickFunction: _pickFunction,
-          onAddSticker: _addMySticker,
+      // 引用底栏（对齐 Web replyBar：「引用：xxx」+ 取消）
+      if (reply != null)
+        Container(
+          width: double.infinity,
+          color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.7),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          child: Row(children: [
+            Icon(Icons.reply_rounded, size: 16, color: theme.colorScheme.primary),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text('引用：${quoteSnippet(reply.$2)}',
+                  maxLines: 1, overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodySmall),
+            ),
+            GestureDetector(
+              onTap: () => widget.replyNotifier?.value = null,
+              child: Text('取消',
+                  style: theme.textTheme.bodySmall
+                      ?.copyWith(color: theme.colorScheme.primary)),
+            ),
+          ]),
         ),
+      // 输入栏（层级：消息列表 / 输入栏 / 底部槽位——输入栏恒在面板上方）
       Container(
         decoration: BoxDecoration(
           color: theme.colorScheme.surface,
@@ -374,6 +479,39 @@ class _ChatComposeState extends ConsumerState<ChatCompose> {
                   : Icons.add_circle_outline_rounded),
             ),
           ]),
+        ),
+      ),
+      // 底部槽位（键盘/⊕/坞互斥共用）：电梯式抬升——高度动画 + 内容被裁剪
+      // 露出，输入栏贴在面板顶部上方；键盘弹出走原生 resize 标准行为
+      AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOutCubic,
+        height: slotHeight,
+        clipBehavior: Clip.hardEdge,
+        decoration: const BoxDecoration(),
+        onEnd: () {
+          // 收合完成后卸载内容，贴纸视频停止解码
+          if (_slots.slot == InputSlot.none && slotHeight == 0 && mounted) {
+            setState(() {});
+          }
+        },
+        child: OverflowBox(
+          alignment: Alignment.topCenter,
+          minHeight: 0,
+          maxHeight: targetPanelH,
+          maxWidth: double.infinity,
+          child: _slots.slot == InputSlot.fn
+              ? _FnPanel(height: targetPanelH, onAction: _onFnAction)
+              : _slots.slot == InputSlot.sticker
+                  ? _StickerDock(
+                      height: targetPanelH,
+                      tab: _stickerTab,
+                      onTab: (t) => setState(() => _stickerTab = t),
+                      onEmoji: _insertEmoji,
+                      onPickFunction: _pickFunction,
+                      onAddSticker: _addMySticker,
+                    )
+                  : const SizedBox(),
         ),
       ),
     ]);
