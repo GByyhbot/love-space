@@ -6,6 +6,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_client.dart';
+import '../../core/config.dart';
 
 enum AuthPhase { checking, out, authed }
 
@@ -54,11 +55,23 @@ class AuthNotifier extends Notifier<AuthPhase> {
     }
   }
 
-  /// 登录：成功返回 null，失败返回服务端中文文案
+  /// 登录：成功返回 null，失败返回服务端中文文案。
+  /// 成功后：从 jar 取回会话 token → secure_storage 存正本 + 全线路播种
+  /// （换线免登录的前提，见 api_client.seedSessionToAllRoutes）。
   Future<String?> login(String username, String password) async {
     try {
       final dio = await ref.read(dioProvider.future);
       await dio.post('/api/login', data: {'username': username, 'password': password});
+      final jar = await ref.read(cookieJarProvider.future);
+      final base = await ref.read(baseProvider.future);
+      final cookies = await jar.loadForRequest(Uri.parse('$base/'));
+      for (final c in cookies) {
+        if (c.name == AppConfig.sessionCookieName && c.value.isNotEmpty) {
+          await storeSessionToken(c.value);
+          await seedSessionToAllRoutes(jar, c.value);
+          break;
+        }
+      }
       await _bootstrap();
       return state == AuthPhase.authed ? null : '登录失败，请重试';
     } on DioException catch (e) {
@@ -77,12 +90,19 @@ class AuthNotifier extends Notifier<AuthPhase> {
     } catch (_) {}
     me = null;
     state = AuthPhase.out;
+    // 客户端侧不留痕：清全部线路 jar 记录 + secure_storage 正本
+    try {
+      final jar = await ref.read(cookieJarProvider.future);
+      await clearSessionEverywhere(jar);
+    } catch (_) {}
   }
 
-  /// 401 全局回调入口（api_client.onUnauthorized 由 build 里注册）
+  /// 401 全局回调入口（api_client.onUnauthorized 由 build 里注册）。
+  /// 会话已失效：token 正本一并清掉，避免下次启动拿死 token 播种。
   void forceOut() {
     me = null;
     state = AuthPhase.out;
+    clearSessionToken();
   }
 }
 
