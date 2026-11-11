@@ -10,7 +10,8 @@ import 'dart:typed_data';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show Clipboard, ClipboardData;
+import 'package:flutter/services.dart'
+    show Clipboard, ClipboardData, SystemUiOverlayStyle;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_client.dart';
@@ -257,6 +258,10 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
         titleSpacing: 0,
         backgroundColor: immersive ? Colors.black54 : null,
         foregroundColor: immersive ? Colors.white : null,
+        // 状态栏图标亮度随顶栏明暗联动（沉浸式顶栏为深色 → 白图标）
+        systemOverlayStyle: immersive
+            ? SystemUiOverlayStyle.light
+            : SystemUiOverlayStyle.dark,
         // 二级页通则：automaticallyImplyLeading 不关，自动返回箭头 + 手势都回上一页
         title: Row(children: [
           const SizedBox(width: 4),
@@ -331,6 +336,7 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
           _buildPinnedBar(chat, immersive),
           Expanded(child: _buildList(context, me, chat, skin, immersive)),
           ChatCompose(
+            immersive: immersive,
             replyNotifier: _replyNotifier,
             onOpenSearch: () => setState(() {
               _searchOpen = true;
@@ -381,11 +387,12 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
           ),
         ),
         IconButton(
-          tooltip: '清空',
-          onPressed: () {
+          tooltip: '关闭搜索',
+          onPressed: () => setState(() {
+            // 清空搜索词并收起搜索栏，恢复完整列表（真机缺陷 3：此前只清文本）
+            _searchOpen = false;
             _searchCtrl.clear();
-            setState(() {});
-          },
+          }),
           icon: const Icon(Icons.close_rounded),
         ),
       ]),

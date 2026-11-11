@@ -37,6 +37,7 @@ class ChatCompose extends ConsumerStatefulWidget {
     this.replyNotifier,
     this.onOpenSearch,
     this.onOpenWallpaper,
+    this.immersive = false,
   });
 
   /// 引用态（页级持有：长按菜单「引用」设置，发送/取消后清空）
@@ -47,6 +48,9 @@ class ChatCompose extends ConsumerStatefulWidget {
 
   /// ⊕「聊天背景」→ 页面打开背景弹层
   final VoidCallback? onOpenWallpaper;
+
+  /// 照片背景沉浸式：输入栏/引用栏走与顶栏同色系的半透明深色层压图上
+  final bool immersive;
 
   @override
   ConsumerState<ChatCompose> createState() => _ChatComposeState();
@@ -397,15 +401,22 @@ class _ChatComposeState extends ConsumerState<ChatCompose> {
       if (reply != null)
         Container(
           width: double.infinity,
-          color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.7),
+          color: widget.immersive
+              ? Colors.black54
+              : theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.7),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           child: Row(children: [
-            Icon(Icons.reply_rounded, size: 16, color: theme.colorScheme.primary),
+            Icon(Icons.reply_rounded,
+                size: 16,
+                color: widget.immersive
+                    ? Colors.white70
+                    : theme.colorScheme.primary),
             const SizedBox(width: 6),
             Expanded(
               child: Text('引用：${quoteSnippet(reply.$2)}',
                   maxLines: 1, overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.bodySmall),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                      color: widget.immersive ? Colors.white70 : null)),
             ),
             GestureDetector(
               onTap: () => widget.replyNotifier?.value = null,
@@ -415,12 +426,18 @@ class _ChatComposeState extends ConsumerState<ChatCompose> {
             ),
           ]),
         ),
-      // 输入栏（层级：消息列表 / 输入栏 / 底部槽位——输入栏恒在面板上方）
+      // 输入栏（层级：消息列表 / 输入栏 / 底部槽位——输入栏恒在面板上方）。
+      // 沉浸式：与顶栏同色系半透明深色层压在照片上（对齐 Web chat-immersive 分层）
       Container(
         decoration: BoxDecoration(
-          color: theme.colorScheme.surface,
+          color: widget.immersive
+              ? Colors.black54
+              : theme.colorScheme.surface,
           border: Border(
-              top: BorderSide(color: theme.colorScheme.outlineVariant)),
+              top: BorderSide(
+                  color: widget.immersive
+                      ? Colors.white24
+                      : theme.colorScheme.outlineVariant)),
         ),
         padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
         child: SafeArea(
@@ -435,10 +452,18 @@ class _ChatComposeState extends ConsumerState<ChatCompose> {
                 maxLength: 20000,
                 textInputAction: TextInputAction.send,
                 onSubmitted: (_) => _sendText(),
+                style: TextStyle(
+                    color: widget.immersive ? Colors.white : null),
+                cursorColor: widget.immersive ? Colors.white70 : null,
                 decoration: InputDecoration(
                   hintText: '发消息',
+                  hintStyle: TextStyle(
+                      color: widget.immersive ? Colors.white60 : null),
                   isDense: true,
                   filled: true,
+                  fillColor: widget.immersive
+                      ? Colors.white.withValues(alpha: 0.12)
+                      : null,
                   counterText: '',
                   contentPadding: const EdgeInsets.symmetric(
                       horizontal: 14, vertical: 10),
@@ -469,11 +494,13 @@ class _ChatComposeState extends ConsumerState<ChatCompose> {
             IconButton(
               tooltip: '表情',
               onPressed: _toggleSticker,
+              color: widget.immersive ? Colors.white : null,
               icon: const Icon(Icons.emoji_emotions_rounded),
             ),
             IconButton(
               tooltip: '更多',
               onPressed: _toggleFn,
+              color: widget.immersive ? Colors.white : null,
               icon: Icon(_slots.slot == InputSlot.fn
                   ? Icons.close_rounded
                   : Icons.add_circle_outline_rounded),
@@ -499,7 +526,8 @@ class _ChatComposeState extends ConsumerState<ChatCompose> {
           alignment: Alignment.topCenter,
           minHeight: 0,
           maxHeight: targetPanelH,
-          maxWidth: double.infinity,
+          // 宽度沿用父约束（槽位宽度）：这里若给 maxWidth 无界，面板内容
+          // 布局直接失败 → 槽位空白（段三真机缺陷 2 根因）
           child: _slots.slot == InputSlot.fn
               ? _FnPanel(height: targetPanelH, onAction: _onFnAction)
               : _slots.slot == InputSlot.sticker
