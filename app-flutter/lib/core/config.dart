@@ -41,4 +41,12 @@ class AppConfig {
   /// SSE 断线重连：首包 retry: 3000 起步，指数退避封顶 30s（与 Web 端策略一致）
   static const sseRetryBase = Duration(seconds: 3);
   static const sseRetryCap = Duration(seconds: 30);
+
+  /// 线路探测：并行发出，单条 3s 硬超时（外层 .timeout 兜底连接挂死），
+  /// 总预算 ≈3s，不再串行逐条等（旧实现最坏 5×10s+，冷启动转圈近一分钟）。
+  static const Duration probeTimeout = Duration(seconds: 3);
+
+  /// 冷启动 bootstrap 总兜底：超过 10s 未完成 → 降级登录页给重试入口，
+  /// 不无限转圈；卡住的环节（探测/me 请求）记入日志供定位。
+  static const Duration bootstrapDeadline = Duration(seconds: 10);
 }

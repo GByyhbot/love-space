@@ -35,6 +35,15 @@ Future<void> clearSessionToken() =>
 Future<String?> readSessionToken() =>
     _secureStorage.read(key: _sessionTokenKey);
 
+/// 上次成功线路的持久化（secure_storage）：冷启动先直连验活走快路径，
+/// 失败才全量并行探测，避免每次冷启动都从头探一遍。
+const _lastRouteKey = 'last_route';
+
+Future<void> storeLastRoute(String base) =>
+    _secureStorage.write(key: _lastRouteKey, value: base);
+
+Future<String?> readLastRoute() => _secureStorage.read(key: _lastRouteKey);
+
 /// 把会话 token 播种到全部线路域名（参照旧壳 shareSessionToAll/seedCookie）。
 /// 五条线路同一后端、同一 sessions 表，token 跨域通用；明文内网线路不带
 /// Secure（cookie 带了 Secure 就不会随 http 请求发送，切过去等于没登录）。
@@ -148,25 +157,35 @@ String errorDetail(Object? e) {
 /// CookieJar（App 全局唯一实例；ApiClient 与 SSE 共用）
 final cookieJarProvider = FutureProvider<PersistCookieJar>((_) => createCookieJar());
 
-/// 线路选择（按主人定版优先级逐条探测可达性，首选 4019 逐级回退）。
-/// 不再读 /api/routes（其返回顺序与产品优先级无关；空清单回退逻辑一并作废）。
+/// 线路选择（三层，预算内收敛）：
+/// ① 快路径：上次成功线路直连验活（多数冷启动只此一步）；
+/// ② 全量并行探测（单条 3s 硬超时，总预算 ≈3s），按优先级取第一个可达；
+/// ③ 全部不可达：回退上次线路或首选，让业务请求自然失败触发「网络连接不上」。
 final baseProvider = FutureProvider<String>((ref) async {
   final routes = AppConfig.effectiveRoutes;
-  for (final base in routes) {
-    if (await _reachable(base)) return base;
+  final last = await readLastRoute();
+  if (last != null && routes.contains(last) && await _reachable(last)) {
+    return last;
   }
-  // 全部不可达：回退首选线路，让业务请求自然失败并触发「网络连接不上」文案
-  return routes.first;
+  final ok = await Future.wait(routes.map(_reachable));
+  for (var i = 0; i < routes.length; i++) {
+    if (ok[i]) {
+      await storeLastRoute(routes[i]);
+      return routes[i];
+    }
+  }
+  return last ?? routes.first;
 });
 
 Future<bool> _reachable(String base) async {
   try {
     final d = Dio(BaseOptions(
       baseUrl: base,
-      connectTimeout: const Duration(seconds: 5),
-      receiveTimeout: const Duration(seconds: 5),
+      connectTimeout: AppConfig.probeTimeout,
+      receiveTimeout: AppConfig.probeTimeout,
       ))..httpClientAdapter = directAdapter();
-    final r = await d.get('/api/status');
+    // 外层 .timeout 兜底：连接层挂死时也能在硬超时内返回
+    final r = await d.get('/api/status').timeout(AppConfig.probeTimeout);
     return r.statusCode == 200;
   } catch (_) {
     return false;

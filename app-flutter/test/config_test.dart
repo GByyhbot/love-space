@@ -24,4 +24,8 @@ void main() {
   test('SSE 端点与方案一致', () {
     expect(AppConfig.ssePath, '/api/events');
   });
+  test('探测与 bootstrap 预算：单条 3s 硬超时，整体 10s 兜底', () {
+    expect(AppConfig.probeTimeout, const Duration(seconds: 3));
+    expect(AppConfig.bootstrapDeadline, const Duration(seconds: 10));
+  });
 }

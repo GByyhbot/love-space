@@ -82,7 +82,16 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                     Text(_error!, textAlign: TextAlign.center,
                         style: TextStyle(color: Theme.of(context).colorScheme.error)),
                   ],
-                  const SizedBox(height: 18),
+                  const SizedBox(height: 6),
+                  TextButton(
+                    onPressed: _busy ? null : () {
+                      setState(() => _busy = true);
+                      ref.read(authProvider.notifier).retryBootstrap().whenComplete(
+                          () { if (mounted) setState(() => _busy = false); });
+                    },
+                    child: const Text('网络不稳？重试免登录恢复'),
+                  ),
+                  const SizedBox(height: 12),
                   Text('还没有空间？初始化与邀请绑定在「阶段 2 · 账号」接入',
                       textAlign: TextAlign.center,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.outline)),

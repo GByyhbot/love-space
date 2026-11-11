@@ -3,6 +3,7 @@ library;
 
 import 'dart:async';
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_client.dart';
@@ -32,10 +33,16 @@ class AuthNotifier extends Notifier<AuthPhase> {
   }
 
   Future<void> _bootstrap() async {
+    final sw = Stopwatch()..start();
+    // stage 记录卡住的环节（探测线路 / me 请求），超时或异常时打日志供定位
+    String stage = '线路选择（快路径/并行探测）';
     try {
-      final dio = await ref.read(dioProvider.future);
-      final r = await dio.get('/api/me');
-      if (r.statusCode == 200) {
+      final steps = Future(() async {
+        final dio = await ref.read(dioProvider.future);
+        stage = 'GET /api/me';
+        final r = await dio.get('/api/me');
+        stage = '解析 me 响应';
+        if (r.statusCode != 200) return false;
         final j = r.data as Map<String, dynamic>;
         final user = (j['user'] ?? {}) as Map<String, dynamic>;
         final space = (j['space'] ?? {}) as Map<String, dynamic>;
@@ -45,14 +52,30 @@ class AuthNotifier extends Notifier<AuthPhase> {
           unread: (j['unread'] as num?)?.toInt() ?? 0,
           chatUnread: (j['chat_unread'] as num?)?.toInt() ?? 0,
         );
+        return true;
+      });
+      final ok = await steps.timeout(AppConfig.bootstrapDeadline);
+      if (ok) {
         state = AuthPhase.authed;
       } else {
+        debugPrint('[bootstrap] ${sw.elapsed} 未登录（me 非 200）');
         state = AuthPhase.out;
       }
-    } catch (_) {
-      // 网络不可达也先给登录页（页面带错误文案，可重试）
+    } on TimeoutException {
+      debugPrint('[bootstrap] ${sw.elapsed} 超时兜底：卡在 [$stage] → 降级登录页可重试');
+      state = AuthPhase.out;
+    } catch (e) {
+      debugPrint('[bootstrap] ${sw.elapsed} 失败：[$stage] $e → 登录页');
       state = AuthPhase.out;
     }
+  }
+
+  /// 网络兜底重试（登录页「重试连接」入口）：不必重输密码，
+  /// 重新走一遍 bootstrap（上次线路快路径 → 全量探测 → me 验活）。
+  Future<void> retryBootstrap() async {
+    if (state == AuthPhase.checking) return;
+    state = AuthPhase.checking;
+    await Future.microtask(_bootstrap);
   }
 
   /// 登录：成功返回 null，失败返回服务端中文文案。
