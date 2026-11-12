@@ -18,6 +18,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../core/api/api_client.dart';
+import '../../core/chat/chat_chrome.dart';
 import '../../core/chat/chat_media.dart';
 import '../../core/chat/keyboard_metrics.dart';
 import '../../core/chat/chat_models.dart';
@@ -409,9 +410,7 @@ class _ChatComposeState extends ConsumerState<ChatCompose> {
       if (reply != null)
         Container(
           width: double.infinity,
-          color: widget.immersive
-              ? Colors.black54
-              : theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.7),
+          color: chatChromeColor(theme, immersive: widget.immersive),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           child: Row(children: [
             Icon(Icons.reply_rounded,
@@ -435,18 +434,14 @@ class _ChatComposeState extends ConsumerState<ChatCompose> {
           ]),
         ),
       // 输入栏（层级：消息列表 / 输入栏 / 底部槽位——输入栏恒在面板上方）。
-      // 视觉统一（复验 item 3）：默认半透明 surface（透出聊天背景），不纯色实底；
-      // 沉浸式与顶栏同色系半透明深色层压在照片上（对齐 Web chat-immersive 分层）
+      // 五处外壳同一函数取色：顶栏/状态栏/引用栏/输入栏/⊕面板/贴纸坞
+      // 同一底色同一 α，杜绝「输入框透明、工具栏纯色」的混搭。
       Container(
         decoration: BoxDecoration(
-          color: widget.immersive
-              ? Colors.black54
-              : theme.colorScheme.surface.withValues(alpha: 0.85),
+          color: chatChromeColor(theme, immersive: widget.immersive),
           border: Border(
               top: BorderSide(
-                  color: widget.immersive
-                      ? Colors.white24
-                      : theme.colorScheme.outlineVariant)),
+                  color: chatChromeBorder(theme, immersive: widget.immersive))),
         ),
         padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
         child: SafeArea(
@@ -532,10 +527,14 @@ class _ChatComposeState extends ConsumerState<ChatCompose> {
           // 宽度沿用父约束（槽位宽度）：这里若给 maxWidth 无界，面板内容
           // 布局直接失败 → 槽位空白（段三真机缺陷 2 根因）
           child: _slots.slot == InputSlot.fn
-              ? _FnPanel(height: kbHeight, onAction: _onFnAction)
+              ? _FnPanel(
+                  height: kbHeight,
+                  immersive: widget.immersive,
+                  onAction: _onFnAction)
               : _slots.slot == InputSlot.sticker
                   ? _StickerDock(
                       height: kbHeight,
+                      immersive: widget.immersive,
                       tab: _stickerTab,
                       onTab: (t) => setState(() => _stickerTab = t),
                       onEmoji: _insertEmoji,
@@ -552,8 +551,12 @@ class _ChatComposeState extends ConsumerState<ChatCompose> {
 // ── ⊕功能面板（16 格对齐 Web fnPanel）────────────────────────────────
 
 class _FnPanel extends StatelessWidget {
-  const _FnPanel({required this.height, required this.onAction});
+  const _FnPanel(
+      {required this.height,
+      required this.immersive,
+      required this.onAction});
   final double height;
+  final bool immersive;
   final void Function(String id) onAction;
 
   static const List<(String, IconData, String)> tiles = [
@@ -580,8 +583,7 @@ class _FnPanel extends StatelessWidget {
     final theme = Theme.of(context);
     return Container(
       height: height,
-      // 视觉统一（复验 item 3）：带透明度底色，不纯色实底
-      color: theme.colorScheme.surfaceContainerLow.withValues(alpha: 0.9),
+      color: chatChromeColor(theme, immersive: immersive),
       child: GridView.count(
         crossAxisCount: 4,
         childAspectRatio: 1.15,
@@ -613,6 +615,7 @@ class _FnPanel extends StatelessWidget {
 class _StickerDock extends ConsumerWidget {
   const _StickerDock({
     required this.height,
+    required this.immersive,
     required this.tab,
     required this.onTab,
     required this.onEmoji,
@@ -620,6 +623,7 @@ class _StickerDock extends ConsumerWidget {
     required this.onAddSticker,
   });
   final double height;
+  final bool immersive;
   final String tab;
   final void Function(String tab) onTab;
   final void Function(String emoji) onEmoji;
@@ -645,8 +649,7 @@ class _StickerDock extends ConsumerWidget {
     final theme = Theme.of(context);
     return Container(
       height: height,
-      // 视觉统一（复验 item 3）：带透明度底色，不纯色实底
-      color: theme.colorScheme.surfaceContainerLow.withValues(alpha: 0.9),
+      color: chatChromeColor(theme, immersive: immersive),
       child: Column(children: [
         // tabs（对齐 Web renderStickerTabs 顺序与文案）
         SizedBox(

@@ -16,6 +16,7 @@ import '../../core/chat/chat_bubbles.dart';
 import '../../core/chat/chat_media.dart';
 import '../../core/chat/chat_state.dart';
 import '../auth/auth_state.dart';
+import 'skin_bubble.dart';
 
 Future<void> showBubbleSkinSheet(BuildContext context) {
   return showModalBottomSheet<void>(
@@ -117,15 +118,8 @@ class _BubbleSkinSheetState extends ConsumerState<_BubbleSkinSheet> {
       final dio = await ref.read(dioProvider.future);
       final payload =
           applyChatSkinPayload(me.spaceRaw, skin: skin.skin, fg: skin.fg, swap: skin.swap);
-      // [skin-dbg] 诊断埋点：PUT 载荷与服务端回执（复验第二轮取证）
-      debugPrint('[skin-dbg] save: PUT /api/space chat_bubble=${skin.skin} '
-          'fg=${skin.fg} swap=${skin.swap}');
-      final rsp = await dio.put('/api/space', data: payload);
-      debugPrint('[skin-dbg] save: PUT status=${rsp.statusCode}');
+      await dio.put('/api/space', data: payload);
       await ref.read(authProvider.notifier).reload();
-      // [skin-dbg] reload 后 me.space 的实际落库值
-      final after = ref.read(authProvider.notifier).me?.spaceRaw['chat_bubble'];
-      debugPrint('[skin-dbg] save: after reload me.space.chat_bubble=$after');
       ref.read(chatUiTickProvider.notifier).state++;
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
@@ -291,8 +285,9 @@ class _BubbleSkinSheetState extends ConsumerState<_BubbleSkinSheet> {
                 : CachedNetworkImage(
                     imageUrl: bubbleSkinUrl(base, skinName),
                     fit: BoxFit.contain,
-                    // 皮肤图公开静态语义（Web 直挂 <img> 无 Cookie）
+                    // 皮肤图低频资源：首次取回落盘，后续读本地（通则 item 5）
                     httpHeaders: headers,
+                    cacheManager: LowFreqCacheManager.instance,
                     placeholder: (_, _) => const SizedBox(),
                     errorWidget: (_, _, _) => const SizedBox()),
           ),
@@ -325,25 +320,22 @@ class _BubbleSkinSheetState extends ConsumerState<_BubbleSkinSheet> {
 
   Widget _skinBubble(ThemeData theme, String base, String packName,
       {required bool mine}) {
-    final textColor =
-        _fg == 'light' ? Colors.white : theme.colorScheme.onSurface;
-    return Container(
-      height: 52,
-      decoration: BoxDecoration(
-        image: DecorationImage(
-          image: CachedNetworkImageProvider(
-              bubbleSkinUrl(base, packName),
-              headers: ref.watch(mediaCookieHeadersProvider).valueOrNull,
-              cacheManager: LowFreqCacheManager.instance),
-          centerSlice: const Rect.fromLTWH(42, 42, 44, 28), // 九宫格：slice 42 fill
-          fit: BoxFit.cover,
+    // 预览与实际气泡共用 SkinBubble：同一 NinePatch painter（42 源角→16 目标角）、
+    // 同一 padding 3/7、同一字色契约（skinTextStyle），保证「预览=实际」。
+    // mine 侧 url 已是服务器 -r 镜像图。
+    return SkinBubble(
+      url: bubbleSkinUrl(base, packName),
+      fgLight: _fg == 'light',
+      child: SizedBox(
+        height: 52,
+        child: Align(
+          alignment: Alignment.center,
+          child: Text(mine ? '我们的小气泡' : '这是对方说的',
+              maxLines: 1, overflow: TextOverflow.ellipsis,
+              style: skinTextStyle(theme.textTheme.bodySmall,
+                  fgLight: _fg == 'light')),
         ),
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      alignment: Alignment.center,
-      child: Text(mine ? '我们的小气泡' : '这是对方说的',
-          maxLines: 1, overflow: TextOverflow.ellipsis,
-          style: theme.textTheme.bodySmall?.copyWith(color: textColor)),
     );
   }
 }

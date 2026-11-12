@@ -80,22 +80,41 @@ class PostCard extends ConsumerWidget {
             padding: const EdgeInsets.only(top: 6),
             child: Text(content, style: theme.textTheme.bodyMedium),
           ),
-        // 媒体网格：图 preview 可点查看器 / 视频 poster+播放 / 语音 chip（复用聊天组件）
+        // 媒体网格：铺满卡片内容宽（Web static/style.css:602-609
+        // `.media-grid{grid-template-columns:repeat(3,1fr);gap:8px}`、
+        // `.single{grid-template-columns:1fr}` + `aspect-ratio:16/10;max-height:360`）。
+        // 旧实现直接复用聊天气泡的 MediaImageView(size:220/110) 固定正方形，
+        // 单图右边空一大块、多图也铺不满（用户复验「右侧 2/3 空白」根因）。
+        // 聊天侧所有调用点不传 width/height，行为不变。
         if (images.isNotEmpty)
           Padding(
             padding: const EdgeInsets.only(top: 8),
-            child: images.length == 1
-                ? GestureDetector(
-                    onTap: () => openImageViewer(context, images),
-                    child: MediaImageView(mid: images.first.id, size: 220))
-                : Wrap(spacing: 4, runSpacing: 4, children: [
-                    for (var i = 0; i < images.length; i++)
-                      GestureDetector(
-                        onTap: () =>
-                            openImageViewer(context, images, initialIndex: i),
-                        child: MediaImageView(mid: images[i].id, size: 110),
-                      ),
-                  ]),
+            child: LayoutBuilder(builder: (context, c) {
+              final w = c.maxWidth;
+              if (images.length == 1) {
+                return GestureDetector(
+                  onTap: () => openImageViewer(context, images),
+                  child: MediaImageView(
+                      mid: images.first.id,
+                      width: w,
+                      height: timelineSingleMediaHeight(w)),
+                );
+              }
+              const gap = timelineMediaGap;
+              final cell = timelineMediaCell(w);
+              return Wrap(
+                spacing: gap,
+                runSpacing: gap,
+                children: [
+                  for (var i = 0; i < images.length; i++)
+                    GestureDetector(
+                      onTap: () =>
+                          openImageViewer(context, images, initialIndex: i),
+                      child: MediaImageView(mid: images[i].id, size: cell),
+                    ),
+                ],
+              );
+            }),
           ),
         if (videos.isNotEmpty)
           Padding(

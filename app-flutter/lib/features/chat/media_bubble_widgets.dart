@@ -21,16 +21,18 @@ import 'video_player_page.dart';
 
 /// 统一的媒体中性占位（加载中 / 失败 / 数据未就绪）
 class MediaPlaceholder extends StatelessWidget {
-  const MediaPlaceholder({super.key, this.label = '[图片]', this.size = 96});
+  const MediaPlaceholder(
+      {super.key, this.label = '[图片]', this.size = 96, this.height});
   final String label;
   final double size;
+  final double? height;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Container(
       width: size,
-      height: size,
+      height: height ?? size,
       decoration: BoxDecoration(
         color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
         borderRadius: BorderRadius.circular(10),
@@ -45,25 +47,40 @@ class MediaPlaceholder extends StatelessWidget {
 
 /// 图片媒体（preview 图；点按行为段三再扩展大图浏览）
 class MediaImageView extends ConsumerWidget {
-  const MediaImageView({super.key, required this.mid, this.size = 180});
+  const MediaImageView({
+    super.key,
+    required this.mid,
+    this.size = 180,
+    this.width,
+    this.height,
+  });
   final String mid;
   final double size;
 
+  /// 时光页媒体网格用：显式宽/高铺满卡片。不传时完全沿用聊天气泡的正方形
+  /// size 语义（聊天侧所有调用点零改动）。
+  final double? width;
+  final double? height;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final w = width ?? size;
+    final h = height ?? size;
     final base = ref.watch(chatBaseProvider).valueOrNull;
-    if (base == null) return MediaPlaceholder(size: size);
+    if (base == null) {
+      return MediaPlaceholder(size: w, height: h);
+    }
     final headers = ref.watch(mediaCookieHeadersProvider).valueOrNull;
     return ClipRRect(
       borderRadius: BorderRadius.circular(10),
       child: CachedNetworkImage(
         imageUrl: mediaUrl(base, mid),
         httpHeaders: headers,
-        width: size,
-        height: size,
+        width: w,
+        height: h,
         fit: BoxFit.cover,
-        placeholder: (_, _) => MediaPlaceholder(size: size),
-        errorWidget: (_, _, _) => MediaPlaceholder(size: size),
+        placeholder: (_, _) => MediaPlaceholder(size: w, height: h),
+        errorWidget: (_, _, _) => MediaPlaceholder(size: w, height: h),
       ),
     );
   }

@@ -8,13 +8,13 @@ library;
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart'
-    show Clipboard, ClipboardData, SystemUiOverlayStyle;
+import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/cache/low_freq_cache.dart';
 import '../../core/chat/chat_bubbles.dart';
+import '../../core/chat/chat_chrome.dart';
 import '../../core/chat/chat_media.dart';
 import '../../core/chat/chat_models.dart';
 import '../../core/chat/chat_state.dart';
@@ -26,6 +26,7 @@ import '../home/home_page.dart' show todayStr;
 import 'bubble_skin_sheet.dart';
 import 'chat_compose.dart';
 import 'media_bubble_widgets.dart';
+import 'skin_bubble.dart';
 import 'wallpaper_sheet.dart';
 
 class MessagesPage extends ConsumerStatefulWidget {
@@ -46,7 +47,6 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
   bool _searchOpen = false;
   String _flashId = '';
   int _flashTick = 0;
-  String _lastSkinLog = '';
   String? _pressedId; // 长按菜单打开中的记录 id（气泡 1.02 微放大）
 
   @override
@@ -276,25 +276,15 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
     final wp = chatBgOf(me.spaceRaw, me.user.id);
     final skin = ChatSkin.fromSpace(me.spaceRaw);
     final immersive = wp.isPhoto;
-    if (_lastSkinLog != '${skin.skin}|${skin.fg}|${skin.swap}|$immersive') {
-      _lastSkinLog = '${skin.skin}|${skin.fg}|${skin.swap}|$immersive';
-      debugPrint('[skin-dbg] page: chat_bubble=${skin.skin} fg=${skin.fg} '
-          'swap=${skin.swap} base=${ref.watch(chatBaseProvider).valueOrNull} '
-          'spaceRaw.chat_bubble=${me.spaceRaw['chat_bubble']}');
-    }
-
     return Scaffold(
       backgroundColor: immersive ? Colors.black : null,
       appBar: AppBar(
         titleSpacing: 0,
-        // 视觉统一（复验 item 3）：顶栏透明沉浸（透出聊天背景），与输入栏/
-        // 展开面板同层半透明连成一体；图标文字颜色随明暗切换保证可读
-        backgroundColor: immersive ? Colors.black54 : Colors.transparent,
+        // 五处外壳同一底色同一透明度（聊天页外壳契约，见 chat_chrome.dart）
+        backgroundColor: chatChromeColor(Theme.of(context), immersive: immersive),
         foregroundColor: immersive ? Colors.white : null,
-        // 状态栏图标亮度随顶栏明暗联动（沉浸式顶栏为深色 → 白图标）
-        systemOverlayStyle: immersive
-            ? SystemUiOverlayStyle.light
-            : SystemUiOverlayStyle.dark,
+        systemOverlayStyle:
+            chatChromeOverlayStyle(Theme.of(context), immersive: immersive),
         // 二级页通则：automaticallyImplyLeading 不关，自动返回箭头 + 手势都回上一页
         title: Row(children: [
           const SizedBox(width: 4),
@@ -623,30 +613,60 @@ class _RecallLine extends StatelessWidget {
 /// 引用块（段三：点击跳回原消息+高亮；对齐 Web chat-quote，文本 slice60 由
 /// quoteSnippet 保证存储端截断，展示端同样截断）
 class _QuoteBlock extends StatelessWidget {
-  const _QuoteBlock({required this.quote, required this.onJump});
+  const _QuoteBlock({
+    required this.quote,
+    required this.onJump,
+    this.skinned = false,
+    this.mine = false,
+    this.skinFg,
+  });
   final (String, String) quote;
   final VoidCallback onJump;
+  final bool skinned;
+  final bool mine;
+  final Color? skinFg;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    // Web .chat-panel.skin-on .chat-quote（style.css:2538-2540）：
+    // 底色跟着气泡走，别再压一层固定黑灰；默认 rgba(0,0,0,.055)，
+    // mine 侧 rgba(255,255,255,.16)；color:inherit（=气泡字色）、
+    // border-left-color:currentColor、opacity:.9。
+    final Color bg;
+    final Color border;
+    final Color fg;
+    if (skinned) {
+      bg = mine
+          ? Colors.white.withValues(alpha: 0.16)
+          : Colors.black.withValues(alpha: 0.055);
+      fg = skinFg ?? skinDarkFg;
+      border = fg;
+    } else {
+      bg = theme.colorScheme.surface.withValues(alpha: 0.55);
+      fg = theme.colorScheme.outline;
+      border = theme.colorScheme.primary;
+    }
     return InkWell(
       borderRadius: BorderRadius.circular(6),
       onTap: onJump,
-      child: Container(
-        width: double.infinity,
-        margin: const EdgeInsets.only(bottom: 4),
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(
-          color: theme.colorScheme.surface.withValues(alpha: 0.55),
-          borderRadius: BorderRadius.circular(6),
-          border: Border(
-              left: BorderSide(width: 3, color: theme.colorScheme.primary)),
+      child: Opacity(
+        opacity: skinned ? 0.9 : 1.0,
+        child: Container(
+          // 不写死 width:double.infinity——气泡宽度由内容自适应（外层
+          // ChatBubbleFrame 的 ConstrainedBox 夹上下限），引用块随正文一起收缩。
+          margin: const EdgeInsets.only(bottom: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: bg,
+            borderRadius: BorderRadius.circular(6),
+            border:
+                Border(left: BorderSide(width: 3, color: border)),
+          ),
+          child: Text('↩ ${quoteSnippet(quote.$2)}',
+              maxLines: 2, overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.bodySmall?.copyWith(color: fg)),
         ),
-        child: Text('↩ ${quoteSnippet(quote.$2)}',
-            maxLines: 2, overflow: TextOverflow.ellipsis,
-            style: theme.textTheme.bodySmall
-                ?.copyWith(color: theme.colorScheme.outline)),
       ),
     );
   }
@@ -708,25 +728,15 @@ class _BubbleRow extends ConsumerWidget {
       );
     }
 
-    // 皮肤九宫格（对齐 Web border-image slice 42 fill / 16px）：
-    // 左=对方图，右=我的图；swap 由 ChatSkin.leftRightUrls 对调
+    // 皮肤九宫格（对齐 Web border-image slice 42 fill / width 16px）：
+    // 左=对方图，右=我的图；swap 由 ChatSkin.leftRightUrls 对调。
+    // 渲染走 SkinBubble 自绘九宫格：Flutter 的 centerSlice 没有 border-image-width
+    // 「42px 源角 → 16px 目标角」的缩放语义，角饰会按原像素绘制而比例失调
+    //（皮肤真机取证根因）；SkinBubble 内部按 url 走低频缓存 + Cookie 头。
     final useSkin = skin.enabled && base != null;
     final (leftSkin, rightSkin) = skin.leftRightUrls;
     final skinName = mine ? rightSkin : leftSkin;
     final lightText = skin.fg == 'light';
-    // [skin-dbg] 诊断埋点：皮肤图请求参数与加载结果（复验第二轮取证，
-    // 证据到手后随最终复验包移除）
-    final skinHeaders = useSkin ? ref.watch(mediaCookieHeadersProvider).valueOrNull : null;
-    if (useSkin) {
-      final skinUrl = bubbleSkinUrl(base, skinName);
-      debugPrint('[skin-dbg] bubble: url=$skinUrl '
-          'cookie=${(skinHeaders?['Cookie'] ?? '').isEmpty ? 'EMPTY' : 'len=${skinHeaders!['Cookie']!.length}'}');
-      // ignore: discarded_futures
-      CachedNetworkImageProvider(skinUrl, headers: skinHeaders,
-          cacheManager: LowFreqCacheManager.instance,
-          errorListener: (e) =>
-              debugPrint('[skin-dbg] bubble load ERROR: $e'));
-    }
 
     // 歌卡 / 位置卡：整条卡片渲染（对齐 Web songCard/locCard 分支）
     Widget? card;
@@ -735,98 +745,115 @@ class _BubbleRow extends ConsumerWidget {
       card = LocationCardView(location: visual.location!);
     }
 
+    // 皮肤态字色（Web .skinned 写死 #2B2029 / .skinned.light #fff + 淡投影），
+    // 引用块 color:inherit 也取同一个 fg；默认态沿用主题 bodyMedium。
+    final bodyStyle = useSkin
+        ? skinTextStyle(theme.textTheme.bodyMedium, fgLight: lightText)
+        : theme.textTheme.bodyMedium;
+    final skinFg = lightText ? skinLightFg : skinDarkFg;
+
+    // 气泡内容（皮肤态 / 默认态共用同一份 child，保证两者宽度口径一致）
+    final content = Column(
+      crossAxisAlignment:
+          mine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (visual.quote != null)
+          _QuoteBlock(
+              quote: visual.quote!,
+              onJump: () => onJump(visual.quote!.$1),
+              skinned: useSkin,
+              mine: mine,
+              skinFg: skinFg),
+        ?card,
+        for (final line in visual.textLines)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 1),
+            child: Text(line, style: bodyStyle),
+          ),
+        if (visual.imageMids.length == 1)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: MediaImageView(mid: visual.imageMids.first),
+          )
+        else if (visual.imageMids.length > 1)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Wrap(
+                spacing: 4,
+                runSpacing: 4,
+                children: [
+                  for (final mid in visual.imageMids)
+                    MediaImageView(mid: mid, size: 96)
+                ]),
+          ),
+        if (visual.videoMids.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Wrap(
+                spacing: 4,
+                children: [
+                  for (final mid in visual.videoMids)
+                    VideoCardView(mid: mid, size: 180)
+                ]),
+          ),
+        if (visual.voiceMids.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Wrap(
+                spacing: 4,
+                children: [
+                  for (final mid in visual.voiceMids) VoiceChipView(mid: mid)
+                ]),
+          ),
+      ],
+    );
+
+    final bubbleBody = useSkin
+        ? SkinBubble(
+            url: bubbleSkinUrl(base, skinName),
+            fgLight: lightText,
+            child: content,
+          )
+        : AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: mine
+                  ? theme.colorScheme.primaryContainer.withValues(alpha: 0.6)
+                  : theme.colorScheme.surfaceContainerHighest
+                      .withValues(alpha: immersive ? 0.85 : 0.6),
+              boxShadow: pressed
+                  ? [
+                      BoxShadow(
+                          blurRadius: 8,
+                          color:
+                              theme.colorScheme.shadow.withValues(alpha: 0.3))
+                    ]
+                  : null,
+              borderRadius: BorderRadius.only(
+                topLeft: const Radius.circular(16),
+                topRight: const Radius.circular(16),
+                bottomLeft: Radius.circular(mine ? 16 : 4),
+                bottomRight: Radius.circular(mine ? 4 : 16),
+              ),
+            ),
+            child: content,
+          );
+
     final bubble = _FlashWrapper(
       flashTick: flashTick,
       child: AnimatedScale(
         scale: pressed ? 1.02 : 1.0,
         duration: const Duration(milliseconds: 150),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          padding: useSkin
-              ? const EdgeInsets.symmetric(horizontal: 14, vertical: 8)
-              : const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: useSkin
-              ? BoxDecoration(
-                  image: DecorationImage(
-                    image: CachedNetworkImageProvider(
-                        bubbleSkinUrl(base, skinName),
-                        headers: skinHeaders,
-                        cacheManager: LowFreqCacheManager.instance),
-                    centerSlice: const Rect.fromLTWH(42, 42, 44, 28),
-                  ),
-                )
-              : BoxDecoration(
-                  color: mine
-                      ? theme.colorScheme.primaryContainer.withValues(alpha: 0.6)
-                      : theme.colorScheme.surfaceContainerHighest
-                          .withValues(alpha: immersive ? 0.85 : 0.6),
-                  boxShadow: pressed
-                      ? [BoxShadow(
-                          blurRadius: 8,
-                          color: theme.colorScheme.shadow.withValues(alpha: 0.3))]
-                      : null,
-                  borderRadius: BorderRadius.only(
-                    topLeft: const Radius.circular(16),
-                    topRight: const Radius.circular(16),
-                    bottomLeft: Radius.circular(mine ? 16 : 4),
-                    bottomRight: Radius.circular(mine ? 4 : 16),
-                  ),
-                ),
-          child: Column(
-            crossAxisAlignment:
-                mine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (visual.quote != null)
-                _QuoteBlock(
-                    quote: visual.quote!,
-                    onJump: () => onJump(visual.quote!.$1)),
-              ?card,
-              for (final line in visual.textLines)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 1),
-                  child: Text(line,
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                          color: useSkin && lightText ? Colors.white : null)),
-                ),
-              if (visual.imageMids.length == 1)
-                Padding(
-                  padding: const EdgeInsets.only(top: 4),
-                  child: MediaImageView(mid: visual.imageMids.first),
-                )
-              else if (visual.imageMids.length > 1)
-                Padding(
-                  padding: const EdgeInsets.only(top: 4),
-                  child: Wrap(
-                      spacing: 4,
-                      runSpacing: 4,
-                      children: [
-                        for (final mid in visual.imageMids)
-                          MediaImageView(mid: mid, size: 96)
-                      ]),
-                ),
-              if (visual.videoMids.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(top: 4),
-                  child: Wrap(
-                      spacing: 4,
-                      children: [
-                        for (final mid in visual.videoMids)
-                          VideoCardView(mid: mid, size: 180)
-                      ]),
-                ),
-              if (visual.voiceMids.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(top: 4),
-                  child: Wrap(
-                      spacing: 4,
-                      children: [
-                        for (final mid in visual.voiceMids) VoiceChipView(mid: mid)
-                      ]),
-                ),
-            ],
-          ),
-        ),
+        // 宽度随聊天内容自适应：Column 在 loose 约束下自身宽度 = 最大子宽，
+        // 由 ConstrainedBox 夹到 Web .chat-bubble 的 44px 下限与
+        // .chat-line 85%/92% 上限（短消息窄、长文本宽至上限）。
+        // 皮肤图由 SkinBubble 的 CustomPaint 跟着这个最终矩形铺开——旧
+        // centerSlice 把 42px 源角按原像素画，角饰吃掉大半气泡、正文挤成
+        // 窄缝，才是「气泡不随内容扩展」的视觉根因。
+        // 不用 IntrinsicWidth：它给子树无界宽，歌卡/位置卡内的 Expanded 会炸。
+        child: ChatBubbleFrame(child: bubbleBody),
       ),
     );
     final avatar = _ChatAvatar(user: author, size: 34);

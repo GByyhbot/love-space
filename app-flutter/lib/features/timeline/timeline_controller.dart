@@ -51,6 +51,9 @@ class TimelineController extends Notifier<TimelineState> {
   String? _boundUserId;
   (double, String)? _cursor;
 
+  /// reset 请求代次：快速连续改筛选时旧请求仍在途，只有最新一代允许写 state。
+  int _reqSeq = 0;
+
   /// composer 发布幂等：首次生成后随会话保留（失败重试复用，成功清空——
   /// 持久化暂存归段二）
   String? _activePostClientId;
@@ -75,15 +78,22 @@ class TimelineController extends Notifier<TimelineState> {
 
   /// 拉取（reset=true 首屏/筛选变更/发布后重置；否则游标追加）
   Future<void> load({required bool reset}) async {
-    if (state.loading || _disposed) return;
-    if (!reset && !state.hasMore) return;
+    if (_disposed) return;
+    // 上翻（reset=false）仍需防重入；首屏/筛选变更（reset=true）**允许并发**：
+    // 旧请求在途时若直接 return，第二次筛选会被静默丢弃，页面停在上一次
+    // 筛选结果（QA4 防抖竞态用例抓到的真实缺陷）。改由 _reqSeq 让旧响应失效。
+    if (!reset && (state.loading || !state.hasMore)) return;
+    final seq = ++_reqSeq;
+    final filter = state.filter; // 捕获本次筛选，避免 await 期间被下一次改掉
     state = state.copyWith(loading: true, error: null,
         skeleton: reset && !_skeletonSeen);
     try {
       final dio = await ref.read(api.dioProvider.future);
       final cursor = reset ? null : _cursor;
       final r = await dio.get('/api/records',
-          queryParameters: buildTimelineQuery(state.filter, cursor: cursor));
+          queryParameters: buildTimelineQuery(filter, cursor: cursor));
+      // 已被更新的筛选覆盖：旧响应不得写 posts / cursor / loading
+      if (_disposed || seq != _reqSeq) return;
       final fetched = parsePostRecords(r.data);
       final hasMore = fetched.length > timelinePageSize;
       final page = fetched.take(timelinePageSize).toList();
@@ -100,7 +110,8 @@ class TimelineController extends Notifier<TimelineState> {
       if (!_disposed) state = state.copyWith(loading: false, skeleton: false);
     } catch (e) {
       _skeletonSeen = true;
-      if (!_disposed) {
+      // 旧请求的失败也不得把 error 盖到最新一次筛选的界面上
+      if (!_disposed && seq == _reqSeq) {
         state = state.copyWith(loading: false, skeleton: false,
             error: api.errorDetail(e));
       }

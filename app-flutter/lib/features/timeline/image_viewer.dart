@@ -17,6 +17,28 @@ import '../../core/chat/chat_media.dart';
 import 'package:dio/dio.dart' show Options, ResponseType;
 import '../../core/chat/chat_models.dart';
 
+/// 下载扩展名推断（mime → 常见后缀；未知回退 .bin）。
+/// 抽成顶层纯函数：下载链涉及 widget/fake-async/文件 IO，把「映射规则」单独
+/// 拿出来做单测，避免整条 UI 链在 flutter test 里挂死。
+String mediaFileExtension(String mime) {
+  const map = {
+    'image/jpeg': '.jpg',
+    'image/png': '.png',
+    'image/webp': '.webp',
+    'image/gif': '.gif',
+    'image/heic': '.heic',
+    'video/mp4': '.mp4',
+    'video/webm': '.webm',
+    'video/mov': '.mov',
+    'audio/mp4': '.m4a',
+    'audio/mpeg': '.mp3',
+    'audio/wav': '.wav',
+    'audio/aac': '.aac',
+    'audio/ogg': '.ogg',
+  };
+  return map[mime.toLowerCase()] ?? '.bin';
+}
+
 class ImageViewerPage extends ConsumerStatefulWidget {
   const ImageViewerPage({super.key, required this.images, this.initialIndex = 0});
   final List<ChatMedia> images;
@@ -35,25 +57,8 @@ class _ImageViewerPageState extends ConsumerState<ImageViewerPage> {
 
   ChatMedia get _current => widget.images[_index];
 
-  /// 扩展名推断（mime → 常见后缀；未知回退 .bin）
-  String _extOf(String mime) {
-    const map = {
-      'image/jpeg': '.jpg',
-      'image/png': '.png',
-      'image/webp': '.webp',
-      'image/gif': '.gif',
-      'image/heic': '.heic',
-      'video/mp4': '.mp4',
-      'video/webm': '.webm',
-      'video/mov': '.mov',
-      'audio/mp4': '.m4a',
-      'audio/mpeg': '.mp3',
-      'audio/wav': '.wav',
-      'audio/aac': '.aac',
-      'audio/ogg': '.ogg',
-    };
-    return map[mime.toLowerCase()] ?? '.bin';
-  }
+  /// 扩展名推断委托顶层纯函数（便于单测）
+  String _extOf(String mime) => mediaFileExtension(mime);
 
   /// 下载原文件（download 参数带 Cookie → 应用文档目录
   /// downloads 目录，文件名为 mid 加扩展名；无系统相册插件（禁新依赖），落应用目录并提示路径

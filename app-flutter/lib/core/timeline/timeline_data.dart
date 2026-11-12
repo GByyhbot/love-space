@@ -8,6 +8,8 @@
 ///   ≈ 「M月d日 HH:mm」。
 library;
 
+import 'dart:math' as math;
+
 import '../api/api_client.dart' as api;
 
 /// 单页条数（服务端拉 61 判 hasMore，展示 60）
@@ -90,3 +92,18 @@ String postHeaderDate({
   required double created,
 }) =>
     bodyDate.isNotEmpty ? bodyDate : timelineDateLabel(created);
+
+// ── 时光卡片媒体网格宽度（Web static/style.css:602-609）────────────────
+// `.media-grid{grid-template-columns:repeat(3,1fr);gap:8px}`、
+// `.media-grid.single{grid-template-columns:1fr}`、
+// `.media-grid.single img{aspect-ratio:16/10;max-height:360px}`。
+// 旧实现复用聊天气泡的固定 size（220/110）→ 单图右侧 2/3 空白（真机复验缺陷 3）。
+const double timelineMediaGap = 8.0;
+
+/// 多图每格边长：卡片内容宽扣两道 8dp 间隙后三等分
+double timelineMediaCell(double cardWidth) =>
+    (cardWidth - timelineMediaGap * 2) / 3;
+
+/// 单图高度：16/10 比例，封顶 360dp
+double timelineSingleMediaHeight(double cardWidth) =>
+    math.min(cardWidth * 10 / 16, 360.0);
