@@ -10,6 +10,8 @@ import '../auth/auth_state.dart';
 import '../../core/chat/chat_state.dart';
 import '../../core/sse/sse_client.dart';
 import '../home/home_page.dart';
+import '../timeline/composer_sheet.dart';
+import '../timeline/timeline_page.dart';
 
 class ShellPage extends ConsumerStatefulWidget {
   const ShellPage({super.key});
@@ -40,9 +42,11 @@ class _ShellPageState extends ConsumerState<ShellPage> {
     final unread = ref.watch(chatUnreadProvider);
     final me = ref.watch(authProvider.notifier).me;
     final theme = Theme.of(context);
+    // IndexedStack 常驻四个 tab：时光列表/筛选状态切页不丢（时光页状态
+    // 挂 keepAlive controller，双保险）
     final pages = [
       HomePage(onGoTab: (tab) => setState(() => _tab = tab)),
-      const _PlaceholderTab(title: '时光', note: '阶段 2 · 条目 4 迁移'),
+      TimelinePage(active: _tab == 1),
       const _PlaceholderTab(title: '相册', note: '阶段 2 · 条目 5 迁移'),
       const _PlaceholderTab(title: '我们', note: '阶段 2 · 条目 6 迁移'),
     ];
@@ -78,11 +82,10 @@ class _ShellPageState extends ConsumerState<ShellPage> {
           ),
         ],
       ),
-      body: pages[_tab],
+      body: IndexedStack(index: _tab, children: pages),
       floatingActionButton: FloatingActionButton(
-        onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('发布（底部弹窗）在阶段 2 迁移')),
-        ),
+        tooltip: '记录此刻',
+        onPressed: () => showComposerSheet(context),
         child: const Icon(Icons.favorite),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
