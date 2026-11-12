@@ -631,8 +631,10 @@ class _FanPanel extends StatelessWidget {
       width: width,
       height: furnitureH,
       child: Stack(children: [
-        // ① 穹顶弧（实际曲线顶点距屏底 96dp → 画布内 y=36；两端点距屏底
-        //    48dp → 画布内 y=84；容器 132 高，画布无上溢）：
+        // ① 穹顶（实心：弧线两端沿屏缘延伸到左右下角闭合，弧线以下
+        //    整个区域填穹顶色直到屏幕物理底边，弧下不留空隙）：
+        //    实际曲线顶点距屏底 96dp → 画布内 y=36；两端点距屏底
+        //    48dp → 画布内 y=84；容器 132 高，画布无上溢。
         //    发送态浅色（微信同款浅白穹顶），取消/转文字态变深灰
         //    （微信非发送态底部整体深色，「语音」白字才可读）
         Positioned(
@@ -729,9 +731,11 @@ class _FanPanel extends StatelessWidget {
   }
 }
 
-/// 穹顶弧：二次贝塞尔（画布坐标两端点 (0,h-48)/(w,h-48)——距屏底 48dp；
+/// 穹顶（实心）：二次贝塞尔弧线两端沿屏缘延伸到屏幕左右下角闭合，
+/// 弧线以下整个区域填穹顶色直到屏幕物理底边（含手势条区），弧下不留空隙。
+/// 画布坐标两端点 (0,h-48)/(w,h-48)——距屏底 48dp；
 /// 实际曲线顶点 = 0.25P0+0.5P1+0.25P2 → 控制点 y=h-144 时顶点 y=h-96，
-/// 即顶点距屏底 96dp）。发送态浅灰白（微信浅穹顶）；
+/// 即顶点距屏底 96dp。发送态浅灰白（微信浅穹顶）；
 /// 非发送态深灰微亮层（保证「语音」白字可读）。
 class _DomePainter extends CustomPainter {
   const _DomePainter({required this.active});
@@ -742,8 +746,12 @@ class _DomePainter extends CustomPainter {
     final w = size.width;
     final h = size.height;
     final p = Path()
-      ..moveTo(0, h - 48)
+      // 实心穹顶：从左下角沿屏缘上到左端点，画弧，再沿屏缘下到右下角闭合
+      // ——弧线以下整个区域（含手势条区）全部填穹顶色，弧下不留空隙
+      ..moveTo(0, h)
+      ..lineTo(0, h - 48)
       ..quadraticBezierTo(w * 0.5, h - 144, w, h - 48)
+      ..lineTo(w, h)
       ..close();
     canvas.drawPath(
         p,
