@@ -383,6 +383,7 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
           Expanded(child: _buildList(context, me, chat, skin, immersive)),
           ChatCompose(
             immersive: immersive,
+            dark: true,
             replyNotifier: _replyNotifier,
             onOpenSearch: () => setState(() {
               _searchOpen = true;
@@ -391,14 +392,17 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
             onOpenWallpaper: () => showWallpaperSheet(context),
           ),
         ]),
-        // 顶部提示层（替代底部 SnackBar）：录音状态卡与「已撤回 / 已复制」
-        // 等提示都挂在 AppBar 下方，不遮挡输入栏与麦克风按钮。
+        // 顶部提示层（替代底部 SnackBar）：「已撤回 / 已复制」等提示挂在
+        // AppBar 下方，不遮挡输入栏与麦克风按钮。
         const Positioned(
           top: 0,
           left: 0,
           right: 0,
           child: ChatToastHost(),
         ),
+        // 微信式语音输入全屏遮罩（录音态显示，盖住输入栏与消息列表）：
+        // 压暗背景 + 中央绿色波形气泡 + 底部取消/转文字/发送三区。
+        const VoiceRecordOverlay(),
       ]),
     );
   }

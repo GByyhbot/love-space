@@ -1,6 +1,6 @@
 /* 复验修复单测：
    ① 长按录音手势意图（松开发送 / 左上取消 / 右上转文字）；
-   ② 顶部提示层取代底部 SnackBar：自动收起、录音态常驻、不占底部；
+   ② 顶部提示层取代底部 SnackBar：自动收起；录音态改全屏遮罩、不占底部；
    ③ 聊天背景层在 body 被键盘压缩后仍保持完整视口高度与顶部位置。 */
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -68,6 +68,7 @@ void main() {
           body: Stack(children: [
             const Positioned(
                 top: 0, left: 0, right: 0, child: ChatToastHost()),
+            const VoiceRecordOverlay(),
             Consumer(builder: (_, ref, _) => Column(children: [
                   TextButton(
                     onPressed: () => ref
@@ -100,16 +101,20 @@ void main() {
       expect(find.text('已撤回'), findsNothing);
     });
 
-    testWidgets('录音态显示意图高亮且不被普通提示挤掉', (tester) async {
+    testWidgets('录音态全屏遮罩显示三区且不被普通提示挤掉', (tester) async {
       await tester.pumpWidget(ProviderScope(child: toastTree()));
       await tester.tap(find.text('toast'));
       await tester.pump();
+      // 普通提示出现在顶部
+      expect(find.text('已撤回'), findsOneWidget);
       await tester.tap(find.text('record'));
       await tester.pump();
-      expect(find.text('正在录音'), findsOneWidget);
-      expect(find.text('松开取消录音'), findsOneWidget);
-      expect(find.text('左上取消'), findsOneWidget);
-      expect(find.text('右上转文字'), findsOneWidget);
+      // 录音态：全屏遮罩显示底部三区（取消 / 转文字 / 发送）
+      expect(find.text('取消'), findsOneWidget);
+      expect(find.text('滑到这里 · 转文字'), findsOneWidget);
+      expect(find.text('松开 发送'), findsOneWidget);
+      // 普通提示仍与遮罩并存（遮罩与顶部提示层是两条独立通道）
+      expect(find.text('已撤回'), findsOneWidget);
       await tester.pumpWidget(const SizedBox());
       await tester.pump();
     });

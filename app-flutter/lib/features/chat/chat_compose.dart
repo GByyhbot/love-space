@@ -5,8 +5,9 @@
 ///   面板高度按内容估高、夹「无键盘视口」62%；面板先占位、键盘收起后显内容（防闪烁）；
 /// · 面板意图：点输入框键盘临时压掉面板，键盘收起后自动回位；亲手收起/选走功能才清意图；
 /// · 输入框自动长高（约 4 行封顶内滚）；有文字时语音位换发送钮（对齐 Web syncCompose）；
-/// · 语音录制对齐 Web chatVoiceToggle：点一下开始，再点一次结束并发送。
+/// · 语音录制对齐微信/QQ：长按麦克风，松开发送 / 上滑左上取消 / 上滑右上转文字。
 /// ⊕面板 16 格与贴纸坞文案逐字对照 Web（chat.js 266–286 / stickerPanel 系列）。
+/// [dark]：底栏按视频 78 整体染黑（与系统浅色主题解耦；顶栏与气泡不受影响）。
 library;
 
 import 'dart:io';
@@ -39,6 +40,7 @@ class ChatCompose extends ConsumerStatefulWidget {
     this.onOpenSearch,
     this.onOpenWallpaper,
     this.immersive = false,
+    this.dark = false,
   });
 
   /// 引用态（页级持有：长按菜单「引用」设置，发送/取消后清空）
@@ -52,6 +54,9 @@ class ChatCompose extends ConsumerStatefulWidget {
 
   /// 照片背景沉浸式：输入栏/引用栏走与顶栏同色系的半透明深色层压图上
   final bool immersive;
+
+  /// 底栏按视频 78 染黑（聊天页专属深色外壳）
+  final bool dark;
 
   @override
   ConsumerState<ChatCompose> createState() => _ChatComposeState();
@@ -469,6 +474,8 @@ class _ChatComposeState extends ConsumerState<ChatCompose>
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    // 外壳前景是否走浅色：深色底（dark 或 immersive 压黑）一律白字白图标。
+    final onDark = chromeIsDark(widget.dark, widget.immersive);
     // 必须读窗口原始 insets：Scaffold 已把 body 子树的 viewInsets.bottom 清零
     //（见 _windowKeyboardInsets 注释），用 MediaQuery 会让键盘高度被算两遍。
     final insets = _windowKeyboardInsets(context);
@@ -494,20 +501,18 @@ class _ChatComposeState extends ConsumerState<ChatCompose>
       if (reply != null)
         Container(
           width: double.infinity,
-          color: chatChromeColor(theme, immersive: widget.immersive),
+          color: chatChromeColor(theme,
+              immersive: widget.immersive, dark: widget.dark),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           child: Row(children: [
             Icon(Icons.reply_rounded,
-                size: 16,
-                color: widget.immersive
-                    ? Colors.white70
-                    : theme.colorScheme.primary),
+                size: 16, color: onDark ? Colors.white70 : theme.colorScheme.primary),
             const SizedBox(width: 6),
             Expanded(
               child: Text('引用：${quoteSnippet(reply.$2)}',
                   maxLines: 1, overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.bodySmall?.copyWith(
-                      color: widget.immersive ? Colors.white70 : null)),
+                      color: onDark ? Colors.white70 : null)),
             ),
             GestureDetector(
               onTap: () => widget.replyNotifier?.value = null,
@@ -517,15 +522,25 @@ class _ChatComposeState extends ConsumerState<ChatCompose>
             ),
           ]),
         ),
-      // 输入栏（层级：消息列表 / 输入栏 / 底部槽位——输入栏恒在面板上方）。
+      // 表情快捷胶囊条（对齐视频 78：常驻在输入栏上方的一排常用 emoji，
+      // 点一下直接插入输入框；底色与外壳同源，深色底走浅色图标）。
+      _QuickEmojiRow(
+        onEmoji: _insertEmoji,
+        onDark: onDark,
+        chromeColor: chatChromeColor(theme,
+            immersive: widget.immersive, dark: widget.dark),
+      ),
+      // 输入栏（层级：消息列表 / 表情条 / 输入栏 / 底部槽位——输入栏恒在面板上方）。
       // 五处外壳同一函数取色：顶栏/状态栏/引用栏/输入栏/⊕面板/贴纸坞
       // 同一底色同一 α，杜绝「输入框透明、工具栏纯色」的混搭。
       Container(
         decoration: BoxDecoration(
-          color: chatChromeColor(theme, immersive: widget.immersive),
+          color: chatChromeColor(theme,
+              immersive: widget.immersive, dark: widget.dark),
           border: Border(
               top: BorderSide(
-                  color: chatChromeBorder(theme, immersive: widget.immersive))),
+                  color: chatChromeBorder(theme,
+                      immersive: widget.immersive, dark: widget.dark))),
         ),
         padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
         child: SafeArea(
@@ -540,17 +555,16 @@ class _ChatComposeState extends ConsumerState<ChatCompose>
                 maxLength: 20000,
                 textInputAction: TextInputAction.send,
                 onSubmitted: (_) => _sendText(),
-                style: TextStyle(
-                    color: widget.immersive ? Colors.white : null),
-                cursorColor: widget.immersive ? Colors.white70 : null,
+                style: TextStyle(color: onDark ? Colors.white : null),
+                cursorColor: onDark ? Colors.white70 : null,
                 decoration: InputDecoration(
-                  hintText: '发消息',
-                  hintStyle: TextStyle(
-                      color: widget.immersive ? Colors.white60 : null),
+                  hintText: '发消息或按住说话…',
+                  hintStyle:
+                      TextStyle(color: onDark ? Colors.white60 : null),
                   isDense: true,
                   filled: true,
-                  fillColor: widget.immersive
-                      ? Colors.white.withValues(alpha: 0.12)
+                  fillColor: onDark
+                      ? Colors.white.withValues(alpha: 0.14)
                       : null,
                   counterText: '',
                   contentPadding: const EdgeInsets.symmetric(
@@ -580,7 +594,7 @@ class _ChatComposeState extends ConsumerState<ChatCompose>
                   child: Padding(
                     padding: const EdgeInsets.all(10),
                     child: Icon(Icons.mic_rounded,
-                        color: widget.immersive ? Colors.white : null),
+                        color: onDark ? Colors.white : null),
                   ),
                 ),
               )
@@ -593,13 +607,13 @@ class _ChatComposeState extends ConsumerState<ChatCompose>
             IconButton(
               tooltip: '表情',
               onPressed: _toggleSticker,
-              color: widget.immersive ? Colors.white : null,
+              color: onDark ? Colors.white : null,
               icon: const Icon(Icons.emoji_emotions_rounded),
             ),
             IconButton(
               tooltip: '更多',
               onPressed: _toggleFn,
-              color: widget.immersive ? Colors.white : null,
+              color: onDark ? Colors.white : null,
               icon: Icon(_slots.slot == InputSlot.fn
                   ? Icons.close_rounded
                   : Icons.add_circle_outline_rounded),
@@ -625,11 +639,13 @@ class _ChatComposeState extends ConsumerState<ChatCompose>
               ? _FnPanel(
                   height: kbHeight,
                   immersive: widget.immersive,
+                  dark: widget.dark,
                   onAction: _onFnAction)
               : visibleSlot == InputSlot.sticker
                   ? _StickerDock(
                       height: kbHeight,
                       immersive: widget.immersive,
+                      dark: widget.dark,
                       tab: _stickerTab,
                       onTab: (t) => setState(() => _stickerTab = t),
                       onEmoji: _insertEmoji,
@@ -643,15 +659,65 @@ class _ChatComposeState extends ConsumerState<ChatCompose>
   }
 }
 
+// ── 表情快捷胶囊条（视频 78：常驻在输入栏上方，点一下插入输入框）────────
+
+const List<String> _quickEmojis = ['😂', '😭', '🌹', '🤞', '❤️', '😘', '🥰', '👍'];
+
+class _QuickEmojiRow extends StatelessWidget {
+  const _QuickEmojiRow({
+    required this.onEmoji,
+    required this.onDark,
+    required this.chromeColor,
+  });
+  final void Function(String emoji) onEmoji;
+  final bool onDark;
+  final Color chromeColor;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        color: chromeColor,
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (final em in _quickEmojis)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 2),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(14),
+                    onTap: () => onEmoji(em),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: onDark
+                            ? Colors.white.withValues(alpha: 0.1)
+                            : Colors.black.withValues(alpha: 0.05),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Text(em, style: const TextStyle(fontSize: 20)),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      );
+}
+
 // ── ⊕功能面板（16 格对齐 Web fnPanel）────────────────────────────────
 
 class _FnPanel extends StatelessWidget {
   const _FnPanel(
       {required this.height,
       required this.immersive,
+      required this.dark,
       required this.onAction});
   final double height;
   final bool immersive;
+  final bool dark;
   final void Function(String id) onAction;
 
   static const List<(String, IconData, String)> tiles = [
@@ -676,9 +742,10 @@ class _FnPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final onDark = chromeIsDark(dark, immersive);
     return Container(
       height: height,
-      color: chatChromeColor(theme, immersive: immersive),
+      color: chatChromeColor(theme, immersive: immersive, dark: dark),
       child: GridView.count(
         crossAxisCount: 4,
         childAspectRatio: 1.15,
@@ -691,12 +758,15 @@ class _FnPanel extends StatelessWidget {
               child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(icon, size: 26, color: theme.colorScheme.primary),
+                    Icon(icon,
+                        size: 26,
+                        color: onDark ? Colors.white : theme.colorScheme.primary),
                     const SizedBox(height: 6),
                     Text(label,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.labelSmall),
+                        style: theme.textTheme.labelSmall?.copyWith(
+                            color: onDark ? Colors.white70 : null)),
                   ]),
             ),
         ],
@@ -711,6 +781,7 @@ class _StickerDock extends ConsumerWidget {
   const _StickerDock({
     required this.height,
     required this.immersive,
+    required this.dark,
     required this.tab,
     required this.onTab,
     required this.onEmoji,
@@ -719,6 +790,7 @@ class _StickerDock extends ConsumerWidget {
   });
   final double height;
   final bool immersive;
+  final bool dark;
   final String tab;
   final void Function(String tab) onTab;
   final void Function(String emoji) onEmoji;
@@ -742,9 +814,10 @@ class _StickerDock extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final onDark = chromeIsDark(dark, immersive);
     return Container(
       height: height,
-      color: chatChromeColor(theme, immersive: immersive),
+      color: chatChromeColor(theme, immersive: immersive, dark: dark),
       child: Column(children: [
         // tabs（对齐 Web renderStickerTabs 顺序与文案）
         SizedBox(
@@ -760,8 +833,10 @@ class _StickerDock extends ConsumerWidget {
                     onPressed: () => onTab(id),
                     style: TextButton.styleFrom(
                       foregroundColor: tab == id
-                          ? theme.colorScheme.primary
-                          : theme.colorScheme.outline,
+                          ? (onDark ? Colors.white : theme.colorScheme.primary)
+                          : (onDark
+                              ? Colors.white60
+                              : theme.colorScheme.outline),
                       textStyle: theme.textTheme.labelLarge,
                     ),
                     child: Text(label),
@@ -770,13 +845,18 @@ class _StickerDock extends ConsumerWidget {
             ],
           ),
         ),
-        Divider(height: 1, color: theme.colorScheme.outlineVariant),
+        Divider(
+            height: 1,
+            color: onDark
+                ? Colors.white24
+                : theme.colorScheme.outlineVariant),
         Expanded(child: _body(context, ref)),
         Padding(
           padding: const EdgeInsets.symmetric(vertical: 6),
           child: Text(_noteFor(tab),
               style:
-                  theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.outline)),
+                  theme.textTheme.bodySmall
+                      ?.copyWith(color: onDark ? Colors.white60 : theme.colorScheme.outline)),
         ),
       ]),
     );

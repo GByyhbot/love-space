@@ -17,16 +17,29 @@ import 'package:flutter/services.dart' show SystemUiOverlayStyle;
 /// 五处外壳唯一透明度（immersive 与否**同一个 α**，不许一块实一块透）。
 const double chatChromeAlpha = 0.72;
 
+/// 深色外壳基色（对齐视频 78 聊天底栏：近黑）。仅聊天输入区这套外壳使用，
+/// 顶栏与气泡不受影响——避免把整页级联改崩菜单/搜索/置顶。
+const Color chatChromeDarkBase = Color(0xFF161616);
+
 /// 五处外壳唯一底色：照片壁纸上压黑、普通背景用主题 surface，
 /// 两者都套同一个 [chatChromeAlpha] → 同一底色 + 同一透明度。
-Color chatChromeColor(ThemeData theme, {required bool immersive}) =>
-    (immersive ? Colors.black : theme.colorScheme.surface)
-        .withValues(alpha: chatChromeAlpha);
+/// [dark]：聊天底栏按视频 78 整体染黑（与系统浅色主题解耦）。
+Color chatChromeColor(ThemeData theme,
+        {required bool immersive, bool dark = false}) =>
+    dark
+        ? chatChromeDarkBase.withValues(alpha: 0.98)
+        : (immersive ? Colors.black : theme.colorScheme.surface)
+            .withValues(alpha: chatChromeAlpha);
 
 /// 外壳分隔线：与底色同明暗，避免浅色模式下一条突兀实线。
-Color chatChromeBorder(ThemeData theme, {required bool immersive}) => immersive
-    ? const Color(0x3DFFFFFF) // Colors.white24
-    : theme.colorScheme.outlineVariant.withValues(alpha: 0.6);
+Color chatChromeBorder(ThemeData theme,
+        {required bool immersive, bool dark = false}) =>
+    (dark || immersive)
+        ? const Color(0x4DFFFFFF) // 深色底上的浅分隔线
+        : theme.colorScheme.outlineVariant.withValues(alpha: 0.6);
+
+/// 外壳前景（文字/图标）是否应使用浅色：深色底（dark 或 immersive 压黑）走白。
+bool chromeIsDark(bool dark, bool immersive) => dark || immersive;
 
 /// 状态栏取色归一：底色与顶栏同源，图标亮度由**同一个底色**的亮度反推，
 /// 杜绝「深色底配深色图标」；状态栏/导航栏底色也取同一色。

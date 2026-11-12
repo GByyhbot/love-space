@@ -124,13 +124,14 @@ final chatRecordProvider =
 
 // ── 顶部提示宿主 ──────────────────────────────────────────────────────
 
-/// 挂在聊天页 body 顶部；录音态优先，其次普通提示。
+/// 挂在聊天页 body 顶部，只承载普通提示（已撤回 / 已复制 / 错误等）。
+/// 录音态由单独的 [VoiceRecordOverlay] 全屏呈现，不再挤在顶部卡里
+///（旧顶部卡会随输入栏被键盘推动，且语义上录音是全屏交互，不该在顶栏）。
 class ChatToastHost extends ConsumerWidget {
   const ChatToastHost({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final rec = ref.watch(chatRecordProvider);
     final toast = ref.watch(chatToastProvider);
     return AnimatedSwitcher(
       duration: const Duration(milliseconds: 220),
@@ -142,11 +143,9 @@ class ChatToastHost extends ConsumerWidget {
             .animate(animation),
         child: FadeTransition(opacity: animation, child: child),
       ),
-      child: rec != null
-          ? _RecordBanner(key: const ValueKey('record'), state: rec)
-          : toast != null
-              ? _ToastPill(key: ValueKey('toast-${toast.id}'), message: toast)
-              : const SizedBox.shrink(key: ValueKey('empty')),
+      child: toast != null
+          ? _ToastPill(key: ValueKey('toast-${toast.id}'), message: toast)
+          : const SizedBox.shrink(key: ValueKey('empty')),
     );
   }
 }
@@ -203,16 +202,122 @@ class _ToastPill extends StatelessWidget {
   }
 }
 
-/// 录音状态卡：波形 + 主文案 + 左上取消 / 右上转文字 两个高亮区。
-class _RecordBanner extends StatefulWidget {
-  const _RecordBanner({super.key, required this.state});
-  final ChatRecordState state;
+/// 微信式语音输入全屏遮罩（对齐视频 81）：
+/// · 压暗背景，聊天界面被半透明黑遮罩盖住（录音是全屏交互，不该挤在顶部卡里）；
+/// · 中上部绿色波形气泡（取消态转红）+ 向下小尾巴；
+/// · 底部三区：左下「取消」/ 右下「滑到这里 · 转文字」/ 最底「松开 发送」，
+///   按当前手势意图([RecordIntent])高亮对应区。
+/// 纯视觉：`IgnorePointer` 不拦截手势——长按录音的起点在输入框旁的麦克风，
+/// 指针 move/up 仍由那个 GestureDetector 接收，遮罩只负责呈现。
+class VoiceRecordOverlay extends ConsumerWidget {
+  const VoiceRecordOverlay({super.key});
 
   @override
-  State<_RecordBanner> createState() => _RecordBannerState();
+  Widget build(BuildContext context, WidgetRef ref) {
+    final rec = ref.watch(chatRecordProvider);
+    if (rec == null) return const SizedBox.shrink();
+    final intent = rec.intent;
+    final top = MediaQuery.of(context).size.height * 0.2;
+    return IgnorePointer(
+      child: Stack(children: [
+        // 压暗背景
+        Container(color: Colors.black.withValues(alpha: 0.6)),
+        // 中上部：绿色波形气泡（取消态转红）+ 向下尾巴
+        Positioned(
+          top: top,
+          left: 0,
+          right: 0,
+          child: Center(child: _RecordBubble(intent: intent)),
+        ),
+        // 底部三区
+        Positioned(
+          left: 0,
+          right: 0,
+          bottom: MediaQuery.of(context).padding.bottom,
+          child: _RecordZones(intent: intent),
+        ),
+      ]),
+    );
+  }
 }
 
-class _RecordBannerState extends State<_RecordBanner>
+/// 录音气泡：微信绿（取消态转红）+ 动态波形 + 向下尾巴。
+class _RecordBubble extends StatelessWidget {
+  const _RecordBubble({required this.intent});
+  final RecordIntent intent;
+
+  @override
+  Widget build(BuildContext context) {
+    final cancel = intent == RecordIntent.cancel;
+    final toText = intent == RecordIntent.toText;
+    final color = cancel ? const Color(0xFFFF5B5B) : const Color(0xFF95EC69);
+    final caption = cancel
+        ? '松开取消'
+        : toText
+            ? '松开转文字'
+            : '手指上滑，取消或转文字';
+    return Stack(clipBehavior: Clip.none, children: [
+      Container(
+        margin: const EdgeInsets.only(bottom: 16, left: 28),
+        padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 20),
+        decoration: BoxDecoration(
+          color: color,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: const [
+            BoxShadow(blurRadius: 22, offset: Offset(0, 8), color: Colors.black38)
+          ],
+        ),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          _RecordWave(color: Colors.black87),
+          const SizedBox(height: 10),
+          Text(caption,
+              style: const TextStyle(
+                  color: Colors.black87,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600)),
+        ]),
+      ),
+      // 向下小尾巴（气泡左下角）
+      Positioned(
+        left: 26,
+        bottom: 0,
+        child: CustomPaint(
+          size: const Size(24, 18),
+          painter: _TailPainter(color: color),
+        ),
+      ),
+    ]);
+  }
+}
+
+/// 气泡尾巴：向下的小三角（贴气泡左下角）。
+class _TailPainter extends CustomPainter {
+  const _TailPainter({required this.color});
+  final Color color;
+  @override
+  void paint(Canvas canvas, Size size) {
+    final p = Path()
+      ..moveTo(2, 0)
+      ..lineTo(size.width, 0)
+      ..lineTo(2, size.height)
+      ..close();
+    canvas.drawPath(p, Paint()..color = color);
+  }
+
+  @override
+  bool shouldRepaint(covariant _TailPainter old) => old.color != color;
+}
+
+/// 动态波形（黑色竖条，中间高两侧低、随时间起伏）。
+class _RecordWave extends StatefulWidget {
+  const _RecordWave({required this.color});
+  final Color color;
+
+  @override
+  State<_RecordWave> createState() => _RecordWaveState();
+}
+
+class _RecordWaveState extends State<_RecordWave>
     with SingleTickerProviderStateMixin {
   late final AnimationController _c = AnimationController(
       vsync: this, duration: const Duration(milliseconds: 900))
@@ -226,84 +331,29 @@ class _RecordBannerState extends State<_RecordBanner>
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final intent = widget.state.intent;
-    final (title, accent) = switch (intent) {
-      RecordIntent.cancel => ('松开取消录音', scheme.error),
-      RecordIntent.toText => ('松开转为文字', scheme.primary),
-      RecordIntent.send => ('松开发送 · 上滑取消或转文字', scheme.primary),
-    };
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
-      decoration: BoxDecoration(
-        color: scheme.inverseSurface.withValues(alpha: 0.95),
-        borderRadius: BorderRadius.circular(22),
-        boxShadow: [
-          BoxShadow(
-              blurRadius: 20,
-              offset: const Offset(0, 6),
-              color: Colors.black.withValues(alpha: 0.24)),
-        ],
-      ),
-      child: Column(mainAxisSize: MainAxisSize.min, children: [
-        Row(children: [
-          _Wave(animation: _c, color: accent),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text('正在录音',
-                style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                    color: scheme.onInverseSurface,
-                    fontWeight: FontWeight.w600)),
-          ),
-        ]),
-        const SizedBox(height: 8),
-        Text(title,
-            textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.bodySmall
-                ?.copyWith(color: scheme.onInverseSurface.withValues(alpha: 0.85))),
-        const SizedBox(height: 12),
-        Row(children: [
-          Expanded(
-              child: _Zone(
-                  label: '左上取消',
-                  icon: Icons.close_rounded,
-                  selected: intent == RecordIntent.cancel,
-                  color: scheme.error)),
-          const SizedBox(width: 10),
-          Expanded(
-              child: _Zone(
-                  label: '右上转文字',
-                  icon: Icons.text_fields_rounded,
-                  selected: intent == RecordIntent.toText,
-                  color: scheme.primary)),
-        ]),
-      ]),
-    );
-  }
-}
-
-class _Wave extends AnimatedWidget {
-  const _Wave({required Animation<double> animation, required this.color})
-      : super(listenable: animation);
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    final t = (listenable as Animation<double>).value;
     return SizedBox(
-      width: 34,
-      height: 22,
+      width: 132,
+      height: 42,
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          for (var i = 0; i < 4; i++)
-            Container(
-              width: 4,
-              height: 6 + (1 - (t - i * 0.18).abs().clamp(0.0, 1.0)) * 15,
-              decoration: BoxDecoration(
-                  color: color, borderRadius: BorderRadius.circular(2)),
+          for (var i = 0; i < 11; i++)
+            AnimatedBuilder(
+              animation: _c,
+              builder: (_, _) {
+                final t = _c.value;
+                final phase = (t * 2 - i * 0.16).abs().clamp(0.0, 1.0);
+                final h = 7 + (1 - phase) * 30;
+                return Container(
+                  width: 4,
+                  height: h,
+                  decoration: BoxDecoration(
+                    color: widget.color,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                );
+              },
             ),
         ],
       ),
@@ -311,41 +361,82 @@ class _Wave extends AnimatedWidget {
   }
 }
 
-class _Zone extends StatelessWidget {
-  const _Zone(
-      {required this.label,
-      required this.icon,
-      required this.selected,
-      required this.color});
-  final String label;
-  final IconData icon;
-  final bool selected;
-  final Color color;
+/// 底部三区（对齐视频 81：左取消 / 右转文字 / 底发送）。
+class _RecordZones extends StatelessWidget {
+  const _RecordZones({required this.intent});
+  final RecordIntent intent;
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    final cancel = intent == RecordIntent.cancel;
+    final toText = intent == RecordIntent.toText;
+    final send = !cancel && !toText;
+    return Column(children: [
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+        child: Row(children: [
+          Expanded(
+            child: _ZonePill(
+              label: '取消',
+              icon: Icons.close_rounded,
+              active: cancel,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: _ZonePill(
+              label: '滑到这里 · 转文字',
+              icon: Icons.text_fields_rounded,
+              active: toText,
+            ),
+          ),
+        ]),
+      ),
+      Container(
+        margin: const EdgeInsets.only(bottom: 22, left: 24, right: 24),
+        padding: const EdgeInsets.symmetric(vertical: 15),
+        decoration: BoxDecoration(
+          color: send ? Colors.white : Colors.white.withValues(alpha: 0.5),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Center(
+          child: Text('松开 发送',
+              style: TextStyle(
+                  color: send ? Colors.black : Colors.black54,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700)),
+        ),
+      ),
+    ]);
+  }
+}
+
+class _ZonePill extends StatelessWidget {
+  const _ZonePill(
+      {required this.label, required this.icon, required this.active});
+  final String label;
+  final IconData icon;
+  final bool active;
+
+  @override
+  Widget build(BuildContext context) {
     return AnimatedContainer(
-      duration: const Duration(milliseconds: 140),
-      padding: const EdgeInsets.symmetric(vertical: 8),
+      duration: const Duration(milliseconds: 120),
+      padding: const EdgeInsets.symmetric(vertical: 13),
       decoration: BoxDecoration(
-        color: selected
-            ? color.withValues(alpha: 0.22)
-            : scheme.onInverseSurface.withValues(alpha: 0.07),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-            color: selected
-                ? color.withValues(alpha: 0.75)
-                : Colors.transparent,
-            width: 1.2),
+        color: active
+            ? const Color(0xFF95EC69)
+            : Colors.white.withValues(alpha: 0.18),
+        borderRadius: BorderRadius.circular(16),
       ),
       child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-        Icon(icon, size: 15, color: selected ? color : scheme.onInverseSurface),
+        Icon(icon, size: 16, color: active ? Colors.black : Colors.white70),
         const SizedBox(width: 6),
         Text(label,
-            style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                color: selected ? color : scheme.onInverseSurface,
-                fontWeight: selected ? FontWeight.w700 : FontWeight.w400)),
+            style: TextStyle(
+                color: active ? Colors.black : Colors.white70,
+                fontSize: 13,
+                fontWeight: FontWeight.w600)),
       ]),
     );
   }
