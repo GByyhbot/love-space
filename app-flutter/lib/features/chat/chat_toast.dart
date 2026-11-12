@@ -258,11 +258,14 @@ class VoiceRecordOverlay extends ConsumerWidget {
   }
 }
 
-/// 录音气泡（用户定版：长扁形，宽度随录音时长逐渐变长）：
-/// · 正常态绿色胶囊，高度 64（更矮更长），宽度 = 基础 0.30 屏宽 +
-///   每秒 +0.035 屏宽，封顶 0.72；波形条数随宽度增加；
-/// · 取消态缩小转红靠左（宽度固定 0.34，不随时长）；
-/// · 意图非发送时上方显示「松手 xx」白字提示。带向下尾巴。
+/// 录音气泡（对齐微信逐帧取证 f03/f08/f11）：
+/// · 发送态：绿色胶囊高 88，宽度随录音时长渐长（0.30 + 0.035/秒，封顶 0.72）；
+/// · 取消态：缩小为 100×100 红色方块（靠左），尾巴居中；
+/// · 转文字态：近全宽（左右 12 边距）高 108 绿色扁条——左侧绿色光标竖线、
+///   波形缩到右下角一小簇（松手后进入文字编辑态的视觉暗示）；
+/// · 提示文字（「松手 取消」/「松手 编辑文字」）在气泡**下方**斜排，
+///   取消态靠左、转文字态靠右；
+/// · 尾巴：发送/取消态居中，转文字态偏右 68%（跟随手势方向）。
 /// 时长驱动：Timer.periodic 每秒重建（气泡是纯视觉组件，重建无副作用）。
 class _RecordBubble extends StatefulWidget {
   const _RecordBubble({required this.intent, required this.startedAt});
@@ -296,7 +299,8 @@ class _RecordBubbleState extends State<_RecordBubble> {
   void didUpdateWidget(covariant _RecordBubble old) {
     super.didUpdateWidget(old);
     if (old.startedAt != widget.startedAt) {
-      _secs = DateTime.now().difference(widget.startedAt).inSeconds.clamp(0, 60);
+      _secs =
+          DateTime.now().difference(widget.startedAt).inSeconds.clamp(0, 60);
     }
   }
 
@@ -311,68 +315,99 @@ class _RecordBubbleState extends State<_RecordBubble> {
     final size = MediaQuery.sizeOf(context);
     final cancel = widget.intent == RecordIntent.cancel;
     final toText = widget.intent == RecordIntent.toText;
-    final color = cancel ? const Color(0xFFFF5B5B) : const Color(0xFF95EC69);
+    final color = cancel ? const Color(0xFFFF6B5E) : const Color(0xFF95EC69);
     final width = cancel
-        ? size.width * 0.34
-        : size.width * _RecordBubble.widthFactorFor(_secs);
+        ? 100.0
+        : toText
+            ? size.width - 24
+            : size.width * _RecordBubble.widthFactorFor(_secs);
+    final height = cancel ? 100.0 : toText ? 108.0 : 88.0;
     final hint = cancel
         ? '松手 取消'
         : toText
-            ? '松手 转文字'
+            ? '松手 编辑文字'
             : null;
-    const padH = 20.0;
-    final bars = cancel
-        ? 8
-        : (((width - padH * 2) / 9).floor()).clamp(8, 26);
-    return Column(mainAxisSize: MainAxisSize.min, children: [
-      if (hint != null) ...[
-        Text(hint,
-            style: const TextStyle(
-                color: Colors.white,
-                fontSize: 15,
-                fontWeight: FontWeight.w700)),
-        const SizedBox(height: 12),
-      ],
-      Stack(clipBehavior: Clip.none, children: [
-        AnimatedContainer(
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOutCubic,
-          width: width,
-          height: 64,
-          padding: const EdgeInsets.symmetric(horizontal: padH, vertical: 10),
-          decoration: BoxDecoration(
-            color: color,
-            borderRadius: BorderRadius.circular(24),
-            boxShadow: const [
-              BoxShadow(
-                  blurRadius: 22, offset: Offset(0, 8), color: Colors.black38)
-            ],
-          ),
-          child: Center(
-              child: _RecordWave(
-                  color: Colors.black87,
-                  bars: bars,
-                  barWidth: 3,
-                  maxHeight: 34)),
-        ),
-        // 向下小尾巴（用户定版：气泡正下方居中，对齐微信语音样式）
-        Positioned(
-          left: 0,
-          right: 0,
-          bottom: -12,
-          child: Center(
-            child: CustomPaint(
-              size: const Size(22, 16),
-              painter: _TailPainter(color: color),
+    // 尾巴水平位置：发送/取消态居中，转文字态偏右 68%（跟随手势方向）
+    final tailLeft = toText ? width * 0.68 - 11 : (width - 22) / 2;
+    return Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment:
+            toText ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+        children: [
+          Stack(clipBehavior: Clip.none, children: [
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeOutCubic,
+              width: width,
+              height: height,
+              padding: EdgeInsets.symmetric(
+                  horizontal: toText ? 14 : 20, vertical: toText ? 14 : 12),
+              decoration: BoxDecoration(
+                color: color,
+                borderRadius: BorderRadius.circular(24),
+                boxShadow: const [
+                  BoxShadow(
+                      blurRadius: 22,
+                      offset: Offset(0, 8),
+                      color: Colors.black38)
+                ],
+              ),
+              child: toText
+                  // 转文字态：左侧光标竖线 + 右下角一小簇波形（编辑态暗示）
+                  ? Stack(children: [
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Container(
+                            width: 3,
+                            height: 38,
+                            decoration: BoxDecoration(
+                                color: const Color(0xFF3EB575),
+                                borderRadius: BorderRadius.circular(2))),
+                      ),
+                      Align(
+                        alignment: Alignment.bottomRight,
+                        child: _RecordWave(
+                            color: Colors.black54,
+                            bars: 12,
+                            barWidth: 3,
+                            maxHeight: 22,
+                            uniform: true),
+                      ),
+                    ])
+                  : Center(
+                      child: _RecordWave(
+                          color: Colors.black54,
+                          bars: cancel ? 12 : 26,
+                          barWidth: cancel ? 4 : 3,
+                          maxHeight: 30,
+                          uniform: true)),
             ),
-          ),
-        ),
-      ]),
-    ]);
+            // 向下小尾巴（发送/取消态居中、转文字态偏右 68%）
+            Positioned(
+              left: tailLeft,
+              bottom: -12,
+              child: CustomPaint(
+                size: const Size(22, 16),
+                painter: _TailPainter(color: color),
+              ),
+            ),
+          ]),
+          if (hint != null) ...[
+            const SizedBox(height: 18),
+            Transform.rotate(
+              angle: -0.15,
+              child: Text(hint,
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700)),
+            ),
+          ],
+        ]);
   }
 }
 
-/// 气泡尾巴：向下的对称小三角（居中贴气泡底边）。
+/// 气泡尾巴：向下的对称小三角（贴气泡底边，水平位置随意图调整）。
 class _TailPainter extends CustomPainter {
   const _TailPainter({required this.color});
   final Color color;
@@ -389,19 +424,20 @@ class _TailPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _TailPainter old) => old.color != color;
 }
-
-/// 动态波形（黑色竖条，中间高两侧低、随时间起伏）。条数/粗细/峰高可调，
-/// 取消态小气泡用小参数。
+/// 波形（对齐微信 f03：一排细密均匀竖线）。[uniform]=true 等高静止排列，
+/// false 保留轻微起伏动画；条数/粗细/峰高可调。
 class _RecordWave extends StatefulWidget {
   const _RecordWave(
       {required this.color,
-      this.bars = 13,
-      this.barWidth = 4,
-      this.maxHeight = 56});
+      this.bars = 26,
+      this.barWidth = 3,
+      this.maxHeight = 30,
+      this.uniform = true});
   final Color color;
   final int bars;
   final double barWidth;
   final double maxHeight;
+  final bool uniform;
 
   @override
   State<_RecordWave> createState() => _RecordWaveState();
@@ -422,7 +458,7 @@ class _RecordWaveState extends State<_RecordWave>
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      width: widget.bars * widget.barWidth * 2.0,
+      width: widget.bars * widget.barWidth * 1.8,
       height: widget.maxHeight,
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -433,15 +469,17 @@ class _RecordWaveState extends State<_RecordWave>
               animation: _c,
               builder: (_, _) {
                 final t = _c.value;
-                final phase = (t * 2 - i * 0.16).abs().clamp(0.0, 1.0);
-                final h = widget.maxHeight * 0.14 +
-                    (1 - phase) * widget.maxHeight * 0.86;
+                final h = widget.uniform
+                    ? widget.maxHeight * (0.92 + 0.08 * (1 - (t * 2 - i * 0.16).abs().clamp(0.0, 1.0)))
+                    : widget.maxHeight * 0.14 +
+                        (1 - (t * 2 - i * 0.16).abs().clamp(0.0, 1.0)) *
+                            widget.maxHeight * 0.86;
                 return Container(
                   width: widget.barWidth,
                   height: h,
                   decoration: BoxDecoration(
                     color: widget.color,
-                    borderRadius: BorderRadius.circular(2),
+                    borderRadius: BorderRadius.circular(1.5),
                   ),
                 );
               },
@@ -451,13 +489,11 @@ class _RecordWaveState extends State<_RecordWave>
     );
   }
 }
-
-/// 底部弧形三区（对齐视频 85）：
-/// · 左右两块独立弧形块（大圆角切片）：「取消」「滑到这里 转文字」，
-///   深灰白字，被当前意图选中时白底黑字；
-/// · 中央凸弧（CustomPaint 二次贝塞尔，宽度溢出屏幕形成平缓弧顶）：
-///   发送态白底黑字「松开 发送」，取消态弱化显示「语音」；
-/// · 手指白点落在当前意图区中央。
+/// 底部弧形三区（对齐微信 f03/f08/f11）：
+/// · 左右两块半弧（底部贴屏幕底、顶部半圆拱，两边平分中央断开）；
+/// · 中央凸弧（宽度溢出屏幕形成平缓弧顶）：发送态浅灰白「松开 发送」，
+///   取消/转文字态弱化显示「语音」；
+/// · 手指白点（空心圆圈样式）随意图平滑滑到对应区中央。
 class _ArcZones extends StatelessWidget {
   const _ArcZones({
     required this.width,
@@ -478,7 +514,7 @@ class _ArcZones extends StatelessWidget {
       width: width,
       height: zoneH,
       child: Stack(children: [
-        // 左弧「取消」（微信式半弧：底部贴屏幕底、顶部拱形，高 96；
+        // 左弧「取消」（微信式半弧：底部贴底、顶部拱形，高 96；
         // 两边平分 0.46 宽、中央断开 8%）
         Positioned(
           left: 0,
@@ -527,21 +563,24 @@ class _ArcZones extends StatelessWidget {
                     fontWeight: FontWeight.w800)),
           ),
         ),
-        // 手指白点：落在当前意图区中央（弧块高 96 贴底 → 中心在 zoneH-48）
+        // 手指白点（空心圈）：随意图平滑滑到对应区中央
         Align(
           alignment: send
               ? const Alignment(0, 0.72)
               : cancel
                   ? const Alignment(-0.54, 0.6)
                   : const Alignment(0.54, 0.6),
-          child: Container(
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOutCubic,
             width: 26,
             height: 26,
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.92),
+              color: Colors.white.withValues(alpha: 0.9),
               shape: BoxShape.circle,
+              border: Border.all(color: const Color(0xFF8FA6B8), width: 2.5),
               boxShadow: const [
-                BoxShadow(blurRadius: 8, color: Colors.black26)
+                BoxShadow(blurRadius: 10, color: Colors.black26)
               ],
             ),
           ),
@@ -550,9 +589,8 @@ class _ArcZones extends StatelessWidget {
     );
   }
 }
-
 /// 左/右弧形块：[arc]=true 时为微信式半弧（底部贴屏幕底、顶部半圆拱形），
-/// 深灰白字，选中时白底黑字；false 为悬浮胶囊切片。
+/// 文字沿弧面微倾；深灰白字，选中时白底黑字。
 class _ArcTile extends StatelessWidget {
   const _ArcTile(
       {required this.label,
@@ -579,20 +617,21 @@ class _ArcTile extends StatelessWidget {
             : BorderRadius.circular(52),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Text(label,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          textAlign: TextAlign.center,
-          style: TextStyle(
-              color: active ? Colors.black : Colors.white,
-              fontSize: 14,
-              fontWeight: FontWeight.w600)),
+      child: Transform.rotate(
+        // 沿弧面微倾（逐帧取证：弧内文字逆时针 ~7°）
+        angle: -0.12,
+        child: Text(label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+                color: active ? Colors.black : Colors.white,
+                fontSize: 14,
+                fontWeight: FontWeight.w600)),
+      ),
     );
   }
 }
-
-/// 中央凸弧：二次贝塞尔弧顶（控制点在容器上方 → 弧顶中央凸起、两侧缓落）。
-/// 发送态浅白，其余态弱化半透明。
 class _ArcPainter extends CustomPainter {
   const _ArcPainter({required this.active});
   final bool active;
