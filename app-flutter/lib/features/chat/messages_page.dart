@@ -29,6 +29,7 @@ import 'chat_toast.dart';
 import 'chat_wallpaper_frame.dart';
 import 'media_bubble_widgets.dart';
 import 'skin_bubble.dart';
+import 'voice_playback.dart';
 import 'wallpaper_sheet.dart';
 
 class MessagesPage extends ConsumerStatefulWidget {
@@ -51,9 +52,14 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
   int _flashTick = 0;
   String? _pressedId; // 长按菜单打开中的记录 id（气泡 1.02 微放大）
 
+  /// 语音播放控制器引用（initState 提前捕获：dispose 时 ref 已不可用），
+  /// 离开聊天页停止复位在播语音。
+  VoicePlaybackController? _voicePlaybackCtrl;
+
   @override
   void initState() {
     super.initState();
+    _voicePlaybackCtrl = ref.read(voicePlaybackProvider.notifier);
     // 页面在栈标志：SSE chat 事件只在页面未打开时才去刷 me 更新角标。
     // 微任务包裹：initState 里同步改 provider 会触发 riverpod 的
     // 「Tried to modify a provider while the widget tree was building」断言
@@ -78,6 +84,9 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
     _lifecycle?.dispose();
     _replyNotifier.dispose();
     _searchCtrl.dispose();
+    // 离开聊天页：在播语音停止复位（全局播放互斥收口）
+    // ignore: unawaited_futures
+    _voicePlaybackCtrl?.stop();
     super.dispose();
   }
 
@@ -846,7 +855,8 @@ class _BubbleRow extends ConsumerWidget {
             child: Wrap(
                 spacing: 4,
                 children: [
-                  for (final mid in visual.voiceMids) VoiceChipView(mid: mid)
+                  for (final mid in visual.voiceMids)
+                    VoiceChipView(mid: mid, mine: mine)
                 ]),
           ),
       ],

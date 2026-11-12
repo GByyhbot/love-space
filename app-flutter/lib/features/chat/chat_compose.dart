@@ -35,6 +35,7 @@ import 'input_slots.dart';
 import 'media_bubble_widgets.dart';
 import 'song_picker_sheet.dart';
 import 'sticker_data.dart';
+import 'voice_playback.dart';
 import 'voice_recorder.dart';
 
 class ChatCompose extends ConsumerStatefulWidget {
@@ -357,6 +358,9 @@ class _ChatComposeState extends ConsumerState<ChatCompose>
         return;
       }
       await _recorder.start();
+      // 开始录音前停掉在播语音（全局播放互斥：录音与试听不同时进行）
+      // ignore: unawaited_futures
+      ref.read(voicePlaybackProvider.notifier).stop();
       voiceDbg('compose _startRecording recorder-start-ok');
       _recordOrigin = globalOrigin;
       _lastIntent = RecordIntent.send;
