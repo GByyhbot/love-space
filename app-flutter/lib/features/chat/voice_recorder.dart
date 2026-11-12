@@ -6,10 +6,18 @@ library;
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 
 import '../../core/chat/chat_models.dart';
+
+/// [voice-dbg] 诊断日志（本轮只加日志不改任何控制流，真机取证用）。
+/// debugPrint 在 release 包 logcat 同样可见；单行紧凑格式：
+/// `[voice-dbg] t=<毫秒时间戳> <节点> <关键值>`。
+void voiceDbg(String node, [String extra = '']) => debugPrint(
+    '[voice-dbg] t=${DateTime.now().millisecondsSinceEpoch} '
+    '$node${extra.isEmpty ? '' : ' $extra'}');
 
 class VoiceRecorder {
   AudioRecorder _rec = AudioRecorder();
@@ -28,8 +36,13 @@ class VoiceRecorder {
   Completer<void>? _recycled;
 
   Future<bool> hasPermission() async {
+    final willWaitForRecycle = _recycled != null && !_recycled!.isCompleted;
+    voiceDbg('recorder hasPermission enter',
+        'willWaitForRecycle=$willWaitForRecycle');
     await _awaitRecycled();
-    return _rec.hasPermission();
+    final ok = await _rec.hasPermission();
+    voiceDbg('recorder hasPermission return', 'ok=$ok');
+    return ok;
   }
 
   /// 录音实时音量流（dBFS，约 -160..0，越大越响）。
@@ -41,14 +54,18 @@ class VoiceRecorder {
   Future<void> _awaitRecycled() {
     final c = _recycled;
     if (c == null || c.isCompleted) return Future.value();
+    voiceDbg('recorder _awaitRecycled awaiting previous recycle');
     return c.future;
   }
 
   Future<void> start() async {
+    voiceDbg('recorder start enter');
     await _awaitRecycled();
     final dir = await getApplicationDocumentsDirectory();
     _path =
         '${dir.path}${Platform.pathSeparator}voice_${DateTime.now().millisecondsSinceEpoch}.m4a';
+    voiceDbg('recorder start path', 'path=$_path');
+    voiceDbg('recorder start before _rec.start');
     await _rec.start(
       const RecordConfig(
         encoder: AudioEncoder.aacLc,
@@ -58,42 +75,68 @@ class VoiceRecorder {
       ),
       path: _path!,
     );
+    voiceDbg('recorder start ok');
   }
 
   /// 结束录制；没有录到声音（空文件/失败）返回 null
   Future<ChatLocalFile?> stop() async {
+    voiceDbg('recorder stop enter');
     final p = await _rec.stop();
-    if (p == null || p.isEmpty) return null;
+    voiceDbg('recorder stop recStopPath', 'path=$p');
+    if (p == null || p.isEmpty) {
+      voiceDbg('recorder stop return null (empty-path)');
+      return null;
+    }
     final f = File(p);
-    if (!await f.exists() || await f.length() == 0) return null;
+    if (!await f.exists() || await f.length() == 0) {
+      voiceDbg('recorder stop return null (empty-file)');
+      return null;
+    }
+    voiceDbg('recorder stop return file', 'path=$p');
     return ChatLocalFile(path: p, name: '语音.m4a');
   }
 
   /// 取消录制：停止并删掉临时文件（长按滑到左上取消时用，不留脏数据）
   Future<void> cancel() async {
+    voiceDbg('recorder cancel enter');
     final p = await _rec.stop();
     final path = p ?? _path;
     _path = null;
-    if (path == null) return;
+    voiceDbg('recorder cancel targetPath', 'path=$path');
+    if (path == null) {
+      voiceDbg('recorder cancel skip (no path)');
+      return;
+    }
     try {
       final f = File(path);
-      if (await f.exists()) await f.delete();
-    } catch (_) {
+      if (await f.exists()) {
+        await f.delete();
+        voiceDbg('recorder cancel deleted');
+      } else {
+        voiceDbg('recorder cancel file-not-exists');
+      }
+    } catch (e) {
       // 临时文件清理失败不阻断手势收尾
+      voiceDbg('recorder cancel delete-error', 'e=$e');
     }
   }
 
   /// 完整释放并重建录音器：收尾后调用，确保下一次 start 用全新实例。
   Future<void> recycle() async {
+    voiceDbg('recorder recycle enter');
     final c = Completer<void>();
     _recycled = c;
     try {
       await _rec.dispose();
-    } catch (_) {
+      voiceDbg('recorder recycle disposed');
+    } catch (e) {
       // dispose 异常不阻断重建
+      voiceDbg('recorder recycle dispose-error', 'e=$e');
     } finally {
       _rec = AudioRecorder();
+      voiceDbg('recorder recycle new-instance-created');
       c.complete();
+      voiceDbg('recorder recycle completer-completed');
     }
   }
 

@@ -15,7 +15,8 @@ import 'dart:io';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show HapticFeedback;
+import 'package:flutter/services.dart'
+    show HapticFeedback, PlatformException;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:image_picker/image_picker.dart';
@@ -324,32 +325,39 @@ class _ChatComposeState extends ConsumerState<ChatCompose>
       ((db + 45) / 37).clamp(0.0, 1.0);
 
   void _startVolumeStream() {
+    voiceDbg('compose _startVolumeStream enter');
     _ampSub?.cancel();
     _ampSub = _recorder
         .amplitudeStream(const Duration(milliseconds: 80))
         .listen((amp) {
       ref.read(chatVolumeProvider.notifier).state = _dbToVolume(amp.current);
     });
+    voiceDbg('compose _startVolumeStream exit');
   }
 
   void _stopVolumeStream() {
+    voiceDbg('compose _stopVolumeStream enter');
     _ampSub?.cancel();
     _ampSub = null;
     _maxTimer?.cancel();
     _maxTimer = null;
     _lastIntent = null;
     ref.read(chatVolumeProvider.notifier).state = 0;
+    voiceDbg('compose _stopVolumeStream exit');
   }
 
   Future<void> _startRecording(Offset globalOrigin) async {
+    voiceDbg('compose _startRecording enter');
     try {
       final ok = await _recorder.hasPermission();
+      voiceDbg('compose _startRecording hasPermission', 'ok=$ok');
       if (!ok) {
         _snack('需要麦克风权限，请到系统设置开启后重试',
             tone: ChatToastTone.error);
         return;
       }
       await _recorder.start();
+      voiceDbg('compose _startRecording recorder-start-ok');
       _recordOrigin = globalOrigin;
       _lastIntent = RecordIntent.send;
       ref.read(recordFingerProvider.notifier).state = globalOrigin;
@@ -359,7 +367,17 @@ class _ChatComposeState extends ConsumerState<ChatCompose>
       _maxTimer = Timer(const Duration(seconds: 60), () {
         if (mounted && _recordOrigin != null) _finishRecording();
       });
-    } catch (_) {
+    } catch (e, s) {
+      // [voice-dbg] 取证：真异常不再吞掉，全量落 logcat（只加日志不动控制流）
+      voiceDbg('compose _startRecording catch',
+          'type=${e.runtimeType} e=${e.toString()}');
+      if (e is PlatformException) {
+        voiceDbg('compose _startRecording platformException',
+            'code=${e.code} message=${e.message} details=${e.details}');
+      }
+      // 栈截前 20 行（拼单行，防 logcat 按行截断/折叠）
+      voiceDbg('compose _startRecording stack',
+          'stack=${s.toString().split('\n').take(20).join(' | ')}');
       _recordOrigin = null;
       _stopVolumeStream();
       ref.read(chatRecordProvider.notifier).stop();
@@ -393,43 +411,67 @@ class _ChatComposeState extends ConsumerState<ChatCompose>
     final origin = _recordOrigin;
     _recordOrigin = null;
     final state = ref.read(chatRecordProvider);
+    voiceDbg('compose _finishRecording enter',
+        'hasOrigin=${origin != null} hasState=${state != null}');
     if (origin == null || state == null) return;
     ref.read(recordFingerProvider.notifier).state = null;
     final intent = state.intent;
     final elapsed = DateTime.now().difference(state.startedAt);
+    voiceDbg('compose _finishRecording intent',
+        'intent=$intent elapsedMs=${elapsed.inMilliseconds}');
     _stopVolumeStream();
     switch (intent) {
       case RecordIntent.cancel:
+        voiceDbg('compose _finish cancel pre stop(ending)');
         ref.read(chatRecordProvider.notifier).stop(ending: RecordEnding.cancel);
+        voiceDbg('compose _finish cancel pre recorder.cancel');
         await _recorder.cancel();
+        voiceDbg('compose _finish cancel pre recorder.recycle');
         await _recorder.recycle();
+        voiceDbg('compose _finish cancel done');
         _snack('已取消录音');
       case RecordIntent.toText:
         // 🔴 后端零改动红线下无 ASR 接口（服务端与 Web 端都没有语音识别），
         // 不做假交互：按取消收尾并明确告知（遮罩气泡内也已即时提示）。
+        voiceDbg('compose _finish toText pre stop(ending)');
         ref.read(chatRecordProvider.notifier).stop(ending: RecordEnding.cancel);
+        voiceDbg('compose _finish toText pre recorder.cancel');
         await _recorder.cancel();
+        voiceDbg('compose _finish toText pre recorder.recycle');
         await _recorder.recycle();
+        voiceDbg('compose _finish toText done');
         _snack('语音识别暂未开放，本次录音未发送', tone: ChatToastTone.warning);
       case RecordIntent.send:
         // 通则：短于 1 秒提示「说话时间太短」不发送
         if (elapsed < const Duration(seconds: 1)) {
+          voiceDbg('compose _finish send too-short pre stop(ending)');
           ref
               .read(chatRecordProvider.notifier)
               .stop(ending: RecordEnding.cancel);
+          voiceDbg('compose _finish send too-short pre recorder.cancel');
           await _recorder.cancel();
+          voiceDbg('compose _finish send too-short pre recorder.recycle');
           await _recorder.recycle();
+          voiceDbg('compose _finish send too-short done');
           _snack('说话时间太短', tone: ChatToastTone.warning);
           return;
         }
+        voiceDbg('compose _finish send pre stop(ending)');
         ref.read(chatRecordProvider.notifier).stop(ending: RecordEnding.send);
+        voiceDbg('compose _finish send pre recorder.stop');
         final f = await _recorder.stop();
+        voiceDbg('compose _finish send recorder.stop',
+            'result=${f == null ? 'null' : f.path}');
+        voiceDbg('compose _finish send pre recorder.recycle');
         await _recorder.recycle();
         if (f == null) {
+          voiceDbg('compose _finish send stop-returned-null');
           _snack('没有录到声音', tone: ChatToastTone.warning);
           return;
         }
+        voiceDbg('compose _finish send pre _sendFiles');
         await _sendFiles([f]);
+        voiceDbg('compose _finish send _sendFiles done');
     }
   }
 
@@ -645,10 +687,20 @@ class _ChatComposeState extends ConsumerState<ChatCompose>
             if (!_hasText)
               GestureDetector(
                 behavior: HitTestBehavior.opaque,
-                onLongPressStart: (d) => _startRecording(d.globalPosition),
+                onLongPressStart: (d) {
+                  voiceDbg('compose gesture longPressStart',
+                      'x=${d.globalPosition.dx} y=${d.globalPosition.dy}');
+                  _startRecording(d.globalPosition);
+                },
                 onLongPressMoveUpdate: (d) => _onRecordMove(d.globalPosition),
-                onLongPressEnd: (_) => _finishRecording(),
-                onLongPressCancel: _finishRecording,
+                onLongPressEnd: (_) {
+                  voiceDbg('compose gesture longPressEnd');
+                  _finishRecording();
+                },
+                onLongPressCancel: () {
+                  voiceDbg('compose gesture longPressCancel');
+                  _finishRecording();
+                },
                 onTap: () => _snack('长按录音，松开发送；滑到左上取消、右上转文字'),
                 child: Semantics(
                   button: true,
