@@ -9,91 +9,64 @@ import 'package:love_space/features/chat/chat_toast.dart';
 import 'package:love_space/features/chat/chat_wallpaper_frame.dart';
 
 void main() {
-  group('① 长按录音手势意图（纯函数）', () {
-    const origin = Offset(500, 1200);
+  group('① 长按录音手势意图（纯函数：胶囊行横带 x 判定）', () {
+    const w = 393.0; // 实测规格屏宽
+    final cancelEdge = w * 0.44;   // 172.9
+    final textEdge = w * 0.56;     // 220.1
 
-    test('直接松开 / 只往上滑一点 / 正上方 → 发送', () {
-      expect(recordIntentFor(finger: origin, origin: origin),
+    test('中间带 → 发送（默认态中心与 ±边缘内）', () {
+      expect(recordIntentFor(x: w / 2, screenWidth: w), RecordIntent.send);
+      expect(recordIntentFor(x: cancelEdge + 1, screenWidth: w),
           RecordIntent.send);
-      expect(
-          recordIntentFor(
-              finger: const Offset(500, 1160), origin: origin),
-          RecordIntent.send);
-      expect(
-          recordIntentFor(
-              finger: const Offset(500, 1000), origin: origin),
+      expect(recordIntentFor(x: textEdge - 1, screenWidth: w),
           RecordIntent.send);
     });
 
-    test('滑到左上 → 取消；滑到右上 → 转文字', () {
-      expect(
-          recordIntentFor(
-              finger: const Offset(300, 1000), origin: origin),
+    test('x < 44% → 取消；x > 56% → 转文字', () {
+      expect(recordIntentFor(x: cancelEdge - 1, screenWidth: w),
           RecordIntent.cancel);
-      expect(
-          recordIntentFor(
-              finger: const Offset(620, 1000), origin: origin),
+      expect(recordIntentFor(x: 20, screenWidth: w), RecordIntent.cancel);
+      expect(recordIntentFor(x: textEdge + 1, screenWidth: w),
           RecordIntent.toText);
+      expect(recordIntentFor(x: w - 20, screenWidth: w), RecordIntent.toText);
     });
 
-    test('屏幕下方水平滑动即生效（不要求先上滑）', () {
+    test('迟滞防抖 18dp：边界来回滑动不闪烁', () {
+      // 已在取消区：x 回到 cancelEdge+10（< cancelEdge+18）→ 保持取消
       expect(
           recordIntentFor(
-              finger: const Offset(100, 1180), origin: origin),
-          RecordIntent.cancel);
-      expect(
-          recordIntentFor(
-              finger: const Offset(620, 1180), origin: origin),
-          RecordIntent.toText);
-    });
-
-    test('迟滞防抖：边界来回滑动不闪烁（enter 64 / exit 48）', () {
-      // 进入取消区：dx <= -64
-      expect(recordIntentFor(finger: const Offset(430, 1200), origin: origin),
-          RecordIntent.cancel);
-      // 已在取消区，dx=-55（介于 -64 与 -48 之间）→ 保持取消不闪烁
-      expect(
-          recordIntentFor(
-              finger: const Offset(445, 1200),
-              origin: origin,
+              x: cancelEdge + 10,
+              screenWidth: w,
               currentIntent: RecordIntent.cancel),
           RecordIntent.cancel);
-      // 已在取消区，dx=-40（> -48）→ 退回发送
+      // x >= cancelEdge+18 → 退回发送
       expect(
           recordIntentFor(
-              finger: const Offset(460, 1200),
-              origin: origin,
+              x: cancelEdge + 19,
+              screenWidth: w,
               currentIntent: RecordIntent.cancel),
           RecordIntent.send);
-      // 已在转文字区，dx=55（介于 48 与 64）→ 保持转文字
+      // 已在转文字区：x = textEdge-10（> textEdge-18）→ 保持转文字
       expect(
           recordIntentFor(
-              finger: const Offset(555, 1200),
-              origin: origin,
+              x: textEdge - 10,
+              screenWidth: w,
               currentIntent: RecordIntent.toText),
           RecordIntent.toText);
-      // 已在转文字区，dx=30（< 48）→ 退回发送
+      // x <= textEdge-18 → 退回发送
       expect(
           recordIntentFor(
-              finger: const Offset(530, 1200),
-              origin: origin,
+              x: textEdge - 19,
+              screenWidth: w,
               currentIntent: RecordIntent.toText),
           RecordIntent.send);
-    });
-
-    test('阈值可配置；边界值落在对应象限', () {
+      // 取消区直接滑过中缝到转文字区 → 转文字
       expect(
           recordIntentFor(
-              finger: const Offset(450, 1136),
-              origin: origin,
-              threshold: 64),
-          RecordIntent.send);
-      expect(
-          recordIntentFor(
-              finger: const Offset(436, 1136),
-              origin: origin,
-              threshold: 64),
-          RecordIntent.cancel);
+              x: textEdge + 2,
+              screenWidth: w,
+              currentIntent: RecordIntent.cancel),
+          RecordIntent.toText);
     });
   });
 

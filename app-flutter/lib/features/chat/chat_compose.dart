@@ -352,6 +352,7 @@ class _ChatComposeState extends ConsumerState<ChatCompose>
       await _recorder.start();
       _recordOrigin = globalOrigin;
       _lastIntent = RecordIntent.send;
+      ref.read(recordFingerProvider.notifier).state = globalOrigin;
       ref.read(chatRecordProvider.notifier).start();
       _startVolumeStream();
       // 60s 上限：到时自动按发送收尾（微信同款）
@@ -367,14 +368,16 @@ class _ChatComposeState extends ConsumerState<ChatCompose>
   }
 
   void _onRecordMove(Offset globalPosition) {
-    final origin = _recordOrigin;
-    if (origin == null) return;
+    if (_recordOrigin == null) return;
+    // 手指圆环跟随（全局坐标，遮罩内换算）
+    ref.read(recordFingerProvider.notifier).state = globalPosition;
+    // 判定带：胶囊行横带 x 比例（44%/56%）+ 18dp 迟滞防闪烁
     final next = recordIntentFor(
-        finger: globalPosition,
-        origin: origin,
-        currentIntent: _lastIntent); // 迟滞防抖：边界来回滑不闪烁
+        x: globalPosition.dx,
+        screenWidth: MediaQuery.sizeOf(context).width,
+        currentIntent: _lastIntent);
     if (next == _lastIntent) return;
-    // 震动反馈：进入取消区加重，其余意图变化轻震
+    // 震动反馈：每次进出区域轻震，进入取消区加重
     HapticFeedback.selectionClick();
     if (next == RecordIntent.cancel) HapticFeedback.heavyImpact();
     _lastIntent = next;
@@ -389,6 +392,7 @@ class _ChatComposeState extends ConsumerState<ChatCompose>
     _recordOrigin = null;
     final state = ref.read(chatRecordProvider);
     if (origin == null || state == null) return;
+    ref.read(recordFingerProvider.notifier).state = null;
     final intent = state.intent;
     final elapsed = DateTime.now().difference(state.startedAt);
     _stopVolumeStream();

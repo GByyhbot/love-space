@@ -415,8 +415,12 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
           child: ChatToastHost(),
         ),
         // 微信式语音输入全屏遮罩（录音态显示，盖住输入栏与消息列表）：
-        // 压暗背景 + 中央绿色波形气泡 + 底部取消/转文字/发送三区。
-        const VoiceRecordOverlay(),
+        // topInset = 状态栏 + AppBar 高，供屏高 58.5% 锚点换算到 body 坐标。
+        Positioned.fill(
+          child: VoiceRecordOverlay(
+            topInset: MediaQuery.paddingOf(context).top + kToolbarHeight,
+          ),
+        ),
       ]),
     );
   }
