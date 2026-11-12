@@ -267,7 +267,7 @@ class _ToastPill extends StatelessWidget {
 /// · 压暗背景 150ms 淡入；扇面 220ms easeOutBack 上升带轻回弹；
 ///   气泡 320ms easeOutBack 弹入（0.8→1）——时长收进 120/220/320 三档；
 /// · 气泡钉死屏幕水平居中、距遮罩顶 40%，全程不跟手指；
-///   宽度随实时音量在 0.44~0.52 屏宽间弹性呼吸（120ms 弹簧过渡）；
+///   宽度随实时音量在 44% 屏宽基线~272dp 间弹性呼吸（220ms 弹簧过渡）；
 /// · 三态同高同位：默认主题绿；取消态仅变红 #FA5151 并缩到 0.85；
 ///   转文字态原地展开为提示卡（当前无 ASR 能力，见交付小结缺口报告）；
 /// · 扇面深灰渐变 + 浅色同心弧带；胶囊进入时纯白填充+深字+1.06 放大；
@@ -276,7 +276,8 @@ class _ToastPill extends StatelessWidget {
 /// 微信式语音输入全屏遮罩（微信全屏截图实测规格 393×873 逐项落实）：
 /// · 气泡中心钉在屏高 58.5%（三态不变），AnimatedAlign 三态水平锚定
 ///   （默认 x=0 / 取消 x=-0.62 即 19% / 转文字 x=0），320ms easeOutBack 同步弹簧；
-/// · 三态尺寸：默认 128~272dp 随音量弹性（高 76 圆角 20 尾 10dp）/ 取消 82dp 红
+/// · 三态尺寸：默认基线 44% 屏宽~272dp 随音量弹性（高 76 圆角 20 尾 10dp）/
+///   取消 82dp 红
 ///   #FA5151 / 转文字 89% 屏宽×104 文字卡（光标 + 右下小波形）；
 /// · 底部家具 180dp：浅色穹顶弧（弧顶中央距底 96dp、两端 48dp）+ 两个
 ///   stadium 胶囊（47% 屏宽×64，中心线距底 127，左 -8° 右 +8°，激活只变色）+
@@ -367,9 +368,9 @@ class VoiceRecordOverlay extends ConsumerWidget {
 
 /// 录音气泡（实测规格）：
 /// · 三态中心由外层 AnimatedAlign 锚定；本组件只管尺寸/颜色/内容：
-///   默认宽 128~272dp 随音量弹性（widthFactorFor 纯函数）、高 76、圆角 20、
-///   底部中央 10dp 尾巴；取消宽 82dp（近方形）红 #FA5151；转文字 89% 屏宽
-///   ×104 文字卡（左对齐文本 + 光标 + 右下小波形）；
+///   默认宽基线 44% 屏宽~272dp 随音量弹性（widthDpFor 纯函数）、高 76、
+///   圆角 20、底部中央 10dp 尾巴；取消宽 82dp（近方形）红 #FA5151；
+///   转文字 89% 屏宽×104 文字卡（左对齐文本 + 光标 + 右下小波形）；
 /// · 真波形 24 根深色竖条（chatVolumeProvider 实时音量 + 60ms tick 平滑）；
 /// · 60s 上限：最后 10 秒气泡内倒计时；
 /// · 收尾 320ms：send 下沉淡出 / cancel 向取消胶囊方向缩小淡出。
@@ -385,11 +386,13 @@ class _RecordBubble extends ConsumerStatefulWidget {
   final RecordEnding? ending;
   final DateTime startedAt;
 
-  /// 宽度随音量弹性曲线（纯函数，可单测）：[volume] 0..1 → dp，
-  /// 最小 128（静音基线）、最大 272，弹簧呼吸。
+  /// 宽度随音量弹性曲线（纯函数，可单测）：[volume] 0..1 → dp。
+  /// 静音基线 = 44% 屏宽（≈172.9dp@393，落在 128~272 区间内），
+  /// 随音量向 [max]（272dp）弹性增长；整体 clamp(128, 272)。
   static double widthDpFor(double volume,
-          {double min = 128, double max = 272}) =>
-      min + volume.clamp(0, 1) * (max - min);
+          {required double screenW, double min = 128, double max = 272}) =>
+      (screenW * 0.44 + volume.clamp(0, 1) * (max - screenW * 0.44))
+          .clamp(min, max);
 
   @override
   ConsumerState<_RecordBubble> createState() => _RecordBubbleState();
@@ -412,7 +415,7 @@ class _RecordBubbleState extends ConsumerState<_RecordBubble> {
         ? widget.width * 0.89
         : cancel
             ? widget.width * 0.21 // 82dp@393
-            : _RecordBubble.widthDpFor(volume);
+            : _RecordBubble.widthDpFor(volume, screenW: widget.width);
     final height = toText ? 104.0 : 76.0;
     return TweenAnimationBuilder<Offset>(
       tween: Tween(
@@ -435,9 +438,11 @@ class _RecordBubbleState extends ConsumerState<_RecordBubble> {
             child: child,
           )),
       child: Stack(clipBehavior: Clip.none, children: [
+        // 宽度随音量弹簧过渡（220ms easeOutBack，带轻回弹的隐式弹簧；
+        // 时长取定版三档 120/220/320 中的 220 档）
         AnimatedContainer(
-          duration: const Duration(milliseconds: 120),
-          curve: Curves.easeOut,
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOutBack,
           width: width,
           height: height,
           decoration: BoxDecoration(
@@ -598,7 +603,8 @@ class _TailPainter extends CustomPainter {
 }
 
 /// 底部家具（实测 180dp，三层由下往上）：
-/// ① 浅色穹顶弧：弧顶中央距底 96dp、两侧边缘降到距底 48dp 后出屏；
+/// ① 浅色穹顶弧：实际曲线顶点中央距屏底 96dp、两端点距屏底 48dp
+///    （两端不再落屏底，画布内 y=h-48 起、画布外不上溢容器）；
 /// ② 两个 stadium 胶囊（宽 47% 屏宽、高 64、中心线距底 127、缝 20dp、
 ///    左 -8° 右 +8°）：默认深灰（18% 白叠加深色遮罩）浅灰白字 15sp，
 ///    激活纯白填充+深色字（只变色不放大）；
@@ -625,7 +631,8 @@ class _FanPanel extends StatelessWidget {
       width: width,
       height: furnitureH,
       child: Stack(children: [
-        // ① 穹顶弧（弧顶中央距底 96 → 家具内 y=84；两端距底 48 → y=132）：
+        // ① 穹顶弧（实际曲线顶点距屏底 96dp → 画布内 y=36；两端点距屏底
+        //    48dp → 画布内 y=84；容器 132 高，画布无上溢）：
         //    发送态浅色（微信同款浅白穹顶），取消/转文字态变深灰
         //    （微信非发送态底部整体深色，「语音」白字才可读）
         Positioned(
@@ -722,8 +729,10 @@ class _FanPanel extends StatelessWidget {
   }
 }
 
-/// 穹顶弧：二次贝塞尔（家具坐标 P0=(0,132) 顶点中央 y=84 → 控制点 y=36）。
-/// 发送态浅灰白（微信浅穹顶）；非发送态深灰微亮层（保证「语音」白字可读）。
+/// 穹顶弧：二次贝塞尔（画布坐标两端点 (0,h-48)/(w,h-48)——距屏底 48dp；
+/// 实际曲线顶点 = 0.25P0+0.5P1+0.25P2 → 控制点 y=h-144 时顶点 y=h-96，
+/// 即顶点距屏底 96dp）。发送态浅灰白（微信浅穹顶）；
+/// 非发送态深灰微亮层（保证「语音」白字可读）。
 class _DomePainter extends CustomPainter {
   const _DomePainter({required this.active});
   final bool active;
@@ -733,8 +742,8 @@ class _DomePainter extends CustomPainter {
     final w = size.width;
     final h = size.height;
     final p = Path()
-      ..moveTo(0, h)
-      ..quadraticBezierTo(w * 0.5, h - 96, w, h)
+      ..moveTo(0, h - 48)
+      ..quadraticBezierTo(w * 0.5, h - 144, w, h - 48)
       ..close();
     canvas.drawPath(
         p,
