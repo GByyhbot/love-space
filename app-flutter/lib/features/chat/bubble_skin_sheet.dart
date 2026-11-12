@@ -321,13 +321,14 @@ class _BubbleSkinSheetState extends ConsumerState<_BubbleSkinSheet> {
   Widget _skinBubble(ThemeData theme, String base, String packName,
       {required bool mine}) {
     // 预览与实际气泡共用 SkinBubble：同一 NinePatch painter（42 源角→16 目标角）、
-    // 同一 padding 3/7、同一字色契约（skinTextStyle），保证「预览=实际」。
+    // 同一 CSS 盒模型内边距（padding 3/7 + border 16）、同一字色契约，
+    // 保证「预览=实际」。内容高 24 + 上下各 19 → 预览总高 62，与单行真气泡接近。
     // mine 侧 url 已是服务器 -r 镜像图。
     return SkinBubble(
       url: bubbleSkinUrl(base, packName),
       fgLight: _fg == 'light',
       child: SizedBox(
-        height: 52,
+        height: 24,
         child: Align(
           alignment: Alignment.center,
           child: Text(mine ? '我们的小气泡' : '这是对方说的',

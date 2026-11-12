@@ -14,9 +14,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:love_space/core/api/api_client.dart' as api;
 import 'package:love_space/core/chat/chat_chrome.dart';
 import 'package:love_space/core/chat/chat_media.dart' show chatBaseProvider;
+import 'package:love_space/core/chat/keyboard_metrics.dart';
 import 'package:love_space/core/chat/nine_patch_border.dart';
 import 'package:love_space/core/timeline/timeline_data.dart';
 import 'package:love_space/features/auth/auth_state.dart';
+import 'package:love_space/features/chat/input_slots.dart';
 import 'package:love_space/features/chat/media_bubble_widgets.dart';
 import 'package:love_space/features/chat/skin_bubble.dart';
 import 'package:love_space/features/timeline/post_card.dart';
@@ -355,6 +357,127 @@ void main() {
         final w = element.findRenderObject()! as RenderBox;
         expect(w.size.width, closeTo(cell, 1.0));
         expect(w.size.height, closeTo(cell, 1.0), reason: '1:1 方格');
+      }
+    });
+  });
+
+  group('⑥ CSS 盒模型：border-image 的 16px 边框占布局空间', () {
+    test('skinBubblePadding = padding(3,7) + border(16)，成功/回退同源', () {
+      final p = skinBubblePadding(_border);
+      // Web：border-box = 内容 + 2×padding(3/7) + 2×border(16)
+      expect(p.horizontal, 2 * (7 + _border)); // 46
+      expect(p.vertical, 2 * (3 + _border)); // 38
+      expect(skinBubblePadding(0),
+          const EdgeInsets.symmetric(horizontal: 7, vertical: 3));
+    });
+
+    test('单行文本目标盒：中心 fill 区恰好容纳「内容+padding」，文字不被边带压住',
+        () {
+      const contentW = 100.0;
+      const contentH = 20.0;
+      final p = skinBubblePadding(_border);
+      final dstW = contentW + p.horizontal;
+      final dstH = contentH + p.vertical;
+      expect(dstW, 146);
+      expect(dstH, 58, reason: '旧实现只给 26px 高 → 上下 16px 边带把文字夹住');
+      final pieces = _pieces(dstW: dstW, dstH: dstH);
+      expect(pieces, hasLength(9));
+      // 四角各 16×16；中心 fill 区 = (W-32)×(H-32) = 114×26
+      expect(pieces[4].dst, const Rect.fromLTWH(16, 16, 114, 26));
+      expect(pieces[4].dst.width, closeTo(contentW + 14, 1e-9));
+      expect(pieces[4].dst.height, closeTo(contentH + 6, 1e-9),
+          reason: '内容区与中心 fill 区严格对齐，换行文本不会溢出气泡');
+    });
+
+    testWidgets('SkinBubble 回退态用同一套内边距（解码完成不跳变）',
+        (tester) async {
+      await tester.pumpWidget(ProviderScope(
+        overrides: [
+          chatBaseProvider.overrideWith((ref) => Completer<String>().future),
+        ],
+        child: MaterialApp(
+          home: Scaffold(
+            body: Center(
+              child: SkinBubble(
+                url: 'https://test.local/api/bubbles/p1/1000.png',
+                child: const Text('嗯嗯'),
+              ),
+            ),
+          ),
+        ),
+      ));
+      await tester.pump();
+      final container = tester.widget<Container>(find.descendant(
+          of: find.byType(SkinBubble), matching: find.byType(Container)));
+      expect(container.padding, skinBubblePadding(_border));
+    });
+  });
+
+  group('⑦ 键盘与工具栏互切：槽位恒占位 + 键盘独占位移', () {
+    test('slotOccupied / visibleSlot：面板被键盘压住期间槽位与内容都不撤', () {
+      final m = InputSlotMachine()..handle(InputSlotEvent.toggleFn);
+      expect(m.slotOccupied, isTrue);
+      expect(m.visibleSlot, InputSlot.fn);
+      m.handle(InputSlotEvent.keyboardFocus); // 键盘压住面板
+      expect(m.slot, InputSlot.none);
+      expect(m.intent, InputSlot.fn);
+      expect(m.slotOccupied, isTrue, reason: '槽位仍占位，输入栏不下沉');
+      expect(m.visibleSlot, InputSlot.fn, reason: '面板内容不闪空白');
+      m.handle(InputSlotEvent.keyboardClosed); // 回位
+      expect(m.slotOccupied, isTrue);
+      expect(m.visibleSlot, InputSlot.fn, reason: '回位前后可见内容不变');
+      m.handle(InputSlotEvent.toggleFn); // 亲手收起
+      expect(m.slotOccupied, isFalse);
+      expect(m.visibleSlot, InputSlot.none);
+    });
+
+    test('slotAnimationDuration：键盘过渡零动画，纯面板展开保留电梯动效', () {
+      expect(
+          slotAnimationDuration(slotOccupied: true, keyboardActive: true),
+          Duration.zero);
+      expect(
+          slotAnimationDuration(slotOccupied: true, keyboardActive: false),
+          const Duration(milliseconds: 200));
+      expect(
+          slotAnimationDuration(slotOccupied: false, keyboardActive: true),
+          const Duration(milliseconds: 200),
+          reason: '纯键盘态槽位恒 0，无高度变化可动画');
+    });
+
+    test('互切全程恒等式：slotHeight + insets ≡ kbHeight，输入栏零位移', () {
+      const kb = 320.0;
+      final m = InputSlotMachine()..handle(InputSlotEvent.toggleSticker);
+      // 键盘→面板：insets 逐帧降到 0
+      for (final insets in [320.0, 240.0, 160.0, 80.0, 0.0]) {
+        final h = slotHeightFor(
+            slotOpen: m.slotOccupied, insets: insets, kbHeight: kb);
+        expect(h + insets, closeTo(kb, 1e-9));
+      }
+      // 面板→键盘：状态机压掉面板（intent 保住占位），insets 从 0 升回 kb
+      m.handle(InputSlotEvent.keyboardFocus);
+      for (final insets in [0.0, 80.0, 160.0, 240.0, 320.0]) {
+        final h = slotHeightFor(
+            slotOpen: m.slotOccupied, insets: insets, kbHeight: kb);
+        expect(h + insets, closeTo(kb, 1e-9),
+            reason: '旧实现此处槽位归零 → 输入栏下沉再展开');
+      }
+      // 键盘收起 → 面板回位，insets 降回 0，仍恒定
+      m.handle(InputSlotEvent.keyboardClosed);
+      for (final insets in [320.0, 160.0, 0.0]) {
+        final h = slotHeightFor(
+            slotOpen: m.slotOccupied, insets: insets, kbHeight: kb);
+        expect(h + insets, closeTo(kb, 1e-9));
+      }
+    });
+
+    test('纯键盘展开/收起：无面板占位时槽位恒 0，不叠任何 App 侧动画', () {
+      const kb = 320.0;
+      final m = InputSlotMachine();
+      for (final insets in [0.0, 100.0, 320.0, 150.0, 0.0]) {
+        final h = slotHeightFor(
+            slotOpen: m.slotOccupied, insets: insets, kbHeight: kb);
+        expect(h, 0);
+        expect(m.visibleSlot, InputSlot.none);
       }
     });
   });

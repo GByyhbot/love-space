@@ -35,6 +35,19 @@ class InputSlotMachine {
   /// 面板意图（键盘压掉面板期间记住，键盘收起后自动回位）
   InputSlot? get intent => _intent;
 
+  /// 槽位是否占位（布局口径，与 [slot] 的「谁在显示」口径不同）。
+  ///
+  /// 面板被键盘临时压住时 [slot] 已变 none、但 [intent] 记住了面板：
+  /// 此刻槽位**仍须按等高公式占位**，否则 slotHeight 会瞬间归零 →
+  /// 输入栏下沉一帧，键盘再把它顶回来，收起时又做一次面板展开
+  /// ——真机「每次切换都执行一次展开动作」的根因。
+  bool get slotOccupied => _slot != InputSlot.none || _intent != null;
+
+  /// 互切过渡期要渲染的面板：slot 被键盘压成 none 时沿用 intent，
+  /// 保证槽位内容不闪空白、不重建。
+  InputSlot get visibleSlot =>
+      _slot != InputSlot.none ? _slot : (_intent ?? InputSlot.none);
+
   /// 处理事件（纯状态迁移，可穷举单测）
   void handle(InputSlotEvent event) {
     switch (event) {

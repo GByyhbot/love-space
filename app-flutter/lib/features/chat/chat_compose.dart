@@ -67,6 +67,11 @@ class _ChatComposeState extends ConsumerState<ChatCompose> {
   double _prevInsets = -1;
   String _stickerTab = 'cute';
 
+  /// 键盘是否正在参与本轮过渡（含 insets 归零的收尾帧）。
+  /// 纯布局标志：帧后由 postFrameCallback 静默清除，不 setState，
+  /// 避免「为清标志再触发一次布局刷新」。
+  bool _keyboardTransition = false;
+
   /// 本机键盘实测高度（落定后持久化；启动先读持久化值，无则用兜底，
   /// 首次键盘弹出自动纠正——主人定版：不写死、不估算）
   double? _kbHeight;
@@ -101,7 +106,19 @@ class _ChatComposeState extends ConsumerState<ChatCompose> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     final insets = MediaQuery.of(context).viewInsets.bottom;
-    // 键盘收起（insets 归零）→ 意图面板自动回位
+    // 键盘过渡标记：insets>0 的每一帧都算过渡；归零收尾帧仍算过渡
+    //（这一帧 slotHeight 还要从 kbHeight-lastInsets 补到 kbHeight，
+    //  若此刻切回 200ms 就会补做一次展开动画），帧后再静默清除。
+    if (insets > 0) {
+      _keyboardTransition = true;
+    } else if (_lastInsets > 0 && insets == 0) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _keyboardTransition = false;
+      });
+    }
+    // 键盘收起（insets 归零）→ 意图面板自动回位。
+    // 回位前后 slotOccupied / visibleSlot 都不变，故本次状态迁移不引起
+    // 任何高度变化或动画（面板只是从 intent 移交回 slot）。
     if (_lastInsets > 0 && insets == 0) {
       if (_slots.intent != null) _slots.handle(InputSlotEvent.keyboardClosed);
     }
@@ -391,19 +408,22 @@ class _ChatComposeState extends ConsumerState<ChatCompose> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final insets = MediaQuery.of(context).viewInsets.bottom;
-    final slotOpen = _slots.slot != InputSlot.none;
+    // 布局口径用 slotOccupied，不用 slot：面板被键盘临时压住期间槽位仍占位，
+    // slotHeight + insets ≡ kbHeight 在整段互切过渡里恒成立，输入栏位置与
+    // 尺寸逐帧不变，位移只由系统键盘提供。
+    final slotOccupied = _slots.slotOccupied;
+    final visibleSlot = _slots.visibleSlot;
     // 槽位高度=键盘实测高度（等高推导，见 keyboard_metrics.dart）：
-    // · 面板/坞开：slotHeight = (kbHeight - insets).clamp(0, kbHeight)
-    //   → slotHeight + insets 恒等于 kbHeight，键盘↔面板两两切换时
-    //   输入栏位置逐帧不动（总高度恒定）；
-    // · 从零展开（insets==0）→ 槽位 0 → kbHeight 走抬升动画。
+    // · 面板/坞占位：slotHeight = (kbHeight - insets).clamp(0, kbHeight)
+    //   → 键盘↔面板两两切换时输入栏位置逐帧不动（总高度恒定）；
+    // · 从零展开（insets==0 且无键盘参与）→ 槽位 0 → kbHeight 走抬升动画。
     final kbHeight = _effectiveKeyboardHeight;
     final slotHeight = slotHeightFor(
-        slotOpen: slotOpen, insets: insets, kbHeight: kbHeight);
-    // 动画时长：键盘过渡中（insets 变化时）零动画逐帧追踪公式（保证恒等式），
-    // 零展开/收合才走 200ms 电梯动画
-    final animDuration =
-        (slotOpen && insets > 0) ? Duration.zero : const Duration(milliseconds: 200);
+        slotOpen: slotOccupied, insets: insets, kbHeight: kbHeight);
+    // 键盘参与的整段过渡（含 insets 归零收尾帧）零动画，杜绝末尾补一段展开；
+    // 只有无键盘参与的从零展开 / 亲手收起才保留 200ms 电梯动效。
+    final animDuration = slotAnimationDuration(
+        slotOccupied: slotOccupied, keyboardActive: _keyboardTransition);
     final reply = widget.replyNotifier?.value;
     return Column(mainAxisSize: MainAxisSize.min, children: [
       // 引用底栏（对齐 Web replyBar：「引用：xxx」+ 取消）
@@ -526,12 +546,12 @@ class _ChatComposeState extends ConsumerState<ChatCompose> {
           maxHeight: kbHeight,
           // 宽度沿用父约束（槽位宽度）：这里若给 maxWidth 无界，面板内容
           // 布局直接失败 → 槽位空白（段三真机缺陷 2 根因）
-          child: _slots.slot == InputSlot.fn
+          child: visibleSlot == InputSlot.fn
               ? _FnPanel(
                   height: kbHeight,
                   immersive: widget.immersive,
                   onAction: _onFnAction)
-              : _slots.slot == InputSlot.sticker
+              : visibleSlot == InputSlot.sticker
                   ? _StickerDock(
                       height: kbHeight,
                       immersive: widget.immersive,

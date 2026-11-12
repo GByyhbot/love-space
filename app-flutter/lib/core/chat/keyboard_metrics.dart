@@ -33,6 +33,20 @@ double slotHeightFor({
   return (kbHeight - insets).clamp(0.0, kbHeight);
 }
 
+/// 槽位高度动画时长。
+///
+/// 键盘参与的整段过渡（展开、收起、**以及 insets 归零的收尾帧**）一律
+/// [Duration.zero]：位移完全由系统键盘动画提供，App 侧只逐帧贴合等高公式，
+/// 不再叠加任何展开/收起动画，也不重复触发布局刷新。
+/// 只有「无键盘参与的从零展开 / 亲手收起面板」才保留 200ms 电梯动效。
+Duration slotAnimationDuration({
+  required bool slotOccupied,
+  required bool keyboardActive,
+}) =>
+    (slotOccupied && keyboardActive)
+        ? Duration.zero
+        : const Duration(milliseconds: 200);
+
 /// insets 是否「落定」（连续两帧相同且达到键盘门槛）
 bool insetsStable(double previous, double current) =>
     previous > minKeyboardInsets &&

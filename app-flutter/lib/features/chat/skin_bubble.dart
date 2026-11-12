@@ -31,6 +31,22 @@ TextStyle skinTextStyle(TextStyle? base, {required bool fgLight}) =>
       shadows: fgLight ? skinLightShadows : const <Shadow>[],
     );
 
+/// CSS 盒模型下的气泡内边距（纯函数，可单测）。
+///
+/// Web `static/style.css:2517-2531`：
+/// `border-width:16px` + `border-image-width:16px` + `padding:3px 7px`。
+/// 这 16px 边框在 CSS 里**占布局空间**，气泡 border-box =
+/// 内容 + 2×padding(3/7) + 2×border(16)；九宫格的角/边带就画在这圈边框上，
+/// 文字只能待在中心 fill 区。
+///
+/// 只给 `padding(7,3)` 时 painter 会把「内容+padding」当成整个 border-box，
+/// 上下各 16px 边带直接压在文字上：单行文本目标盒仅 20 余 px 高，
+/// 中心区被夹到接近 0，表现为气泡扁成一条横带、换行文字溢出（真机复验缺陷）。
+EdgeInsets skinBubblePadding(double border) => EdgeInsets.symmetric(
+      horizontal: 7 + border,
+      vertical: 3 + border,
+    );
+
 /// 皮肤九宫格气泡：url 为皮肤图完整地址（含 -r 镜像选择），
 /// [fgLight] 浅色字（Web skin-light：白字+淡投影），深字 #2B2029。
 class SkinBubble extends ConsumerStatefulWidget {
@@ -101,10 +117,12 @@ class _SkinBubbleState extends ConsumerState<SkinBubble> {
       future: _ensureImage(),
       builder: (context, snap) {
         final image = snap.data;
+        // 成功/回退必须用同一套尺寸，否则皮肤图解码完成瞬间气泡会跳一下。
+        final padding = skinBubblePadding(widget.border);
         if (image == null) {
           // 未解码/解码失败：回退半透明底（不发请求风暴，URL 不变不再拉）
           return Container(
-            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+            padding: padding,
             decoration: BoxDecoration(
               color: theme.colorScheme.primaryContainer.withValues(alpha: 0.6),
               borderRadius: BorderRadius.circular(16),
@@ -119,8 +137,7 @@ class _SkinBubbleState extends ConsumerState<SkinBubble> {
             border: widget.border,
           ),
           child: Padding(
-            // Web .skinned 实读：padding 3px 7px（border-width 16px 下）
-            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+            padding: padding,
             child: _styledChild(theme),
           ),
         );
