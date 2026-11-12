@@ -363,6 +363,8 @@ class _ChatComposeState extends ConsumerState<ChatCompose>
       _recordOrigin = null;
       _stopVolumeStream();
       ref.read(chatRecordProvider.notifier).stop();
+      // start 失败后录音器可能处于半初始化态，重建拿干净实例，避免影响下一次
+      await _recorder.recycle();
       _snack('录音失败', tone: ChatToastTone.error);
     }
   }
@@ -400,12 +402,14 @@ class _ChatComposeState extends ConsumerState<ChatCompose>
       case RecordIntent.cancel:
         ref.read(chatRecordProvider.notifier).stop(ending: RecordEnding.cancel);
         await _recorder.cancel();
+        await _recorder.recycle();
         _snack('已取消录音');
       case RecordIntent.toText:
         // 🔴 后端零改动红线下无 ASR 接口（服务端与 Web 端都没有语音识别），
         // 不做假交互：按取消收尾并明确告知（遮罩气泡内也已即时提示）。
         ref.read(chatRecordProvider.notifier).stop(ending: RecordEnding.cancel);
         await _recorder.cancel();
+        await _recorder.recycle();
         _snack('语音识别暂未开放，本次录音未发送', tone: ChatToastTone.warning);
       case RecordIntent.send:
         // 通则：短于 1 秒提示「说话时间太短」不发送
@@ -414,11 +418,13 @@ class _ChatComposeState extends ConsumerState<ChatCompose>
               .read(chatRecordProvider.notifier)
               .stop(ending: RecordEnding.cancel);
           await _recorder.cancel();
+          await _recorder.recycle();
           _snack('说话时间太短', tone: ChatToastTone.warning);
           return;
         }
         ref.read(chatRecordProvider.notifier).stop(ending: RecordEnding.send);
         final f = await _recorder.stop();
+        await _recorder.recycle();
         if (f == null) {
           _snack('没有录到声音', tone: ChatToastTone.warning);
           return;
