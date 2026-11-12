@@ -19,7 +19,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:just_audio/just_audio.dart';
 
 import '../../core/chat/chat_media.dart';
+import 'chat_toast.dart' show ChatToastTone, chatToastProvider;
 import 'voice_recorder.dart' show voiceDbg;
+
+/// 网络步（resolve/headers/setUrl/play/stop/seek）统一超时：
+/// 任一步挂起都会让 toggle 的 await 卡住 → finally 永不执行 →
+/// _busy 永久为 true，之后所有点击被静默挡掉（真机现象「点击没有反应」）。
+const Duration _netTimeout = Duration(seconds: 10);
 
 /// 统一播放状态（抽象层，屏蔽 just_audio 类型；单测可直接构造）
 class VoiceAudioStatus {
@@ -170,8 +176,9 @@ class VoicePlaybackController extends Notifier<VoicePlaybackState> {
     final p = _player;
     if (p == null) return;
     try {
-      await p.stop();
-      await p.seek(Duration.zero);
+      // stop/seek 也守超时：挂起同样会卡住调用方的 busy（toggle/stop）
+      await p.stop().timeout(_netTimeout);
+      await p.seek(Duration.zero).timeout(_netTimeout);
     } catch (e) {
       voiceDbg('vp reset error e=$e');
     }
@@ -179,15 +186,15 @@ class VoicePlaybackController extends Notifier<VoicePlaybackState> {
 
   Future<void> _playFromStart(String mid) async {
     try {
-      final url = await urlResolver(mid);
+      final url = await urlResolver(mid).timeout(_netTimeout);
       if (url == null) {
         voiceDbg('vp play no-url mid=$mid');
         return;
       }
-      final headers = await headersLoader();
+      final headers = await headersLoader().timeout(_netTimeout);
       final p = _ensurePlayer();
-      final d = await p.setUrl(url, headers: headers);
-      await p.seek(Duration.zero);
+      final d = await p.setUrl(url, headers: headers).timeout(_netTimeout);
+      await p.seek(Duration.zero).timeout(_netTimeout);
       // 状态先行置为播放（图标/波形即时切换），再驱动真实播放
       state = VoicePlaybackState(
         playingMid: mid,
@@ -196,12 +203,15 @@ class VoicePlaybackController extends Notifier<VoicePlaybackState> {
         durationRev: state.durationRev,
       );
       voiceDbg('vp play begin mid=$mid sec=${d?.inSeconds}');
-      await p.play();
+      await p.play().timeout(_netTimeout);
       voiceDbg('vp play started mid=$mid');
     } catch (e) {
       voiceDbg('vp play error mid=$mid e=$e');
-      // 加载失败回复位态（图标回未播放）
+      // 加载失败回复位态（图标回未播放），并给 UI 明确反馈——
+      // 静默失败在用户视角就是「点击没有反应」（Web 版同款 toast）
       state = VoicePlaybackState(durationRev: state.durationRev);
+      ref.read(chatToastProvider.notifier)
+          .show('语音播放失败，请稍后再试', tone: ChatToastTone.error);
     }
   }
 
@@ -242,10 +252,11 @@ class VoicePlaybackController extends Notifier<VoicePlaybackState> {
         voiceDbg('vp prefetch skip mid=$mid (no url)');
         return null;
       }
-      final headers = await headersLoader();
+      final headers = await headersLoader().timeout(_netTimeout);
       final prober = _ensureProber();
       voiceDbg('vp prefetch begin mid=$mid');
-      final d = await prober.setUrl(url, headers: headers);
+      final d =
+          await prober.setUrl(url, headers: headers).timeout(_netTimeout);
       final sec = d?.inSeconds ?? 0;
       _durationCache[mid] = sec;
       voiceDbg('vp prefetch done mid=$mid sec=$sec');
