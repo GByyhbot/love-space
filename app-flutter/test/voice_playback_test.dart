@@ -27,8 +27,8 @@ class FakeVoicePlayer implements VoiceAudioPlayer {
   Stream<VoiceAudioStatus> get statusStream => _ctrl.stream;
 
   @override
-  Future<Duration?> setUrl(String url, {Map<String, String>? headers}) async {
-    calls.add('$tag.setUrl:$url');
+  Future<Duration?> setFilePath(String path) async {
+    calls.add('$tag.setFilePath:$path');
     return const Duration(seconds: 7);
   }
 
@@ -65,8 +65,8 @@ class FakePlaybackController extends VoicePlaybackController {
       (mid) async => 'https://fake/$mid.m4a';
 
   @override
-  Future<Map<String, String>> Function() get headersLoader =>
-      () async => const <String, String>{};
+  Future<String?> Function(String mid) get voiceDownloader =>
+      (mid) async => '/fake/$mid.m4a';
 }
 
 void main() {
@@ -122,11 +122,11 @@ void main() {
 
       player.calls.clear();
       await ctrl.toggle('b');
-      // A 被 stop + seek(0) 复位，B setUrl 后从头 play
+      // A 被 stop + seek(0) 复位，B 下载后 setFilePath 从头 play
       expect(
           player.calls,
           containsAllInOrder(
-              ['p.stop', 'p.seek', 'p.setUrl:https://fake/b.m4a', 'p.play']));
+              ['p.stop', 'p.seek', 'p.setFilePath:/fake/b.m4a', 'p.play']));
       expect(ctrl.state.playingMid, 'b');
       expect(ctrl.state.playing, true);
     });
@@ -191,7 +191,7 @@ void main() {
       final sec = await ctrl.prefetchDuration('m1');
       expect(sec, 7);
       expect(ctrl.cachedDuration('m1'), 7);
-      expect(prober.calls, contains('q.setUrl:https://fake/m1.m4a'));
+      expect(prober.calls, contains('q.setFilePath:/fake/m1.m4a'));
       expect(prober.calls, isNot(contains('q.play')));
       // 版本号 +1 通知 chip 刷新
       expect(container.read(voicePlaybackProvider).durationRev, 1);
@@ -204,7 +204,7 @@ void main() {
       expect(sec, 7);
       expect(ctrl.state.playingMid, 'a'); // 播放未受影响
       expect(player.calls.where((c) => c == 'p.stop'), isEmpty);
-      expect(prober.calls, contains('q.setUrl:https://fake/m2.m4a'));
+      expect(prober.calls, contains('q.setFilePath:/fake/m2.m4a'));
     });
 
     test('二次探测命中缓存，不再发 setUrl', () async {

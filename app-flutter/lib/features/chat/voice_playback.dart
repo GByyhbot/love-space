@@ -1,32 +1,57 @@
 /// 全局语音播放管理器（聊天页语音消息互斥播放 + 时长探测）。
 ///
+/// · **先下载后播放（定版修法）**：iepose 中转线对原生播放器的 Range 流式
+///   请求处理异常（PlayerException (0) Source error），直连正常。故不再让
+///   just_audio 直接 setUrl 拉远程流——改用 Dio（CookieJar 自动带登录态）把
+///   /media/{mid}?preview=true 下载到本地缓存文件，再用 setFilePath 播本地
+///   文件，时长也从本地文件读。与账号/登录态/播放逻辑无关，仅换取流方式。
 /// · 全局唯一播放实例：同一时刻最多一条语音在播；点 B 打断 A（A 立即
 ///   stop+seek(0)+状态复位），B 从头播；点正在播的 → 停止复位；
 ///   playerStateStream 的 completed → 自动复位到未播放态。
 ///   复位定义：playingMid 置 null（消费端图标回未播放、波形回静态）。
-/// · 专用探测器（第二个播放器实例，串行队列）：prefetchDuration 用 setUrl
-///   读时长后缓存（秒），**绝不 play、绝不打断当前播放**；结果供 chip 显示
-///   `<60s → N″ / ≥60s → M:SS`。
+/// · 专用探测器（第二个播放器实例，串行队列）：prefetchDuration 用
+///   setFilePath 读本地文件时长后缓存（秒），**绝不 play、绝不打断当前播放**；
+///   结果供 chip 显示 `<60s → N″ / ≥60s → M:SS`。
+/// · 下载的语音按 mid 缓存留存（文件很小），命中缓存不重复下载；
+///   缓存目录为文档目录 voice_cache/，LRU 上限裁剪（与现有媒体缓存同语义）。
 /// · 消费端只从 voicePlaybackProvider 的状态流读（不自持播放器）；
 ///   离开聊天页 / 开始录音由调用方触发 stop()。
-/// · 可注入点（playerFactory/proberFactory/urlResolver/headersLoader）
+/// · 可注入点（playerFactory/proberFactory/urlResolver/voiceDownloader）
 ///   供互斥状态机单测换 fake。
 library;
 
 import 'dart:async';
+import 'dart:io';
 
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:just_audio/just_audio.dart';
+import 'package:path_provider/path_provider.dart';
 
+import '../../core/api/api_client.dart';
 import '../../core/chat/chat_media.dart';
 import 'chat_toast.dart' show ChatToastTone, chatToastProvider;
 import 'voice_diag.dart';
 import 'voice_recorder.dart' show voiceDbg;
 
-/// 网络步（resolve/headers/setUrl/play/stop/seek）统一超时：
+/// 网络步（resolve/下载/setFilePath/play/stop/seek）统一超时：
 /// 任一步挂起都会让 toggle 的 await 卡住 → finally 永不执行 →
 /// _busy 永久为 true，之后所有点击被静默挡掉（真机现象「点击没有反应」）。
 const Duration _netTimeout = Duration(seconds: 10);
+
+/// 语音缓存上限（文件很小，保留最近 100 条，超出按 mtime 淘汰最旧）
+const int _voiceCacheCap = 100;
+
+/// 下载失败异常：携带 HTTP 状态码，供诊断页原样显示
+class VoiceDownloadError implements Exception {
+  const VoiceDownloadError(this.statusCode, [this.detail = '']);
+  final int statusCode;
+  final String detail;
+
+  @override
+  String toString() =>
+      'VoiceDownloadError(HTTP $statusCode)${detail.isEmpty ? '' : ' $detail'}';
+}
 
 /// 统一播放状态（抽象层，屏蔽 just_audio 类型；单测可直接构造）
 class VoiceAudioStatus {
@@ -38,9 +63,11 @@ class VoiceAudioStatus {
 }
 
 /// 可注入播放器接口：控制器只依赖此抽象（互斥状态机单测用 fake 实现）
+///
+/// 只播本地文件（setFilePath），不再直接拉远程流（setUrl）。
 abstract class VoiceAudioPlayer {
   Stream<VoiceAudioStatus> get statusStream;
-  Future<Duration?> setUrl(String url, {Map<String, String>? headers});
+  Future<Duration?> setFilePath(String path);
   Future<void> play();
   Future<void> stop();
   Future<void> seek(Duration position);
@@ -59,8 +86,7 @@ class JustAudioVoicePlayer implements VoiceAudioPlayer {
           ));
 
   @override
-  Future<Duration?> setUrl(String url, {Map<String, String>? headers}) =>
-      _player.setUrl(url, headers: headers);
+  Future<Duration?> setFilePath(String path) => _player.setFilePath(path);
 
   @override
   Future<void> play() => _player.play();
@@ -113,13 +139,97 @@ class VoicePlaybackController extends Notifier<VoicePlaybackState> {
   /// 媒体地址解析（返回 null 表示无法解析，直接放弃播放/探测）
   Future<String?> Function(String mid) get urlResolver => defaultUrlResolver;
 
-  /// Cookie 头（/media/{mid} 需登录态）
-  Future<Map<String, String>> Function() get headersLoader =>
-      () => ref.read(mediaCookieHeadersProvider.future);
+  /// 语音下载器：把 /media/{mid}?preview=true 下载到本地缓存，返回本地文件路径。
+  /// 走共享 dio（CookieJar 自动带登录态）；失败抛 VoiceDownloadError（带状态码）。
+  Future<String?> Function(String mid) get voiceDownloader =>
+      downloadVoiceToCache;
 
   Future<String?> defaultUrlResolver(String mid) async {
     final base = await ref.read(chatBaseProvider.future);
     return mediaUrl(base, mid);
+  }
+
+  // ── 语音缓存（下载落盘 + LRU 裁剪）────────────────────────────────
+
+  /// 语音缓存目录：文档目录/voice_cache（与聊天库、CookieJar 同属持久目录）
+  Future<Directory> _voiceCacheDir() async {
+    final base = await getApplicationDocumentsDirectory();
+    final dir = Directory(
+        '${base.path}${Platform.pathSeparator}voice_cache');
+    if (!dir.existsSync()) dir.createSync(recursive: true);
+    return dir;
+  }
+
+  /// 下载语音到本地缓存并返回路径；命中缓存直接返回，不重复下载。
+  Future<String?> downloadVoiceToCache(String mid) async {
+    final dio = await ref.read(dioProvider.future);
+    final dir = await _voiceCacheDir();
+    final file = File(
+        '${dir.path}${Platform.pathSeparator}$mid.m4a');
+    if (await file.exists()) return file.path; // 命中缓存
+
+    // 完整下载（Dio 全量 GET，无 Range 流式请求——避开中转线 Range 缺陷）
+    final r = await dio
+        .get('/media/$mid',
+            queryParameters: const {'preview': 'true'},
+            options: Options(responseType: ResponseType.bytes))
+        .timeout(_netTimeout);
+    final code = r.statusCode ?? 0;
+    if (code < 200 || code >= 300) {
+      throw VoiceDownloadError(code);
+    }
+    final bytes = r.data;
+    if (bytes == null || bytes.isEmpty) {
+      throw VoiceDownloadError(code, '空响应体');
+    }
+    await file.writeAsBytes(bytes, flush: true);
+    await _evictVoiceCache(dir);
+    return file.path;
+  }
+
+  /// LRU 裁剪：保留最近 [_voiceCacheCap] 个，按 mtime 淘汰最旧
+  Future<void> _evictVoiceCache(Directory dir) async {
+    final files = dir
+        .listSync()
+        .whereType<File>()
+        .where((f) => f.path.endsWith('.m4a'))
+        .toList();
+    if (files.length <= _voiceCacheCap) return;
+    files.sort((a, b) =>
+        a.lastModifiedSync().compareTo(b.lastModifiedSync()));
+    for (final f in files.take(files.length - _voiceCacheCap)) {
+      try {
+        await f.delete();
+      } catch (_) {
+        // 清理失败不阻断播放
+      }
+    }
+  }
+
+  /// 当前 Cookie 头长度（同步读已加载的 mediaCookieHeadersProvider 值；失败/未解析返回 null）
+  int? _cookieLen() {
+    try {
+      final h = ref.read(mediaCookieHeadersProvider).value;
+      final c = h?['Cookie'];
+      return c?.length;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// 记录一条失败诊断（仅观测，不改动流程）
+  void _recordDiag(String kind, String mid, String? url, Object e) {
+    final cookieLen = _cookieLen();
+    ref.read(voiceDiagProvider.notifier).record(VoiceDiagRecord(
+          ts: DateTime.now(),
+          kind: kind,
+          mid: mid,
+          url: url ?? '(url 解析失败/超时)',
+          cookiePresent: cookieLen != null && cookieLen > 0,
+          cookieLen: cookieLen ?? 0,
+          exception: e.toString(),
+          exceptionType: e.runtimeType.toString(),
+        ));
   }
 
   // ── 生命周期 ─────────────────────────────────────────────────────
@@ -186,18 +296,22 @@ class VoicePlaybackController extends Notifier<VoicePlaybackState> {
   }
 
   Future<void> _playFromStart(String mid) async {
-    // 抬到 try 外：catch 里记录诊断需要 url/headers（仅变量作用域调整，流程不变）
+    // 抬到 try 外：catch 里记录诊断需要 url
     String? url;
-    Map<String, String>? headers;
     try {
       url = await urlResolver(mid).timeout(_netTimeout);
       if (url == null) {
         voiceDbg('vp play no-url mid=$mid');
         return;
       }
-      headers = await headersLoader().timeout(_netTimeout);
+      // 先下载到本地缓存，再播本地文件（不直接拉远程流）
+      final file = await voiceDownloader(mid).timeout(_netTimeout);
+      if (file == null) {
+        voiceDbg('vp play no-file mid=$mid');
+        return;
+      }
       final p = _ensurePlayer();
-      final d = await p.setUrl(url, headers: headers).timeout(_netTimeout);
+      final d = await p.setFilePath(file).timeout(_netTimeout);
       await p.seek(Duration.zero).timeout(_netTimeout);
       // 状态先行置为播放（图标/波形即时切换），再驱动真实播放
       state = VoicePlaybackState(
@@ -206,23 +320,12 @@ class VoicePlaybackController extends Notifier<VoicePlaybackState> {
         loadedSec: d?.inSeconds,
         durationRev: state.durationRev,
       );
-      voiceDbg('vp play begin mid=$mid sec=${d?.inSeconds}');
+      voiceDbg('vp play begin mid=$mid sec=${d?.inSeconds} file=$file');
       await p.play().timeout(_netTimeout);
       voiceDbg('vp play started mid=$mid');
     } catch (e) {
       voiceDbg('vp play error mid=$mid e=$e');
-      // 仅记录诊断，不改动播放流程
-      final cookie = headers?['Cookie'];
-      ref.read(voiceDiagProvider.notifier).record(VoiceDiagRecord(
-            ts: DateTime.now(),
-            kind: 'play',
-            mid: mid,
-            url: url ?? '(url 解析失败/超时)',
-            cookiePresent: cookie != null,
-            cookieLen: cookie?.length ?? 0,
-            exception: e.toString(),
-            exceptionType: e.runtimeType.toString(),
-          ));
+      _recordDiag('play', mid, url, e);
       // 加载失败回复位态（图标回未播放），并给 UI 明确反馈——
       // 静默失败在用户视角就是「点击没有反应」（Web 版同款 toast）
       state = VoicePlaybackState(durationRev: state.durationRev);
@@ -262,20 +365,23 @@ class VoicePlaybackController extends Notifier<VoicePlaybackState> {
   Future<int?> _probeOnce(String mid) async {
     final cached = _durationCache[mid];
     if (cached != null) return cached;
-    // 抬到 try 外：catch 里记录诊断需要 url/headers（仅变量作用域调整，流程不变）
+    // 抬到 try 外：catch 里记录诊断需要 url
     String? url;
-    Map<String, String>? headers;
     try {
       url = await urlResolver(mid);
       if (url == null) {
         voiceDbg('vp prefetch skip mid=$mid (no url)');
         return null;
       }
-      headers = await headersLoader().timeout(_netTimeout);
+      // 先下载到本地缓存，再从本地文件读时长（不直接拉远程流）
+      final file = await voiceDownloader(mid).timeout(_netTimeout);
+      if (file == null) {
+        voiceDbg('vp prefetch no-file mid=$mid');
+        return null;
+      }
       final prober = _ensureProber();
-      voiceDbg('vp prefetch begin mid=$mid');
-      final d =
-          await prober.setUrl(url, headers: headers).timeout(_netTimeout);
+      voiceDbg('vp prefetch begin mid=$mid file=$file');
+      final d = await prober.setFilePath(file).timeout(_netTimeout);
       final sec = d?.inSeconds ?? 0;
       _durationCache[mid] = sec;
       voiceDbg('vp prefetch done mid=$mid sec=$sec');
@@ -289,18 +395,7 @@ class VoicePlaybackController extends Notifier<VoicePlaybackState> {
       return sec;
     } catch (e) {
       voiceDbg('vp prefetch error mid=$mid e=$e');
-      // 仅记录诊断，不改动探测流程
-      final cookie = headers?['Cookie'];
-      ref.read(voiceDiagProvider.notifier).record(VoiceDiagRecord(
-            ts: DateTime.now(),
-            kind: 'prefetch',
-            mid: mid,
-            url: url ?? '(url 解析失败/超时)',
-            cookiePresent: cookie != null,
-            cookieLen: cookie?.length ?? 0,
-            exception: e.toString(),
-            exceptionType: e.runtimeType.toString(),
-          ));
+      _recordDiag('prefetch', mid, url, e);
       return null;
     }
   }
