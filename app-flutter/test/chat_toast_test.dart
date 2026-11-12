@@ -47,6 +47,40 @@ void main() {
           RecordIntent.toText);
     });
 
+    test('迟滞防抖：边界来回滑动不闪烁（enter 64 / exit 48）', () {
+      // 进入取消区：dx <= -64
+      expect(recordIntentFor(finger: const Offset(430, 1200), origin: origin),
+          RecordIntent.cancel);
+      // 已在取消区，dx=-55（介于 -64 与 -48 之间）→ 保持取消不闪烁
+      expect(
+          recordIntentFor(
+              finger: const Offset(445, 1200),
+              origin: origin,
+              currentIntent: RecordIntent.cancel),
+          RecordIntent.cancel);
+      // 已在取消区，dx=-40（> -48）→ 退回发送
+      expect(
+          recordIntentFor(
+              finger: const Offset(460, 1200),
+              origin: origin,
+              currentIntent: RecordIntent.cancel),
+          RecordIntent.send);
+      // 已在转文字区，dx=55（介于 48 与 64）→ 保持转文字
+      expect(
+          recordIntentFor(
+              finger: const Offset(555, 1200),
+              origin: origin,
+              currentIntent: RecordIntent.toText),
+          RecordIntent.toText);
+      // 已在转文字区，dx=30（< 48）→ 退回发送
+      expect(
+          recordIntentFor(
+              finger: const Offset(530, 1200),
+              origin: origin,
+              currentIntent: RecordIntent.toText),
+          RecordIntent.send);
+    });
+
     test('阈值可配置；边界值落在对应象限', () {
       expect(
           recordIntentFor(
@@ -109,12 +143,11 @@ void main() {
       expect(find.text('已撤回'), findsOneWidget);
       await tester.tap(find.text('record'));
       await tester.pump();
-      // 录音态：全屏遮罩显示弧形三区（record 按钮设 intent=cancel →
-      // 左弧高亮、大弧弱化为「语音」、气泡上方「松手 取消」）
+      // 录音态：全屏遮罩显示扇面三区（record 按钮设 intent=cancel →
+      // 左胶囊白底高亮放大、中央大弧弱化为「语音」、气泡变红缩小）
       expect(find.text('取消'), findsOneWidget);
       expect(find.text('滑到这里 转文字'), findsOneWidget);
       expect(find.text('语音'), findsOneWidget);
-      expect(find.text('松手 取消'), findsOneWidget);
       // 普通提示仍与遮罩并存（遮罩与顶部提示层是两条独立通道）
       expect(find.text('已撤回'), findsOneWidget);
       await tester.pumpWidget(const SizedBox());

@@ -10,13 +10,16 @@
 /// [dark]：底栏按视频 78 整体染黑（与系统浅色主题解耦；顶栏与气泡不受影响）。
 library;
 
+import 'dart:async';
 import 'dart:io';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show HapticFeedback;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:record/record.dart' show Amplitude;
 
 import '../../core/api/api_client.dart';
 import '../../core/chat/chat_chrome.dart';
@@ -178,6 +181,8 @@ class _ChatComposeState extends ConsumerState<ChatCompose>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     widget.replyNotifier?.removeListener(_onReplyChanged);
+    _ampSub?.cancel();
+    _maxTimer?.cancel();
     _input.dispose();
     _focus.dispose();
     _recorder.dispose();
@@ -307,7 +312,34 @@ class _ChatComposeState extends ConsumerState<ChatCompose>
     await _sendFiles([ChatLocalFile(path: x.path, name: x.name)]);
   }
 
-  // ── 长按录音（微信/QQ 同款手势：松开发送 / 左上取消 / 右上转文字）──
+  // ── 长按录音（微信规格重做：真波形 / 迟滞判定 / 震动 / 60s 与 1s 通则）──
+
+  /// 音量流订阅（真波形数据源）与 60s 上限定时器
+  StreamSubscription<Amplitude>? _ampSub;
+  Timer? _maxTimer;
+  RecordIntent? _lastIntent;
+
+  /// dBFS（约 -160..0）→ 归一化 0..1：-45dB 起听、-8dB 视为满格
+  static double _dbToVolume(double db) =>
+      ((db + 45) / 37).clamp(0.0, 1.0);
+
+  void _startVolumeStream() {
+    _ampSub?.cancel();
+    _ampSub = _recorder
+        .amplitudeStream(const Duration(milliseconds: 80))
+        .listen((amp) {
+      ref.read(chatVolumeProvider.notifier).state = _dbToVolume(amp.current);
+    });
+  }
+
+  void _stopVolumeStream() {
+    _ampSub?.cancel();
+    _ampSub = null;
+    _maxTimer?.cancel();
+    _maxTimer = null;
+    _lastIntent = null;
+    ref.read(chatVolumeProvider.notifier).state = 0;
+  }
 
   Future<void> _startRecording(Offset globalOrigin) async {
     try {
@@ -319,9 +351,16 @@ class _ChatComposeState extends ConsumerState<ChatCompose>
       }
       await _recorder.start();
       _recordOrigin = globalOrigin;
+      _lastIntent = RecordIntent.send;
       ref.read(chatRecordProvider.notifier).start();
+      _startVolumeStream();
+      // 60s 上限：到时自动按发送收尾（微信同款）
+      _maxTimer = Timer(const Duration(seconds: 60), () {
+        if (mounted && _recordOrigin != null) _finishRecording();
+      });
     } catch (_) {
       _recordOrigin = null;
+      _stopVolumeStream();
       ref.read(chatRecordProvider.notifier).stop();
       _snack('录音失败', tone: ChatToastTone.error);
     }
@@ -330,28 +369,51 @@ class _ChatComposeState extends ConsumerState<ChatCompose>
   void _onRecordMove(Offset globalPosition) {
     final origin = _recordOrigin;
     if (origin == null) return;
-    ref.read(chatRecordProvider.notifier).intent(
-        recordIntentFor(finger: globalPosition, origin: origin));
+    final next = recordIntentFor(
+        finger: globalPosition,
+        origin: origin,
+        currentIntent: _lastIntent); // 迟滞防抖：边界来回滑不闪烁
+    if (next == _lastIntent) return;
+    // 震动反馈：进入取消区加重，其余意图变化轻震
+    HapticFeedback.selectionClick();
+    if (next == RecordIntent.cancel) HapticFeedback.heavyImpact();
+    _lastIntent = next;
+    ref.read(chatRecordProvider.notifier).intent(next);
   }
 
-  /// 松手收尾（幂等：手势取消与正常结束都可能回调，靠 _recordOrigin 去重）
+  /// 松手收尾（幂等：手势取消与正常结束都可能回调，靠 _recordOrigin 去重）。
+  /// 收尾分两段：先通知 overlay 播 320ms 收尾动画（stop(ending)），
+  /// 再落盘/清理录音文件——动画与文件处理并行，互不阻塞。
   Future<void> _finishRecording() async {
     final origin = _recordOrigin;
     _recordOrigin = null;
     final state = ref.read(chatRecordProvider);
-    ref.read(chatRecordProvider.notifier).stop();
     if (origin == null || state == null) return;
-    switch (state.intent) {
+    final intent = state.intent;
+    final elapsed = DateTime.now().difference(state.startedAt);
+    _stopVolumeStream();
+    switch (intent) {
       case RecordIntent.cancel:
+        ref.read(chatRecordProvider.notifier).stop(ending: RecordEnding.cancel);
         await _recorder.cancel();
         _snack('已取消录音');
       case RecordIntent.toText:
-        // 🔴 后端零改动红线下，服务端与 Web 端都没有语音转文字（ASR）接口，
-        // 不自创协议：此处按取消处理并明确告知，接入点保留在这个分支。
+        // 🔴 后端零改动红线下无 ASR 接口（服务端与 Web 端都没有语音识别），
+        // 不做假交互：按取消收尾并明确告知（遮罩气泡内也已即时提示）。
+        ref.read(chatRecordProvider.notifier).stop(ending: RecordEnding.cancel);
         await _recorder.cancel();
-        _snack('语音转文字需要服务端识别能力，当前未开放，本次录音未发送',
-            tone: ChatToastTone.warning);
+        _snack('语音识别暂未开放，本次录音未发送', tone: ChatToastTone.warning);
       case RecordIntent.send:
+        // 通则：短于 1 秒提示「说话时间太短」不发送
+        if (elapsed < const Duration(seconds: 1)) {
+          ref
+              .read(chatRecordProvider.notifier)
+              .stop(ending: RecordEnding.cancel);
+          await _recorder.cancel();
+          _snack('说话时间太短', tone: ChatToastTone.warning);
+          return;
+        }
+        ref.read(chatRecordProvider.notifier).stop(ending: RecordEnding.send);
         final f = await _recorder.stop();
         if (f == null) {
           _snack('没有录到声音', tone: ChatToastTone.warning);

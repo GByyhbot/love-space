@@ -16,6 +16,11 @@ class VoiceRecorder {
 
   Future<bool> hasPermission() => _rec.hasPermission();
 
+  /// 录音实时音量流（dBFS，约 -160..0，越大越响）。
+  /// 供气泡真波形使用；仅在 start() 成功后调用。
+  Stream<Amplitude> amplitudeStream(Duration interval) =>
+      _rec.onAmplitudeChanged(interval);
+
   Future<void> start() async {
     final dir = await getApplicationDocumentsDirectory();
     _path =
