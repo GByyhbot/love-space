@@ -33,6 +33,14 @@ double slotHeightFor({
   return (kbHeight - insets).clamp(0.0, kbHeight);
 }
 
+/// 窗口原始底部 insets（物理像素）→ 逻辑像素。
+///
+/// Scaffold 会把 body 子树的 `MediaQuery.viewInsets.bottom` 清零
+///（`scaffold.dart:2921-2923`，resizeToAvoidBottomInset 默认 true），
+/// 因此必须从 `View.of(context).viewInsets` 读物理像素再换算。
+double windowBottomInset(double physicalBottom, double devicePixelRatio) =>
+    devicePixelRatio <= 0 ? 0.0 : physicalBottom / devicePixelRatio;
+
 /// 槽位高度动画时长。
 ///
 /// 键盘参与的整段过渡（展开、收起、**以及 insets 归零的收尾帧**）一律

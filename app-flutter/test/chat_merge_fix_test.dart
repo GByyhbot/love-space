@@ -410,6 +410,15 @@ void main() {
       final container = tester.widget<Container>(find.descendant(
           of: find.byType(SkinBubble), matching: find.byType(Container)));
       expect(container.padding, skinBubblePadding(_border));
+      // 实证：16px 边框空间确实进入布局尺寸，而不只是 painter 的绘制参数。
+      // 旧实现只给 padding(7,3)，气泡总高比文字多 6px，会把文字压成扁线。
+      final bubbleSize = tester.getSize(find.descendant(
+          of: find.byType(SkinBubble), matching: find.byType(Container)));
+      final textSize = tester.getSize(find.text('嗯嗯'));
+      expect(bubbleSize.height - textSize.height, closeTo(38, 1.0),
+          reason: '上下各 (3+16)px 边框空间');
+      expect(bubbleSize.width - textSize.width, closeTo(46, 1.0),
+          reason: '左右各 (7+16)px 边框空间');
     });
   });
 
@@ -479,6 +488,32 @@ void main() {
         expect(h, 0);
         expect(m.visibleSlot, InputSlot.none);
       }
+    });
+
+    test('窗口原始 insets 换算（Scaffold 已清零 body 子树 viewInsets）', () {
+      expect(windowBottomInset(900, 3.0), closeTo(300, 1e-9));
+      expect(windowBottomInset(640, 2.0), closeTo(320, 1e-9));
+      expect(windowBottomInset(900, 0), 0);
+      expect(windowBottomInset(0, 3.0), 0);
+    });
+
+    test('真实 insets 下输入栏底边恒为 H-kbHeight（录屏输入栏被顶到顶部的回归）',
+        () {
+      const h = 800.0; // 视口高
+      const kb = 300.0; // 实测键盘高
+      final m = InputSlotMachine()..handle(InputSlotEvent.toggleFn);
+      for (final k in [0.0, 60.0, 150.0, 240.0, 300.0]) {
+        // Scaffold.resizeToAvoidBottomInset 把 body 高度压到 h-k
+        final bodyH = h - k;
+        final s = slotHeightFor(
+            slotOpen: m.slotOccupied, insets: k, kbHeight: kb);
+        expect(bodyH - s, closeTo(h - kb, 1e-9),
+            reason: '键盘高 $k 时输入栏必须在 h-kbHeight，不随键盘移动');
+      }
+      // 阴性对照：误用 body 内被清零的 viewInsets(0) 会让输入栏额外上移 k
+      final wrongS = slotHeightFor(slotOpen: true, insets: 0, kbHeight: kb);
+      final wrongBottom = (h - 300.0) - wrongS;
+      expect(wrongBottom, lessThan(h - kb - 100));
     });
   });
 }

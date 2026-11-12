@@ -56,7 +56,8 @@ class ChatCompose extends ConsumerStatefulWidget {
   ConsumerState<ChatCompose> createState() => _ChatComposeState();
 }
 
-class _ChatComposeState extends ConsumerState<ChatCompose> {
+class _ChatComposeState extends ConsumerState<ChatCompose>
+    with WidgetsBindingObserver {
   final _input = TextEditingController();
   final _focus = FocusNode();
   final _slots = InputSlotMachine();
@@ -76,9 +77,26 @@ class _ChatComposeState extends ConsumerState<ChatCompose> {
   /// 首次键盘弹出自动纠正——主人定版：不写死、不估算）
   double? _kbHeight;
 
+  /// 读取**未被 Scaffold 消费**的原始窗口底部 insets，换算为逻辑像素。
+  ///
+  /// 🔴 根因（Flutter 源码 scaffold.dart:2921-2923 实读）：
+  /// Scaffold 在 `resizeToAvoidBottomInset=true`（默认）时会给 body 子树
+  /// 包一层 `MediaQuery.removeViewInsets(removeBottom: true)`，所以 body 内的
+  /// `MediaQuery.of(context).viewInsets.bottom` **恒为 0**。旧实现读它会导致
+  /// slotHeight 永远等于完整键盘高度，而 Scaffold 又单独压缩了一次 body，
+  /// 键盘高度被计算两遍 → 输入栏被顶到屏幕顶部、工具栏与键盘同时完整显示
+  ///（真机录屏 8.00s 实证）；键盘高度也永远测不到，过渡标记永不置位，
+  /// 于是每次切换都跑 200ms 展开动画。
+  /// `View.of(context)` 取自 widget 树根，不经过 Scaffold 的 MediaQuery 覆盖。
+  double _windowKeyboardInsets(BuildContext context) {
+    final view = View.of(context);
+    return windowBottomInset(view.viewInsets.bottom, view.devicePixelRatio);
+  }
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _input.addListener(() {
       final has = _input.text.trim().isNotEmpty;
       if (has != _hasText) setState(() => _hasText = has);
@@ -102,16 +120,25 @@ class _ChatComposeState extends ConsumerState<ChatCompose> {
     }
   }
 
+  /// 窗口指标变化（键盘展开/收起的每一帧）由 WidgetsBinding 通知。
+  /// 不能再用 didChangeDependencies：Scaffold 给 body 的 MediaQuery 已把
+  /// viewInsets.bottom 清零，键盘变化未必会触发它。
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    final insets = MediaQuery.of(context).viewInsets.bottom;
-    // 键盘过渡标记：insets>0 的每一帧都算过渡；归零收尾帧仍算过渡
+  void didChangeMetrics() {
+    super.didChangeMetrics();
+    if (!mounted) return;
+    _syncKeyboardInsets(_windowKeyboardInsets(context));
+  }
+
+  /// 键盘 insets 状态同步（幂等：同一高度不重复 setState、不重复布局刷新）。
+  void _syncKeyboardInsets(double insets) {
+    if (insets == _lastInsets) return;
+    // 过渡标记：insets>0 的每帧都算过渡；归零收尾帧仍算过渡
     //（这一帧 slotHeight 还要从 kbHeight-lastInsets 补到 kbHeight，
-    //  若此刻切回 200ms 就会补做一次展开动画），帧后再静默清除。
+    //  若此刻切回 200ms 就会补做一次展开动画），帧后静默清除。
     if (insets > 0) {
       _keyboardTransition = true;
-    } else if (_lastInsets > 0 && insets == 0) {
+    } else if (_lastInsets > 0) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _keyboardTransition = false;
       });
@@ -123,13 +150,15 @@ class _ChatComposeState extends ConsumerState<ChatCompose> {
       if (_slots.intent != null) _slots.handle(InputSlotEvent.keyboardClosed);
     }
     // 键盘高度实测（复验 item 2）：连续两帧稳定且超门槛 → 记录并持久化
-    if (insetsStable(_prevInsets, insets) && ((_kbHeight ?? 0) - insets).abs() > 1) {
+    if (insetsStable(_prevInsets, insets) &&
+        ((_kbHeight ?? 0) - insets).abs() > 1) {
       _kbHeight = insets;
       // ignore: unawaited_futures
       ref.read(keyboardMetricsStoreProvider).save(insets);
     }
     _prevInsets = insets;
     _lastInsets = insets;
+    if (mounted) setState(() {});
   }
 
   /// 当前生效的键盘高度：本机实测（本次会话已弹过键盘）→ 持久化值 → 兜底。
@@ -138,6 +167,7 @@ class _ChatComposeState extends ConsumerState<ChatCompose> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     widget.replyNotifier?.removeListener(_onReplyChanged);
     _input.dispose();
     _focus.dispose();
@@ -407,7 +437,9 @@ class _ChatComposeState extends ConsumerState<ChatCompose> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final insets = MediaQuery.of(context).viewInsets.bottom;
+    // 必须读窗口原始 insets：Scaffold 已把 body 子树的 viewInsets.bottom 清零
+    //（见 _windowKeyboardInsets 注释），用 MediaQuery 会让键盘高度被算两遍。
+    final insets = _windowKeyboardInsets(context);
     // 布局口径用 slotOccupied，不用 slot：面板被键盘临时压住期间槽位仍占位，
     // slotHeight + insets ≡ kbHeight 在整段互切过渡里恒成立，输入栏位置与
     // 尺寸逐帧不变，位移只由系统键盘提供。
