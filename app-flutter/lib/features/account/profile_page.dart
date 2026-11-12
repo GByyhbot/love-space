@@ -12,9 +12,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import '../../core/api/api_client.dart';
+import '../../core/chat/chat_media.dart' show chatBaseProvider;
 import '../auth/auth_state.dart';
+import '../chat/voice_diag.dart';
 
 class ProfilePage extends ConsumerStatefulWidget {
   const ProfilePage({super.key});
@@ -36,6 +39,12 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   String? _error;
   String? _notice;
 
+  // 实际安装包版本（取自 PackageInfo，不写死）—— 诊断页/页脚共用
+  String _pkgVersion = '';
+  String _pkgBuild = '';
+  String get _appVersionLabel =>
+      _pkgVersion.isEmpty ? '版本加载中…' : 'v$_pkgVersion ($_pkgBuild)';
+
   @override
   void initState() {
     super.initState();
@@ -43,6 +52,22 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     _name = TextEditingController(text: me?.user.name ?? '');
     _avatarId = me?.user.avatar ?? '';
     _loadAvatar();
+    _loadPackageInfo();
+  }
+
+  /// 读取实际安装包版本（versionName + buildNumber），供页脚与诊断页展示
+  Future<void> _loadPackageInfo() async {
+    try {
+      final info = await PackageInfo.fromPlatform();
+      if (mounted) {
+        setState(() {
+          _pkgVersion = info.version;
+          _pkgBuild = info.buildNumber;
+        });
+      }
+    } catch (_) {
+      // 读取失败时保留空值，UI 显示「版本加载中…」而非崩溃
+    }
   }
 
   @override
@@ -151,6 +176,161 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     if (confirmed == true && mounted) {
       await ref.read(authProvider.notifier).logout();
     }
+  }
+
+  Future<void> _openVoiceDiag() async {
+    final theme = Theme.of(context);
+    final records = ref.read(voiceDiagProvider);
+    final base = ref.read(chatBaseProvider).value;
+    final messenger = ScaffoldMessenger.of(context);
+    if (records.isEmpty) {
+      if (mounted) {
+        messenger.showSnackBar(const SnackBar(
+            content: Text('暂无语音诊断记录，请先去聊天里点一条语音 / 等语音秒数加载')));
+      }
+      return;
+    }
+    if (!mounted) return;
+    await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('语音诊断'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // ── 头部：实际安装包版本 + 当前线路 base ──
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text('App 版本（实际安装包）：$_appVersionLabel',
+                            style: theme.textTheme.bodySmall),
+                        const SizedBox(height: 8),
+                        Text('当前线路 base（原样完整域名）：',
+                            style: theme.textTheme.bodySmall),
+                        SelectableText(
+                            base ?? '(base 未解析)',
+                            style: theme.textTheme.bodySmall
+                                ?.copyWith(fontFamily: 'monospace')),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                // ── 最近一次完整异常原文（未截断、未改写）──
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Row(children: [
+                          Chip(label: Text(records.first.kind)),
+                          const SizedBox(width: 8),
+                          Expanded(
+                              child: Text(records.first.summary,
+                                  style: theme.textTheme.bodySmall)),
+                        ]),
+                        const SizedBox(height: 8),
+                        Text('最近一次完整异常原文（含 HTTP 状态码，未截断）：',
+                            style: theme.textTheme.bodySmall),
+                        const SizedBox(height: 4),
+                        SelectableText(
+                            records.first.exception,
+                            style: theme.textTheme.bodySmall
+                                ?.copyWith(fontFamily: 'monospace')),
+                        const SizedBox(height: 8),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton.icon(
+                            onPressed: () async {
+                              await Clipboard.setData(ClipboardData(
+                                  text: records.first.exception));
+                              if (mounted) {
+                                messenger.showSnackBar(const SnackBar(
+                                    content: Text('已复制最近一次异常原文')));
+                              }
+                            },
+                            icon: const Icon(Icons.copy, size: 16),
+                            label: const Text('复制异常'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  '全部失败记录（最新在上）。点「复制」可复制完整原文发给开发者；长按正文也可选择复制。',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                const SizedBox(height: 12),
+                for (final r in records) ...[
+                  _diagCard(r),
+                  const SizedBox(height: 12),
+                ],
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => ref.read(voiceDiagProvider.notifier).clear(),
+            child: const Text('清空记录'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('关闭'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _diagCard(VoiceDiagRecord r) {
+    final theme = Theme.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(children: [
+              Chip(label: Text(r.kind)),
+              const SizedBox(width: 8),
+              Expanded(
+                  child: Text(r.summary,
+                      style: theme.textTheme.bodySmall)),
+            ]),
+            const SizedBox(height: 8),
+            SelectableText(r.detail,
+                style: theme.textTheme.bodySmall
+                    ?.copyWith(fontFamily: 'monospace')),
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: () async {
+                  await Clipboard.setData(ClipboardData(text: r.detail));
+                  if (mounted) {
+                    messenger.showSnackBar(
+                        const SnackBar(content: Text('已复制该条诊断详情')));
+                  }
+                },
+                icon: const Icon(Icons.copy, size: 16),
+                label: const Text('复制'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -274,6 +454,34 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
               ),
             ),
           const SizedBox(height: 16),
+          // ── 语音诊断（暴露失败原始异常，免去 logcat）──
+          Builder(builder: (ctx) {
+            final records = ref.watch(voiceDiagProvider);
+            final latest = records.isNotEmpty ? records.first : null;
+            final messenger = ScaffoldMessenger.of(context);
+            return Card(
+              child: ListTile(
+                leading: const Icon(Icons.bug_report),
+                title: const Text('语音诊断'),
+                subtitle: latest == null
+                    ? const Text('暂无失败记录')
+                    : Text('最近失败：${latest.summary}'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: _openVoiceDiag,
+                onLongPress: latest == null
+                    ? null
+                    : () async {
+                        await Clipboard.setData(
+                            ClipboardData(text: latest.detail));
+                        if (mounted) {
+                          messenger.showSnackBar(const SnackBar(
+                              content: Text('已复制最近一次诊断详情')));
+                        }
+                      },
+              ),
+            );
+          }),
+          const SizedBox(height: 16),
           // ── 退出登录 ──
           OutlinedButton.icon(
             style: OutlinedButton.styleFrom(
@@ -283,6 +491,12 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
             icon: const Icon(Icons.logout),
             label: const Text('退出登录'),
           ),
+          const SizedBox(height: 12),
+          // ── 实际安装包版本（取自 PackageInfo，不写死）──
+          Text(_appVersionLabel,
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(color: theme.colorScheme.outline)),
           const SizedBox(height: 24),
         ],
       ),

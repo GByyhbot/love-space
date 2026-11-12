@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.0+20
+version: 1.0.1+22
 
 environment:
   sdk: ^3.13.7
@@ -64,6 +64,8 @@ dependencies:
   # 复验 5 项 item 5：低频资源（头像/壁纸/皮肤图）自定义 CacheManager 强制落盘
   # （cached_network_image 的传递依赖，按主人明文通则提为直接依赖）
   flutter_cache_manager: ^3.4.1
+  # App 内展示「实际安装包」版本（versionName + buildNumber，取自 PackageInfo，不写死）
+  package_info_plus: ^8.0.0
 
 # 上游错位修正：record 5.2.1 允许 platform_interface 升到 1.6.0，但其约束的
 # record_linux 0.7.2 没跟上 1.6.0 的接口（缺 startStream/hasPermission 新签名），

@@ -20,6 +20,7 @@ import 'package:just_audio/just_audio.dart';
 
 import '../../core/chat/chat_media.dart';
 import 'chat_toast.dart' show ChatToastTone, chatToastProvider;
+import 'voice_diag.dart';
 import 'voice_recorder.dart' show voiceDbg;
 
 /// 网络步（resolve/headers/setUrl/play/stop/seek）统一超时：
@@ -185,13 +186,16 @@ class VoicePlaybackController extends Notifier<VoicePlaybackState> {
   }
 
   Future<void> _playFromStart(String mid) async {
+    // 抬到 try 外：catch 里记录诊断需要 url/headers（仅变量作用域调整，流程不变）
+    String? url;
+    Map<String, String>? headers;
     try {
-      final url = await urlResolver(mid).timeout(_netTimeout);
+      url = await urlResolver(mid).timeout(_netTimeout);
       if (url == null) {
         voiceDbg('vp play no-url mid=$mid');
         return;
       }
-      final headers = await headersLoader().timeout(_netTimeout);
+      headers = await headersLoader().timeout(_netTimeout);
       final p = _ensurePlayer();
       final d = await p.setUrl(url, headers: headers).timeout(_netTimeout);
       await p.seek(Duration.zero).timeout(_netTimeout);
@@ -207,6 +211,18 @@ class VoicePlaybackController extends Notifier<VoicePlaybackState> {
       voiceDbg('vp play started mid=$mid');
     } catch (e) {
       voiceDbg('vp play error mid=$mid e=$e');
+      // 仅记录诊断，不改动播放流程
+      final cookie = headers?['Cookie'];
+      ref.read(voiceDiagProvider.notifier).record(VoiceDiagRecord(
+            ts: DateTime.now(),
+            kind: 'play',
+            mid: mid,
+            url: url ?? '(url 解析失败/超时)',
+            cookiePresent: cookie != null,
+            cookieLen: cookie?.length ?? 0,
+            exception: e.toString(),
+            exceptionType: e.runtimeType.toString(),
+          ));
       // 加载失败回复位态（图标回未播放），并给 UI 明确反馈——
       // 静默失败在用户视角就是「点击没有反应」（Web 版同款 toast）
       state = VoicePlaybackState(durationRev: state.durationRev);
@@ -246,13 +262,16 @@ class VoicePlaybackController extends Notifier<VoicePlaybackState> {
   Future<int?> _probeOnce(String mid) async {
     final cached = _durationCache[mid];
     if (cached != null) return cached;
+    // 抬到 try 外：catch 里记录诊断需要 url/headers（仅变量作用域调整，流程不变）
+    String? url;
+    Map<String, String>? headers;
     try {
-      final url = await urlResolver(mid);
+      url = await urlResolver(mid);
       if (url == null) {
         voiceDbg('vp prefetch skip mid=$mid (no url)');
         return null;
       }
-      final headers = await headersLoader().timeout(_netTimeout);
+      headers = await headersLoader().timeout(_netTimeout);
       final prober = _ensureProber();
       voiceDbg('vp prefetch begin mid=$mid');
       final d =
@@ -270,6 +289,18 @@ class VoicePlaybackController extends Notifier<VoicePlaybackState> {
       return sec;
     } catch (e) {
       voiceDbg('vp prefetch error mid=$mid e=$e');
+      // 仅记录诊断，不改动探测流程
+      final cookie = headers?['Cookie'];
+      ref.read(voiceDiagProvider.notifier).record(VoiceDiagRecord(
+            ts: DateTime.now(),
+            kind: 'prefetch',
+            mid: mid,
+            url: url ?? '(url 解析失败/超时)',
+            cookiePresent: cookie != null,
+            cookieLen: cookie?.length ?? 0,
+            exception: e.toString(),
+            exceptionType: e.runtimeType.toString(),
+          ));
       return null;
     }
   }
