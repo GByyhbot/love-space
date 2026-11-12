@@ -685,34 +685,67 @@ class _FnPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final onDark = chromeIsDark(dark, immersive);
-    return Container(
+    // 悬浮胶囊（用户定版：与输入框同宽同圆角，浮在底部；与输入栏同 margin）。
+    // 固定 4×4 布局：Column+Row 均分，不用 GridView——网格天然可滚动，
+    // 真机上内容不满一屏也能拖动（用户反馈的「上下滑动一点点」根因）。
+    return SizedBox(
       height: height,
-      color: chatChromeColor(theme, immersive: immersive, dark: dark),
-      child: GridView.count(
-        crossAxisCount: 4,
-        childAspectRatio: 1.15,
-        padding: const EdgeInsets.all(10),
-        children: [
-          for (final (id, icon, label) in tiles)
-            InkWell(
-              borderRadius: BorderRadius.circular(12),
-              onTap: () => onAction(id),
-              child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(icon,
-                        size: 26,
-                        color: onDark ? Colors.white : theme.colorScheme.primary),
-                    const SizedBox(height: 6),
-                    Text(label,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.labelSmall?.copyWith(
-                            color: onDark ? Colors.white70 : null)),
-                  ]),
-            ),
-        ],
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(10, 4, 10, 10),
+        child: Container(
+          width: double.infinity,
+          decoration: BoxDecoration(
+            color: chatChromeColor(theme, immersive: immersive, dark: dark),
+            borderRadius: BorderRadius.circular(26),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+          child: Column(children: [
+            for (var row = 0; row < 4; row++)
+              Expanded(
+                child: Row(children: [
+                  for (var col = 0; col < 4; col++)
+                    Expanded(
+                      child: _FnCell(
+                        tile: tiles[row * 4 + col],
+                        onDark: onDark,
+                        onTap: () => onAction(tiles[row * 4 + col].$1),
+                      ),
+                    ),
+                ]),
+              ),
+          ]),
+        ),
       ),
+    );
+  }
+}
+
+/// ⊕面板单格（固定布局用；图标+文字居中）。
+class _FnCell extends StatelessWidget {
+  const _FnCell(
+      {required this.tile, required this.onDark, required this.onTap});
+  final (String, IconData, String) tile;
+  final bool onDark;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: onTap,
+      child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(tile.$2,
+                size: 24, color: onDark ? Colors.white : theme.colorScheme.primary),
+            const SizedBox(height: 5),
+            Text(tile.$3,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.labelSmall?.copyWith(
+                    color: onDark ? Colors.white70 : null)),
+          ]),
     );
   }
 }

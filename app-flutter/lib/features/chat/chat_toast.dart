@@ -28,18 +28,16 @@ enum RecordIntent {
 /// 上滑判定阈值（逻辑像素；相对长按起点）
 const double recordSlideThreshold = 64.0;
 
-/// 由手指当前位置与长按起点推导意图（微信/QQ 同款象限语义）：
-/// · 未明显上滑 / 正上方 → 发送；
-/// · 左上（dx<0 且 dy<0 超阈值）→ 取消；
-/// · 右上（dx>0 且 dy<0 超阈值）→ 转文字。
+/// 由手指当前位置与长按起点推导意图（微信/QQ 同款，用户定版水平优先）：
+/// · 向左滑超阈值（**不要求先上滑**——屏幕下方左右滑动即生效）→ 取消；
+/// · 向右滑超阈值 → 转文字；
+/// · 其余（原地按住 / 轻微抖动 / 只上滑）→ 发送。
 RecordIntent recordIntentFor({
   required Offset finger,
   required Offset origin,
   double threshold = recordSlideThreshold,
 }) {
   final dx = finger.dx - origin.dx;
-  final dy = finger.dy - origin.dy;
-  if (dy > -threshold) return RecordIntent.send;
   if (dx <= -threshold) return RecordIntent.cancel;
   if (dx >= threshold) return RecordIntent.toText;
   return RecordIntent.send;
@@ -238,8 +236,11 @@ class VoiceRecordOverlay extends ConsumerWidget {
                   alignment: Alignment.centerLeft,
                   child: Padding(
                       padding: const EdgeInsets.only(left: 24),
-                      child: _RecordBubble(intent: intent)))
-              : Center(child: _RecordBubble(intent: intent)),
+                      child: _RecordBubble(
+                          intent: intent, startedAt: rec.startedAt)))
+              : Center(
+                  child: _RecordBubble(
+                      intent: intent, startedAt: rec.startedAt)),
         ),
         // 底部弧形三区
         Positioned(
@@ -257,24 +258,72 @@ class VoiceRecordOverlay extends ConsumerWidget {
   }
 }
 
-/// 录音气泡：正常态绿色大胶囊（波形居中）；取消态缩小转红、转文字态保持绿；
-/// 意图非发送时上方显示「松手 xx」白字提示。带向下尾巴。
-class _RecordBubble extends StatelessWidget {
-  const _RecordBubble({required this.intent});
+/// 录音气泡（用户定版：长扁形，宽度随录音时长逐渐变长）：
+/// · 正常态绿色胶囊，高度 64（更矮更长），宽度 = 基础 0.30 屏宽 +
+///   每秒 +0.035 屏宽，封顶 0.72；波形条数随宽度增加；
+/// · 取消态缩小转红靠左（宽度固定 0.34，不随时长）；
+/// · 意图非发送时上方显示「松手 xx」白字提示。带向下尾巴。
+/// 时长驱动：Timer.periodic 每秒重建（气泡是纯视觉组件，重建无副作用）。
+class _RecordBubble extends StatefulWidget {
+  const _RecordBubble({required this.intent, required this.startedAt});
   final RecordIntent intent;
+  final DateTime startedAt;
+
+  /// 宽度随时长增长曲线（纯函数，可单测）：
+  /// [secs] 秒 → 屏宽占比，基础 0.30、每秒 +0.035、封顶 0.72。
+  static double widthFactorFor(int secs,
+          {double base = 0.30, double growth = 0.035, double max = 0.72}) =>
+      (base + secs * growth).clamp(base, max);
+
+  @override
+  State<_RecordBubble> createState() => _RecordBubbleState();
+}
+
+class _RecordBubbleState extends State<_RecordBubble> {
+  Timer? _ticker;
+  int _secs = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _secs = DateTime.now().difference(widget.startedAt).inSeconds.clamp(0, 60);
+    _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() => _secs++);
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant _RecordBubble old) {
+    super.didUpdateWidget(old);
+    if (old.startedAt != widget.startedAt) {
+      _secs = DateTime.now().difference(widget.startedAt).inSeconds.clamp(0, 60);
+    }
+  }
+
+  @override
+  void dispose() {
+    _ticker?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.sizeOf(context);
-    final cancel = intent == RecordIntent.cancel;
-    final toText = intent == RecordIntent.toText;
+    final cancel = widget.intent == RecordIntent.cancel;
+    final toText = widget.intent == RecordIntent.toText;
     final color = cancel ? const Color(0xFFFF5B5B) : const Color(0xFF95EC69);
-    final width = cancel ? size.width * 0.34 : size.width * 0.62;
+    final width = cancel
+        ? size.width * 0.34
+        : size.width * _RecordBubble.widthFactorFor(_secs);
     final hint = cancel
         ? '松手 取消'
         : toText
             ? '松手 转文字'
             : null;
+    const padH = 20.0;
+    final bars = cancel
+        ? 8
+        : (((width - padH * 2) / 9).floor()).clamp(8, 26);
     return Column(mainAxisSize: MainAxisSize.min, children: [
       if (hint != null) ...[
         Text(hint,
@@ -286,11 +335,11 @@ class _RecordBubble extends StatelessWidget {
       ],
       Stack(clipBehavior: Clip.none, children: [
         AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOutCubic,
           width: width,
-          height: cancel ? 64 : 104,
-          padding: EdgeInsets.symmetric(
-              horizontal: cancel ? 14 : 22, vertical: cancel ? 10 : 18),
+          height: 64,
+          padding: const EdgeInsets.symmetric(horizontal: padH, vertical: 10),
           decoration: BoxDecoration(
             color: color,
             borderRadius: BorderRadius.circular(24),
@@ -302,9 +351,9 @@ class _RecordBubble extends StatelessWidget {
           child: Center(
               child: _RecordWave(
                   color: Colors.black87,
-                  bars: cancel ? 7 : 13,
-                  barWidth: cancel ? 3 : 4,
-                  maxHeight: cancel ? 26 : 56)),
+                  bars: bars,
+                  barWidth: 3,
+                  maxHeight: 34)),
         ),
         // 向下小尾巴（气泡左下角）
         Positioned(
@@ -426,23 +475,23 @@ class _ArcZones extends StatelessWidget {
       width: width,
       height: zoneH,
       child: Stack(children: [
-        // 左弧「取消」
+        // 左弧「取消」（用户定版：缩小——高 104、圆角 52）
         Positioned(
           left: 0,
-          top: 30,
-          width: width * 0.44,
-          height: 150,
+          top: 46,
+          width: width * 0.42,
+          height: 104,
           child:
-              _ArcTile(label: '取消', active: cancel, width: width * 0.44),
+              _ArcTile(label: '取消', active: cancel, width: width * 0.42),
         ),
         // 右弧「滑到这里 转文字」
         Positioned(
           right: 0,
-          top: 30,
-          width: width * 0.44,
-          height: 150,
+          top: 46,
+          width: width * 0.42,
+          height: 104,
           child: _ArcTile(
-              label: '滑到这里 转文字', active: toText, width: width * 0.44),
+              label: '滑到这里 转文字', active: toText, width: width * 0.42),
         ),
         // 中央凸弧（宽度溢出屏幕 → 平缓弧顶；Stack 默认裁剪溢出）
         Positioned(
@@ -509,17 +558,17 @@ class _ArcTile extends StatelessWidget {
         color: active
             ? Colors.white.withValues(alpha: 0.95)
             : Colors.white.withValues(alpha: 0.16),
-        borderRadius: BorderRadius.circular(72),
+        borderRadius: BorderRadius.circular(52),
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 18),
+      padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Text(label,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           textAlign: TextAlign.center,
           style: TextStyle(
               color: active ? Colors.black : Colors.white,
-              fontSize: 15,
-              fontWeight: FontWeight.w700)),
+              fontSize: 14,
+              fontWeight: FontWeight.w600)),
     );
   }
 }

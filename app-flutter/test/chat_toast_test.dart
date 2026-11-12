@@ -36,15 +36,15 @@ void main() {
           RecordIntent.toText);
     });
 
-    test('没有明显上滑时不误判左右象限', () {
+    test('屏幕下方水平滑动即生效（不要求先上滑）', () {
       expect(
           recordIntentFor(
               finger: const Offset(100, 1180), origin: origin),
-          RecordIntent.send);
+          RecordIntent.cancel);
       expect(
           recordIntentFor(
               finger: const Offset(620, 1180), origin: origin),
-          RecordIntent.send);
+          RecordIntent.toText);
     });
 
     test('阈值可配置；边界值落在对应象限', () {
