@@ -1,4 +1,4 @@
-/// 语音录制（段二 · 对齐 Web chatVoiceToggle：点一下开始，再点一下结束并发送）。
+/// 语音录制（复验改为长按手势：松开发送 / 左上取消 / 右上转文字）。
 /// record 5.2.1（AudioRecorder）录 m4a/AAC-LC 44.1kHz，产物走 Step 5 上传链路。
 /// 需要的 RECORD_AUDIO 权限已在 AndroidManifest 声明（本条目唯一清单改动）。
 library;
@@ -38,6 +38,20 @@ class VoiceRecorder {
     final f = File(p);
     if (!await f.exists() || await f.length() == 0) return null;
     return ChatLocalFile(path: p, name: '语音.m4a');
+  }
+
+  /// 取消录制：停止并删掉临时文件（长按滑到左上取消时用，不留脏数据）
+  Future<void> cancel() async {
+    final p = await _rec.stop();
+    final path = p ?? _path;
+    _path = null;
+    if (path == null) return;
+    try {
+      final f = File(path);
+      if (await f.exists()) await f.delete();
+    } catch (_) {
+      // 临时文件清理失败不阻断手势收尾
+    }
   }
 
   Future<void> dispose() => _rec.dispose();

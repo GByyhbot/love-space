@@ -25,6 +25,7 @@ import '../../core/chat/chat_models.dart';
 import '../../core/chat/chat_state.dart';
 import '../auth/auth_state.dart';
 import 'album_picker_sheet.dart';
+import 'chat_toast.dart';
 import 'input_slots.dart';
 import 'media_bubble_widgets.dart';
 import 'song_picker_sheet.dart';
@@ -62,8 +63,11 @@ class _ChatComposeState extends ConsumerState<ChatCompose>
   final _focus = FocusNode();
   final _slots = InputSlotMachine();
   final VoiceRecorder _recorder = VoiceRecorder();
-  bool _recording = false;
   bool _hasText = false;
+
+  /// 长按录音起点（全局坐标）；为空表示当前不在录音手势中，
+  /// 同时作为 _finishRecording 的幂等守卫。
+  Offset? _recordOrigin;
   double _lastInsets = 0;
   double _prevInsets = -1;
   String _stickerTab = 'cute';
@@ -175,9 +179,11 @@ class _ChatComposeState extends ConsumerState<ChatCompose>
     super.dispose();
   }
 
-  void _snack(String msg) {
+  /// 统一走聊天页顶部提示层：底部 SnackBar 会盖住输入栏与麦克风按钮，
+  /// 录音时「再点一次结束」根本点不到（真机录屏 11.00s 实证）。
+  void _snack(String msg, {ChatToastTone tone = ChatToastTone.info}) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+    ref.read(chatToastProvider.notifier).show(msg, tone: tone);
   }
 
   // ── 槽位切换 ───────────────────────────────────────────────────────
@@ -296,31 +302,57 @@ class _ChatComposeState extends ConsumerState<ChatCompose>
     await _sendFiles([ChatLocalFile(path: x.path, name: x.name)]);
   }
 
-  /// 语音（对齐 Web chatVoiceToggle：点一下开始，再点一次结束并发送）
-  Future<void> _toggleVoice() async {
-    if (_recording) {
-      final f = await _recorder.stop();
-      setState(() => _recording = false);
-      if (f == null) {
-        _snack('没有录到声音');
-        return;
-      }
-      _snack('正在发送语音…');
-      await _sendFiles([f]);
-      return;
-    }
+  // ── 长按录音（微信/QQ 同款手势：松开发送 / 左上取消 / 右上转文字）──
+
+  Future<void> _startRecording(Offset globalOrigin) async {
     try {
       final ok = await _recorder.hasPermission();
       if (!ok) {
-        _snack('需要麦克风权限，请到系统设置开启后重试');
+        _snack('需要麦克风权限，请到系统设置开启后重试',
+            tone: ChatToastTone.error);
         return;
       }
       await _recorder.start();
-      setState(() => _recording = true);
-      _snack('正在录音，再点一次麦克风结束并发送');
+      _recordOrigin = globalOrigin;
+      ref.read(chatRecordProvider.notifier).start();
     } catch (_) {
-      setState(() => _recording = false);
-      _snack('录音失败');
+      _recordOrigin = null;
+      ref.read(chatRecordProvider.notifier).stop();
+      _snack('录音失败', tone: ChatToastTone.error);
+    }
+  }
+
+  void _onRecordMove(Offset globalPosition) {
+    final origin = _recordOrigin;
+    if (origin == null) return;
+    ref.read(chatRecordProvider.notifier).intent(
+        recordIntentFor(finger: globalPosition, origin: origin));
+  }
+
+  /// 松手收尾（幂等：手势取消与正常结束都可能回调，靠 _recordOrigin 去重）
+  Future<void> _finishRecording() async {
+    final origin = _recordOrigin;
+    _recordOrigin = null;
+    final state = ref.read(chatRecordProvider);
+    ref.read(chatRecordProvider.notifier).stop();
+    if (origin == null || state == null) return;
+    switch (state.intent) {
+      case RecordIntent.cancel:
+        await _recorder.cancel();
+        _snack('已取消录音');
+      case RecordIntent.toText:
+        // 🔴 后端零改动红线下，服务端与 Web 端都没有语音转文字（ASR）接口，
+        // 不自创协议：此处按取消处理并明确告知，接入点保留在这个分支。
+        await _recorder.cancel();
+        _snack('语音转文字需要服务端识别能力，当前未开放，本次录音未发送',
+            tone: ChatToastTone.warning);
+      case RecordIntent.send:
+        final f = await _recorder.stop();
+        if (f == null) {
+          _snack('没有录到声音', tone: ChatToastTone.warning);
+          return;
+        }
+        await _sendFiles([f]);
     }
   }
 
@@ -380,9 +412,9 @@ class _ChatComposeState extends ConsumerState<ChatCompose>
       case 'camera': // 拍摄（对齐 Web chat-shot：拍照）
         _pickFunction();
         _pickCamera();
-      case 'voice': // 语音
+      case 'voice': // 语音改为长按手势，面板入口只做引导
         _pickFunction();
-        _toggleVoice();
+        _snack('长按输入框旁的麦克风录音，松开发送；上滑可取消或转文字');
       case 'sticker-panel': // 表情 → 切到贴纸坞（同槽位互换）
         _toggleSticker();
       case 'chat-locate': // 位置（段三：定位+发送）
@@ -531,15 +563,26 @@ class _ChatComposeState extends ConsumerState<ChatCompose>
               ),
             ),
             const SizedBox(width: 8),
-            // 有文字时语音位换发送钮（对齐 Web form.has-text）
+            // 有文字时语音位换发送钮（对齐 Web form.has-text）。
+            // 无文字时长按麦克风录音：松开发送 / 滑到左上取消 / 滑到右上转文字。
+            // 不再有「再点一次结束」，底部提示也不会挡住这个按钮。
             if (!_hasText)
-              IconButton(
-                tooltip: _recording ? '结束并发送' : '发语音',
-                onPressed: _toggleVoice,
-                color: _recording ? theme.colorScheme.error : null,
-                icon: Icon(_recording
-                    ? Icons.stop_circle_rounded
-                    : Icons.mic_rounded),
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onLongPressStart: (d) => _startRecording(d.globalPosition),
+                onLongPressMoveUpdate: (d) => _onRecordMove(d.globalPosition),
+                onLongPressEnd: (_) => _finishRecording(),
+                onLongPressCancel: _finishRecording,
+                onTap: () => _snack('长按录音，松开发送；滑到左上取消、右上转文字'),
+                child: Semantics(
+                  button: true,
+                  label: '长按录音',
+                  child: Padding(
+                    padding: const EdgeInsets.all(10),
+                    child: Icon(Icons.mic_rounded,
+                        color: widget.immersive ? Colors.white : null),
+                  ),
+                ),
               )
             else
               IconButton.filled(

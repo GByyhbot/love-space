@@ -25,6 +25,8 @@ import '../auth/auth_state.dart';
 import '../home/home_page.dart' show todayStr;
 import 'bubble_skin_sheet.dart';
 import 'chat_compose.dart';
+import 'chat_toast.dart';
+import 'chat_wallpaper_frame.dart';
 import 'media_bubble_widgets.dart';
 import 'skin_bubble.dart';
 import 'wallpaper_sheet.dart';
@@ -79,9 +81,10 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
     super.dispose();
   }
 
-  void _snack(String msg) {
+  /// 统一走顶部提示层：底部 SnackBar 会盖住输入栏按钮（真机复验缺陷）。
+  void _snack(String msg, {ChatToastTone tone = ChatToastTone.info}) {
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+      ref.read(chatToastProvider.notifier).show(msg, tone: tone);
     }
   }
 
@@ -178,7 +181,7 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
         try {
           await ref.read(chatControllerProvider.notifier).pinMessage(record.id);
         } catch (e) {
-          _snack(errorDetail(e));
+          _snack(errorDetail(e), tone: ChatToastTone.error);
         }
       case 'moment':
         await _sendToMoment(record);
@@ -216,7 +219,7 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
           );
       _snack('这一刻，已经好好收藏');
     } catch (e) {
-      _snack(errorDetail(e));
+      _snack(errorDetail(e), tone: ChatToastTone.error);
     }
   }
 
@@ -236,9 +239,9 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
     if (ok != true) return;
     try {
       await ref.read(chatControllerProvider.notifier).recallMessage(record.id);
-      _snack('已撤回');
+      _snack('已撤回', tone: ChatToastTone.success);
     } catch (e) {
-      _snack(errorDetail(e));
+      _snack(errorDetail(e), tone: ChatToastTone.error);
     }
   }
 
@@ -276,6 +279,10 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
     final wp = chatBgOf(me.spaceRaw, me.user.id);
     final skin = ChatSkin.fromSpace(me.spaceRaw);
     final immersive = wp.isPhoto;
+    // 背景层固定用完整视口高度：Scaffold 在键盘弹出时会压缩 body，
+    // 若背景用 Positioned.fill 会跟着收缩并被 BoxFit.cover 重新裁剪，
+    // 视觉上就是「点输入框背景往上跑、点工具栏又落回来」。
+    final fullHeight = MediaQuery.sizeOf(context).height;
     return Scaffold(
       backgroundColor: immersive ? Colors.black : null,
       appBar: AppBar(
@@ -336,9 +343,11 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
         ]),
       ),
       body: Stack(children: [
-        // 背景层：整屏铺（头部/输入栏压图上，像聊天 App 那样——对齐 Web 挂 .chat-panel）
+        // 背景层：按完整视口高度固定铺满（头部/输入栏压图上，对齐 Web .chat-panel）。
+        // 高度不随 body 压缩变化，键盘弹出/收起时图片位置与裁剪保持不变。
         if (wp.isPhoto && ref.watch(chatBaseProvider).valueOrNull != null) ...[
-          Positioned.fill(
+          ChatWallpaperFrame(
+            viewportHeight: fullHeight,
             child: Builder(builder: (context) {
               final base = ref.watch(chatBaseProvider).valueOrNull!;
               final url = mediaUrl(base, wp.media);
@@ -357,10 +366,14 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
           ),
         ]
         else if (wp.hasWallpaper)
-          Positioned.fill(child: Container(color: _presetColor(wp.bg))),
+          ChatWallpaperFrame(
+            viewportHeight: fullHeight,
+            child: Container(color: _presetColor(wp.bg)),
+          ),
         if (wp.isPhoto)
-          // dim 遮罩：0–80%，只为一件事——气泡文字在任何底图上都读得清
-          Positioned.fill(
+          // dim 遮罩与背景同尺寸同定位，避免键盘收起时下缘露出未遮罩区域
+          ChatWallpaperFrame(
+            viewportHeight: fullHeight,
             child: Container(
                 color: Colors.black.withValues(alpha: wp.dim.clamp(0, 80) / 100)),
           ),
@@ -378,6 +391,14 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
             onOpenWallpaper: () => showWallpaperSheet(context),
           ),
         ]),
+        // 顶部提示层（替代底部 SnackBar）：录音状态卡与「已撤回 / 已复制」
+        // 等提示都挂在 AppBar 下方，不遮挡输入栏与麦克风按钮。
+        const Positioned(
+          top: 0,
+          left: 0,
+          right: 0,
+          child: ChatToastHost(),
+        ),
       ]),
     );
   }
