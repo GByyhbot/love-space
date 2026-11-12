@@ -522,29 +522,19 @@ class _ChatComposeState extends ConsumerState<ChatCompose>
             ),
           ]),
         ),
-      // 表情快捷胶囊条（对齐视频 78：常驻在输入栏上方的一排常用 emoji，
-      // 点一下直接插入输入框；底色与外壳同源，深色底走浅色图标）。
-      _QuickEmojiRow(
-        onEmoji: _insertEmoji,
-        onDark: onDark,
-        chromeColor: chatChromeColor(theme,
-            immersive: widget.immersive, dark: widget.dark),
-      ),
-      // 输入栏（层级：消息列表 / 表情条 / 输入栏 / 底部槽位——输入栏恒在面板上方）。
-      // 五处外壳同一函数取色：顶栏/状态栏/引用栏/输入栏/⊕面板/贴纸坞
-      // 同一底色同一 α，杜绝「输入框透明、工具栏纯色」的混搭。
-      Container(
-        decoration: BoxDecoration(
-          color: chatChromeColor(theme,
-              immersive: widget.immersive, dark: widget.dark),
-          border: Border(
-              top: BorderSide(
-                  color: chatChromeBorder(theme,
-                      immersive: widget.immersive, dark: widget.dark))),
-        ),
-        padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
-        child: SafeArea(
-          top: false,
+      // 输入栏：悬浮胶囊（用户定版：不贴屏幕底边，四周留边、整体大圆角）。
+      // SafeArea 包在胶囊外——胶囊整体浮在系统导航条上方。
+      // 深色外壳与面板同源取色；胶囊态不再要顶部分隔线。
+      SafeArea(
+        top: false,
+        child: Container(
+          margin: const EdgeInsets.fromLTRB(10, 0, 10, 8),
+          decoration: BoxDecoration(
+            color: chatChromeColor(theme,
+                immersive: widget.immersive, dark: widget.dark),
+            borderRadius: BorderRadius.circular(26),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
           child: Row(children: [
             Expanded(
               child: TextField(
@@ -657,54 +647,6 @@ class _ChatComposeState extends ConsumerState<ChatCompose>
       ),
     ]);
   }
-}
-
-// ── 表情快捷胶囊条（视频 78：常驻在输入栏上方，点一下插入输入框）────────
-
-const List<String> _quickEmojis = ['😂', '😭', '🌹', '🤞', '❤️', '😘', '🥰', '👍'];
-
-class _QuickEmojiRow extends StatelessWidget {
-  const _QuickEmojiRow({
-    required this.onEmoji,
-    required this.onDark,
-    required this.chromeColor,
-  });
-  final void Function(String emoji) onEmoji;
-  final bool onDark;
-  final Color chromeColor;
-
-  @override
-  Widget build(BuildContext context) => Container(
-        color: chromeColor,
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-        child: SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              for (final em in _quickEmojis)
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 2),
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(14),
-                    onTap: () => onEmoji(em),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: onDark
-                            ? Colors.white.withValues(alpha: 0.1)
-                            : Colors.black.withValues(alpha: 0.05),
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: Text(em, style: const TextStyle(fontSize: 20)),
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        ),
-      );
 }
 
 // ── ⊕功能面板（16 格对齐 Web fnPanel）────────────────────────────────

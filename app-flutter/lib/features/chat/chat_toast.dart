@@ -202,11 +202,12 @@ class _ToastPill extends StatelessWidget {
   }
 }
 
-/// 微信式语音输入全屏遮罩（对齐视频 81）：
-/// · 压暗背景，聊天界面被半透明黑遮罩盖住（录音是全屏交互，不该挤在顶部卡里）；
-/// · 中上部绿色波形气泡（取消态转红）+ 向下小尾巴；
-/// · 底部三区：左下「取消」/ 右下「滑到这里 · 转文字」/ 最底「松开 发送」，
-///   按当前手势意图([RecordIntent])高亮对应区。
+/// 微信式语音输入全屏遮罩（对齐视频 85）：
+/// · 压暗背景，聊天界面被半透明黑遮罩盖住（录音是全屏交互）；
+/// · 中央绿色波形气泡 + 向下尾巴（取消态缩小变红靠左，上方「松手 取消」）；
+/// · 底部弧形三区：左弧「取消」/ 右弧「滑到这里 转文字」（深灰白字），
+///   最底凸弧「松开 发送」（浅白黑字），当前意图对应区白底高亮；
+/// · 手指白点落在当前意图区的中央（发送→大弧中央 / 取消→左弧 / 转文字→右弧）。
 /// 纯视觉：`IgnorePointer` 不拦截手势——长按录音的起点在输入框旁的麦克风，
 /// 指针 move/up 仍由那个 GestureDetector 接收，遮罩只负责呈现。
 class VoiceRecordOverlay extends ConsumerWidget {
@@ -217,75 +218,104 @@ class VoiceRecordOverlay extends ConsumerWidget {
     final rec = ref.watch(chatRecordProvider);
     if (rec == null) return const SizedBox.shrink();
     final intent = rec.intent;
-    final top = MediaQuery.of(context).size.height * 0.2;
+    final size = MediaQuery.sizeOf(context);
+    final cancel = intent == RecordIntent.cancel;
+    final toText = intent == RecordIntent.toText;
+    final bubbleTop = size.height * (cancel ? 0.52 : 0.46);
     return IgnorePointer(
       child: Stack(children: [
         // 压暗背景
-        Container(color: Colors.black.withValues(alpha: 0.6)),
-        // 中上部：绿色波形气泡（取消态转红）+ 向下尾巴
+        ColoredBox(
+            color: Colors.black.withValues(alpha: 0.6),
+            child: SizedBox(width: size.width, height: size.height)),
+        // 中央气泡（取消态靠左缩小）
         Positioned(
-          top: top,
           left: 0,
           right: 0,
-          child: Center(child: _RecordBubble(intent: intent)),
+          top: bubbleTop,
+          child: cancel
+              ? Align(
+                  alignment: Alignment.centerLeft,
+                  child: Padding(
+                      padding: const EdgeInsets.only(left: 24),
+                      child: _RecordBubble(intent: intent)))
+              : Center(child: _RecordBubble(intent: intent)),
         ),
-        // 底部三区
+        // 底部弧形三区
         Positioned(
           left: 0,
           right: 0,
-          bottom: MediaQuery.of(context).padding.bottom,
-          child: _RecordZones(intent: intent),
+          bottom: MediaQuery.paddingOf(context).bottom,
+          child: _ArcZones(
+              width: size.width,
+              cancel: cancel,
+              toText: toText,
+              send: !cancel && !toText),
         ),
       ]),
     );
   }
 }
 
-/// 录音气泡：微信绿（取消态转红）+ 动态波形 + 向下尾巴。
+/// 录音气泡：正常态绿色大胶囊（波形居中）；取消态缩小转红、转文字态保持绿；
+/// 意图非发送时上方显示「松手 xx」白字提示。带向下尾巴。
 class _RecordBubble extends StatelessWidget {
   const _RecordBubble({required this.intent});
   final RecordIntent intent;
 
   @override
   Widget build(BuildContext context) {
+    final size = MediaQuery.sizeOf(context);
     final cancel = intent == RecordIntent.cancel;
     final toText = intent == RecordIntent.toText;
     final color = cancel ? const Color(0xFFFF5B5B) : const Color(0xFF95EC69);
-    final caption = cancel
-        ? '松开取消'
+    final width = cancel ? size.width * 0.34 : size.width * 0.62;
+    final hint = cancel
+        ? '松手 取消'
         : toText
-            ? '松开转文字'
-            : '手指上滑，取消或转文字';
-    return Stack(clipBehavior: Clip.none, children: [
-      Container(
-        margin: const EdgeInsets.only(bottom: 16, left: 28),
-        padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 20),
-        decoration: BoxDecoration(
-          color: color,
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: const [
-            BoxShadow(blurRadius: 22, offset: Offset(0, 8), color: Colors.black38)
-          ],
-        ),
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          _RecordWave(color: Colors.black87),
-          const SizedBox(height: 10),
-          Text(caption,
-              style: const TextStyle(
+            ? '松手 转文字'
+            : null;
+    return Column(mainAxisSize: MainAxisSize.min, children: [
+      if (hint != null) ...[
+        Text(hint,
+            style: const TextStyle(
+                color: Colors.white,
+                fontSize: 15,
+                fontWeight: FontWeight.w700)),
+        const SizedBox(height: 12),
+      ],
+      Stack(clipBehavior: Clip.none, children: [
+        AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          width: width,
+          height: cancel ? 64 : 104,
+          padding: EdgeInsets.symmetric(
+              horizontal: cancel ? 14 : 22, vertical: cancel ? 10 : 18),
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(24),
+            boxShadow: const [
+              BoxShadow(
+                  blurRadius: 22, offset: Offset(0, 8), color: Colors.black38)
+            ],
+          ),
+          child: Center(
+              child: _RecordWave(
                   color: Colors.black87,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600)),
-        ]),
-      ),
-      // 向下小尾巴（气泡左下角）
-      Positioned(
-        left: 26,
-        bottom: 0,
-        child: CustomPaint(
-          size: const Size(24, 18),
-          painter: _TailPainter(color: color),
+                  bars: cancel ? 7 : 13,
+                  barWidth: cancel ? 3 : 4,
+                  maxHeight: cancel ? 26 : 56)),
         ),
-      ),
+        // 向下小尾巴（气泡左下角）
+        Positioned(
+          left: 22,
+          bottom: -12,
+          child: CustomPaint(
+            size: const Size(22, 16),
+            painter: _TailPainter(color: color),
+          ),
+        ),
+      ]),
     ]);
   }
 }
@@ -308,10 +338,18 @@ class _TailPainter extends CustomPainter {
   bool shouldRepaint(covariant _TailPainter old) => old.color != color;
 }
 
-/// 动态波形（黑色竖条，中间高两侧低、随时间起伏）。
+/// 动态波形（黑色竖条，中间高两侧低、随时间起伏）。条数/粗细/峰高可调，
+/// 取消态小气泡用小参数。
 class _RecordWave extends StatefulWidget {
-  const _RecordWave({required this.color});
+  const _RecordWave(
+      {required this.color,
+      this.bars = 13,
+      this.barWidth = 4,
+      this.maxHeight = 56});
   final Color color;
+  final int bars;
+  final double barWidth;
+  final double maxHeight;
 
   @override
   State<_RecordWave> createState() => _RecordWaveState();
@@ -332,21 +370,22 @@ class _RecordWaveState extends State<_RecordWave>
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      width: 132,
-      height: 42,
+      width: widget.bars * widget.barWidth * 2.0,
+      height: widget.maxHeight,
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          for (var i = 0; i < 11; i++)
+          for (var i = 0; i < widget.bars; i++)
             AnimatedBuilder(
               animation: _c,
               builder: (_, _) {
                 final t = _c.value;
                 final phase = (t * 2 - i * 0.16).abs().clamp(0.0, 1.0);
-                final h = 7 + (1 - phase) * 30;
+                final h = widget.maxHeight * 0.14 +
+                    (1 - phase) * widget.maxHeight * 0.86;
                 return Container(
-                  width: 4,
+                  width: widget.barWidth,
                   height: h,
                   decoration: BoxDecoration(
                     color: widget.color,
@@ -361,83 +400,152 @@ class _RecordWaveState extends State<_RecordWave>
   }
 }
 
-/// 底部三区（对齐视频 81：左取消 / 右转文字 / 底发送）。
-class _RecordZones extends StatelessWidget {
-  const _RecordZones({required this.intent});
-  final RecordIntent intent;
+/// 底部弧形三区（对齐视频 85）：
+/// · 左右两块独立弧形块（大圆角切片）：「取消」「滑到这里 转文字」，
+///   深灰白字，被当前意图选中时白底黑字；
+/// · 中央凸弧（CustomPaint 二次贝塞尔，宽度溢出屏幕形成平缓弧顶）：
+///   发送态白底黑字「松开 发送」，取消态弱化显示「语音」；
+/// · 手指白点落在当前意图区中央。
+class _ArcZones extends StatelessWidget {
+  const _ArcZones({
+    required this.width,
+    required this.cancel,
+    required this.toText,
+    required this.send,
+  });
+  final double width;
+  final bool cancel;
+  final bool toText;
+  final bool send;
+
+  static const double zoneH = 240;
 
   @override
   Widget build(BuildContext context) {
-    final cancel = intent == RecordIntent.cancel;
-    final toText = intent == RecordIntent.toText;
-    final send = !cancel && !toText;
-    return Column(children: [
-      Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-        child: Row(children: [
-          Expanded(
-            child: _ZonePill(
-              label: '取消',
-              icon: Icons.close_rounded,
-              active: cancel,
+    return SizedBox(
+      width: width,
+      height: zoneH,
+      child: Stack(children: [
+        // 左弧「取消」
+        Positioned(
+          left: 0,
+          top: 30,
+          width: width * 0.44,
+          height: 150,
+          child:
+              _ArcTile(label: '取消', active: cancel, width: width * 0.44),
+        ),
+        // 右弧「滑到这里 转文字」
+        Positioned(
+          right: 0,
+          top: 30,
+          width: width * 0.44,
+          height: 150,
+          child: _ArcTile(
+              label: '滑到这里 转文字', active: toText, width: width * 0.44),
+        ),
+        // 中央凸弧（宽度溢出屏幕 → 平缓弧顶；Stack 默认裁剪溢出）
+        Positioned(
+          left: -width * 0.3,
+          right: -width * 0.3,
+          bottom: 0,
+          height: 110,
+          child: CustomPaint(
+            size: Size(width * 1.6, 110),
+            painter: _ArcPainter(active: send),
+          ),
+        ),
+        // 大弧文字（发送态「松开 发送」/ 取消态「语音」）
+        Positioned(
+          left: 0,
+          right: 0,
+          bottom: 42,
+          child: Center(
+            child: Text(send ? '松开 发送' : '语音',
+                style: TextStyle(
+                    color: send ? Colors.black : Colors.white70,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800)),
+          ),
+        ),
+        // 手指白点：落在当前意图区中央
+        Align(
+          alignment: send
+              ? const Alignment(0, 0.72)
+              : cancel
+                  ? const Alignment(-0.55, -0.42)
+                  : const Alignment(0.55, -0.42),
+          child: Container(
+            width: 26,
+            height: 26,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.92),
+              shape: BoxShape.circle,
+              boxShadow: const [
+                BoxShadow(blurRadius: 8, color: Colors.black26)
+              ],
             ),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: _ZonePill(
-              label: '滑到这里 · 转文字',
-              icon: Icons.text_fields_rounded,
-              active: toText,
-            ),
-          ),
-        ]),
-      ),
-      Container(
-        margin: const EdgeInsets.only(bottom: 22, left: 24, right: 24),
-        padding: const EdgeInsets.symmetric(vertical: 15),
-        decoration: BoxDecoration(
-          color: send ? Colors.white : Colors.white.withValues(alpha: 0.5),
-          borderRadius: BorderRadius.circular(16),
         ),
-        child: Center(
-          child: Text('松开 发送',
-              style: TextStyle(
-                  color: send ? Colors.black : Colors.black54,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700)),
-        ),
-      ),
-    ]);
+      ]),
+    );
   }
 }
 
-class _ZonePill extends StatelessWidget {
-  const _ZonePill(
-      {required this.label, required this.icon, required this.active});
+/// 左/右弧形块：大圆角切片（顶部+底部同半径），深灰白字；选中时白底黑字。
+class _ArcTile extends StatelessWidget {
+  const _ArcTile(
+      {required this.label, required this.active, required this.width});
   final String label;
-  final IconData icon;
   final bool active;
+  final double width;
 
   @override
   Widget build(BuildContext context) {
     return AnimatedContainer(
-      duration: const Duration(milliseconds: 120),
-      padding: const EdgeInsets.symmetric(vertical: 13),
+      duration: const Duration(milliseconds: 150),
+      alignment: Alignment.center,
       decoration: BoxDecoration(
         color: active
-            ? const Color(0xFF95EC69)
-            : Colors.white.withValues(alpha: 0.18),
-        borderRadius: BorderRadius.circular(16),
+            ? Colors.white.withValues(alpha: 0.95)
+            : Colors.white.withValues(alpha: 0.16),
+        borderRadius: BorderRadius.circular(72),
       ),
-      child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-        Icon(icon, size: 16, color: active ? Colors.black : Colors.white70),
-        const SizedBox(width: 6),
-        Text(label,
-            style: TextStyle(
-                color: active ? Colors.black : Colors.white70,
-                fontSize: 13,
-                fontWeight: FontWeight.w600)),
-      ]),
+      padding: const EdgeInsets.symmetric(horizontal: 18),
+      child: Text(label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+              color: active ? Colors.black : Colors.white,
+              fontSize: 15,
+              fontWeight: FontWeight.w700)),
     );
   }
+}
+
+/// 中央凸弧：二次贝塞尔弧顶（控制点在容器上方 → 弧顶中央凸起、两侧缓落）。
+/// 发送态浅白，其余态弱化半透明。
+class _ArcPainter extends CustomPainter {
+  const _ArcPainter({required this.active});
+  final bool active;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width;
+    final h = size.height;
+    final p = Path()
+      ..moveTo(0, h)
+      ..quadraticBezierTo(w * 0.5, -70, w, h)
+      ..close();
+    canvas.drawPath(
+        p,
+        Paint()
+          ..color = active
+              ? Colors.white.withValues(alpha: 0.95)
+              : Colors.white.withValues(alpha: 0.16));
+  }
+
+  @override
+  bool shouldRepaint(covariant _ArcPainter old) => old.active != active;
 }

@@ -109,10 +109,12 @@ void main() {
       expect(find.text('已撤回'), findsOneWidget);
       await tester.tap(find.text('record'));
       await tester.pump();
-      // 录音态：全屏遮罩显示底部三区（取消 / 转文字 / 发送）
+      // 录音态：全屏遮罩显示弧形三区（record 按钮设 intent=cancel →
+      // 左弧高亮、大弧弱化为「语音」、气泡上方「松手 取消」）
       expect(find.text('取消'), findsOneWidget);
-      expect(find.text('滑到这里 · 转文字'), findsOneWidget);
-      expect(find.text('松开 发送'), findsOneWidget);
+      expect(find.text('滑到这里 转文字'), findsOneWidget);
+      expect(find.text('语音'), findsOneWidget);
+      expect(find.text('松手 取消'), findsOneWidget);
       // 普通提示仍与遮罩并存（遮罩与顶部提示层是两条独立通道）
       expect(find.text('已撤回'), findsOneWidget);
       await tester.pumpWidget(const SizedBox());
