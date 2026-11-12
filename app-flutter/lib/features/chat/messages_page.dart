@@ -381,15 +381,29 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
           if (_searchOpen) _buildSearchBar(immersive),
           _buildPinnedBar(chat, immersive),
           Expanded(child: _buildList(context, me, chat, skin, immersive)),
-          ChatCompose(
-            immersive: immersive,
-            dark: true,
-            replyNotifier: _replyNotifier,
-            onOpenSearch: () => setState(() {
-              _searchOpen = true;
-              _searchCtrl.clear();
-            }),
-            onOpenWallpaper: () => showWallpaperSheet(context),
+          // 录音态把输入栏整体滑出隐藏（对齐微信：录音时底栏消失，
+          // 只剩全屏遮罩上的弧形区）；手势已开始，move/up 仍由原
+          // GestureDetector 接收，隐藏不中断录音。高度保留，列表不跳动。
+          AnimatedSlide(
+            offset: ref.watch(chatRecordProvider) != null
+                ? const Offset(0, 1.2)
+                : Offset.zero,
+            duration: const Duration(milliseconds: 250),
+            curve: Curves.easeOutCubic,
+            child: AnimatedOpacity(
+              opacity: ref.watch(chatRecordProvider) != null ? 0 : 1,
+              duration: const Duration(milliseconds: 250),
+              child: ChatCompose(
+                immersive: immersive,
+                dark: true,
+                replyNotifier: _replyNotifier,
+                onOpenSearch: () => setState(() {
+                  _searchOpen = true;
+                  _searchCtrl.clear();
+                }),
+                onOpenWallpaper: () => showWallpaperSheet(context),
+              ),
+            ),
           ),
         ]),
         // 顶部提示层（替代底部 SnackBar）：「已撤回 / 已复制」等提示挂在

@@ -216,44 +216,51 @@ class VoiceRecordOverlay extends ConsumerWidget {
     final rec = ref.watch(chatRecordProvider);
     if (rec == null) return const SizedBox.shrink();
     final intent = rec.intent;
-    final size = MediaQuery.sizeOf(context);
     final cancel = intent == RecordIntent.cancel;
     final toText = intent == RecordIntent.toText;
-    final bubbleTop = size.height * (cancel ? 0.52 : 0.46);
     return IgnorePointer(
-      child: Stack(children: [
-        // 压暗背景
-        ColoredBox(
-            color: Colors.black.withValues(alpha: 0.6),
-            child: SizedBox(width: size.width, height: size.height)),
-        // 中央气泡（取消态靠左缩小）
-        Positioned(
-          left: 0,
-          right: 0,
-          top: bubbleTop,
-          child: cancel
-              ? Align(
-                  alignment: Alignment.centerLeft,
-                  child: Padding(
-                      padding: const EdgeInsets.only(left: 24),
-                      child: _RecordBubble(
-                          intent: intent, startedAt: rec.startedAt)))
-              : Center(
-                  child: _RecordBubble(
-                      intent: intent, startedAt: rec.startedAt)),
-        ),
-        // 底部弧形三区
-        Positioned(
-          left: 0,
-          right: 0,
-          bottom: MediaQuery.paddingOf(context).bottom,
-          child: _ArcZones(
-              width: size.width,
-              cancel: cancel,
-              toText: toText,
-              send: !cancel && !toText),
-        ),
-      ]),
+      // LayoutBuilder 取**遮罩自身**（= body）高度定位气泡：
+      // MediaQuery.sizeOf 是全屏高，而 Positioned.top 相对 body Stack
+      //（AppBar 之下）——用全屏高会整体偏下一个 AppBar 高度（真机 91 录屏实证）。
+      child: LayoutBuilder(builder: (context, box) {
+        final w = box.maxWidth;
+        final h = box.maxHeight;
+        final bubbleTop = h * (cancel ? 0.46 : 0.42);
+        return Stack(children: [
+          // 压暗背景（铺满 body 全域）
+          Positioned.fill(
+            child: ColoredBox(
+                color: Colors.black.withValues(alpha: 0.6)),
+          ),
+          // 气泡（取消态靠左缩小）
+          Positioned(
+            left: 0,
+            right: 0,
+            top: bubbleTop,
+            child: cancel
+                ? Align(
+                    alignment: Alignment.centerLeft,
+                    child: Padding(
+                        padding: const EdgeInsets.only(left: 24),
+                        child: _RecordBubble(
+                            intent: intent, startedAt: rec.startedAt)))
+                : Center(
+                    child: _RecordBubble(
+                        intent: intent, startedAt: rec.startedAt)),
+          ),
+          // 底部弧形三区（贴屏幕底）
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: _ArcZones(
+                width: w,
+                cancel: cancel,
+                toText: toText,
+                send: !cancel && !toText),
+          ),
+        ]);
+      }),
     );
   }
 }
@@ -368,8 +375,8 @@ class _RecordBubbleState extends State<_RecordBubble> {
                         alignment: Alignment.bottomRight,
                         child: _RecordWave(
                             color: Colors.black54,
-                            bars: 12,
-                            barWidth: 3,
+                            bars: 14,
+                            barWidth: 2.5,
                             maxHeight: 22,
                             uniform: true),
                       ),
@@ -377,8 +384,8 @@ class _RecordBubbleState extends State<_RecordBubble> {
                   : Center(
                       child: _RecordWave(
                           color: Colors.black54,
-                          bars: cancel ? 12 : 26,
-                          barWidth: cancel ? 4 : 3,
+                          bars: cancel ? 14 : 30,
+                          barWidth: 2.5,
                           maxHeight: 30,
                           uniform: true)),
             ),
@@ -458,7 +465,7 @@ class _RecordWaveState extends State<_RecordWave>
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      width: widget.bars * widget.barWidth * 1.8,
+      width: widget.bars * widget.barWidth * 2.2,
       height: widget.maxHeight,
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -573,14 +580,14 @@ class _ArcZones extends StatelessWidget {
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 300),
             curve: Curves.easeOutCubic,
-            width: 26,
-            height: 26,
+            width: 22,
+            height: 22,
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.9),
+              color: Colors.white.withValues(alpha: 0.92),
               shape: BoxShape.circle,
               border: Border.all(color: const Color(0xFF8FA6B8), width: 2.5),
               boxShadow: const [
-                BoxShadow(blurRadius: 10, color: Colors.black26)
+                BoxShadow(blurRadius: 4, color: Colors.black26)
               ],
             ),
           ),
