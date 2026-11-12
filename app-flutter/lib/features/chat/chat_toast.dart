@@ -355,13 +355,16 @@ class _RecordBubbleState extends State<_RecordBubble> {
                   barWidth: 3,
                   maxHeight: 34)),
         ),
-        // 向下小尾巴（气泡左下角）
+        // 向下小尾巴（用户定版：气泡正下方居中，对齐微信语音样式）
         Positioned(
-          left: 22,
+          left: 0,
+          right: 0,
           bottom: -12,
-          child: CustomPaint(
-            size: const Size(22, 16),
-            painter: _TailPainter(color: color),
+          child: Center(
+            child: CustomPaint(
+              size: const Size(22, 16),
+              painter: _TailPainter(color: color),
+            ),
           ),
         ),
       ]),
@@ -369,16 +372,16 @@ class _RecordBubbleState extends State<_RecordBubble> {
   }
 }
 
-/// 气泡尾巴：向下的小三角（贴气泡左下角）。
+/// 气泡尾巴：向下的对称小三角（居中贴气泡底边）。
 class _TailPainter extends CustomPainter {
   const _TailPainter({required this.color});
   final Color color;
   @override
   void paint(Canvas canvas, Size size) {
     final p = Path()
-      ..moveTo(2, 0)
+      ..moveTo(0, 0)
       ..lineTo(size.width, 0)
-      ..lineTo(2, size.height)
+      ..lineTo(size.width / 2, size.height)
       ..close();
     canvas.drawPath(p, Paint()..color = color);
   }
@@ -475,23 +478,30 @@ class _ArcZones extends StatelessWidget {
       width: width,
       height: zoneH,
       child: Stack(children: [
-        // 左弧「取消」（用户定版：缩小——高 104、圆角 52）
+        // 左弧「取消」（微信式半弧：底部贴屏幕底、顶部拱形，高 96；
+        // 两边平分 0.46 宽、中央断开 8%）
         Positioned(
           left: 0,
-          top: 46,
-          width: width * 0.42,
-          height: 104,
-          child:
-              _ArcTile(label: '取消', active: cancel, width: width * 0.42),
+          bottom: 0,
+          width: width * 0.46,
+          height: 96,
+          child: _ArcTile(
+              label: '取消',
+              active: cancel,
+              width: width * 0.46,
+              arc: true),
         ),
         // 右弧「滑到这里 转文字」
         Positioned(
           right: 0,
-          top: 46,
-          width: width * 0.42,
-          height: 104,
+          bottom: 0,
+          width: width * 0.46,
+          height: 96,
           child: _ArcTile(
-              label: '滑到这里 转文字', active: toText, width: width * 0.42),
+              label: '滑到这里 转文字',
+              active: toText,
+              width: width * 0.46,
+              arc: true),
         ),
         // 中央凸弧（宽度溢出屏幕 → 平缓弧顶；Stack 默认裁剪溢出）
         Positioned(
@@ -517,13 +527,13 @@ class _ArcZones extends StatelessWidget {
                     fontWeight: FontWeight.w800)),
           ),
         ),
-        // 手指白点：落在当前意图区中央
+        // 手指白点：落在当前意图区中央（弧块高 96 贴底 → 中心在 zoneH-48）
         Align(
           alignment: send
               ? const Alignment(0, 0.72)
               : cancel
-                  ? const Alignment(-0.55, -0.42)
-                  : const Alignment(0.55, -0.42),
+                  ? const Alignment(-0.54, 0.6)
+                  : const Alignment(0.54, 0.6),
           child: Container(
             width: 26,
             height: 26,
@@ -541,13 +551,18 @@ class _ArcZones extends StatelessWidget {
   }
 }
 
-/// 左/右弧形块：大圆角切片（顶部+底部同半径），深灰白字；选中时白底黑字。
+/// 左/右弧形块：[arc]=true 时为微信式半弧（底部贴屏幕底、顶部半圆拱形），
+/// 深灰白字，选中时白底黑字；false 为悬浮胶囊切片。
 class _ArcTile extends StatelessWidget {
   const _ArcTile(
-      {required this.label, required this.active, required this.width});
+      {required this.label,
+      required this.active,
+      required this.width,
+      this.arc = false});
   final String label;
   final bool active;
   final double width;
+  final bool arc;
 
   @override
   Widget build(BuildContext context) {
@@ -558,7 +573,10 @@ class _ArcTile extends StatelessWidget {
         color: active
             ? Colors.white.withValues(alpha: 0.95)
             : Colors.white.withValues(alpha: 0.16),
-        borderRadius: BorderRadius.circular(52),
+        borderRadius: arc
+            // 高 96 容器：顶部半径 48 = 高度一半 → 连续半圆拱顶
+            ? const BorderRadius.vertical(top: Radius.circular(48))
+            : BorderRadius.circular(52),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Text(label,
