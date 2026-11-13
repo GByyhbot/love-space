@@ -1,29 +1,27 @@
-/// 相册全屏查看器（条目 5 · 段 B · 甲档，返修版）。
+/// 相册全屏查看器（条目 5 · 段 B · 甲档，第二轮返修）。
 /// · Hero 共享元素转场：网格缩略图 ↔ 查看器双向，Hero tag 跟随当前页
 ///   （翻页后返回落点 = 当前查看那张，不是最初点开那张）；
 /// · 跨整个相册翻页：PageView 数据集 = 当前筛选下全部照片，首/末页不越界；
-/// · 缩放/平移手势仲裁（本文件核心，见下方说明）：
-///   - 双指捏合缩放 1~5×，连续可调；双击缩放（1×↔2.5×）保留；
-///   - 缩放态（scale>1）单指拖动 = 平移局部，跟手，不被翻页/下拉抢走；
-///   - 回到 1× 后横滑翻页与下拉关闭自动恢复；
+/// · 缩放/平移手势仲裁（返修核心，见下方说明）：
+///   - 1× 直接双指外拉即可连续放大（不需双击前置）；双指内缩回 1×；
+///   - 放大态（scale>1）单指拖动 = 平移局部，跟手；
+///   - 1× 单指横滑翻页、单指竖滑下拉关闭、双击缩放，全部照旧；
 /// · 下拉跟手关闭：位移跟手、背景渐暗；过阈值关闭且 **HeroMode 禁用**
 ///   （下拉关闭不触发返回转场，避免打架）；未过阈值弹回；
 /// · 计数 n/N、caption/date、相邻图预加载；
 /// · 下载走顶部通知（chatToastProvider / ChatToastHost），无底部 SnackBar。
 ///
-/// ── 手势仲裁口径（最终版，返修定版）──
-/// 冲突双方：外层下拉关闭（竖向拖拽 GestureDetector）、PageView（横滑翻页）、
-/// 内层 InteractiveViewer（捏合缩放 + 单指平移）。
-/// 关键：**_scale 是真实状态**，由 onInteractionEnd 在手势结束时结算
-/// （读 TransformationController 最终值，不中途频繁 setState，避免重建抖动/
-/// 丢手势），双击与翻页也同步结算。据此驱动三处：
-///   1) InteractiveViewer.panEnabled = 缩放态(active&&_zoomed)——只有放大后才允许
-///      单指平移，1× 时关掉，横滑交给 PageView；
-///   2) PageView.physics = 缩放态或手势进行中 → NeverScrollable，否则 PageScroll；
-///   3) 外层下拉拖拽识别器 = 缩放态或手势进行中 → 不挂载(null)，让 InteractiveViewer
-///      完整接管手势（否则竖向拖拽会与平移打架）。
-/// 这样：1× 时横滑翻页、竖滑下拉、双击放大都正常；放大后单指平移跟手、双指继续
-/// 调倍、横滑/下拉被锁；捏合回 1× 后翻页/下拉恢复。
+/// ── 手势仲裁口径（第二轮返修定版，根因）──
+/// 上一轮把 panEnabled 写死 false + _zoomed 不响应 controller 变化 → 放大后不能平移
+/// （已修）；但复验发现「1× 捏合完全无反应、须先双击」：根因是查看器外层叠了两个
+/// 单指拖拽识别器与 InteractiveViewer 的多指 Scale 抢竞技场——外层下拉关闭的
+/// VerticalDragGestureRecognizer + PageView 的 HorizontalDragGestureRecognizer 会在
+/// 第二根手指落下前认领第一指的初始位移而抢先胜出，scale 无法组形。放大后这两个识别器
+/// 被卸载/禁用，捏合才生效，故「必须先双击」。
+/// 本轮修法：**PageView 改为永远 NeverScrollable（彻底移除翻页拖拽这个竞争者），翻页与
+/// 下拉关闭都改为非竞技场的 Listener 手动跟踪**（单指横滑→animateToPage；单指竖滑→
+/// 下拉关闭）。这样 1× 时竞技场只剩 InteractiveViewer 的 scale（pan 在 1× 关闭），捏合
+/// 无竞争者必然生效。双击缩放、放大态单指平移、缩回 1× 后翻页/下拉恢复均不变。
 library;
 
 import 'dart:io';
@@ -63,23 +61,29 @@ class _AlbumViewerPageState extends ConsumerState<AlbumViewerPage> {
   bool _dragDismiss = false; // 下拉关闭中：禁用 Hero，避免与返回转场打架
   bool _saving = false;
 
-  /// 缩放手势进行中（onInteractionStart→true，onInteractionEnd→false）。
-  /// 用于手势期间锁住 PageView 横滑与下拉关闭，避免翻页/下拉抢手势。
-  bool _interacting = false;
-
   /// 当前缩放倍率（真实状态）：onInteractionEnd 结算 / 双击 / 翻页 同步。
-  /// 驱动 panEnabled、PageView 物理、下拉识别器三处仲裁。
   double _scale = 1.0;
 
+  /// 落在查看器上的活动指针数（Listener 跟踪）。>=2 表示多指（捏合中）→
+  /// 关闭单指横滑翻页 / 竖滑下拉，避免与缩放抢手势。
+  int _pointers = 0;
+  int? _primaryId;          // 首根指针 id（用于计算横滑/下拉位移）
+  Offset _primaryStart = Offset.zero;
+
   static const double _dismissThreshold = 110.0;
+  static const double _swipeThreshold = 80.0;
   static const double _maxScale = 5.0;
 
   String get _base => ref.watch(chatBaseProvider).valueOrNull ?? '';
   Map<String, String>? get _headers =>
       ref.watch(mediaCookieHeadersProvider).valueOrNull;
 
-  /// 缩放态：放大超过 1× 即视为「已放大」，解锁单指平移、锁住翻页与下拉。
+  /// 缩放态：放大超过 1× 即视为「已放大」，解锁单指平移、锁翻页/下拉。
   bool get _zoomed => _scale > 1.01;
+
+  /// 单指 + 未缩放：才允许 Listener 横滑翻页 / 竖滑下拉（多指捏合或已缩放时关闭，
+  /// 让 InteractiveViewer 完整接管手势）。
+  bool get _allowSingleDrag => _pointers == 1 && !_zoomed;
 
   PhotoItem get _current => widget.photos[_index];
 
@@ -119,22 +123,21 @@ class _AlbumViewerPageState extends ConsumerState<AlbumViewerPage> {
       _index = i;
       _zoom.value = Matrix4.identity(); // 翻页复位缩放
       _scale = 1.0;
-      _interacting = false;
     });
     // 翻页即通知网格预滚动：pop 时 Hero 落回「当前查看那张」而非最初点开那张
     ref.read(albumViewerIndexProvider.notifier).state = i;
     _preloadNeighbors();
   }
 
-  /// 缩放/平移手势开始：锁住翻页与下拉（期间 PageView 不可翻、下拉不可触发）。
-  void _onScaleStart() => setState(() => _interacting = true);
+  /// 缩放/平移手势开始：占位回调。翻页/下拉的锁已由 _allowSingleDrag
+  /// （_pointers==1 && !_zoomed）在 Listener 层统一处理，无需在此额外状态。
+  void _onScaleStart() {}
 
   /// 缩放/平移手势结束：结算最终倍率（读 controller 值），据此切换 panEnabled
   /// 与翻页/下拉仲裁。**只在手势结束时 setState 一次**，避免手势进行中频繁重建
   /// 导致 InteractiveViewer 丢手势/抖动。
   void _onScaleEnd() => setState(() {
         _scale = _zoom.value.getMaxScaleOnAxis();
-        _interacting = false;
       });
 
   /// 双击：未缩放 → 2.5×（围绕视口中心）；已缩放 → 复位 1×。同步 _scale 仲裁。
@@ -149,41 +152,84 @@ class _AlbumViewerPageState extends ConsumerState<AlbumViewerPage> {
             zoomMatrixAroundCenter(2.5, size.width, size.height));
         _scale = 2.5;
       }
-      _interacting = false;
     });
   }
 
-  /// 下拉跟手：仅未缩放且非手势进行中时启用；位移跟手 + 背景渐暗
-  void _onDragUpdate(DragUpdateDetails d) {
-    if (_zoomed || _interacting) return;
-    setState(() {
-      _dragging = true;
-      _dragDy = (_dragDy + d.delta.dy).clamp(0.0, double.infinity);
-    });
-  }
-
-  void _onDragEnd(DragEndDetails d) {
-    if (!_dragging) return;
-    if (shouldDismissOnDrag(_dragDy, _dismissThreshold) ||
-        (d.velocity.pixelsPerSecond.dy > 700 && _dragDy > 40)) {
-      // 下拉关闭：先禁用 Hero 再 pop，避免下拉动画与 Hero 返回转场互相打架
-      setState(() => _dragDismiss = true);
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) Navigator.of(context).pop(_index);
-      });
-      return;
+  // ── 非竞技场 Listener：跟踪指针，实现 1× 横滑翻页 / 竖滑下拉关闭 ──
+  // Listener 不参与手势竞技场，因此不会抢走 InteractiveViewer 的 scale/pan，
+  // 也不与（已设为 NeverScrollable 的）PageView 抢翻页。
+  void _onPointerDown(PointerDownEvent e) {
+    _pointers++;
+    if (_pointers == 1) {
+      _primaryId = e.pointer;
+      _primaryStart = e.position;
+      _dragging = false;
+      _dragDy = 0;
     }
-    // 未过阈值：回弹
+  }
+
+  void _onPointerMove(PointerMoveEvent e) {
+    if (!_allowSingleDrag) return; // 多指捏合或已缩放：交给 InteractiveViewer
+    if (e.pointer != _primaryId) return;
+    final dx = e.position.dx - _primaryStart.dx;
+    final dy = e.position.dy - _primaryStart.dy;
+    if (dy.abs() > dx.abs()) {
+      // 以竖向为主 → 下拉关闭位移（仅向下跟手）
+      setState(() {
+        _dragging = true;
+        _dragDy = dy.clamp(0.0, double.infinity);
+      });
+    } else if (_dragging) {
+      // 横滑为主 → 取消下拉位移（翻页交给 onPointerUp）
+      setState(() {
+        _dragDy = 0;
+        _dragging = false;
+      });
+    }
+  }
+
+  void _onPointerUp(PointerUpEvent e) {
+    final wasPrimary = e.pointer == _primaryId;
+    _pointers = _pointers > 0 ? _pointers - 1 : 0;
+    if (!wasPrimary) return;
+    if (_pointers == 0) _primaryId = null;
+    if (!_allowSingleDrag && _pointers != 0) return;
+    final dx = e.position.dx - _primaryStart.dx;
+    final dy = e.position.dy - _primaryStart.dy;
+    if (_pointers == 0 && !_zoomed) {
+      // 单指手势结束：判定横滑翻页 or 下拉关闭
+      if (dx.abs() > dy.abs() && dx.abs() > _swipeThreshold) {
+        final target = (_index + (dx < 0 ? 1 : -1))
+            .clamp(0, widget.photos.length - 1);
+        if (target != _index) {
+          _page.animateToPage(target,
+              duration: const Duration(milliseconds: 250),
+              curve: Curves.easeOut);
+        }
+      } else if (dy > _dismissThreshold) {
+        _triggerDismiss();
+      }
+    }
     setState(() {
       _dragging = false;
       _dragDy = 0;
     });
   }
 
-  void _onDragCancel() {
+  void _onPointerCancel(PointerCancelEvent e) {
+    _pointers = _pointers > 0 ? _pointers - 1 : 0;
+    if (e.pointer == _primaryId) _primaryId = null;
     setState(() {
       _dragging = false;
       _dragDy = 0;
+    });
+  }
+
+  /// 下拉关闭：先禁用 Hero 再 pop，避免下拉动画与 Hero 返回转场互相打架
+  void _triggerDismiss() {
+    setState(() => _dragDismiss = true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) Navigator.of(context).pop(_index);
     });
   }
 
@@ -226,44 +272,47 @@ class _AlbumViewerPageState extends ConsumerState<AlbumViewerPage> {
     // 下拉过程中禁用 Hero 参与：返回时由 HeroMode 统一控制，
     // 下拉关闭走禁用态（不飞回），按钮/手势返回走启用态（飞回当前缩略图）
     final heroEnabled = !_dragDismiss;
-    // 缩放态或手势进行中：PageView 锁翻页、下拉拖拽识别器不挂载（让 InteractiveViewer 接管）
-    final gestureLocked = _zoomed || _interacting;
     return Scaffold(
       backgroundColor: Colors.black.withValues(alpha: 1 - dragProgress),
       body: Stack(children: [
-        // 全屏图片区（下拉位移跟手）
+        // 全屏图片区（下拉位移跟手）。Listener 非竞技场：跟踪指针实现
+        // 1× 横滑翻页 / 竖滑下拉；不参与竞技场，不抢 InteractiveViewer 的缩放。
         Positioned.fill(
           child: Transform.translate(
             offset: Offset(0, _dragDy),
-            child: GestureDetector(
-              // 缩放/手势进行中：不挂载下拉识别器，避免与 InteractiveViewer 平移打架
-              onVerticalDragUpdate: gestureLocked ? null : _onDragUpdate,
-              onVerticalDragEnd: gestureLocked ? null : _onDragEnd,
-              onVerticalDragCancel: gestureLocked ? null : _onDragCancel,
-              onDoubleTap: _onDoubleTap,
+            child: Listener(
               behavior: HitTestBehavior.opaque,
-              child: HeroMode(
-                enabled: heroEnabled,
-                child: PageView.builder(
-                  controller: _page,
-                  itemCount: widget.photos.length,
-                  // 缩放/手势进行中锁翻页；否则正常横滑翻页
-                  physics: gestureLocked
-                      ? const NeverScrollableScrollPhysics()
-                      : const PageScrollPhysics(),
-                  onPageChanged: _onPageChanged,
-                  itemBuilder: (_, i) => _PhotoPage(
-                    key: ValueKey(widget.photos[i].id),
-                    photo: widget.photos[i],
-                    base: _base,
-                    headers: _headers,
-                    zoom: _zoom,
-                    active: i == _index,
-                    heroEnabled: heroEnabled,
-                    maxScale: _maxScale,
-                    zoomed: i == _index && _zoomed,
-                    onScaleStart: _onScaleStart,
-                    onScaleEnd: _onScaleEnd,
+              onPointerDown: _onPointerDown,
+              onPointerMove: _onPointerMove,
+              onPointerUp: _onPointerUp,
+              onPointerCancel: _onPointerCancel,
+              child: GestureDetector(
+                // 仅双击缩放；不与 pinch/pan/翻页抢手势（双击=两次 1 指轻点，
+                // 与 scale/横滑竖滑互不冲突）
+                onDoubleTap: _onDoubleTap,
+                behavior: HitTestBehavior.opaque,
+                child: HeroMode(
+                  enabled: heroEnabled,
+                  // PageView 永远不可拖拽翻页（移除翻页拖拽这个竞技场竞争者），
+                  // 翻页改由 Listener 单指横滑 animateToPage 实现
+                  child: PageView.builder(
+                    controller: _page,
+                    itemCount: widget.photos.length,
+                    physics: const NeverScrollableScrollPhysics(),
+                    onPageChanged: _onPageChanged,
+                    itemBuilder: (_, i) => _PhotoPage(
+                      key: ValueKey(widget.photos[i].id),
+                      photo: widget.photos[i],
+                      base: _base,
+                      headers: _headers,
+                      zoom: _zoom,
+                      active: i == _index,
+                      heroEnabled: heroEnabled,
+                      maxScale: _maxScale,
+                      zoomed: i == _index && _zoomed,
+                      onScaleStart: _onScaleStart,
+                      onScaleEnd: _onScaleEnd,
+                    ),
                   ),
                 ),
               ),
@@ -333,8 +382,8 @@ class _AlbumViewerPageState extends ConsumerState<AlbumViewerPage> {
 
 /// 单页大图：仅当前页挂 Hero（tag 跟随当前照片 → 翻页后返回落点正确），
 /// 相邻页只做预渲染不带 Hero，避免重复 tag 导致转场 abort。
-/// 缩放/平移手势仲裁：panEnabled 仅在「当前页且缩放态」开启（1× 关闭，横滑交
-/// 给 PageView）；onInteractionStart/End 在手势边界结算 _scale（见上层说明）。
+/// 缩放/平移手势仲裁：panEnabled 仅在「当前页且缩放态」开启（1× 关闭，横滑翻页
+/// 交给 Listener）；onInteractionStart/End 在手势边界结算 _scale（见上层说明）。
 class _PhotoPage extends StatelessWidget {
   const _PhotoPage({
     super.key,
@@ -380,7 +429,7 @@ class _PhotoPage extends StatelessWidget {
       minScale: 1,
       maxScale: maxScale,
       scaleEnabled: true,
-      // 仅当前页 + 缩放态允许单指平移；1× 时关闭，横滑翻页交给 PageView
+      // 仅当前页 + 缩放态允许单指平移；1× 时关闭，横滑翻页交给 Listener
       panEnabled: active && zoomed,
       onInteractionStart: active ? (_) => onScaleStart() : null,
       onInteractionEnd: active ? (_) => onScaleEnd() : null,

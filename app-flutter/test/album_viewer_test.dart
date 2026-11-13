@@ -150,7 +150,8 @@ void main() {
   group('④ 缩放态手势口径', () {
     test('放大时禁用横滑翻页与下拉；回到 1× 恢复', () {
       // 查看器：_zoomed = maxScaleOnAxis > 1.01；
-      // physics = _zoomed ? NeverScrollableScrollPhysics : PageScrollPhysics
+      // PageView 永远 NeverScrollable（翻页拖拽竞争者彻底移除），横滑翻页 /
+      // 下拉关闭统一由非竞技场 Listener 在 1× 时接管（_allowSingleDrag 语义）
       bool zoomed(double scale) => scale > 1.01;
       expect(zoomed(1.0), isFalse);
       expect(zoomed(2.5), isTrue);
@@ -185,14 +186,15 @@ void main() {
     PageView pageView(WidgetTester tester) =>
         tester.widget<PageView>(find.byType(PageView));
 
-    testWidgets('1× 时当前页 InteractiveViewer.panEnabled=false（横滑交 PageView）',
+    testWidgets('1× 时当前页 InteractiveViewer.panEnabled=false（横滑交 Listener 手动翻页）',
         (tester) async {
       await pumpViewer(tester);
-      // 初始未缩放：panEnabled 必须为 false，否则会吞掉横滑翻页
+      // 初始未缩放：panEnabled 必须为 false，否则会吞掉横滑翻页 / 下拉关闭
       expect(activeViewer(tester).panEnabled, isFalse,
-          reason: '1× 不允许单指平移，横滑翻页交给 PageView');
-      // 对应的 PageView 物理应为可横滑
-      expect(pageView(tester).physics, isA<PageScrollPhysics>());
+          reason: '1× 不允许单指平移，横滑翻页交给 Listener 手动翻页');
+      // PageView 永远 NeverScrollable（移除翻页拖拽这个竞技场竞争者），
+      // 翻页改由非竞技场 Listener 单指横滑 animateToPage 实现
+      expect(pageView(tester).physics, isA<NeverScrollableScrollPhysics>());
     });
 
     testWidgets('捏合放大后 panEnabled=true 且 PageView 锁翻页（单指可平移）',
@@ -243,7 +245,33 @@ void main() {
       await tester.pump(const Duration(milliseconds: 50));
       expect(activeViewer(tester).panEnabled, isFalse,
           reason: '缩回 1× 后翻页/下拉恢复');
-      expect(pageView(tester).physics, isA<PageScrollPhysics>());
+      expect(pageView(tester).physics, isA<NeverScrollableScrollPhysics>());
+    });
+
+    testWidgets('【返修核心】1× 直接双指外拉即放大，无须先双击', (tester) async {
+      await pumpViewer(tester);
+      // 根因（上一轮复验）：1× 时捏合被外层「竖滑下拉」VerticalDragRecognizer
+      // 与 PageView「横滑翻页」HorizontalDragRecognizer 抢走第一指——单指拖拽
+      // 识别器在第二个指头落下前就认领了首个指针的位移而胜出，InteractiveViewer 的
+      // ScaleRecognizer 拿不到两个指针、无法组形；直到双击放大后 _zoomed=true 把那些
+      // 单指拖拽识别器卸载/禁用，捏合才生效 → 表现为「必须先双击」。
+      // 本轮修法：PageView 永远 NeverScrollable（移除横滑竞争者），翻页/下拉改由
+      // 非竞技场的 Listener 跟踪（不进竞技场、不抢 InteractiveViewer 的 scale）。
+      // 于是 1× 竞技场只剩 InteractiveViewer 的 scale，捏合无竞争者必然生效。
+      // 本测试从 1× 起手直接双指外拉，全程不触发任何双击，放大态必须成立。
+      final c = tester.getCenter(find.byType(InteractiveViewer).first);
+      final p1 = await tester.startGesture(c - const Offset(50, 0));
+      final p2 = await tester.startGesture(c + const Offset(50, 0));
+      await p1.moveBy(const Offset(-50, 0));
+      await p2.moveBy(const Offset(50, 0));
+      await tester.pump();
+      await p1.up();
+      await p2.up();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      // 关键断言：未经过任何双击，仅双指外拉即进入放大态
+      expect(activeViewer(tester).panEnabled, isTrue,
+          reason: '1× 直接捏合必须放大——禁止「先双击才能捏合」');
     });
   });
 
