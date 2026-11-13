@@ -140,6 +140,13 @@ class TogetherController extends Notifier<TogetherState> {
     return edit(record.id, 'wish', record.body, {'done': !done});
   }
 
+  /// quest 完成勾选（app.js:2537 toggle-quest 同口径：**记录级 PUT body 只翻转
+  /// done**——完成机制走 body 字段而非 check 子资源）。返回 null=成功。
+  Future<String?> toggleQuestDone(TogetherRecord record) async {
+    final done = record.body['done'] == true;
+    return edit(record.id, 'quest', record.body, {'done': !done});
+  }
+
   /// 删除（服务端软删，回收站 30 天）。仅本人（非本人服务端 403 → 错误文案）。
   /// 成功后整列表 reload。返回 null=成功。
   Future<String?> delete(String rid) async {

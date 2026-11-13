@@ -26,6 +26,7 @@ class TogetherRecord {
     this.answers = const [],
     this.answerCount = 0,
     this.checks = const [],
+    this.media = const [],
   });
 
   final String id;
@@ -45,6 +46,10 @@ class TogetherRecord {
   /// habit 打卡（serializers.py:44，day 倒序）；{record_id, author, day}
   final List<Map<String, String>> checks;
 
+  /// 附件媒体（序列化 media：{id,name,mime,status,preview}）——music 记录的
+  /// 本地音频走这里（在线歌走 body.song.src）
+  final List<Map<String, String>> media;
+
   factory TogetherRecord.fromJson(Map<String, dynamic> j) {
     final rawBody = (j['body'] ?? {}) as Map;
     List<Map<String, String>> strMaps(Object? list) {
@@ -53,7 +58,8 @@ class TogetherRecord {
         for (final e in list)
           if (e is Map)
             {
-              for (final k in ['record_id', 'author', 'content', 'day'])
+              for (final k in ['record_id', 'author', 'content', 'day', 'id',
+                    'mime', 'name'])
                 if (e[k] != null) k: e[k].toString(),
             },
       ];
@@ -67,10 +73,19 @@ class TogetherRecord {
       answers: strMaps(j['answers']),
       answerCount: (j['answer_count'] as num?)?.toInt() ?? 0,
       checks: strMaps(j['checks']),
+      media: strMaps(j['media']),
     );
   }
 
   String get date => (body['date'] ?? '').toString();
+
+  /// music 记录的本地音频附件 mid（media 里第一个 audio/*）；在线歌为空
+  String get audioMid {
+    for (final m in media) {
+      if ((m['mime'] ?? '').startsWith('audio/')) return m['id'] ?? '';
+    }
+    return '';
+  }
 }
 
 /// 解析记录列表（畸形条目容错跳过，绝不抛异常）
@@ -308,4 +323,131 @@ CalendarMonth parseCalendarMonth(Object? data) {
     );
   });
   return CalendarMonth(month: month, days: days);
+}
+
+// ── 段 D · 恋爱清单 / 共同账本 / 共同歌单 ─────────────────────────
+// 契约（Web 实读）：quest 完成机制 = 记录级 PUT body {...r.body, done:!done}
+// （app.js:2537 toggle-quest，与 wish 同口径，非 check 子资源）；
+// ledger 金额 = body.amount 数值（元，可两位小数，0–1 亿，clean_body 校验），
+// 付款人=记录作者；music 记录 = {title, content(歌手/想说的话), song:{title,
+// artist, src, art, dur}}（在线歌，src 走 /api/music/stream 转发）或
+// media 音频附件（本地上传，Web 口径）。
+
+/// quest 分类（逐字对齐 Web recordForm quest 分支，app.js:1847，六选）
+const questCategories = ['日常', '旅行', '美食', '约会', '生活', '其他'];
+
+/// ledger 分类（逐字对齐 Web recordForm ledger 分支，app.js:1849，七选）
+const ledgerCategories = ['餐饮', '交通', '旅行', '礼物', '生活', '娱乐', '其他'];
+
+/// 恋爱清单精选（逐字对齐 Web QUEST_IDEAS，app.js:1233-1246，五组 40 条）
+const questIdeas = <String, List<String>>{
+  '日常': [
+    '一起做一顿完整的早餐', '互换一天的家务', '一起逛一次菜市场', '给对方读一段书',
+    '一起养一盆植物', '写一封手写信给对方', '一起拍一组生活照', '给对方剪一次指甲',
+  ],
+  '旅行': [
+    '一起看一次日出', '一起看一次日落', '去一次海边踩水', '坐一次绿皮火车',
+    '在陌生的城市迷路一次', '一起看一场livehouse', '去一次露营看星星', '拍一张跳起来的合照',
+  ],
+  '美食': [
+    '一起做一次火锅', '一起排队买一次网红小吃', '互相喂对方吃一样没吃过的', '一起去一次夜市',
+    '一起烤一次蛋糕', '记住对方最爱的三道菜', '一起喝到微醺', '给对方做一次生日面',
+  ],
+  '约会': [
+    '看一场电影并牵着手', '一起去一次游乐园', '一起逛一次美术馆', '去一次城市最高的地方',
+    '一起看一次烟花', '重走第一次见面的路', '一起唱一次KTV', '雨天共撑一把伞',
+  ],
+  '生活': [
+    '一起做一次体检', '一起存一笔旅行基金', '一起布置一次房间', '一起过完一个没有手机的晚上',
+    '一起吵一架然后和好', '一起制定一次年度计划', '互相写一份「喜欢你的十件事」', '一起看完一部很长的剧',
+  ],
+};
+
+/// 账本金额显示（逐字对齐 Web money()，static/app.js:1253：'¥'+toFixed(2)）
+String ledgerMoney(num v) => '¥${v.toDouble().toStringAsFixed(2)}';
+
+/// 恋爱清单排序：未完成在前（对齐 Web questPage，app.js:1257），同态按
+/// created 倒序（新添加的排前面）。
+List<TogetherRecord> sortQuests(List<TogetherRecord> src) {
+  final indexed = <int, TogetherRecord>{
+    for (var i = 0; i < src.length; i++) i: src[i],
+  };
+  final order = indexed.keys.toList()
+    ..sort((a, b) {
+      final da = indexed[a]!.body['done'] == true ? 1 : 0;
+      final db = indexed[b]!.body['done'] == true ? 1 : 0;
+      if (da != db) return da - db;
+      final c = indexed[b]!.created.compareTo(indexed[a]!.created);
+      return c != 0 ? c : a.compareTo(b);
+    });
+  return [for (final i in order) indexed[i]!];
+}
+
+/// 账本按月汇总（**算法逐字对齐 Web ledgerPage**，app.js:1267-1287）：
+/// · sum = reduce(Number(amount||0))；付款人=记录作者，按 author 聚合；
+/// · monthTotal/allTotal、byUser（当月按人）、allByUser（累计按人）、
+///   byCat（当月按分类，降序）、trend（含选中月在内的近六个月，空月占位 0）。
+class LedgerSummary {
+  const LedgerSummary({
+    required this.monthTotal,
+    required this.allTotal,
+    required this.monthCount,
+    required this.byUser,
+    required this.allByUser,
+    required this.byCat,
+    required this.trend,
+  });
+  final double monthTotal;
+  final double allTotal;
+  final int monthCount;
+  final List<(String author, double total)> byUser; // 当月按人
+  final List<(String author, double total)> allByUser; // 累计按人
+  final List<(String category, double total)> byCat; // 当月按分类（降序）
+  final List<(String month, double total)> trend; // 近六个月（旧→新）
+}
+
+LedgerSummary ledgerSummary(
+    List<TogetherRecord> items, String month, List<String> userIds) {
+  double sum(Iterable<TogetherRecord> rows) => rows.fold(
+      0.0, (s, r) => s + (num.tryParse('${r.body['amount'] ?? ''}') ?? 0).toDouble());
+  final inMonth = items
+      .where((r) => (r.body['date'] ?? '').toString().startsWith(month))
+      .toList();
+  final byUser = [
+    for (final u in userIds)
+      (u, sum(inMonth.where((r) => r.author == u))),
+  ];
+  final allByUser = [
+    for (final u in userIds) (u, sum(items.where((r) => r.author == u))),
+  ];
+  final catMap = <String, double>{};
+  for (final r in inMonth) {
+    final k = (r.body['category'] ?? '其他').toString();
+    catMap[k] = (catMap[k] ?? 0) +
+        (num.tryParse('${r.body['amount'] ?? ''}') ?? 0).toDouble();
+  }
+  final byCat = catMap.entries.toList()
+    ..sort((a, b) => b.value.compareTo(a.value));
+  final y = int.parse(month.substring(0, 4));
+  final m = int.parse(month.substring(5, 7));
+  final trend = <(String, double)>[];
+  for (var i = 5; i >= 0; i--) {
+    final d = DateTime(y, m - i, 1); // 空月也占位（对齐 Web trend）
+    final key =
+        '${d.year}-${d.month.toString().padLeft(2, '0')}';
+    trend.add((
+      key,
+      sum(items.where((r) =>
+          (r.body['date'] ?? '').toString().startsWith(key))),
+    ));
+  }
+  return LedgerSummary(
+    monthTotal: sum(inMonth),
+    allTotal: sum(items),
+    monthCount: inMonth.length,
+    byUser: byUser,
+    allByUser: allByUser,
+    byCat: [for (final e in byCat) (e.key, e.value)],
+    trend: trend,
+  );
 }
