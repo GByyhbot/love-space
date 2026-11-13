@@ -13,6 +13,7 @@ import 'features/auth/login_page.dart';
 import 'features/chat/chat_toast.dart' show ChatToastHost;
 import 'features/chat/messages_page.dart';
 import 'features/shell/shell_page.dart';
+import 'features/together/tool_pages.dart';
 
 void main() {
   runApp(const ProviderScope(child: LoveApp()));
@@ -43,6 +44,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       // 聊天（悄悄话）：二级页，Shell AppBar 私聊图标 push 进入（对齐 Web 顶栏入口）
       GoRoute(path: '/messages', builder: (_, _) => const MessagesPage()),
       GoRoute(path: '/profile', builder: (_, _) => const ProfilePage()),
+      // 「我们」工具页（条目 6 · 段 A）：hub 宫格 push 进入，二级页规范
+      GoRoute(path: '/together/mood', builder: (_, _) => const MoodPage()),
+      GoRoute(path: '/together/note', builder: (_, _) => const NotePage()),
+      GoRoute(path: '/together/wish', builder: (_, _) => const WishPage()),
       // 相册查看器（条目 5 · 段 B 甲档）：Hero 共享元素转场 + 跨相册翻页 +
       // InteractiveViewer 缩放 + 下拉跟手关闭 + 计数/caption/预加载 + 下载顶部通知。
       // 二级页一律 context.push：保留主页在路由栈，返回按钮/系统手势回网格。

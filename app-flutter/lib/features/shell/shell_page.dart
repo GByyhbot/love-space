@@ -13,6 +13,7 @@ import '../album/album_page.dart';
 import '../home/home_page.dart';
 import '../timeline/composer_sheet.dart';
 import '../timeline/timeline_page.dart';
+import '../together/together_page.dart';
 
 class ShellPage extends ConsumerStatefulWidget {
   const ShellPage({super.key});
@@ -49,7 +50,8 @@ class _ShellPageState extends ConsumerState<ShellPage> {
       HomePage(onGoTab: (tab) => setState(() => _tab = tab)),
       TimelinePage(active: _tab == 1),
       AlbumPage(active: _tab == 2),
-      const _PlaceholderTab(title: '我们', note: '阶段 2 · 条目 6 迁移'),
+      // 条目 6 段 A：hub 宫格（纪念日展示卡点击切回首页 tab）
+      TogetherPage(active: _tab == 3, onGoHome: () => setState(() => _tab = 0)),
     ];
     return Scaffold(
       appBar: AppBar(
@@ -134,24 +136,6 @@ class _NavItem extends StatelessWidget {
           )),
         ]),
       ),
-    );
-  }
-}
-
-
-class _PlaceholderTab extends StatelessWidget {
-  const _PlaceholderTab({required this.title, required this.note});
-  final String title;
-  final String note;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-        Icon(Icons.construction_rounded, size: 44, color: Theme.of(context).colorScheme.outline),
-        const SizedBox(height: 10),
-        Text('$title · $note', style: Theme.of(context).textTheme.bodyMedium),
-      ]),
     );
   }
 }
