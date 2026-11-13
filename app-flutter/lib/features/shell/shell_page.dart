@@ -9,6 +9,7 @@ import 'package:go_router/go_router.dart';
 import '../auth/auth_state.dart';
 import '../../core/chat/chat_state.dart';
 import '../../core/sse/sse_client.dart';
+import '../album/album_page.dart';
 import '../home/home_page.dart';
 import '../timeline/composer_sheet.dart';
 import '../timeline/timeline_page.dart';
@@ -47,7 +48,7 @@ class _ShellPageState extends ConsumerState<ShellPage> {
     final pages = [
       HomePage(onGoTab: (tab) => setState(() => _tab = tab)),
       TimelinePage(active: _tab == 1),
-      const _PlaceholderTab(title: '相册', note: '阶段 2 · 条目 5 迁移'),
+      AlbumPage(active: _tab == 2),
       const _PlaceholderTab(title: '我们', note: '阶段 2 · 条目 6 迁移'),
     ];
     return Scaffold(

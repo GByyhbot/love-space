@@ -5,11 +5,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import 'core/chat/chat_models.dart' show ChatMedia;
 import 'features/account/profile_page.dart';
 import 'features/auth/auth_state.dart';
 import 'features/auth/login_page.dart';
 import 'features/chat/messages_page.dart';
 import 'features/shell/shell_page.dart';
+import 'features/timeline/image_viewer.dart';
 
 void main() {
   runApp(const ProviderScope(child: LoveApp()));
@@ -40,6 +42,19 @@ final routerProvider = Provider<GoRouter>((ref) {
       // 聊天（悄悄话）：二级页，Shell AppBar 私聊图标 push 进入（对齐 Web 顶栏入口）
       GoRoute(path: '/messages', builder: (_, _) => const MessagesPage()),
       GoRoute(path: '/profile', builder: (_, _) => const ProfilePage()),
+      // 相册查看器（条目 5 · 段 A 先用段一基础查看器；段 B 替换为
+      // Hero 共享元素转场 + 跨相册翻页的进阶查看器，路由路径不变）。
+      // 二级页一律 context.push：保留主页在路由栈，返回按钮/系统手势回网格。
+      GoRoute(
+        path: '/album/viewer',
+        builder: (_, state) {
+          final extra = (state.extra as Map?) ?? const {};
+          final images = (extra['images'] as List?)?.cast<ChatMedia>() ??
+              const <ChatMedia>[];
+          final index = (extra['index'] as int?) ?? 0;
+          return ImageViewerPage(images: images, initialIndex: index);
+        },
+      ),
     ],
   );
 });
