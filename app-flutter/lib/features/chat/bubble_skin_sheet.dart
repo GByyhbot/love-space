@@ -16,6 +16,7 @@ import '../../core/chat/chat_bubbles.dart';
 import '../../core/chat/chat_media.dart';
 import '../../core/chat/chat_state.dart';
 import '../auth/auth_state.dart';
+import 'chat_toast.dart' show ChatToastTone, chatToastProvider;
 import 'skin_bubble.dart';
 
 Future<void> showBubbleSkinSheet(BuildContext context) {
@@ -124,8 +125,8 @@ class _BubbleSkinSheetState extends ConsumerState<_BubbleSkinSheet> {
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(errorDetail(e))));
+        ref.read(chatToastProvider.notifier).show(errorDetail(e),
+            tone: ChatToastTone.error);
       }
     } finally {
       if (mounted) setState(() => _saving = false);

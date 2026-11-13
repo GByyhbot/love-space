@@ -17,6 +17,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import '../../core/api/api_client.dart';
 import '../../core/chat/chat_media.dart' show chatBaseProvider;
 import '../auth/auth_state.dart';
+import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
 import '../chat/voice_diag.dart';
 
 class ProfilePage extends ConsumerStatefulWidget {
@@ -134,8 +135,8 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     } else if (err == 'RELOGIN') {
       // 改密成功：会话已失效，路由 redirect 自动送回登录页（authed→out）
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('密码已修改，请用新密码重新登录')));
+        ref.read(chatToastProvider.notifier).show(
+            '密码已修改，请用新密码重新登录', tone: ChatToastTone.success);
       }
     } else {
       setState(() => _error = err);
@@ -156,8 +157,8 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     if (_inviteUrl == null) return;
     await Clipboard.setData(ClipboardData(text: _inviteUrl!));
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('邀请链接已复制，私下发给 TA')));
+      ref.read(chatToastProvider.notifier).show(
+          '邀请链接已复制，私下发给 TA', tone: ChatToastTone.success);
     }
   }
 
@@ -182,12 +183,10 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     final theme = Theme.of(context);
     final records = ref.read(voiceDiagProvider);
     final base = ref.read(chatBaseProvider).value;
-    final messenger = ScaffoldMessenger.of(context);
     if (records.isEmpty) {
-      if (mounted) {
-        messenger.showSnackBar(const SnackBar(
-            content: Text('暂无语音诊断记录，请先去聊天里点一条语音 / 等语音秒数加载')));
-      }
+      ref.read(chatToastProvider.notifier).show(
+          '暂无语音诊断记录，请先去聊天里点一条语音 / 等语音秒数加载',
+          tone: ChatToastTone.info);
       return;
     }
     if (!mounted) return;
@@ -252,8 +251,9 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                               await Clipboard.setData(ClipboardData(
                                   text: records.first.exception));
                               if (mounted) {
-                                messenger.showSnackBar(const SnackBar(
-                                    content: Text('已复制最近一次异常原文')));
+                                ref.read(chatToastProvider.notifier).show(
+                                    '已复制最近一次异常原文',
+                                    tone: ChatToastTone.success);
                               }
                             },
                             icon: const Icon(Icons.copy, size: 16),
@@ -294,7 +294,6 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
 
   Widget _diagCard(VoiceDiagRecord r) {
     final theme = Theme.of(context);
-    final messenger = ScaffoldMessenger.of(context);
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(12),
@@ -319,8 +318,8 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                 onPressed: () async {
                   await Clipboard.setData(ClipboardData(text: r.detail));
                   if (mounted) {
-                    messenger.showSnackBar(
-                        const SnackBar(content: Text('已复制该条诊断详情')));
+                    ref.read(chatToastProvider.notifier).show(
+                        '已复制该条诊断详情', tone: ChatToastTone.success);
                   }
                 },
                 icon: const Icon(Icons.copy, size: 16),
@@ -458,7 +457,6 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
           Builder(builder: (ctx) {
             final records = ref.watch(voiceDiagProvider);
             final latest = records.isNotEmpty ? records.first : null;
-            final messenger = ScaffoldMessenger.of(context);
             return Card(
               child: ListTile(
                 leading: const Icon(Icons.bug_report),
@@ -474,8 +472,9 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                         await Clipboard.setData(
                             ClipboardData(text: latest.detail));
                         if (mounted) {
-                          messenger.showSnackBar(const SnackBar(
-                              content: Text('已复制最近一次诊断详情')));
+                          ref.read(chatToastProvider.notifier).show(
+                              '已复制最近一次诊断详情',
+                              tone: ChatToastTone.success);
                         }
                       },
               ),

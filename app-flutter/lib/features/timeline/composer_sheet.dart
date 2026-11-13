@@ -17,7 +17,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../core/api/api_client.dart';
 import '../../core/chat/chat_media.dart';
 import '../../core/chat/chat_models.dart' show ChatLocalFile;
-import '../chat/chat_toast.dart' show ChatToastHost, ChatToastTone, chatToastProvider;
+import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
 import '../chat/voice_recorder.dart';
 import 'composer_store.dart';
 import 'timeline_controller.dart';
@@ -609,8 +609,7 @@ class _ComposerSheetState extends ConsumerState<ComposerSheet> {
       child: SingleChildScrollView(
         child: Column(mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          // 顶部通知宿主（复用聊天撤回提示同一套组件/位置/样式；空态 0 高不占位）
-          const ChatToastHost(),
+          // 顶部通知由 App 根部全局 ChatToastHost 承载（覆盖弹层）
           Row(children: [
             Expanded(child: Text(
                 widget.isEdit ? '编辑这一刻' : '记录此刻',

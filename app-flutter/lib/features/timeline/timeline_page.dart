@@ -13,7 +13,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/timeline/timeline_data.dart';
 import '../../core/sse/sse_client.dart';
 import '../auth/auth_state.dart';
-import '../chat/chat_toast.dart' show ChatToastHost;
 import 'composer_sheet.dart';
 import 'post_card.dart';
 import 'timeline_controller.dart';
@@ -98,10 +97,8 @@ class _TimelinePageState extends ConsumerState<TimelinePage> {
     }
 
     return SafeArea(
-      // StackFit.expand：非定位子级（列表 Column）约束与原布局一致；
-      // 顶部通知宿主用 Positioned 悬浮，不占布局空间
-      child: Stack(fit: StackFit.expand, children: [
-        Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        // 页头 heading（对齐 Web heading('时光慢慢，爱意满满', ...) + 「记录此刻」）
         // 页头 heading（对齐 Web heading('时光慢慢，爱意满满', ...) + 「记录此刻」）
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 8, 0),
@@ -123,15 +120,6 @@ class _TimelinePageState extends ConsumerState<TimelinePage> {
         ),
         _buildFilters(context, me, chat),
         Expanded(child: _buildList(context, me, chat)),
-        ]),
-        // 顶部通知宿主（发布成功等结果类提示；composer 弹层 pop 后在此
-        // 接棒显示——同一 provider、同一组件、同位置同样式，挂 body 顶部）
-        const Positioned(
-          top: 0,
-          left: 0,
-          right: 0,
-          child: ChatToastHost(),
-        ),
       ]),
     );
   }

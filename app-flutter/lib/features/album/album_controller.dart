@@ -130,3 +130,9 @@ class AlbumController extends Notifier<AlbumState> {
 
 final albumControllerProvider =
     NotifierProvider<AlbumController, AlbumState>(AlbumController.new);
+
+/// 查看器当前页索引（条目 5 · 段 B）：查看器翻页时写入，网格页监听后
+/// **在查看器仍打开时预滚动**到该照片位置——保证 pop 时 Hero 飞回的
+/// 目标缩略图已在视口内（否则 Hero 找不到目标会退化淡出、闪黑/跳图）。
+/// 索引按「当前筛选下的 photos 列表」计，与网格数据源一致。
+final albumViewerIndexProvider = StateProvider<int>((ref) => 0);

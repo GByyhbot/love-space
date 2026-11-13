@@ -18,6 +18,7 @@ import '../../core/chat/chat_models.dart';
 import '../../core/api/api_client.dart';
 import '../../core/chat/chat_media.dart';
 import '../../core/chat/chat_state.dart';
+import 'chat_toast.dart' show ChatToastTone, chatToastProvider;
 
 class MusicSearchResult {
   const MusicSearchResult({
@@ -164,8 +165,8 @@ class _SongSheetState extends ConsumerState<_SongSheet> {
       setState(() => _previewingIdx = i);
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('试听加载失败，稍后再试')));
+        ref.read(chatToastProvider.notifier).show('试听加载失败，稍后再试',
+            tone: ChatToastTone.error);
       }
     }
   }
@@ -192,8 +193,8 @@ class _SongSheetState extends ConsumerState<_SongSheet> {
       setState(() => _previewingIdx = i);
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('试听加载失败，稍后再试')));
+        ref.read(chatToastProvider.notifier).show('试听加载失败，稍后再试',
+            tone: ChatToastTone.error);
       }
     }
   }

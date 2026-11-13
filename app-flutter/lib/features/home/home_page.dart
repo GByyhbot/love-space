@@ -14,6 +14,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/api/api_client.dart';
 import '../../core/sse/sse_client.dart';
 import '../auth/auth_state.dart';
+import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
 
 /// 今日日期（本地时区，与 Web today() 一致格式 yyyy-MM-dd）
 String todayStr() {
@@ -293,7 +294,8 @@ class _Hero extends ConsumerWidget {
       ref.invalidate(dashboardProvider);
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('保存失败：$e')));
+        ref.read(chatToastProvider.notifier).show('保存失败：$e',
+            tone: ChatToastTone.error);
       }
     }
   }
@@ -490,7 +492,8 @@ class _MoodRow extends ConsumerWidget {
       ref.invalidate(dashboardProvider);
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('保存失败：$e')));
+        ref.read(chatToastProvider.notifier).show('保存失败：$e',
+            tone: ChatToastTone.error);
       }
     }
   }

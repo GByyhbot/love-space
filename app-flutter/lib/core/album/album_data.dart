@@ -143,3 +143,37 @@ List<List<PhotoItem>> chunkPhotosForGrid(List<PhotoItem> photos,
   }
   return rows;
 }
+
+/// 相册缩略图 ↔ 查看器的 Hero tag（网格与查看器共用，保证双向转场）
+String albumHeroTag(String mid) => 'album-photo-$mid';
+
+/// 3 列网格：给定 index 的滚动目标偏移（用于翻页后返回网格时把落点
+/// 滚到「当前查看的那张」而不是最初点开的）。行高 = cell + 行间距。
+double albumGridScrollOffset(
+  int index, {
+  required double cellSize,
+  required double spacing,
+  required double viewportHeight,
+  required double maxScrollExtent,
+}) {
+  final row = index ~/ 3;
+  final rowStride = cellSize + spacing;
+  // 目标：让该行居中（不足一屏时归零），并夹在可滚动范围内
+  final raw = row * rowStride - (viewportHeight - cellSize) / 2;
+  return raw.clamp(0.0, maxScrollExtent < 0 ? 0.0 : maxScrollExtent);
+}
+
+/// 双击缩放围绕视口中心的变换矩阵（供 InteractiveViewer 用，纯函数可单测）：
+/// T(中心) · S(s) · T(-中心)，使中心点在缩放前后不动。
+List<double> zoomMatrixAroundCenter(double scale, double width, double height) {
+  final cx = width / 2, cy = height / 2;
+  return <double>[
+    scale, 0, 0, 0,
+    0, scale, 0, 0,
+    0, 0, 1, 0,
+    cx * (1 - scale), cy * (1 - scale), 0, 1,
+  ];
+}
+
+/// 下拉关闭阈值判定（位移过阈值 → 关闭；否则回弹）
+bool shouldDismissOnDrag(double dy, double threshold) => dy > threshold;

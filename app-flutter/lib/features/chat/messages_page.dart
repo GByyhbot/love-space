@@ -393,14 +393,8 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
             ),
           ),
         ]),
-        // 顶部提示层（替代底部 SnackBar）：「已撤回 / 已复制」等提示挂在
-        // AppBar 下方，不遮挡输入栏与麦克风按钮。
-        const Positioned(
-          top: 0,
-          left: 0,
-          right: 0,
-          child: ChatToastHost(),
-        ),
+        // 顶部通知由 App 根部全局 ChatToastHost 承载（覆盖弹层/全屏遮罩），
+        // 本页不再单独挂宿主，避免同一条通知渲染两遍。
         // 微信式语音输入全屏遮罩（录音态显示，盖住输入栏与消息列表）：
         // topInset = 状态栏 + AppBar 高，供屏高 58.5% 锚点换算到 body 坐标。
         Positioned.fill(

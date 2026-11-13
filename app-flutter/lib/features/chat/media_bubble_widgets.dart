@@ -18,6 +18,7 @@ import 'package:video_player/video_player.dart';
 
 import '../../core/chat/chat_media.dart';
 import '../../core/chat/chat_models.dart';
+import 'chat_toast.dart' show ChatToastTone, chatToastProvider;
 import '../../core/chat/map_launcher.dart';
 import 'video_player_page.dart';
 import 'voice_playback.dart';
@@ -442,8 +443,8 @@ class _SongCardViewState extends ConsumerState<SongCardView> {
         _player = player;
       } catch (_) {
         if (mounted) {
-          ScaffoldMessenger.of(context)
-              .showSnackBar(const SnackBar(content: Text('试听加载失败，稍后再试')));
+          ref.read(chatToastProvider.notifier).show('试听加载失败，稍后再试',
+              tone: ChatToastTone.error);
         }
         return;
       } finally {

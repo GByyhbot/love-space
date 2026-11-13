@@ -14,8 +14,9 @@ import 'package:path_provider/path_provider.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/chat/chat_media.dart';
+import '../../core/chat/chat_models.dart' show ChatMedia;
 import 'package:dio/dio.dart' show Options, ResponseType;
-import '../../core/chat/chat_models.dart';
+import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
 
 /// 下载扩展名推断（mime → 常见后缀；未知回退 .bin）。
 /// 抽成顶层纯函数：下载链涉及 widget/fake-async/文件 IO，把「映射规则」单独
@@ -79,13 +80,14 @@ class _ImageViewerPageState extends ConsumerState<ImageViewerPage> {
       final file = File(path);
       await file.writeAsBytes(rsp.data ?? const []);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('已保存到本地：downloads/$mid${_extOf(_current.mime)}')));
+        ref.read(chatToastProvider.notifier).show(
+            '已保存到本地：downloads/$mid${_extOf(_current.mime)}',
+            tone: ChatToastTone.success);
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(errorDetail(e))));
+        ref.read(chatToastProvider.notifier).show('下载失败：${errorDetail(e)}',
+            tone: ChatToastTone.error);
       }
     } finally {
       if (mounted) setState(() => _saving = false);

@@ -1,9 +1,9 @@
-/// 相册页（条目 5 · 段 A）：heading + 两视图（按相册分类 / 按时间月份分组）
-/// + 分类 chips（全部照片/各相册）+ 3 列照片网格（CachedNetworkImage 占位色
-/// 渐显 + preview=true + Cookie 头）+ 空态两套 + 首屏骨架 + SSE other 重拉。
-/// 缩略图带 Hero tag 并 context.push 到查看器（段 A 复用段一基础查看器，
-/// 段 B 替换为 Hero 共享转场 + 跨相册翻页的进阶查看器）。
-/// 顶部通知宿主（ChatToastHost）按通则挂 body 顶部，供 B/C/D 段结果类提示复用。
+/// 相册页（条目 5 · 段 A 页与网格 + 段 B 查看器联动）：
+/// heading + 两视图 + 分类 chips + 3 列网格（preview=true + Cookie 头 +
+/// 占位色渐显）+ 空态两套 + 骨架 + SSE other 重拉。
+/// 段 B：缩略图 Hero tag ↔ 查看器双向；查看器翻页时通过 albumViewerIndexProvider
+/// 通知本页**预滚动**到当前查看那张，保证返回时 Hero 落点正确（不闪黑/不跳图）。
+/// 顶部通知由 App 根部全局 ChatToastHost 统一承载（本页不再单独挂宿主）。
 library;
 
 import 'package:cached_network_image/cached_network_image.dart';
@@ -13,10 +13,11 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/album/album_data.dart';
 import '../../core/chat/chat_media.dart';
-import '../../core/chat/chat_models.dart';
 import '../../core/sse/sse_client.dart';
-import '../chat/chat_toast.dart' show ChatToastHost;
 import 'album_controller.dart';
+
+/// 网格缩略图尺寸（3 列）：cell = (屏宽 - 左右 32 - 两道 8) / 3
+double albumCellSize(double screenWidth) => (screenWidth - 32 - 16) / 3;
 
 class AlbumPage extends ConsumerStatefulWidget {
   const AlbumPage({super.key, required this.active});
@@ -27,11 +28,37 @@ class AlbumPage extends ConsumerStatefulWidget {
 }
 
 class _AlbumPageState extends ConsumerState<AlbumPage> {
+  final ScrollController _gridScroll = ScrollController();
+
   @override
   void initState() {
     super.initState();
     Future.microtask(() =>
         ref.read(albumControllerProvider.notifier).bootstrap());
+  }
+
+  @override
+  void dispose() {
+    _gridScroll.dispose();
+    super.dispose();
+  }
+
+  /// 段 B：查看器翻页 → 网格在后台预滚动到该照片（无动画，避免与 Hero 打架）。
+  /// 只在 3 列网格视图且滚动控制器已挂载时生效；按时间视图用 ensureVisible 的
+  /// 等价偏移（列表分组高度不固定，采用行偏移近似，误差 ≤ 一行）。
+  void _scrollToViewerIndex(int index) {
+    if (!_gridScroll.hasClients) return;
+    final st = ref.read(albumControllerProvider);
+    if (st.photos.isEmpty) return;
+    final cell = albumCellSize(MediaQuery.sizeOf(context).width);
+    final offset = albumGridScrollOffset(
+      index.clamp(0, st.photos.length - 1),
+      cellSize: cell,
+      spacing: 8,
+      viewportHeight: _gridScroll.position.viewportDimension,
+      maxScrollExtent: _gridScroll.position.maxScrollExtent,
+    );
+    _gridScroll.jumpTo(offset);
   }
 
   @override
@@ -44,17 +71,21 @@ class _AlbumPageState extends ConsumerState<AlbumPage> {
         ref.read(albumControllerProvider.notifier).resetOnSseOther();
       }
     });
+    // 查看器翻页索引 → 预滚动（查看器仍打开时就对齐，pop 时 Hero 目标已在视口）
+    ref.listen(albumViewerIndexProvider, (prev, next) {
+      if (widget.active && st.view == AlbumView.byAlbum) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _scrollToViewerIndex(next);
+        });
+      }
+    });
 
     return SafeArea(
-      child: Stack(fit: StackFit.expand, children: [
-        Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          _heading(context),
-          _viewTabs(context, st),
-          if (st.view == AlbumView.byAlbum) _albumChips(context, st),
-          Expanded(child: _body(context, st)),
-        ]),
-        // 顶部通知宿主（结果类提示统一走顶部，宿主不占布局空间）
-        const Positioned(top: 0, left: 0, right: 0, child: ChatToastHost()),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        _heading(context),
+        _viewTabs(context, st),
+        if (st.view == AlbumView.byAlbum) _albumChips(context, st),
+        Expanded(child: _body(context, st)),
       ]),
     );
   }
@@ -151,6 +182,7 @@ class _AlbumPageState extends ConsumerState<AlbumPage> {
     return RefreshIndicator(
       onRefresh: () => ref.read(albumControllerProvider.notifier).load(),
       child: GridView.builder(
+        controller: _gridScroll, // 段 B：查看器翻页后预滚动，保证 Hero 落点
         padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
         itemCount: photos.length,
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -246,7 +278,7 @@ class _AlbumPageState extends ConsumerState<AlbumPage> {
 }
 
 /// 缩略图：CachedNetworkImage（preview=true + Cookie）+ 占位色渐显 +
-/// Hero tag（段 B 共享元素转场用）+ context.push 打开查看器。
+/// Hero tag（段 B 共享元素转场双向）+ context.push 打开甲档查看器。
 class _Thumb extends ConsumerWidget {
   const _Thumb({required this.photo, required this.all, required this.index});
   final PhotoItem photo;
@@ -257,16 +289,15 @@ class _Thumb extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final base = ref.watch(chatBaseProvider).valueOrNull ?? '';
     final headers = ref.watch(mediaCookieHeadersProvider).valueOrNull;
-    final images = [
-      for (final p in all)
-        ChatMedia(id: p.id, name: p.name, mime: p.mime,
-            status: p.status, preview: p.preview),
-    ];
     return Hero(
-      tag: 'album-photo-${photo.id}',
+      tag: albumHeroTag(photo.id),
       child: GestureDetector(
-        onTap: () => context.push('/album/viewer',
-            extra: {'images': images, 'index': index.clamp(0, images.length - 1)}),
+        onTap: () async {
+          // 打开前先把索引对齐到点开的这张（查看器 initState 会再写一次）
+          ref.read(albumViewerIndexProvider.notifier).state = index;
+          await context.push('/album/viewer',
+              extra: {'photos': all, 'index': index.clamp(0, all.length - 1)});
+        },
         child: ClipRRect(
           borderRadius: BorderRadius.circular(10),
           child: CachedNetworkImage(

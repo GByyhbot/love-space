@@ -12,6 +12,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:love_space/core/api/api_client.dart' show dioProvider;
 import 'package:love_space/features/chat/chat_toast.dart';
+import 'package:love_space/features/chat/chat_toast.dart';
 import 'package:love_space/features/timeline/composer_sheet.dart';
 
 Future<void> _pumpComposer(WidgetTester tester) async {
@@ -21,8 +22,16 @@ Future<void> _pumpComposer(WidgetTester tester) async {
       // catch 吞掉，不影响 UI 渲染）
       dioProvider.overrideWith((ref) async => Dio()),
     ],
-    child: const MaterialApp(
-      home: Scaffold(
+    // 段 B 起宿主由 App 根部全局承载（App 内只挂一处），测试按真实架构
+    // 在 MaterialApp.builder 里挂同一个 ChatToastHost，覆盖所有页面/弹层。
+    child: MaterialApp(
+      builder: (context, child) => Stack(children: [
+        child ?? const SizedBox.shrink(),
+        const Positioned(
+            top: 0, left: 0, right: 0,
+            child: IgnorePointer(child: SafeArea(child: ChatToastHost()))),
+      ]),
+      home: const Scaffold(
         body: SafeArea(child: ComposerSheet()),
       ),
     ),
@@ -40,10 +49,11 @@ void main() {
         .read(chatToastProvider.notifier)
         .show('草稿已保存', tone: ChatToastTone.success);
     await tester.pumpAndSettle();
-    // 通知出现在弹层顶部（ChatToastHost 在 Column 首位）、不被底部栏遮挡
+    // 通知出现在页面顶部（全局宿主）、不被底部栏遮挡
     expect(find.text('草稿已保存'), findsOneWidget);
     expect(find.byType(SnackBar), findsNothing);
-    await expectLater(find.byType(ComposerSheet),
+    // 取整页截图（含顶部宿主），与聊天撤回提示 golden 做同组件对比
+    await expectLater(find.byType(MaterialApp),
         matchesGoldenFile('goldens/composer_top_toast.png'));
   });
 

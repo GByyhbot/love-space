@@ -16,6 +16,7 @@ import '../../core/chat/chat_media.dart';
 import '../../core/chat/chat_state.dart';
 import '../../core/chat/chat_wallpaper.dart';
 import '../auth/auth_state.dart';
+import 'chat_toast.dart' show ChatToastTone, chatToastProvider;
 
 Future<void> showWallpaperSheet(BuildContext context) {
   return showModalBottomSheet<void>(
@@ -53,9 +54,8 @@ class _WallpaperSheetState extends ConsumerState<_WallpaperSheet> {
   }
 
   void _snack(String msg) {
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
-    }
+    ref.read(chatToastProvider.notifier).show(msg,
+        tone: ChatToastTone.info);
   }
 
   /// 切「设给谁」：按目标用户当前那份重绘色卡（对齐 Web bg-target change）
