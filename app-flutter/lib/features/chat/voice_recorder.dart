@@ -78,9 +78,25 @@ class VoiceRecorder {
     voiceDbg('recorder start ok');
   }
 
+  /// 暂停录音会话（record 自带 pause；会话保持存活，stop/取消仍有效）。
+  /// composer 录音三键用：暂停时计时冻结，继续后接着录。
+  Future<void> pause() async {
+    voiceDbg('recorder pause enter');
+    await _awaitRecycled();
+    await _rec.pause();
+    voiceDbg('recorder pause ok');
+  }
+
+  /// 恢复录音会话（record 自带 resume；暂停后接着录，计时续走）。
+  Future<void> resume() async {
+    voiceDbg('recorder resume enter');
+    await _awaitRecycled();
+    await _rec.resume();
+    voiceDbg('recorder resume ok');
+  }
+
   /// 结束录制；没有录到声音（空文件/失败）返回 null
-  Future<ChatLocalFile?> stop() async {
-    voiceDbg('recorder stop enter');
+  Future<ChatLocalFile?> stop() async {    voiceDbg('recorder stop enter');
     final p = await _rec.stop();
     voiceDbg('recorder stop recStopPath', 'path=$p');
     if (p == null || p.isEmpty) {

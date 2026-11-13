@@ -17,7 +17,8 @@ import 'package:image_picker/image_picker.dart';
 import '../../core/api/api_client.dart';
 import '../../core/chat/chat_media.dart';
 import '../../core/chat/chat_models.dart' show ChatLocalFile;
-import '../../features/chat/voice_recorder.dart';
+import '../chat/chat_toast.dart' show ChatToastHost, ChatToastTone, chatToastProvider;
+import '../chat/voice_recorder.dart';
 import 'composer_store.dart';
 import 'timeline_controller.dart';
 
@@ -73,10 +74,13 @@ class _ComposerSheetState extends ConsumerState<ComposerSheet> {
   String? _draftClientId;
   bool _pendingMediaNotice = false; // 恢复出未传完媒体
 
-  // 录音
+  // 录音三键状态机（四态互斥：idle / recording / paused → 完成=进列表、
+  // 取消=丢弃；录制中或暂停中关弹层一律自动取消）
+  static const _recIdle = 0, _recRecording = 1, _recPaused = 2;
   final VoiceRecorder _rec = VoiceRecorder();
-  bool _recording = false;
+  int _recState = _recIdle;
   Duration _recElapsed = Duration.zero;
+  int _recTicks = 0; // 累计录制秒数（暂停冻结，继续续走）
   Timer? _recTimer;
 
   @override
@@ -97,7 +101,8 @@ class _ComposerSheetState extends ConsumerState<ComposerSheet> {
     _content.dispose();
     _recTimer?.cancel();
     _recTimer = null;
-    if (_recording) {
+    // 录制中或暂停中关掉弹层：一律自动取消录音，不留脏文件（已验收行为）
+    if (_recState != _recIdle) {
       _rec.cancel().catchError((_) {});
     }
     _rec.dispose();
@@ -106,10 +111,10 @@ class _ComposerSheetState extends ConsumerState<ComposerSheet> {
 
   void _onFieldChanged() => _persistStore();
 
-  void _snack(String msg) {
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
-    }
+  /// 结果类提示统一走顶部通知（复用聊天撤回提示同一套组件/位置/样式，
+  /// 2200ms 自动收起；禁用底部 SnackBar——真机被底部栏遮盖）。
+  void _toast(String msg, {ChatToastTone tone = ChatToastTone.info}) {
+    ref.read(chatToastProvider.notifier).show(msg, tone: tone);
   }
 
   // ── 本地暂存 ───────────────────────────────────────────────
@@ -243,7 +248,7 @@ class _ComposerSheetState extends ConsumerState<ComposerSheet> {
         _persistStore();
       }
     } catch (e) {
-      _snack(errorDetail(e));
+      _toast(errorDetail(e), tone: ChatToastTone.error);
     }
   }
 
@@ -252,14 +257,15 @@ class _ComposerSheetState extends ConsumerState<ComposerSheet> {
       final bytes = await File(x.path).length();
       final err = validateUploadFile(x.name, bytes);
       if (err != null) {
-        _snack('${x.name}：$err');
+        _toast('${x.name}：$err', tone: ChatToastTone.warning);
         continue;
       }
       setState(() =>
           _media.add(ComposerMedia(localFile: ChatLocalFile(path: x.path, name: x.name))));
     }
     if (_media.length > maxMediaPerRecord) {
-      _snack('一条记录最多 $maxMediaPerRecord 个附件，多出的已忽略');
+      _toast('一条记录最多 $maxMediaPerRecord 个附件，多出的已忽略',
+          tone: ChatToastTone.warning);
       setState(() {
         while (_media.length > maxMediaPerRecord) {
           _media.removeLast();
@@ -285,39 +291,85 @@ class _ComposerSheetState extends ConsumerState<ComposerSheet> {
 
   // ── 录音 tile ───────────────────────────────────────────────
 
-  Future<void> _toggleRecord() async {
-    if (_recording) {
-      final f = await _rec.stop();
-      _recTimer?.cancel();
-      _recTimer = null;
-      setState(() { _recording = false; _recElapsed = Duration.zero; });
-      await _rec.recycle();
-      if (f != null) {
-        setState(() => _media.add(ComposerMedia(
-            localFile: ChatLocalFile(path: f.path, name: f.name))));
-        _persistStore();
-      }
-      return;
-    }
+  // ── 录音三键（状态机四态互斥：idle / recording / paused →
+  //    完成=停止进列表，取消=丢弃）──────────────────────────────
+
+  void _startTick() {
+    _recTimer?.cancel();
+    _recTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+      _recTicks += 1;
+      setState(() => _recElapsed = Duration(seconds: _recTicks));
+    });
+  }
+
+  /// 冻结计时（暂停时调用；继续后 _startTick 续走，_recTicks 不清零）
+  void _stopTick() {
+    _recTimer?.cancel();
+    _recTimer = null;
+  }
+
+  Future<void> _startRecord() async {
     // record 5.x：hasPermission() 首次调用即在 Android 触发系统授权弹窗，
     // 无独立 requestPermission API；返回 false 视为已拒绝
     if (!await _rec.hasPermission()) {
-      _snack('没有录音权限，请到系统设置里给 App 开启麦克风权限');
+      _toast('没有录音权限，请到系统设置里给 App 开启麦克风权限',
+          tone: ChatToastTone.warning);
       return;
     }
     try {
       await _rec.start();
-      _recTimer?.cancel();
-      var ticks = 0;
-      _recTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-        ticks += 1;
-        if (mounted) setState(() => _recElapsed = Duration(seconds: ticks));
-      });
-      setState(() { _recording = true; _recElapsed = Duration.zero; });
+      _recTicks = 0;
+      if (mounted) {
+        setState(() { _recState = _recRecording; _recElapsed = Duration.zero; });
+      }
+      _startTick();
     } catch (e) {
-      _recTimer?.cancel();
-      _recTimer = null;
-      _snack(errorDetail(e));
+      _stopTick();
+      _toast(errorDetail(e), tone: ChatToastTone.error);
+    }
+  }
+
+  /// 暂停 / 继续（record 插件自带 pause/resume，不自造）：
+  /// 暂停时计时冻结、界面明示「已暂停」；继续后接着录、计时续走。
+  Future<void> _togglePause() async {
+    if (_recState == _recRecording) {
+      await _rec.pause();
+      _stopTick();
+      if (mounted) setState(() => _recState = _recPaused);
+    } else if (_recState == _recPaused) {
+      await _rec.resume();
+      if (mounted) setState(() => _recState = _recRecording);
+      _startTick();
+    }
+  }
+
+  /// 完成：停止录音并把这条录音加入媒体列表（等同已验收的「停止进列表」）
+  Future<void> _finishRecord() async {
+    _stopTick();
+    final f = await _rec.stop();
+    _recTicks = 0;
+    if (mounted) {
+      setState(() { _recState = _recIdle; _recElapsed = Duration.zero; });
+    }
+    await _rec.recycle();
+    if (f != null) {
+      if (!mounted) return;
+      setState(() => _media.add(ComposerMedia(
+          localFile: ChatLocalFile(path: f.path, name: f.name))));
+      _persistStore();
+      _toast('录音已添加', tone: ChatToastTone.success);
+    }
+  }
+
+  /// 取消：丢弃录音、不留脏文件（现有行为不变）
+  Future<void> _cancelRecord() async {
+    _stopTick();
+    await _rec.cancel();
+    await _rec.recycle();
+    _recTicks = 0;
+    if (mounted) {
+      setState(() { _recState = _recIdle; _recElapsed = Duration.zero; });
     }
   }
 
@@ -367,20 +419,24 @@ class _ComposerSheetState extends ConsumerState<ComposerSheet> {
           );
       if (err != null) {
         setState(() { _error = err; _submitting = false; });
+        _toast(err, tone: ChatToastTone.error);
         return;
       }
       await clearComposerStore();
       await ref.read(timelineControllerProvider.notifier).resetAfterPublish();
+      // 发布成功走顶部通知（先发再关弹层：弹层内 host 即将卸载，
+      // 时光页顶部宿主接棒显示同一 provider 的通知）
+      _toast('这一刻，已经好好收藏', tone: ChatToastTone.success);
       if (mounted) {
         Navigator.of(context).pop();
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('这一刻，已经好好收藏')));
       }
     } catch (e) {
+      final msg = e is MediaValidationError ? e.message : errorDetail(e);
       setState(() {
-        _error = e is MediaValidationError ? e.message : errorDetail(e);
+        _error = msg;
         _submitting = false;
       });
+      _toast(msg, tone: ChatToastTone.error);
     }
   }
 
@@ -403,19 +459,19 @@ class _ComposerSheetState extends ConsumerState<ComposerSheet> {
           );
       if (err != null) {
         setState(() { _error = err; _draftSaving = false; });
+        _toast(err, tone: ChatToastTone.error);
         return;
       }
-      // 成功：明确提示，绝不让用户以为按钮没反应
+      // 成功：顶部通知明确提示，绝不让用户以为按钮没反应
       setState(() { _draftSaving = false; });
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('草稿已保存')));
-      }
+      _toast('草稿已保存', tone: ChatToastTone.success);
     } catch (e) {
+      final msg = e is MediaValidationError ? e.message : errorDetail(e);
       setState(() {
-        _error = e is MediaValidationError ? e.message : errorDetail(e);
+        _error = msg;
         _draftSaving = false;
       });
+      _toast(msg, tone: ChatToastTone.error);
     }
   }
 
@@ -432,6 +488,8 @@ class _ComposerSheetState extends ConsumerState<ComposerSheet> {
       child: SingleChildScrollView(
         child: Column(mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          // 顶部通知宿主（复用聊天撤回提示同一套组件/位置/样式；空态 0 高不占位）
+          const ChatToastHost(),
           Row(children: [
             Expanded(child: Text('记录此刻', style: theme.textTheme.titleMedium)),
             IconButton(
@@ -489,7 +547,7 @@ class _ComposerSheetState extends ConsumerState<ComposerSheet> {
               label: const Text('音频'),
             ),
           ]),
-          // 录音 tile
+          // 录音 tile（三键：录制中=暂停/完成/取消，暂停中=继续/完成/取消）
           Padding(
             padding: const EdgeInsets.only(top: 4),
             child: Row(children: [
@@ -497,28 +555,46 @@ class _ComposerSheetState extends ConsumerState<ComposerSheet> {
               const SizedBox(width: 8),
               Text('录音', style: theme.textTheme.bodyMedium),
               const Spacer(),
-              TextButton.icon(
-                onPressed: _recording ? null : _toggleRecord,
-                icon: Icon(_recording ? Icons.stop_rounded : Icons.mic_rounded,
-                    size: 18,
-                    color: _recording
-                        ? theme.colorScheme.error
-                        : theme.colorScheme.primary),
-                label: Text(_recording
-                    ? _fmtDuration(_recElapsed)
-                    : '开始录音'),
-              ),
-              if (_recording)
+              if (_recState == _recIdle)
+                TextButton.icon(
+                  onPressed: _startRecord,
+                  icon: const Icon(Icons.mic_rounded, size: 18),
+                  label: const Text('开始录音'),
+                ),
+              if (_recState == _recRecording) ...[
+                Text(_fmtDuration(_recElapsed),
+                    style: theme.textTheme.bodyMedium),
+                const SizedBox(width: 4),
+                TextButton.icon(
+                  onPressed: _togglePause,
+                  icon: const Icon(Icons.pause_rounded, size: 18),
+                  label: const Text('暂停'),
+                ),
+              ],
+              if (_recState == _recPaused) ...[
+                Text('已暂停 ${_fmtDuration(_recElapsed)}',
+                    style: theme.textTheme.bodyMedium
+                        ?.copyWith(color: theme.colorScheme.primary)),
+                const SizedBox(width: 4),
+                TextButton.icon(
+                  onPressed: _togglePause,
+                  icon: const Icon(Icons.play_arrow_rounded, size: 18),
+                  label: const Text('继续'),
+                ),
+              ],
+              if (_recState != _recIdle) ...[
+                TextButton.icon(
+                  onPressed: _finishRecord,
+                  icon: const Icon(Icons.check_rounded, size: 18),
+                  label: const Text('完成'),
+                ),
                 IconButton(
                   tooltip: '取消',
                   visualDensity: VisualDensity.compact,
-                  onPressed: () async {
-                    await _rec.cancel();
-                    await _rec.recycle();
-                    setState(() { _recording = false; _recElapsed = Duration.zero; });
-                  },
+                  onPressed: _cancelRecord,
                   icon: const Icon(Icons.cancel_rounded, size: 18),
                 ),
+              ],
             ]),
           ),
           // 相册分类 chips

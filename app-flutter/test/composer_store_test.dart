@@ -1,5 +1,7 @@
 /// composer 本地暂存序列化单测（段二 A）：
 /// toJson/fromJson 往返无损；uploadedId 空缺与恢复语义；isEmpty 口径。
+library;
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:love_space/features/timeline/composer_store.dart';
 
