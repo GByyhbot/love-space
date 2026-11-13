@@ -126,6 +126,153 @@ class AlbumController extends Notifier<AlbumState> {
     }
     return '相册';
   }
+
+  // ── 段 C · 增删改与封面 ──────────────────────────────────────
+  // 后端契约（app/main.py）：clean_body 只留 permitted 字段且**不合并**旧 body，
+  // 故编辑/设封面必须以服务器原始 body 为底合并后 PUT 全量（回填铁律）；
+  // DELETE album 服务端自动清掉引用该相册的记录的 body.album（软删）。
+  // 全部方法返回 null=成功，否则为错误文案。
+
+  /// 新建相册：POST kind='album'，title 必填（服务端亦校验）。
+  /// 成功后重拉分类列表（新 chip 出现）。返回 null=成功。
+  Future<String?> createAlbum(String title) async {
+    final t = title.trim();
+    if (t.isEmpty) return '相册名称不能为空';
+    if (_disposed) return null;
+    try {
+      final dio = await ref.read(api.dioProvider.future);
+      final r = await dio.post('/api/records', data: {
+        'kind': 'album',
+        'body': {'title': t},
+      });
+      if ((r.statusCode ?? 500) >= 400) {
+        final d = r.data;
+        if (d is Map && d['detail'] != null) return d['detail'].toString();
+        return '创建失败，请重试';
+      }
+      await _reloadAlbums(); // 新相册入列表，chip 立即出现
+      return null;
+    } catch (e) {
+      return api.errorDetail(e);
+    }
+  }
+
+  /// 拉取单条记录原始 body（回填铁律的底）。失败/不存在返回 null。
+  Future<Map<String, dynamic>?> _fetchAlbumBody(String id) async {
+    try {
+      final dio = await ref.read(api.dioProvider.future);
+      final r = await dio.get('/api/records/$id');
+      if (r.data is Map) {
+        final body = (r.data as Map)['body'];
+        if (body is Map) {
+          return Map<String, dynamic>.from(body.cast<String, dynamic>());
+        }
+      }
+    } catch (_) {
+      // 404 / 网络异常：交由调用方判空
+    }
+    return null;
+  }
+
+  /// 相册改名：GET 原始 body → 以底合并 {title} → PUT 全量。
+  /// 回填铁律：未知字段与封面（body.media）一律原样带回。
+  Future<String?> renameAlbum(String id, String title) async {
+    final t = title.trim();
+    if (t.isEmpty) return '相册名称不能为空';
+    if (_disposed) return null;
+    final original = await _fetchAlbumBody(id);
+    if (original == null) return '相册不存在或已删除';
+    final body = mergeAlbumBody(original, {'title': t});
+    try {
+      final dio = await ref.read(api.dioProvider.future);
+      final r = await dio.put('/api/records/$id', data: {
+        'kind': 'album',
+        'body': body,
+      });
+      if ((r.statusCode ?? 500) >= 400) {
+        final d = r.data;
+        if (d is Map && d['detail'] != null) return d['detail'].toString();
+        return '保存失败，请重试';
+      }
+      await _reloadAlbums();
+      return null;
+    } catch (e) {
+      return api.errorDetail(e);
+    }
+  }
+
+  /// 设封面：把 [mid] 置到 body.media[0]（方案③）。
+  /// 回填铁律：保留 media 中其余元素（若有）与全部未知字段；[mid] 为空则清空封面。
+  Future<String?> setCover(String id, String mid) async {
+    if (_disposed) return null;
+    final original = await _fetchAlbumBody(id);
+    if (original == null) return '相册不存在或已删除';
+    final oldMedia = List<String>.from(
+        ((original['media'] as List?) ?? [])
+            .whereType<dynamic>()
+            .map((e) => e.toString()));
+    final m = mid.trim();
+    if (m.isEmpty) {
+      oldMedia.clear(); // 清空封面（无封面回退）
+    } else {
+      oldMedia.removeWhere((x) => x == m); // 若已在尾部则先移除，避免重复
+      oldMedia.insert(0, m); // 置顶为封面
+    }
+    final body = mergeAlbumBody(original, {'media': oldMedia});
+    try {
+      final dio = await ref.read(api.dioProvider.future);
+      final r = await dio.put('/api/records/$id', data: {
+        'kind': 'album',
+        'body': body,
+      });
+      if ((r.statusCode ?? 500) >= 400) {
+        final d = r.data;
+        if (d is Map && d['detail'] != null) return d['detail'].toString();
+        return '设置封面失败，请重试';
+      }
+      await _reloadAlbums();
+      return null;
+    } catch (e) {
+      return api.errorDetail(e);
+    }
+  }
+
+  /// 删除相册：DELETE（软删，服务端自动清掉引用该相册的记录的归属）。
+  /// 客户端删后切回「全部照片」视图并重拉（照片仍在，归属已清）。
+  Future<String?> deleteAlbum(String id) async {
+    if (_disposed) return null;
+    try {
+      final dio = await ref.read(api.dioProvider.future);
+      final r = await dio.delete('/api/records/$id');
+      if ((r.statusCode ?? 500) >= 400) {
+        final d = r.data;
+        if (d is Map && d['detail'] != null) return d['detail'].toString();
+        return '删除失败，请重试';
+      }
+      // 切回全部照片（selectedAlbum=''）后整页重拉：photos 全量回显、
+      // albums 自动剔除已删相册（load 同时拉分类）。
+      if (!_disposed) state = state.copyWith(selectedAlbum: '');
+      await load();
+      return null;
+    } catch (e) {
+      return api.errorDetail(e);
+    }
+  }
+
+  /// 仅重拉分类列表（新建/改名/设封面后刷新 chip 与封面，不重拉照片）。
+  Future<void> _reloadAlbums() async {
+    if (_disposed) return;
+    try {
+      final dio = await ref.read(api.dioProvider.future);
+      final r = await dio.get('/api/records',
+          queryParameters: {'kind': 'album', 'limit': 200});
+      if (!_disposed) {
+        state = state.copyWith(albums: parseAlbumRecords(r.data));
+      }
+    } catch (_) {
+      // 分类刷新失败不阻断主流程：下次 load 自然会重拉
+    }
+  }
 }
 
 final albumControllerProvider =

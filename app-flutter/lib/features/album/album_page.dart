@@ -14,7 +14,10 @@ import 'package:go_router/go_router.dart';
 import '../../core/album/album_data.dart';
 import '../../core/chat/chat_media.dart';
 import '../../core/sse/sse_client.dart';
+import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
 import 'album_controller.dart';
+import 'album_cover_tile.dart';
+import '../timeline/composer_sheet.dart';
 
 /// 网格缩略图尺寸（3 列）：cell = (屏宽 - 左右 32 - 两道 8) / 3
 double albumCellSize(double screenWidth) => (screenWidth - 32 - 16) / 3;
@@ -81,13 +84,27 @@ class _AlbumPageState extends ConsumerState<AlbumPage> {
     });
 
     return SafeArea(
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        _heading(context),
-        _viewTabs(context, st),
-        if (st.view == AlbumView.byAlbum) _albumChips(context, st),
-        Expanded(child: _body(context, st)),
-      ]),
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        floatingActionButton: FloatingActionButton(
+          tooltip: '上传照片',
+          onPressed: () => _openUpload(context, st.selectedAlbum),
+          child: const Icon(Icons.add_a_photo_rounded),
+        ),
+        body: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          _heading(context),
+          _viewTabs(context, st),
+          if (st.view == AlbumView.byAlbum) _albumCoverRow(context, st),
+          Expanded(child: _body(context, st)),
+        ]),
+      ),
     );
+  }
+
+  /// 上传照片：FAB 打开官方 composer，预填当前相册（全部照片视图不预填）。
+  /// 复用时光段二 composer 全链路：本地暂存 / client_id 幂等 / 顶部通知。
+  void _openUpload(BuildContext context, String selectedAlbum) {
+    showComposerSheet(context, initialAlbum: selectedAlbum);
   }
 
   Widget _heading(BuildContext context) {
@@ -130,43 +147,314 @@ class _AlbumPageState extends ConsumerState<AlbumPage> {
     );
   }
 
-  Widget _albumChips(BuildContext context, AlbumState st) {
+  /// 相册入口（段 C）：横向滚动的封面卡网格——「全部照片」卡 + 各相册封面卡
+  /// （LowFreqCache 单槽位显示封面，无封面走占位回退）+「+ 新建相册」卡。
+  /// 每张相册卡带 ⋯ 菜单（改名/删除）；点卡进入该相册；点「全部照片」回到全部。
+  Widget _albumCoverRow(BuildContext context, AlbumState st) {
     final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
-      child: Wrap(spacing: 6, runSpacing: 6, children: [
-        _chip(theme, '全部照片', st.selectedAlbum.isEmpty,
-            () => ref.read(albumControllerProvider.notifier).selectAlbum('')),
-        for (final a in st.albums)
-          _chip(theme, a.title, st.selectedAlbum == a.id,
-              () => ref.read(albumControllerProvider.notifier).selectAlbum(a.id)),
-      ]),
+    final base = ref.watch(chatBaseProvider).valueOrNull ?? '';
+    final headers = ref.watch(mediaCookieHeadersProvider).valueOrNull;
+    final controller = ref.read(albumControllerProvider.notifier);
+    final cards = <Widget>[
+      _allPhotosCard(theme, st.selectedAlbum.isEmpty, () => controller.selectAlbum('')),
+    ];
+    for (final a in st.albums) {
+      cards.add(_albumCoverCard(
+        theme,
+        album: a,
+        base: base,
+        headers: headers,
+        selected: st.selectedAlbum == a.id,
+        onTap: () => controller.selectAlbum(a.id),
+        onRename: () => _showRenameDialog(context, a),
+        onDelete: () => _showDeleteConfirm(context, a),
+      ));
+    }
+    cards.add(_createCard(theme, () => _showCreateAlbumDialog(context)));
+    return SizedBox(
+      height: 132,
+      child: ListView.separated(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+        scrollDirection: Axis.horizontal,
+        itemCount: cards.length,
+        separatorBuilder: (_, _) => const SizedBox(width: 10),
+        itemBuilder: (_, i) => cards[i],
+      ),
     );
   }
 
-  Widget _chip(ThemeData theme, String label, bool selected, VoidCallback onTap) {
+  Widget _allPhotosCard(ThemeData theme, bool selected, VoidCallback onTap) {
+    final cs = theme.colorScheme;
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(999),
+      borderRadius: BorderRadius.circular(12),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        width: 100,
+        padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
-          color: selected
-              ? theme.colorScheme.primaryContainer
-              : theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-          borderRadius: BorderRadius.circular(999),
+          color: selected ? cs.primaryContainer : cs.surfaceContainerHighest.withValues(alpha: 0.5),
+          borderRadius: BorderRadius.circular(12),
           border: Border.all(
-              color: selected
-                  ? theme.colorScheme.primary
-                  : theme.colorScheme.outlineVariant),
+              color: selected ? cs.primary : cs.outlineVariant),
         ),
-        child: Text(label,
-            style: theme.textTheme.labelSmall?.copyWith(
-                color: selected
-                    ? theme.colorScheme.onPrimaryContainer
-                    : theme.colorScheme.outline)),
+        child: Column(children: [
+          Expanded(
+            child: Container(
+              decoration: BoxDecoration(
+                color: selected ? cs.onPrimaryContainer.withValues(alpha: 0.08) : cs.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Center(
+                child: Icon(Icons.photo_library_rounded,
+                    size: 28, color: selected ? cs.primary : cs.outline),
+              ),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text('全部照片',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.labelSmall?.copyWith(
+                  color: selected ? cs.onPrimaryContainer : cs.outline)),
+        ]),
       ),
     );
+  }
+
+  Widget _albumCoverCard(
+    ThemeData theme, {
+    required AlbumInfo album,
+    required String base,
+    required Map<String, String>? headers,
+    required bool selected,
+    required VoidCallback onTap,
+    required VoidCallback onRename,
+    required VoidCallback onDelete,
+  }) {
+    final cs = theme.colorScheme;
+    final coverPlaceholder = Container(
+      color: cs.surfaceContainerHighest,
+      alignment: Alignment.center,
+      child: Icon(Icons.photo_album_rounded, size: 28, color: cs.outline),
+    );
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        width: 100,
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: selected ? cs.primaryContainer : cs.surfaceContainerHighest.withValues(alpha: 0.5),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+              color: selected ? cs.primary : cs.outlineVariant),
+        ),
+        child: Column(children: [
+          Expanded(
+            child: Stack(children: [
+              AlbumCoverTile(
+                base: base,
+                headers: headers,
+                coverMid: album.cover,
+                slot: 'album_cover_${album.id}',
+                placeholder: coverPlaceholder,
+                borderRadius: 10,
+              ),
+              Positioned(
+                top: -4,
+                right: -4,
+                child: PopupMenuButton<String>(
+                  tooltip: '更多',
+                  icon: Icon(Icons.more_horiz_rounded, size: 18,
+                      color: cs.onSurface.withValues(alpha: 0.7)),
+                  padding: EdgeInsets.zero,
+                  itemBuilder: (_) => const [
+                    PopupMenuItem(value: 'rename', child: Text('改名')),
+                    PopupMenuItem(value: 'delete', child: Text('删除')),
+                  ],
+                  onSelected: (v) {
+                    if (v == 'rename') {
+                      onRename();
+                    } else if (v == 'delete') {
+                      onDelete();
+                    }
+                  },
+                ),
+              ),
+            ]),
+          ),
+          const SizedBox(height: 6),
+          Text(album.title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.labelSmall?.copyWith(
+                  color: selected ? cs.onPrimaryContainer : cs.outline)),
+        ]),
+      ),
+    );
+  }
+
+  Widget _createCard(ThemeData theme, VoidCallback onTap) {
+    final cs = theme.colorScheme;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        width: 100,
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: cs.surfaceContainerHighest.withValues(alpha: 0.5),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: cs.outlineVariant, style: BorderStyle.solid),
+        ),
+        child: Column(children: [
+          Expanded(
+            child: Container(
+              decoration: BoxDecoration(
+                color: cs.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Center(
+                child: Icon(Icons.add_rounded, size: 28, color: cs.primary),
+              ),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text('新建相册',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.labelSmall?.copyWith(color: cs.primary)),
+        ]),
+      ),
+    );
+  }
+
+  /// 新建相册弹层（可取消）：标题必填，确认走 createAlbum。
+  Future<void> _showCreateAlbumDialog(BuildContext context) async {
+    final ctrl = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+    final submitted = await showDialog<bool>(
+      context: context,
+      builder: (dctx) => AlertDialog(
+        title: const Text('新建相册'),
+        content: Form(
+          key: formKey,
+          child: TextFormField(
+            controller: ctrl,
+            autofocus: true,
+            maxLength: 100,
+            decoration: const InputDecoration(
+                labelText: '相册名称', counterText: ''),
+            validator: (v) =>
+                (v ?? '').trim().isEmpty ? '相册名称不能为空' : null,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dctx).pop(false), // 取消
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () {
+              if (formKey.currentState?.validate() ?? false) {
+                Navigator.of(dctx).pop(true);
+              }
+            },
+            child: const Text('创建'),
+          ),
+        ],
+      ),
+    );
+    if (submitted != true) return; // 取消/关闭：不动
+    final title = ctrl.text.trim();
+    if (title.isEmpty) return;
+    final err = await ref
+        .read(albumControllerProvider.notifier)
+        .createAlbum(title);
+    if (!mounted) return;
+    ref.read(chatToastProvider.notifier).show(
+        err == null ? '已新建相册' : '新建失败：$err',
+        tone: err == null ? ChatToastTone.success : ChatToastTone.error);
+  }
+
+  /// 相册改名弹层（可取消）：预填原标题，确认走 renameAlbum（回填铁律）。
+  Future<void> _showRenameDialog(BuildContext context, AlbumInfo album) async {
+    final ctrl = TextEditingController(text: album.title);
+    final formKey = GlobalKey<FormState>();
+    final submitted = await showDialog<bool>(
+      context: context,
+      builder: (dctx) => AlertDialog(
+        title: const Text('相册改名'),
+        content: Form(
+          key: formKey,
+          child: TextFormField(
+            controller: ctrl,
+            autofocus: true,
+            maxLength: 100,
+            decoration: const InputDecoration(
+                labelText: '相册名称', counterText: ''),
+            validator: (v) =>
+                (v ?? '').trim().isEmpty ? '相册名称不能为空' : null,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dctx).pop(false), // 取消
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () {
+              if (formKey.currentState?.validate() ?? false) {
+                Navigator.of(dctx).pop(true);
+              }
+            },
+            child: const Text('保存'),
+          ),
+        ],
+      ),
+    );
+    if (submitted != true) return;
+    final title = ctrl.text.trim();
+    if (title.isEmpty) return;
+    final err = await ref
+        .read(albumControllerProvider.notifier)
+        .renameAlbum(album.id, title);
+    if (!mounted) return;
+    ref.read(chatToastProvider.notifier).show(
+        err == null ? '已保存' : '改名失败：$err',
+        tone: err == null ? ChatToastTone.success : ChatToastTone.error);
+  }
+
+  /// 删除相册确认弹层（可取消，含 G5 口径）：软删，服务端自动清归属。
+  Future<void> _showDeleteConfirm(BuildContext context, AlbumInfo album) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dctx) => AlertDialog(
+        title: const Text('删除相册'),
+        content: Text(
+            '确定删除「${album.title}」吗？\n\n照片会保留在全部照片里，但恢复相册不会自动还原照片的归类。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dctx).pop(false), // 取消
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+                backgroundColor: Theme.of(context).colorScheme.error),
+            onPressed: () => Navigator.of(dctx).pop(true),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return; // 取消/关闭：不删
+    final err = await ref
+        .read(albumControllerProvider.notifier)
+        .deleteAlbum(album.id);
+    if (!mounted) return;
+    ref.read(chatToastProvider.notifier).show(
+        err == null ? '已删除相册' : '删除失败：$err',
+        tone: err == null ? ChatToastTone.success : ChatToastTone.error);
   }
 
   Widget _body(BuildContext context, AlbumState st) {
@@ -295,8 +583,14 @@ class _Thumb extends ConsumerWidget {
         onTap: () async {
           // 打开前先把索引对齐到点开的这张（查看器 initState 会再写一次）
           ref.read(albumViewerIndexProvider.notifier).state = index;
+          // albumId 仅当正处于某个相册内才带上（全部照片视图不预填封面归属）
+          final albumId = ref.read(albumControllerProvider).selectedAlbum;
           await context.push('/album/viewer',
-              extra: {'photos': all, 'index': index.clamp(0, all.length - 1)});
+              extra: {
+                'photos': all,
+                'index': index.clamp(0, all.length - 1),
+                'albumId': albumId,
+              });
         },
         child: ClipRRect(
           borderRadius: BorderRadius.circular(10),

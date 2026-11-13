@@ -27,11 +27,14 @@ import 'timeline_controller.dart';
 ///   为底只覆盖改动字段），不走暂存、不显示存草稿。
 /// · [initialContent] / [initialMediaIds] = 聊天「记入时光」预填（C4）：
 ///   post 态，与时光页发布共用暂存/client_id 幂等一套逻辑。
+/// · [initialAlbum] = 相册页上传预填（段 C）：非空时预填该相册分类并跳过
+///   本地暂存恢复（干净起点，避免把上一次草稿混进当前相册）。
 Future<void> showComposerSheet(
   BuildContext context, {
   Record? editRecord,
   String? initialContent,
   List<String>? initialMediaIds,
+  String? initialAlbum,
 }) {
   return showModalBottomSheet<void>(
     context: context,
@@ -42,6 +45,7 @@ Future<void> showComposerSheet(
       editRecord: editRecord,
       initialContent: initialContent,
       initialMediaIds: initialMediaIds,
+      initialAlbum: initialAlbum,
     ),
   );
 }
@@ -67,10 +71,12 @@ class ComposerSheet extends ConsumerStatefulWidget {
     this.editRecord,
     this.initialContent,
     this.initialMediaIds,
+    this.initialAlbum,
   });
   final Record? editRecord;
   final String? initialContent;
   final List<String>? initialMediaIds;
+  final String? initialAlbum;
 
   bool get isEdit => editRecord != null;
   bool get hasPrefill =>
@@ -128,6 +134,10 @@ class _ComposerSheetState extends ConsumerState<ComposerSheet> {
             localFile: ChatLocalFile(path: '', name: 'media:$id'))
           ..uploadedId = id);
       }
+    } else if (widget.initialAlbum != null && widget.initialAlbum!.isNotEmpty) {
+      // 相册页上传预填（段 C）：预填相册分类，跳过暂存恢复（干净起点，
+      // 避免把上一次草稿混进当前相册），之后仍走自动暂存 + 幂等发布。
+      _album = widget.initialAlbum;
     } else {
       _loadStore();
     }

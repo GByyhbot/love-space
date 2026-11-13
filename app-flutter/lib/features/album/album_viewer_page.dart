@@ -44,9 +44,12 @@ class AlbumViewerPage extends ConsumerStatefulWidget {
     super.key,
     required this.photos,
     this.initialIndex = 0,
+    this.albumId = '',
   });
   final List<PhotoItem> photos;
   final int initialIndex;
+  /// 所属相册 id（空=来自「全部照片」，不可设封面）；非空时顶部显示「设为封面」。
+  final String albumId;
 
   @override
   ConsumerState<AlbumViewerPage> createState() => _AlbumViewerPageState();
@@ -233,6 +236,32 @@ class _AlbumViewerPageState extends ConsumerState<AlbumViewerPage> {
     });
   }
 
+  /// 设当前照片为所属相册封面（方案③：mid 存 body.media[0]），结果走顶部通知。
+  Future<void> _setCover() async {
+    if (widget.albumId.isEmpty || _saving) return;
+    setState(() => _saving = true);
+    try {
+      final err = await ref
+          .read(albumControllerProvider.notifier)
+          .setCover(widget.albumId, _current.id);
+      if (!mounted) return;
+      if (err != null) {
+        ref.read(chatToastProvider.notifier).show(
+            '设封面失败：$err', tone: ChatToastTone.error);
+      } else {
+        ref.read(chatToastProvider.notifier).show(
+            '已设为封面', tone: ChatToastTone.success);
+      }
+    } catch (e) {
+      if (mounted) {
+        ref.read(chatToastProvider.notifier).show(
+            '设封面失败：${errorDetail(e)}', tone: ChatToastTone.error);
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
   /// 下载原文件 → downloads/，结果走顶部通知
   Future<void> _download() async {
     if (_saving) return;
@@ -336,6 +365,17 @@ class _AlbumViewerPageState extends ConsumerState<AlbumViewerPage> {
                 Text('${_index + 1} / ${widget.photos.length}',
                     style: const TextStyle(color: Colors.white, fontSize: 15)),
                 const Spacer(),
+                if (widget.albumId.isNotEmpty)
+                  IconButton(
+                    tooltip: '设为封面',
+                    onPressed: _saving ? null : _setCover,
+                    icon: _saving
+                        ? const SizedBox(
+                            width: 16, height: 16,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2, color: Colors.white))
+                        : const Icon(Icons.photo_album_rounded, color: Colors.white),
+                  ),
                 IconButton(
                   tooltip: '下载原文件',
                   onPressed: _saving ? null : _download,

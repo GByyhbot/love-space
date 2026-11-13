@@ -43,15 +43,39 @@ class PhotoItem {
 }
 
 /// 相册分类（kind='album' 记录）
+/// · [title] 来自 body.title（必填）；
+/// · [cover] 来自 body.media[0]（封面照片 mid，方案③：mid 存于 body.media[0]）；
+///   空串表示尚未设置封面（UI 走占位回退）。
 class AlbumInfo {
-  const AlbumInfo({required this.id, this.title = ''});
+  const AlbumInfo({required this.id, this.title = '', this.cover = ''});
   final String id;
   final String title;
+  final String cover;
 
-  factory AlbumInfo.fromRecord(Map<String, dynamic> j) => AlbumInfo(
-        id: (j['id'] ?? '').toString(),
-        title: (((j['body'] ?? {}) as Map)['title'] ?? '').toString(),
-      );
+  factory AlbumInfo.fromRecord(Map<String, dynamic> j) {
+    final body = (j['body'] ?? {}) as Map;
+    final media = (body['media'] ?? []) as List?;
+    final cover = media != null && media.isNotEmpty
+        ? media.first.toString()
+        : '';
+    return AlbumInfo(
+      id: (j['id'] ?? '').toString(),
+      title: (body['title'] ?? '').toString(),
+      cover: cover,
+    );
+  }
+}
+
+/// 相册编辑回填铁律（与时光段二 C buildEditBody 同语义）：
+/// 编辑/设封面提交的 body **必须以服务器拉到的原始 body 为底**逐键复制
+/// （含客户端不建模的字段、permitted 集内的未知字段），只覆盖实际改动的字段。
+/// 服务端 clean_body 只留 permitted 字段且不合并旧 body，故客户端必须自行合并——
+/// 绝不按字段表拼装新 body（那会丢掉未知字段）。
+Map<String, dynamic> mergeAlbumBody(
+    Map<String, dynamic> original, Map<String, dynamic> changes) {
+  final body = <String, dynamic>{...original}; // 深拷贝顶层：未知字段全部存活
+  body.addAll(changes); // 只覆盖实际改动的字段
+  return body;
 }
 
 /// 解析照片列表（畸形条目容错跳过，绝不抛异常）

@@ -53,7 +53,12 @@ final routerProvider = Provider<GoRouter>((ref) {
           final photos = (extra['photos'] as List?)?.cast<PhotoItem>() ??
               const <PhotoItem>[];
           final index = (extra['index'] as int?) ?? 0;
-          return AlbumViewerPage(photos: photos, initialIndex: index);
+          final albumId = (extra['albumId'] as String?) ?? '';
+          return AlbumViewerPage(
+            photos: photos,
+            initialIndex: index,
+            albumId: albumId,
+          );
         },
       ),
     ],
