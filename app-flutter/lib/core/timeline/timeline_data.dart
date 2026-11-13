@@ -93,6 +93,38 @@ String postHeaderDate({
 }) =>
     bodyDate.isNotEmpty ? bodyDate : timelineDateLabel(created);
 
+// ── 段二 B · 互动纯函数（可单测）─────────────────────────────────
+
+/// 本地翻转向量的 likes（B1）：含本人 id → 移除；否则追加。
+/// 服务端 POST /records/{id}/like 只回 {ok:true} 不回新状态，故本地翻转。
+List<String> toggleLocalLikes(List<String> likes, String myId) => likes.contains(myId)
+    ? likes.where((u) => u != myId).toList()
+    : [...likes, myId];
+
+/// 按评论 id 去重合并（B2/B3）：服务端列表为底，本地即时插入的评论
+/// 仅在 cid 不存在时追加。SSE other 重拉回来的列表与本端即时插入的
+/// 那条（用服务端返回的真实 cid）经此合并后恒为一条，绝不重复。
+List<Map<String, dynamic>> mergeCommentsByCid(
+    List<Map<String, dynamic>> server, List<Map<String, dynamic>> local) {
+  final ids = {for (final c in server) c['id']?.toString()};
+  final merged = <Map<String, dynamic>>[...server];
+  for (final c in local) {
+    final cid = c['id']?.toString();
+    if (cid != null && cid.isNotEmpty && !ids.contains(cid)) {
+      merged.add(c);
+      ids.add(cid);
+    }
+  }
+  // 服务端评论按 created 升序；本地插入的 created 更大，排末尾即合序
+  merged.sort((a, b) => ((a['created'] as num?)?.toDouble() ?? 0)
+      .compareTo((b['created'] as num?)?.toDouble() ?? 0));
+  return merged;
+}
+
+/// 删评论入口显隐：仅本人评论（B2，服务端 DELETE 亦按 author 校验）
+bool canDeleteComment(Map<String, dynamic> comment, String myId) =>
+    comment['author']?.toString() == myId;
+
 // ── 时光卡片媒体网格宽度（Web static/style.css:602-609）────────────────
 // `.media-grid{grid-template-columns:repeat(3,1fr);gap:8px}`、
 // `.media-grid.single{grid-template-columns:1fr}`、

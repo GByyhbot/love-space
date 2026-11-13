@@ -281,6 +281,9 @@ class _TimelinePageState extends ConsumerState<TimelinePage> {
         itemBuilder: (context, i) {
           if (i < chat.posts.length) {
             return PostCard(
+              // ValueKey 保住 widget 身份：段二 B 本卡原地更新时，
+              // 其它卡片不重建、列表不跳位、不闪烁
+              key: ValueKey(chat.posts[i].id),
               record: chat.posts[i],
               me: me,
               revealDelayMs: _firstRevealDone ? 0 : (i * 40).clamp(0, 600),

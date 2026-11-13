@@ -1,7 +1,10 @@
-/// 时光页状态与控制器（条目 4 · 段一）。
+/// 时光页状态与控制器（条目 4 · 段一骨架 + 段二 B 互动）。
 /// 状态挂 keepAlive Notifier：切 tab（shell IndexedStack 常驻）与短时离开
 /// 不丢列表/筛选；首屏骨架只在首次拉取时出现（对齐 Web timelineSkeleton）。
 /// SSE other 且时光 tab 激活 → resetOnSseOther（对齐 Web refresh）。
+/// 段二 B：点赞/评论/删评论只替换本卡（_patchRecord），不整列表重建、
+/// 不跳位；失败回滚到点前状态并走顶部通知；SSE 重拉按 cid 去重合并，
+/// 本端即时插入与服务端回显恒为一条。
 library;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,6 +12,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api/api_client.dart' as api;
 import '../../core/chat/chat_repository.dart' show newChatClientId;
 import '../../core/timeline/timeline_data.dart';
+import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
 
 class TimelineState {
   const TimelineState({
@@ -62,6 +66,14 @@ class TimelineController extends Notifier<TimelineState> {
   /// 避免同 client_id 返回旧草稿不更新）
   String? _activeDraftClientId;
 
+  /// 段二 B：本端即时插入的评论（cid → 评论对象，含 record_id），
+  /// SSE reset 重拉时按 cid 去重补回（服务端快照可能早于本端提交）。
+  final Map<String, Map<String, dynamic>> _localComments = {};
+
+  /// 段二 B：乐观点赞在途的卡（rid → 期望 likes），POST 完成即清。
+  /// 防止 SSE 重拉在途把乐观态短暂冲回。
+  final Map<String, List<String>> _optimisticLikes = {};
+
   @override
   TimelineState build() {
     ref.onDispose(() => _disposed = true);
@@ -102,7 +114,31 @@ class TimelineController extends Notifier<TimelineState> {
       final hasMore = fetched.length > timelinePageSize;
       final page = fetched.take(timelinePageSize).toList();
       if (reset) {
-        if (!_disposed) state = state.copyWith(posts: page, hasMore: hasMore);
+        // SSE other 重拉 / 发布后重拉：以服务端为底，按 cid 去重合并
+        // 本端即时插入的评论（服务端快照可能早于本端 POST），并保留
+        // 在途的乐观点赞态，避免刷出重复卡或点赞闪烁。
+        final merged = <api.Record>[];
+        for (final rec in page) {
+          final locals = _localComments.values
+              .where((c) => c['record_id']?.toString() == rec.id)
+              .toList();
+          final comments = locals.isEmpty
+              ? rec.comments
+              : mergeCommentsByCid(rec.comments, locals);
+          final likes = _optimisticLikes[rec.id] ?? rec.likes;
+          // 服务端已回显该评论 → 本地兜底记录功成身退（防无限留存）
+          final serverCids = {
+            for (final c in rec.comments) c['id']?.toString()
+          };
+          _localComments.removeWhere((cid, _) => serverCids.contains(cid));
+          merged.add(identical(comments, rec.comments) &&
+                  identical(likes, rec.likes)
+              ? rec
+              : _rebuildRecord(rec, likes: likes, comments: comments));
+        }
+        if (!_disposed) {
+          state = state.copyWith(posts: merged, hasMore: hasMore);
+        }
       } else {
         final (_, merged) =
             appendTimelinePage(state.posts, page, (rec) => rec.id);
@@ -140,6 +176,126 @@ class TimelineController extends Notifier<TimelineState> {
   /// SSE other（时光 tab 激活时由页面调用）：reset 重拉
   Future<void> resetOnSseOther() async {
     if (_loaded) await load(reset: true);
+  }
+
+  // ── 段二 B · 互动（本卡原地更新 / 失败回滚 / SSE 去重）────────────
+
+  /// 用同一 id 重建一条 Record（仅覆盖 likes/comments，其余字段原样保留）
+  api.Record _rebuildRecord(api.Record old,
+          {List<String>? likes, List<Map<String, dynamic>>? comments}) =>
+      api.Record(
+        id: old.id,
+        kind: old.kind,
+        author: old.author,
+        body: old.body,
+        created: old.created,
+        clientId: old.clientId,
+        likes: likes ?? old.likes,
+        comments: comments ?? old.comments,
+        media: old.media,
+      );
+
+  /// 只替换列表中对应 rid 的那一张卡：其余元素对象引用不变、顺序不变、
+  /// 游标与 hasMore 不变 → ListView 视口位置不动、不闪烁（B3）。
+  void _patchRecord(String rid,
+      {List<String>? likes, List<Map<String, dynamic>>? comments}) {
+    if (_disposed) return;
+    final idx = state.posts.indexWhere((r) => r.id == rid);
+    if (idx < 0) return;
+    final next = List<api.Record>.of(state.posts);
+    next[idx] = _rebuildRecord(next[idx], likes: likes, comments: comments);
+    state = state.copyWith(posts: next);
+  }
+
+  void _toast(String msg, ChatToastTone tone) =>
+      ref.read(chatToastProvider.notifier).show(msg, tone: tone);
+
+  /// B1 点赞 toggle：本地先翻转（服务端只回 {ok:true} 不回状态），
+  /// POST 失败回滚到点前状态并给顶部通知，绝不静默失败。
+  Future<void> toggleLike(String rid, String myId) async {
+    if (_disposed) return;
+    final idx = state.posts.indexWhere((r) => r.id == rid);
+    if (idx < 0) return;
+    final before = List<String>.of(state.posts[idx].likes); // 点前快照
+    final optimistic = toggleLocalLikes(before, myId);
+    _optimisticLikes[rid] = optimistic;
+    _patchRecord(rid, likes: optimistic);
+    try {
+      final dio = await ref.read(api.dioProvider.future);
+      final r = await dio.post('/api/records/$rid/like');
+      if ((r.statusCode ?? 500) >= 400) {
+        throw Exception('HTTP ${r.statusCode}');
+      }
+      _optimisticLikes.remove(rid); // 服务端已落库，后续重拉自然对齐
+    } catch (e) {
+      _optimisticLikes.remove(rid);
+      _patchRecord(rid, likes: before); // 回滚到点前状态
+      _toast('点赞失败，已恢复', ChatToastTone.error);
+    }
+  }
+
+  /// B2 发表评论：POST 返回真实 cid → 本卡即时插入（卡片内联列表上屏）。
+  /// 失败给顶部通知、不插入。返回是否成功（供 BottomSheet 收起用）。
+  Future<bool> addComment(String rid, String content, String myId) async {
+    final text = content.trim();
+    if (text.isEmpty || text.length > 5000) {
+      _toast('评论内容需在 1–5000 字之间', ChatToastTone.warning);
+      return false;
+    }
+    if (_disposed) return false;
+    try {
+      final dio = await ref.read(api.dioProvider.future);
+      final r = await dio.post('/api/records/$rid/comments',
+          data: {'content': text});
+      if ((r.statusCode ?? 500) >= 400) {
+        throw Exception('HTTP ${r.statusCode}');
+      }
+      final cid = ((r.data as Map?) ?? const {})['id']?.toString() ?? '';
+      if (cid.isEmpty) throw Exception('服务端未返回评论 id');
+      final comment = <String, dynamic>{
+        'id': cid,
+        'record_id': rid,
+        'author': myId,
+        'content': text,
+        'created': DateTime.now().millisecondsSinceEpoch / 1000.0,
+      };
+      _localComments[cid] = comment; // SSE 重拉去重合并的本地兜底
+      final idx = state.posts.indexWhere((rec) => rec.id == rid);
+      if (idx < 0) return false;
+      _patchRecord(rid, comments: mergeCommentsByCid(
+          state.posts[idx].comments, [comment]));
+      return true;
+    } catch (e) {
+      _toast('评论发送失败：${api.errorDetail(e)}', ChatToastTone.error);
+      return false;
+    }
+  }
+
+  /// B2 删评论：仅本人（UI 已按 author 控制入口，服务端再校验一次）。
+  /// 成功后本卡移除；失败回滚并给顶部通知。
+  Future<void> deleteComment(String rid, String cid, String myId) async {
+    if (_disposed) return;
+    final idx = state.posts.indexWhere((r) => r.id == rid);
+    if (idx < 0) return;
+    final before = List<Map<String, dynamic>>.of(state.posts[idx].comments);
+    final target = before.where((c) => c['id']?.toString() == cid).toList();
+    if (target.isEmpty || !canDeleteComment(target.first, myId)) return;
+    final optimistic = before
+        .where((c) => c['id']?.toString() != cid)
+        .toList();
+    _localComments.remove(cid);
+    _patchRecord(rid, comments: optimistic);
+    try {
+      final dio = await ref.read(api.dioProvider.future);
+      final r = await dio.delete('/api/comments/$cid');
+      if ((r.statusCode ?? 500) >= 400) {
+        throw Exception('HTTP ${r.statusCode}');
+      }
+    } catch (e) {
+      _patchRecord(rid, comments: before); // 回滚
+      _toast('删除评论失败，已恢复：${api.errorDetail(e)}',
+          ChatToastTone.error);
+    }
   }
 
   /// 发布（composer 完整态）：POST /api/records {kind:'post', body, client_id}。

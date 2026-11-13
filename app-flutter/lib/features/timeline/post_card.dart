@@ -1,8 +1,8 @@
-/// 时光页 post 卡片（条目 4 · 段一，对齐 Web recordCard 的 post 投影）：
+/// 时光页 post 卡片（条目 4 · 段一投影 + 段二 B 互动）：
 /// 头像（LowFreqCacheManager）+昵称+日期（b.date||dateLabel 双时间口径）+可选
 /// 标题+正文+媒体网格（图 preview 可点查看器/视频 poster+播放/语音 chip）+
-/// footer（时间戳+点赞数/评论数展示，互动行为段二接）+内联评论列表。
-/// kind 扩展位：post 之外字段照常渲染（列本页仅 post）。
+/// footer（时间戳+点赞/评论按钮：本地翻转与评论 Sheet）+内联评论列表
+/// （本人评论带删除入口）。段二 B 本卡原地更新：只替换列表里这一条 Record。
 library;
 
 import 'package:cached_network_image/cached_network_image.dart';
@@ -16,7 +16,9 @@ import '../auth/auth_state.dart';
 import '../../core/chat/chat_models.dart';
 import '../../core/timeline/timeline_data.dart';
 import '../chat/media_bubble_widgets.dart' show MediaImageView, VideoCardView, VoiceChipView;
+import 'comment_sheet.dart';
 import 'image_viewer.dart';
+import 'timeline_controller.dart';
 
 /// post 卡片
 class PostCard extends ConsumerWidget {
@@ -130,33 +132,59 @@ class PostCard extends ConsumerWidget {
               for (final v in voices) VoiceChipView(mid: v.id)
             ]),
           ),
-        // footer：时间戳 + 点赞/评论数展示（行为段二接）
+        // footer：时间戳 + 点赞/评论按钮（段二 B：本地翻转 + 评论 Sheet）
         Padding(
-          padding: const EdgeInsets.only(top: 10),
+          padding: const EdgeInsets.only(top: 4),
           child: Row(children: [
-            Icon(Icons.schedule_rounded, size: 14,
+            Icon(Icons.access_time_rounded, size: 13,
                 color: theme.colorScheme.outline),
             const SizedBox(width: 4),
             Text(timelineDateLabel(record.created),
                 style: theme.textTheme.bodySmall
                     ?.copyWith(color: theme.colorScheme.outline)),
             const Spacer(),
-            Icon(Icons.favorite_rounded, size: 14,
-                color: liked ? theme.colorScheme.primary : theme.colorScheme.outline),
-            const SizedBox(width: 3),
-            Text(record.likes.isEmpty ? '喜欢' : '${record.likes.length}',
-                style: theme.textTheme.bodySmall
-                    ?.copyWith(color: theme.colorScheme.outline)),
-            const SizedBox(width: 12),
-            Icon(Icons.mode_comment_rounded, size: 14,
-                color: theme.colorScheme.outline),
-            const SizedBox(width: 3),
-            Text(record.comments.isEmpty ? '回复' : '${record.comments.length}',
-                style: theme.textTheme.bodySmall
-                    ?.copyWith(color: theme.colorScheme.outline)),
+            // 点赞 toggle：状态与计数同一处，点击走控制器乐观翻转 + 失败回滚
+            InkWell(
+              borderRadius: BorderRadius.circular(12),
+              onTap: () => ref
+                  .read(timelineControllerProvider.notifier)
+                  .toggleLike(record.id, me.user.id),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(Icons.favorite_rounded, size: 15,
+                      color: liked
+                          ? theme.colorScheme.primary
+                          : theme.colorScheme.outline),
+                  const SizedBox(width: 3),
+                  Text(record.likes.isEmpty ? '喜欢' : '${record.likes.length}',
+                      style: theme.textTheme.bodySmall
+                          ?.copyWith(color: theme.colorScheme.outline)),
+                ]),
+              ),
+            ),
+            const SizedBox(width: 6),
+            // 评论入口：原生 BottomSheet（按钮 + 下滑手势都能关）
+            InkWell(
+              borderRadius: BorderRadius.circular(12),
+              onTap: () => showCommentSheet(context, rid: record.id, me: me),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(Icons.mode_comment_rounded, size: 15,
+                      color: theme.colorScheme.outline),
+                  const SizedBox(width: 3),
+                  Text(record.comments.isEmpty
+                      ? '评论'
+                      : '${record.comments.length}',
+                      style: theme.textTheme.bodySmall
+                          ?.copyWith(color: theme.colorScheme.outline)),
+                ]),
+              ),
+            ),
           ]),
         ),
-        // 内联评论列表
+        // 内联评论列表（本人评论带删除入口，段二 B）
         if (record.comments.isNotEmpty) ...[
           const SizedBox(height: 8),
           Container(
@@ -170,18 +198,10 @@ class PostCard extends ConsumerWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   for (final c in record.comments)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 2),
-                      child: Text.rich(TextSpan(children: [
-                        TextSpan(
-                            text: '${_personName(me, c['author']?.toString() ?? '')}：',
-                            style: theme.textTheme.bodySmall?.copyWith(
-                                color: theme.colorScheme.primary,
-                                fontWeight: FontWeight.w600)),
-                        TextSpan(
-                            text: c['content']?.toString() ?? '',
-                            style: theme.textTheme.bodySmall),
-                      ])),
+                    _CommentRow(
+                      comment: c,
+                      me: me,
+                      rid: record.id,
                     ),
                 ]),
           ),
@@ -196,8 +216,71 @@ class PostCard extends ConsumerWidget {
     return card;
   }
 
-  String _personName(MeData me, String id) =>
-      me.byId(id)?.name ?? '?';
+}
+
+/// 内联评论行：仅本人评论显示删除入口；删前弹确认弹层（可取消）。
+class _CommentRow extends ConsumerWidget {
+  const _CommentRow({required this.comment, required this.me, required this.rid});
+  final Map<String, dynamic> comment;
+  final MeData me;
+  final String rid;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final mine = canDeleteComment(comment, me.user.id);
+    final cid = comment['id']?.toString() ?? '';
+    return Row(children: [
+      Expanded(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 2),
+          child: Text.rich(TextSpan(children: [
+            TextSpan(
+                text: '${_name(me, comment['author']?.toString() ?? '')}：',
+                style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.primary,
+                    fontWeight: FontWeight.w600)),
+            TextSpan(
+                text: comment['content']?.toString() ?? '',
+                style: theme.textTheme.bodySmall),
+          ])),
+        ),
+      ),
+      if (mine)
+        InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () => _confirmDelete(context, ref, cid),
+          child: Padding(
+            padding: const EdgeInsets.all(4),
+            child: Icon(Icons.close_rounded, size: 14,
+                color: theme.colorScheme.error),
+          ),
+        ),
+    ]);
+  }
+
+  String _name(MeData me, String id) => me.byId(id)?.name ?? '?';
+
+  Future<void> _confirmDelete(BuildContext context, WidgetRef ref, String cid) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('删除这条评论？'),
+        content: const Text('删除后无法恢复。'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('取消')),
+          FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('删除')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    await ref.read(timelineControllerProvider.notifier).deleteComment(
+        rid, cid, me.user.id);
+  }
 }
 
 /// 错开浮现（透明度+轻微上移，40ms 错开封顶 600ms）
