@@ -15,6 +15,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:love_space/core/album/album_data.dart';
 import 'package:love_space/features/album/album_controller.dart';
+import 'package:love_space/features/album/album_viewer_page.dart';
 
 Map<String, Object> _photo(String id, {String caption = ''}) => {
       'id': id, 'name': '$id.jpg', 'mime': 'image/jpeg',
@@ -130,7 +131,7 @@ void main() {
       ]);
       expect(photos.length, 5);
       // 首/末页不越界：索引夹取
-      final clampAt = (int i) => i.clamp(0, photos.length - 1);
+      int clampAt(int i) => i.clamp(0, photos.length - 1);
       expect(clampAt(-1), 0);
       expect(clampAt(0), 0);
       expect(clampAt(4), 4);
@@ -156,6 +157,93 @@ void main() {
       expect(zoomed(5.0), isTrue);
       // 缩放下禁用下拉：_onDragUpdate 在 _zoomed 时直接 return
       expect(zoomed(2.5), isTrue, reason: '缩放态下拉不生效');
+    });
+  });
+
+  // ── ⑥ 返修点：缩放/平移手势仲裁（panEnabled 跟随 zoomed，不再写死）──
+  group('⑥ 返修点 · 缩放平移手势仲裁', () {
+    Future<void> pumpViewer(WidgetTester tester,
+        {int initialIndex = 0}) async {
+      await tester.pumpWidget(ProviderScope(
+        child: MaterialApp(
+          home: AlbumViewerPage(
+            photos: parsePhotos([
+              _photo('m1'), _photo('m2'), _photo('m3'),
+            ]),
+            initialIndex: initialIndex,
+          ),
+        ),
+      ));
+      // 不 pumpAndSettle：无网络环境下 CachedNetworkImage 占位 spinner 是无限
+      // 动画，pumpAndSettle 会超时；单帧 pump 即可让树构建出 InteractiveViewer
+      await tester.pump();
+    }
+
+    InteractiveViewer activeViewer(WidgetTester tester) =>
+        tester.widgetList<InteractiveViewer>(find.byType(InteractiveViewer)).first;
+
+    PageView pageView(WidgetTester tester) =>
+        tester.widget<PageView>(find.byType(PageView));
+
+    testWidgets('1× 时当前页 InteractiveViewer.panEnabled=false（横滑交 PageView）',
+        (tester) async {
+      await pumpViewer(tester);
+      // 初始未缩放：panEnabled 必须为 false，否则会吞掉横滑翻页
+      expect(activeViewer(tester).panEnabled, isFalse,
+          reason: '1× 不允许单指平移，横滑翻页交给 PageView');
+      // 对应的 PageView 物理应为可横滑
+      expect(pageView(tester).physics, isA<PageScrollPhysics>());
+    });
+
+    testWidgets('捏合放大后 panEnabled=true 且 PageView 锁翻页（单指可平移）',
+        (tester) async {
+      await pumpViewer(tester);
+      final c = tester.getCenter(find.byType(InteractiveViewer).first);
+      // 双指外拉：初始间距 100 → 拉开到 200（≈2×）
+      final p1 = await tester.startGesture(c - const Offset(50, 0));
+      final p2 = await tester.startGesture(c + const Offset(50, 0));
+      await p1.moveBy(const Offset(-50, 0));
+      await p2.moveBy(const Offset(50, 0));
+      await tester.pump();
+      await p1.up();
+      await p2.up();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      // 放大后：panEnabled 翻转为 true（单指可平移看局部）
+      expect(activeViewer(tester).panEnabled, isTrue,
+          reason: '放大态必须允许单指平移——这是返修点核心');
+      // 放大态锁翻页（横滑/下拉交还手势）
+      expect(pageView(tester).physics, isA<NeverScrollableScrollPhysics>());
+    });
+
+    testWidgets('缩放回 1× 后翻页恢复（panEnabled 复位 false）', (tester) async {
+      await pumpViewer(tester);
+      final c = tester.getCenter(find.byType(InteractiveViewer).first);
+      // 先双指外拉放大
+      final p1 = await tester.startGesture(c - const Offset(50, 0));
+      final p2 = await tester.startGesture(c + const Offset(50, 0));
+      await p1.moveBy(const Offset(-50, 0));
+      await p2.moveBy(const Offset(50, 0));
+      await tester.pump();
+      await p1.up();
+      await p2.up();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(activeViewer(tester).panEnabled, isTrue,
+          reason: '先放大确认已进入放大态');
+      // 再双指内缩回到 1×（起始间距 200 → 收回到 100，倍率 0.5 被夹到 1×）
+      final q1 = await tester.startGesture(c - const Offset(100, 0));
+      final q2 = await tester.startGesture(c + const Offset(100, 0));
+      await q1.moveBy(const Offset(50, 0));
+      await q2.moveBy(const Offset(-50, 0));
+      await tester.pump();
+      await q1.up();
+      await q2.up();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(activeViewer(tester).panEnabled, isFalse,
+          reason: '缩回 1× 后翻页/下拉恢复');
+      expect(pageView(tester).physics, isA<PageScrollPhysics>());
     });
   });
 

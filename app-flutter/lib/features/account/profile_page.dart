@@ -38,7 +38,6 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   bool _inviting = false;
   String? _inviteUrl;       // 生成的邀请链接
   String? _error;
-  String? _notice;
 
   // 实际安装包版本（取自 PackageInfo，不写死）—— 诊断页/页脚共用
   String _pkgVersion = '';
@@ -105,7 +104,11 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
         _avatarBytes = Uint8List.fromList(bytes); // 本地即时预览（无需等服务端转码）
       });
     } catch (e) {
-      if (mounted) setState(() => _error = '头像上传失败，可重试后重新保存');
+      if (mounted) {
+        setState(() => _error = '头像上传失败，可重试后重新保存');
+        ref.read(chatToastProvider.notifier).show(
+            '头像上传失败，可重试后重新保存', tone: ChatToastTone.error);
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -114,7 +117,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   Future<void> _save() async {
     final name = _name.text.trim();
     if (name.isEmpty) { setState(() => _error = '昵称不能为空'); return; }
-    setState(() { _busy = true; _error = null; _notice = null; });
+    setState(() { _busy = true; _error = null; });
     final err = await ref.read(authProvider.notifier).updateProfile(
           name: name,
           avatarId: _pendingAvatarId ?? (_avatarId?.isEmpty == true ? '' : null),
@@ -125,12 +128,16 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     setState(() => _busy = false);
     if (err == null) {
       setState(() {
-        _notice = '已保存';
         if (_pendingAvatarId != null) _avatarId = _pendingAvatarId;
         _pendingAvatarId = null;
         _oldPw.clear();
         _newPw.clear();
       });
+      // 保存成功：统一走顶部通知（全局宿主），不再只显示在按钮下方行内
+      if (mounted) {
+        ref.read(chatToastProvider.notifier).show(
+            '已保存', tone: ChatToastTone.success);
+      }
       if (_avatarId != null && _avatarId!.isNotEmpty) _loadAvatar();
     } else if (err == 'RELOGIN') {
       // 改密成功：会话已失效，路由 redirect 自动送回登录页（authed→out）
@@ -139,7 +146,9 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
             '密码已修改，请用新密码重新登录', tone: ChatToastTone.success);
       }
     } else {
+      // 服务端失败：行内保留 + 顶部通知（字段级校验「昵称不能为空」只走行内，不在此分支）
       setState(() => _error = err);
+      ref.read(chatToastProvider.notifier).show(err, tone: ChatToastTone.error);
     }
   }
 
@@ -148,7 +157,11 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     final (token, err) = await ref.read(authProvider.notifier).createInvite();
     if (!mounted) return;
     setState(() => _inviting = false);
-    if (err != null) { setState(() => _error = err); return; }
+    if (err != null) {
+      setState(() => _error = err);
+      ref.read(chatToastProvider.notifier).show(err, tone: ChatToastTone.error);
+      return;
+    }
     final base = await ref.read(baseProvider.future);
     setState(() => _inviteUrl = '$base/?invite=${Uri.encodeComponent(token ?? '')}');
   }
@@ -397,11 +410,6 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                     child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                 : const Text('保存'),
           ),
-          if (_notice != null) ...[
-            const SizedBox(height: 8),
-            Text(_notice!, textAlign: TextAlign.center,
-                style: TextStyle(color: theme.colorScheme.primary)),
-          ],
           if (_error != null) ...[
             const SizedBox(height: 8),
             Text(_error!, textAlign: TextAlign.center,

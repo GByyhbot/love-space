@@ -12,7 +12,6 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:love_space/core/api/api_client.dart' show dioProvider;
 import 'package:love_space/features/chat/chat_toast.dart';
-import 'package:love_space/features/chat/chat_toast.dart';
 import 'package:love_space/features/timeline/composer_sheet.dart';
 
 Future<void> _pumpComposer(WidgetTester tester) async {

@@ -1,12 +1,29 @@
-/// 相册全屏查看器（条目 5 · 段 B · 甲档）。
+/// 相册全屏查看器（条目 5 · 段 B · 甲档，返修版）。
 /// · Hero 共享元素转场：网格缩略图 ↔ 查看器双向，Hero tag 跟随当前页
 ///   （翻页后返回落点 = 当前查看那张，不是最初点开那张）；
 /// · 跨整个相册翻页：PageView 数据集 = 当前筛选下全部照片，首/末页不越界；
-/// · InteractiveViewer 1~5× 缩放（双击 2.5× 回弹、捏合），缩放下禁用下拉/翻页；
+/// · 缩放/平移手势仲裁（本文件核心，见下方说明）：
+///   - 双指捏合缩放 1~5×，连续可调；双击缩放（1×↔2.5×）保留；
+///   - 缩放态（scale>1）单指拖动 = 平移局部，跟手，不被翻页/下拉抢走；
+///   - 回到 1× 后横滑翻页与下拉关闭自动恢复；
 /// · 下拉跟手关闭：位移跟手、背景渐暗；过阈值关闭且 **HeroMode 禁用**
 ///   （下拉关闭不触发返回转场，避免打架）；未过阈值弹回；
 /// · 计数 n/N、caption/date、相邻图预加载；
 /// · 下载走顶部通知（chatToastProvider / ChatToastHost），无底部 SnackBar。
+///
+/// ── 手势仲裁口径（最终版，返修定版）──
+/// 冲突双方：外层下拉关闭（竖向拖拽 GestureDetector）、PageView（横滑翻页）、
+/// 内层 InteractiveViewer（捏合缩放 + 单指平移）。
+/// 关键：**_scale 是真实状态**，由 onInteractionEnd 在手势结束时结算
+/// （读 TransformationController 最终值，不中途频繁 setState，避免重建抖动/
+/// 丢手势），双击与翻页也同步结算。据此驱动三处：
+///   1) InteractiveViewer.panEnabled = 缩放态(active&&_zoomed)——只有放大后才允许
+///      单指平移，1× 时关掉，横滑交给 PageView；
+///   2) PageView.physics = 缩放态或手势进行中 → NeverScrollable，否则 PageScroll；
+///   3) 外层下拉拖拽识别器 = 缩放态或手势进行中 → 不挂载(null)，让 InteractiveViewer
+///      完整接管手势（否则竖向拖拽会与平移打架）。
+/// 这样：1× 时横滑翻页、竖滑下拉、双击放大都正常；放大后单指平移跟手、双指继续
+/// 调倍、横滑/下拉被锁；捏合回 1× 后翻页/下拉恢复。
 library;
 
 import 'dart:io';
@@ -46,6 +63,14 @@ class _AlbumViewerPageState extends ConsumerState<AlbumViewerPage> {
   bool _dragDismiss = false; // 下拉关闭中：禁用 Hero，避免与返回转场打架
   bool _saving = false;
 
+  /// 缩放手势进行中（onInteractionStart→true，onInteractionEnd→false）。
+  /// 用于手势期间锁住 PageView 横滑与下拉关闭，避免翻页/下拉抢手势。
+  bool _interacting = false;
+
+  /// 当前缩放倍率（真实状态）：onInteractionEnd 结算 / 双击 / 翻页 同步。
+  /// 驱动 panEnabled、PageView 物理、下拉识别器三处仲裁。
+  double _scale = 1.0;
+
   static const double _dismissThreshold = 110.0;
   static const double _maxScale = 5.0;
 
@@ -53,7 +78,8 @@ class _AlbumViewerPageState extends ConsumerState<AlbumViewerPage> {
   Map<String, String>? get _headers =>
       ref.watch(mediaCookieHeadersProvider).valueOrNull;
 
-  bool get _zoomed => _zoom.value.getMaxScaleOnAxis() > 1.01;
+  /// 缩放态：放大超过 1× 即视为「已放大」，解锁单指平移、锁住翻页与下拉。
+  bool get _zoomed => _scale > 1.01;
 
   PhotoItem get _current => widget.photos[_index];
 
@@ -92,25 +118,44 @@ class _AlbumViewerPageState extends ConsumerState<AlbumViewerPage> {
     setState(() {
       _index = i;
       _zoom.value = Matrix4.identity(); // 翻页复位缩放
+      _scale = 1.0;
+      _interacting = false;
     });
     // 翻页即通知网格预滚动：pop 时 Hero 落回「当前查看那张」而非最初点开那张
     ref.read(albumViewerIndexProvider.notifier).state = i;
     _preloadNeighbors();
   }
 
-  /// 双击：未缩放 → 2.5×（围绕视口中心）；已缩放 → 复位 1×
+  /// 缩放/平移手势开始：锁住翻页与下拉（期间 PageView 不可翻、下拉不可触发）。
+  void _onScaleStart() => setState(() => _interacting = true);
+
+  /// 缩放/平移手势结束：结算最终倍率（读 controller 值），据此切换 panEnabled
+  /// 与翻页/下拉仲裁。**只在手势结束时 setState 一次**，避免手势进行中频繁重建
+  /// 导致 InteractiveViewer 丢手势/抖动。
+  void _onScaleEnd() => setState(() {
+        _scale = _zoom.value.getMaxScaleOnAxis();
+        _interacting = false;
+      });
+
+  /// 双击：未缩放 → 2.5×（围绕视口中心）；已缩放 → 复位 1×。同步 _scale 仲裁。
   void _onDoubleTap() {
     final size = MediaQuery.sizeOf(context);
     setState(() {
-      _zoom.value = _zoomed
-          ? Matrix4.identity()
-          : Matrix4.fromList(zoomMatrixAroundCenter(2.5, size.width, size.height));
+      if (_zoomed) {
+        _zoom.value = Matrix4.identity();
+        _scale = 1.0;
+      } else {
+        _zoom.value = Matrix4.fromList(
+            zoomMatrixAroundCenter(2.5, size.width, size.height));
+        _scale = 2.5;
+      }
+      _interacting = false;
     });
   }
 
-  /// 下拉跟手：仅未缩放时启用；位移跟手 + 背景渐暗
+  /// 下拉跟手：仅未缩放且非手势进行中时启用；位移跟手 + 背景渐暗
   void _onDragUpdate(DragUpdateDetails d) {
-    if (_zoomed) return;
+    if (_zoomed || _interacting) return;
     setState(() {
       _dragging = true;
       _dragDy = (_dragDy + d.delta.dy).clamp(0.0, double.infinity);
@@ -181,6 +226,8 @@ class _AlbumViewerPageState extends ConsumerState<AlbumViewerPage> {
     // 下拉过程中禁用 Hero 参与：返回时由 HeroMode 统一控制，
     // 下拉关闭走禁用态（不飞回），按钮/手势返回走启用态（飞回当前缩略图）
     final heroEnabled = !_dragDismiss;
+    // 缩放态或手势进行中：PageView 锁翻页、下拉拖拽识别器不挂载（让 InteractiveViewer 接管）
+    final gestureLocked = _zoomed || _interacting;
     return Scaffold(
       backgroundColor: Colors.black.withValues(alpha: 1 - dragProgress),
       body: Stack(children: [
@@ -189,9 +236,10 @@ class _AlbumViewerPageState extends ConsumerState<AlbumViewerPage> {
           child: Transform.translate(
             offset: Offset(0, _dragDy),
             child: GestureDetector(
-              onVerticalDragUpdate: _onDragUpdate,
-              onVerticalDragEnd: _onDragEnd,
-              onVerticalDragCancel: _onDragCancel,
+              // 缩放/手势进行中：不挂载下拉识别器，避免与 InteractiveViewer 平移打架
+              onVerticalDragUpdate: gestureLocked ? null : _onDragUpdate,
+              onVerticalDragEnd: gestureLocked ? null : _onDragEnd,
+              onVerticalDragCancel: gestureLocked ? null : _onDragCancel,
               onDoubleTap: _onDoubleTap,
               behavior: HitTestBehavior.opaque,
               child: HeroMode(
@@ -199,8 +247,8 @@ class _AlbumViewerPageState extends ConsumerState<AlbumViewerPage> {
                 child: PageView.builder(
                   controller: _page,
                   itemCount: widget.photos.length,
-                  // 缩放中禁用横滑翻页：拖拽归 InteractiveViewer 平移
-                  physics: _zoomed
+                  // 缩放/手势进行中锁翻页；否则正常横滑翻页
+                  physics: gestureLocked
                       ? const NeverScrollableScrollPhysics()
                       : const PageScrollPhysics(),
                   onPageChanged: _onPageChanged,
@@ -213,6 +261,9 @@ class _AlbumViewerPageState extends ConsumerState<AlbumViewerPage> {
                     active: i == _index,
                     heroEnabled: heroEnabled,
                     maxScale: _maxScale,
+                    zoomed: i == _index && _zoomed,
+                    onScaleStart: _onScaleStart,
+                    onScaleEnd: _onScaleEnd,
                   ),
                 ),
               ),
@@ -282,6 +333,8 @@ class _AlbumViewerPageState extends ConsumerState<AlbumViewerPage> {
 
 /// 单页大图：仅当前页挂 Hero（tag 跟随当前照片 → 翻页后返回落点正确），
 /// 相邻页只做预渲染不带 Hero，避免重复 tag 导致转场 abort。
+/// 缩放/平移手势仲裁：panEnabled 仅在「当前页且缩放态」开启（1× 关闭，横滑交
+/// 给 PageView）；onInteractionStart/End 在手势边界结算 _scale（见上层说明）。
 class _PhotoPage extends StatelessWidget {
   const _PhotoPage({
     super.key,
@@ -292,6 +345,9 @@ class _PhotoPage extends StatelessWidget {
     required this.active,
     required this.heroEnabled,
     required this.maxScale,
+    required this.zoomed,
+    required this.onScaleStart,
+    required this.onScaleEnd,
   });
   final PhotoItem photo;
   final String base;
@@ -300,6 +356,9 @@ class _PhotoPage extends StatelessWidget {
   final bool active;
   final bool heroEnabled;
   final double maxScale;
+  final bool zoomed;
+  final VoidCallback onScaleStart;
+  final VoidCallback onScaleEnd;
 
   @override
   Widget build(BuildContext context) {
@@ -320,7 +379,11 @@ class _PhotoPage extends StatelessWidget {
       transformationController: active ? zoom : null,
       minScale: 1,
       maxScale: maxScale,
-      panEnabled: false, // 缩放态由双击/捏合控制；横滑翻页不误触
+      scaleEnabled: true,
+      // 仅当前页 + 缩放态允许单指平移；1× 时关闭，横滑翻页交给 PageView
+      panEnabled: active && zoomed,
+      onInteractionStart: active ? (_) => onScaleStart() : null,
+      onInteractionEnd: active ? (_) => onScaleEnd() : null,
       child: Center(
         child: active
             ? HeroMode(
