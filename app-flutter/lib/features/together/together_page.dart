@@ -1,7 +1,7 @@
-/// 「我们」页 hub（条目 6 · 段 A）：
-/// heading + 纪念日只读展示卡（最近纪念日倒计时，点击切回首页 tab——
-/// 决策点①定案：管理页归首页入口，B 段建页）+ 本段已落地工具卡
-/// （心情手记 / 悄悄留言 / 共同愿望），后续段页面落地后逐段增补卡，
+/// 「我们」页 hub（条目 6 · 段 A/B）：
+/// heading + 纪念日只读展示卡（最近纪念日倒计时，段 B 起点击直达管理页——
+/// 决策点①定案：管理页归首页入口 + 本卡双入口）+ 已落地工具卡
+/// （共同年历 / 心情手记 / 悄悄留言 / 共同愿望），后续段页面落地后逐段增补卡，
 /// 🔴 不预放死卡。数据与工具页共用 togetherControllerProvider（一次全量）。
 /// SSE other 且 tab 激活 → reset 重拉；顶部通知由全局 ChatToastHost 承载。
 library;
@@ -15,10 +15,8 @@ import '../../core/together/together_data.dart';
 import 'together_controller.dart';
 
 class TogetherPage extends ConsumerStatefulWidget {
-  const TogetherPage({super.key, required this.active, this.onGoHome});
+  const TogetherPage({super.key, required this.active});
   final bool active; // 当前 tab 是否为「我们」（SSE other 只在激活时重拉）
-  /// 纪念日展示卡点击 → 切回首页 tab（决策点①：倒计时归首页，卡只读）
-  final VoidCallback? onGoHome;
 
   @override
   ConsumerState<TogetherPage> createState() => _TogetherPageState();
@@ -58,11 +56,17 @@ class _TogetherPageState extends ConsumerState<TogetherPage> {
                   style: theme.textTheme.bodySmall
                       ?.copyWith(color: theme.colorScheme.outline)),
               const SizedBox(height: 16),
-              _AnniversaryCard(ann: ann, onGoHome: widget.onGoHome),
+              _AnniversaryCard(ann: ann),
               const SizedBox(height: 12),
               _toolCard(
                 context,
-                icon: Icons.mood_rounded,
+                emoji: '🗓️',
+                title: '共同年历',
+                desc: '重要的日子，一眼看清',
+                route: '/together/calendar',
+              ),
+              _toolCard(
+                context,
                 emoji: '🌤',
                 title: '心情手记',
                 desc: '晴天雨天，都想陪着你',
@@ -70,7 +74,6 @@ class _TogetherPageState extends ConsumerState<TogetherPage> {
               ),
               _toolCard(
                 context,
-                icon: Icons.mail_outline_rounded,
                 emoji: '💌',
                 title: '悄悄留言',
                 desc: '有些喜欢，值得慢慢读',
@@ -78,7 +81,6 @@ class _TogetherPageState extends ConsumerState<TogetherPage> {
               ),
               _toolCard(
                 context,
-                icon: Icons.auto_awesome_rounded,
                 emoji: '✨',
                 title: '共同愿望',
                 desc: '把一起想做的事，一件件实现',
@@ -99,8 +101,7 @@ class _TogetherPageState extends ConsumerState<TogetherPage> {
 
   /// 工具入口卡（仅本段已落地页面；后续段随页面落地逐段增补，不预放死卡）
   Widget _toolCard(BuildContext context,
-      {required IconData icon,
-      required String emoji,
+      {required String emoji,
       required String title,
       required String desc,
       required String route}) {
@@ -134,13 +135,12 @@ class _TogetherPageState extends ConsumerState<TogetherPage> {
   }
 }
 
-/// 纪念日只读展示卡（决策点①）：最近纪念日倒计时（口径逐字对齐首页/Web
-/// nextAnniversary：annual=true 按年推进 + 02-29 回退；days<0 跳过）。
-/// 点击切回首页 tab；空态提示去首页添加（管理页 B 段建）。
+/// 纪念日只读展示卡（决策点①）：最近纪念日倒计时（口径=首页/管理页共用
+/// together_data 唯一实现）。段 B 起**点击直达管理页**（/together/anniversary，
+/// 与首页纪念日区同一路由）；空态点击同样进管理页添加。
 class _AnniversaryCard extends StatelessWidget {
-  const _AnniversaryCard({required this.ann, this.onGoHome});
+  const _AnniversaryCard({required this.ann});
   final NextAnniversary? ann;
-  final VoidCallback? onGoHome;
 
   @override
   Widget build(BuildContext context) {
@@ -151,7 +151,7 @@ class _AnniversaryCard extends StatelessWidget {
       margin: EdgeInsets.zero,
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
-        onTap: onGoHome,
+        onTap: () => context.push('/together/anniversary'),
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: a == null
@@ -167,7 +167,7 @@ class _AnniversaryCard extends StatelessWidget {
                       padding: const EdgeInsets.only(bottom: 4),
                       child: Text(
                         '天后 · ${(a.record.body['title'] ?? '纪念日')}\n'
-                        '${a.due} · 点此回首页查看全部',
+                        '${a.due} · 点此管理纪念日',
                         softWrap: true,
                         style: theme.textTheme.bodySmall
                             ?.copyWith(color: cs.outline),

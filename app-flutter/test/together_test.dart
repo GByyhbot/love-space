@@ -14,6 +14,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:love_space/core/api/api_client.dart' as api;
 import 'package:love_space/core/chat/chat_media.dart'
     show chatBaseProvider, mediaCookieHeadersProvider;
@@ -289,8 +290,8 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    testWidgets('hub：纪念日展示卡显示倒计时，点击回调 onGoHome（决策点①）', (tester) async {
-      var goHomeFired = false;
+    testWidgets('hub：纪念日展示卡点击直达管理页（段 B 接线）+ 年历卡就位',
+        (tester) async {
       final adapter = _FakeAdapter((options, i) {
         return _json([
           _toolRecord('a1', 'anniversary', body: {
@@ -301,18 +302,43 @@ void main() {
       });
       final container = widgetSetup(adapter);
       addTearDown(container.dispose);
-      await pumpPage(tester, container,
-          page: TogetherPage(active: true, onGoHome: () => goHomeFired = true));
+      final router = GoRouter(initialLocation: '/home', routes: [
+        GoRoute(
+            path: '/home',
+            builder: (_, _) => UncontrolledProviderScope(
+                container: container,
+                child: const TogetherPage(active: true))),
+        GoRoute(
+            path: '/together/anniversary',
+            builder: (_, _) => const Scaffold(body: Text('纪念日管理页'))),
+        GoRoute(
+            path: '/together/calendar',
+            builder: (_, _) => const Scaffold(body: Text('年历页'))),
+      ]);
+      addTearDown(router.dispose);
+      await tester.pumpWidget(UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp.router(routerConfig: router),
+      ));
+      await tester.pumpAndSettle();
 
       expect(find.textContaining('领证纪念日'), findsOneWidget,
           reason: '纪念日卡展示标题（嵌在天数旁文案里）');
       expect(find.text('10'), findsOneWidget, reason: '倒计时天数');
+      expect(find.text('共同年历'), findsOneWidget, reason: '段 B 新卡就位（无死卡纪律）');
       expect(find.text('心情手记'), findsOneWidget);
       expect(find.text('共同愿望'), findsOneWidget);
 
+      // 纪念日展示卡点击 → 直达管理页（决策点①段 B 接线）
       await tester.tap(find.textContaining('领证纪念日'));
-      await tester.pump();
-      expect(goHomeFired, isTrue, reason: '纪念日卡点击切回首页 tab');
+      await tester.pumpAndSettle();
+      expect(find.text('纪念日管理页'), findsOneWidget);
+
+      // 返回路径：返回键/手势回 hub（主页在路由栈）
+      router.pop();
+      await tester.pumpAndSettle();
+      expect(find.textContaining('领证纪念日'), findsOneWidget,
+          reason: '返回后回到 hub');
     });
 
     testWidgets('mood 表单：取消不误写；提交 POST kind=mood', (tester) async {

@@ -50,8 +50,8 @@ class _ShellPageState extends ConsumerState<ShellPage> {
       HomePage(onGoTab: (tab) => setState(() => _tab = tab)),
       TimelinePage(active: _tab == 1),
       AlbumPage(active: _tab == 2),
-      // 条目 6 段 A：hub 宫格（纪念日展示卡点击切回首页 tab）
-      TogetherPage(active: _tab == 3, onGoHome: () => setState(() => _tab = 0)),
+      // 条目 6 段 B：hub 宫格（纪念日展示卡直达管理页 /together/anniversary）
+      TogetherPage(active: _tab == 3),
     ];
     return Scaffold(
       appBar: AppBar(

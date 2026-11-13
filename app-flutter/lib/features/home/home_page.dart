@@ -13,6 +13,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/sse/sse_client.dart';
+import '../../core/together/together_data.dart' show anniversaryDue;
 import '../auth/auth_state.dart';
 import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
 
@@ -311,31 +312,18 @@ class _TodayCard extends ConsumerWidget {
   final List<Record> list;
   final void Function(int tab)? onGoTab;
 
-  /// 最近纪念日（逐字对齐 Web nextAnniversary：annual=true 按年推进 + 02-29 回退；
-  /// lunar 按原样日期近似——与 Web 现状一致；一次性按 date）。
-  /// 🔴 返回推算后的 due/days：展示不得用原始 date 重算，否则过去的
-  /// 一次性纪念日会显示负数天数（2026-11-11 真机抓到 -97 天）。
+  /// 最近纪念日（🔴 段 B 起委托 together_data.anniversaryDue 唯一实现——
+  /// 首页/hub 展示卡/纪念日管理页三处数字必须永远一致，不再各写一套；
+  /// 口径不变：annual=true 按年推进 + 02-29 回退；lunar 按原样近似；
+  /// days<0 跳过（2026-11-11 真机抓到 -97 天的教训已锁进纯函数）。
   _Ann? nextAnniversary() {
-    final today = todayStr();
+    final t = todayStr();
     _Ann? best;
     for (final r in list) {
       if (r.kind != 'anniversary') continue;
-      final raw = (r.body['date'] ?? '').toString();
-      if (raw.length < 10) continue;
-      var date = raw;
-      if (r.body['annual'] == true) {
-        final year = int.parse(today.substring(0, 4));
-        date = '$year${raw.substring(4)}';
-        if (date.endsWith('02-29') && DateTime(year, 3, 1).month != 2) date = '$year-02-28';
-        if (date.compareTo(today) < 0) {
-          final next = year + 1;
-          date = '$next${raw.substring(4)}';
-          if (date.endsWith('02-29') && DateTime(next, 3, 1).month != 2) date = '$next-02-28';
-        }
-      }
-      final days = daysBetween(today, date);
-      if (days < 0) continue;
-      if (best == null || days < best.days) best = _Ann(r, date, days);
+      final d = anniversaryDue(r.body, t);
+      if (d == null) continue;
+      if (best == null || d.days < best.days) best = _Ann(r, d.due, d.days);
     }
     return best;
   }
@@ -359,10 +347,10 @@ class _TodayCard extends ConsumerWidget {
           const Divider(height: 24),
           Text('📅 最近纪念日', style: theme.textTheme.titleSmall),
           const SizedBox(height: 8),
-          // 整区可点 → 「我们」页的纪念日（条目 6 未建前先到 tab 占位页）
+          // 整区可点 → 纪念日管理页（段 B 二级页；决策点①定案的直达接线）
           InkWell(
             borderRadius: BorderRadius.circular(10),
-            onTap: () => onGoTab?.call(3),
+            onTap: () => context.push('/together/anniversary'),
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 4),
               child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -380,7 +368,7 @@ class _TodayCard extends ConsumerWidget {
                   Icon(Icons.chevron_right, color: theme.colorScheme.outline),
                 ])
               else
-                Text('留一个日子，给仪式感 · 点此去「我们」页添加纪念日。',
+                Text('留一个日子，给仪式感 · 点此添加纪念日。',
                     style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.outline)),
               ]),
             ),

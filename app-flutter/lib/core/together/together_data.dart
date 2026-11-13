@@ -136,35 +136,116 @@ class NextAnniversary {
   final int days;
 }
 
-/// 最近纪念日（逐字对齐 Web nextAnniversary 与首页 home_page 同款口径）：
+/// 单条纪念日推算（**全 App 唯一实现**）：
+/// 首页倒计时区 / 「我们」hub 展示卡 / 纪念日管理页列表三处共用本函数，
+/// 数字必须永远一致——不许在任何页面再写第二套推算。
 /// · annual=true：按年推进（今年已过 → 明年），02-29 回退 02-28；
-/// · annual='lunar'：按原样日期近似（与 Web/首页现状一致）；
+/// · annual='lunar'：按原样日期近似（与 Web/首页现状一致，服务端年历另有
+///   lunardate 精确换算，客户端列表只做近似展示）；
 /// · 其它（一次性/无 annual）：按原始 date；
-/// · days<0 一律跳过（过去的纪念日不倒计时）；取 days 最小者。
+/// · days<0（已过去且不循环）→ null（不倒计时）。
+class AnniversaryDue {
+  const AnniversaryDue(this.due, this.days);
+  final String due;
+  final int days;
+}
+
+AnniversaryDue? anniversaryDue(Map<String, dynamic> body, String today) {
+  final raw = (body['date'] ?? '').toString();
+  if (raw.length < 10) return null;
+  var date = raw;
+  if (body['annual'] == true) {
+    final year = int.parse(today.substring(0, 4));
+    date = '$year${raw.substring(4)}';
+    // 闰年判定（Web 口径 new Date(year,1,29).getMonth()!==1 的 Dart 对应）：
+    // 非闰年 DateTime(year,2,29) 会滚到 3 月 → month!=2 → 回退 02-28；
+    // 闰年保留 02-29。（🔴 旧首页实现误写 DateTime(year,3,1).month!=2 ——
+    // 恒为真导致闰年也被回退，段 B 契约核实中修正，随三处共用自然修复）
+    if (date.endsWith('02-29') && DateTime(year, 2, 29).month != 2) {
+      date = '$year-02-28';
+    }
+    if (date.compareTo(today) < 0) {
+      final next = year + 1;
+      date = '$next${raw.substring(4)}';
+      if (date.endsWith('02-29') && DateTime(next, 2, 29).month != 2) {
+        date = '$next-02-28';
+      }
+    }
+  }
+  final days = daysBetweenDates(today, date);
+  if (days < 0) return null;
+  return AnniversaryDue(date, days);
+}
+
+/// 最近纪念日：对全部 anniversary 记录逐条 [anniversaryDue]，取 days 最小者。
 NextAnniversary? nextAnniversary(List<TogetherRecord> records, String today) {
   NextAnniversary? best;
   for (final r in records) {
     if (r.kind != 'anniversary') continue;
-    final raw = (r.body['date'] ?? '').toString();
-    if (raw.length < 10) continue;
-    var date = raw;
-    if (r.body['annual'] == true) {
-      final year = int.parse(today.substring(0, 4));
-      date = '$year${raw.substring(4)}';
-      if (date.endsWith('02-29') && DateTime(year, 3, 1).month != 2) {
-        date = '$year-02-28';
-      }
-      if (date.compareTo(today) < 0) {
-        final next = year + 1;
-        date = '$next${raw.substring(4)}';
-        if (date.endsWith('02-29') && DateTime(next, 3, 1).month != 2) {
-          date = '$next-02-28';
-        }
-      }
+    final d = anniversaryDue(r.body, today);
+    if (d == null) continue;
+    if (best == null || d.days < best.days) {
+      best = NextAnniversary(r, d.due, d.days);
     }
-    final days = daysBetweenDates(today, date);
-    if (days < 0) continue;
-    if (best == null || days < best.days) best = NextAnniversary(r, date, days);
   }
   return best;
+}
+
+// ── 段 B · 共同年历（/api/calendar，main.py:2341 实读）──────────────
+// 返回 {month:'yyyy-MM', days:{'dd': {anniversaries/posts: [{id,title}],
+// moods: [{author,emoji}], checks: [{author}]}}}；纪念日含服务端 lunardate
+// 换算，mood 无 id（仅作者+表情），年历整体只读浏览。
+
+/// 年历某天的条目
+class CalendarDay {
+  const CalendarDay({
+    this.anniversaries = const [],
+    this.posts = const [],
+    this.moods = const [],
+    this.checks = const [],
+  });
+  final List<Map<String, String>> anniversaries; // {id,title}
+  final List<Map<String, String>> posts; // {id,title}
+  final List<Map<String, String>> moods; // {author,emoji}
+  final List<Map<String, String>> checks; // {author}
+
+  bool get hasEvents =>
+      anniversaries.isNotEmpty || posts.isNotEmpty ||
+      moods.isNotEmpty || checks.isNotEmpty;
+}
+
+/// 年历整月数据：days 键为两位日期字符串 '01'..'31'
+class CalendarMonth {
+  const CalendarMonth({required this.month, required this.days});
+  final String month;
+  final Map<String, CalendarDay> days;
+}
+
+/// 解析 /api/calendar 响应（畸形条目容错跳过，绝不抛异常）
+CalendarMonth parseCalendarMonth(Object? data) {
+  if (data is! Map) return CalendarMonth(month: '', days: const {});
+  final month = (data['month'] ?? '').toString();
+  final rawDays = (data['days'] ?? {}) as Map;
+  final days = <String, CalendarDay>{};
+  rawDays.forEach((k, v) {
+    if (v is! Map) return;
+    List<Map<String, String>> pick(String key, List<String> fields) {
+      final list = (v[key] ?? []) as List?;
+      if (list == null) return const [];
+      return [
+        for (final e in list)
+          if (e is Map)
+            {
+              for (final f in fields) f: (e[f] ?? '').toString(),
+            },
+      ];
+    }
+    days[k.toString()] = CalendarDay(
+      anniversaries: pick('anniversaries', ['id', 'title']),
+      posts: pick('posts', ['id', 'title']),
+      moods: pick('moods', ['author', 'emoji']),
+      checks: pick('checks', ['author']),
+    );
+  });
+  return CalendarMonth(month: month, days: days);
 }
