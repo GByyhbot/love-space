@@ -35,8 +35,10 @@ void _pumpState(ProviderContainer container, RecordIntent intent) {
 }
 
 void main() {
-  testWidgets('语音遮罩三态 golden（send/cancel/toText）', (tester) async {
-    await _loadChineseFont();
+  testWidgets(
+    '语音遮罩三态 golden（send/cancel/toText）',
+    (tester) async {
+      await _loadChineseFont();
     tester.view.physicalSize = const Size(393, 873);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
@@ -73,5 +75,11 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
     await expectLater(find.byType(VoiceRecordOverlay),
         matchesGoldenFile('goldens/voice_totext.png'));
-  });
+  },
+  // golden 基准 PNG 在 Windows（微软雅黑 msyh.ttc 注册为 Roboto 族）下生成与
+  // 比对；非 Windows 平台（CI Linux runner）没有该字体文件，加载直接
+  // PathNotFoundException，且即使跳过字体渲染结果也不同、比对必挂——
+  // 故仅在 Windows 本地跑（flutter-ci 红灯根因之一，2026-11-13）。
+  skip: !Platform.isWindows,
+  );
 }
