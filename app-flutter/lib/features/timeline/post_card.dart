@@ -15,8 +15,10 @@ import '../../core/chat/chat_media.dart';
 import '../auth/auth_state.dart';
 import '../../core/chat/chat_models.dart';
 import '../../core/timeline/timeline_data.dart';
+import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
 import '../chat/media_bubble_widgets.dart' show MediaImageView, VideoCardView, VoiceChipView;
 import 'comment_sheet.dart';
+import 'composer_sheet.dart';
 import 'image_viewer.dart';
 import 'timeline_controller.dart';
 
@@ -71,6 +73,9 @@ class PostCard extends ConsumerWidget {
                       ?.copyWith(color: theme.colorScheme.outline)),
             ]),
           ),
+          // C1 本人卡片「⋯」菜单：编辑 / 删除（非本人不出现）
+          if (isOwnPost(record.author, me.user.id))
+            _OwnMenu(record: record, me: me),
         ]),
         if (title.isNotEmpty)
           Padding(
@@ -216,6 +221,74 @@ class PostCard extends ConsumerWidget {
     return card;
   }
 
+}
+
+/// C1 本人卡片「⋯」菜单：编辑 / 删除。
+/// PopupMenuButton 点外部或系统返回键即可关闭（菜单可关验收项）；
+/// 删除必须经确认弹层，不许一点即删。
+class _OwnMenu extends ConsumerWidget {
+  const _OwnMenu({required this.record, required this.me});
+  final Record record;
+  final MeData me;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return PopupMenuButton<String>(
+      tooltip: '更多',
+      icon: const Icon(Icons.more_horiz_rounded, size: 20),
+      padding: EdgeInsets.zero,
+      onSelected: (v) async {
+        if (v == 'edit') {
+          await showComposerSheet(context, editRecord: record);
+        } else if (v == 'delete') {
+          await _confirmDelete(context, ref);
+        }
+      },
+      itemBuilder: (_) => const [
+        PopupMenuItem(
+            value: 'edit',
+            child: Row(children: [
+              Icon(Icons.edit_rounded, size: 18),
+              SizedBox(width: 10),
+              Text('编辑'),
+            ])),
+        PopupMenuItem(
+            value: 'delete',
+            child: Row(children: [
+              Icon(Icons.delete_outline_rounded, size: 18),
+              SizedBox(width: 10),
+              Text('删除'),
+            ])),
+      ],
+    );
+  }
+
+  Future<void> _confirmDelete(BuildContext context, WidgetRef ref) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('删除这一刻？'),
+        content: const Text('删除后会进入回收站，30 天内可以恢复。'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('取消')),
+          FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('删除')),
+        ],
+      ),
+    );
+    if (ok != true) return; // 误删防护：确认弹层可取消
+    final err = await ref
+        .read(timelineControllerProvider.notifier)
+        .deleteRecord(record.id);
+    ref.read(chatToastProvider.notifier).show(
+        err ?? '已删除（30 天内可在回收站恢复）',
+        tone: err == null
+            ? ChatToastTone.success
+            : ChatToastTone.error);
+  }
 }
 
 /// 内联评论行：仅本人评论显示删除入口；删前弹确认弹层（可取消）。

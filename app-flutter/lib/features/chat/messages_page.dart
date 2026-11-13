@@ -22,7 +22,7 @@ import '../../core/chat/chat_time.dart';
 import '../../core/chat/chat_wallpaper.dart';
 import '../../core/sse/sse_client.dart';
 import '../auth/auth_state.dart';
-import '../home/home_page.dart' show todayStr;
+import '../timeline/composer_sheet.dart' show showComposerSheet;
 import 'bubble_skin_sheet.dart';
 import 'chat_compose.dart';
 import 'chat_toast.dart';
@@ -199,37 +199,15 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
     }
   }
 
-  /// 记入时光（主人定版=最小发布弹窗）：预填消息文本可编辑 + 沿用媒体
+  /// C4 记入时光（主人定版=正式 composer）：段三最小发布弹窗已替换——
+  /// 打开与时光页共用的 ComposerSheet（post 态），预填原消息文本并带入
+  /// 原消息媒体 id，发布走同一套本地暂存 + client_id 幂等 + 顶部通知逻辑。
   Future<void> _sendToMoment(ChatRecord record) async {
-    final ctrl = TextEditingController(text: record.body.content);
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('记入时光'),
-        content: TextField(
-          controller: ctrl,
-          maxLines: 4,
-          maxLength: 2000,
-          decoration: const InputDecoration(
-              hintText: '这一刻想说点什么（可编辑）', counterText: ''),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('发布')),
-        ],
-      ),
+    await showComposerSheet(
+      context,
+      initialContent: record.body.content,
+      initialMediaIds: record.body.mediaIds,
     );
-    if (ok != true) return;
-    try {
-      await ref.read(chatControllerProvider.notifier).sendToMoment(
-            ctrl.text.trim(),
-            todayStr(),
-            record.body.mediaIds,
-          );
-      _snack('这一刻，已经好好收藏');
-    } catch (e) {
-      _snack(errorDetail(e), tone: ChatToastTone.error);
-    }
   }
 
   /// 撤回确认（对齐 Web confirmAction：'撤回这条悄悄话？'/'撤回后双方都不会再看到这条消息。'）

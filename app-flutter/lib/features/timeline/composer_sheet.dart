@@ -22,14 +22,27 @@ import '../chat/voice_recorder.dart';
 import 'composer_store.dart';
 import 'timeline_controller.dart';
 
-/// 打开 composer 弹层（FAB 与页头「记录此刻」共用入口）
-Future<void> showComposerSheet(BuildContext context) {
+/// 打开 composer 弹层（页头「记录此刻」/ FAB / 聊天「记入时光」/ 编辑共用）。
+/// · [editRecord] 非空 = 编辑态（C2）：预填原记录，PUT 全量 body（原始 body
+///   为底只覆盖改动字段），不走暂存、不显示存草稿。
+/// · [initialContent] / [initialMediaIds] = 聊天「记入时光」预填（C4）：
+///   post 态，与时光页发布共用暂存/client_id 幂等一套逻辑。
+Future<void> showComposerSheet(
+  BuildContext context, {
+  Record? editRecord,
+  String? initialContent,
+  List<String>? initialMediaIds,
+}) {
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
     shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
-    builder: (_) => const ComposerSheet(),
+    builder: (_) => ComposerSheet(
+      editRecord: editRecord,
+      initialContent: initialContent,
+      initialMediaIds: initialMediaIds,
+    ),
   );
 }
 
@@ -49,7 +62,20 @@ class AlbumChoice {
 }
 
 class ComposerSheet extends ConsumerStatefulWidget {
-  const ComposerSheet({super.key});
+  const ComposerSheet({
+    super.key,
+    this.editRecord,
+    this.initialContent,
+    this.initialMediaIds,
+  });
+  final Record? editRecord;
+  final String? initialContent;
+  final List<String>? initialMediaIds;
+
+  bool get isEdit => editRecord != null;
+  bool get hasPrefill =>
+      (initialContent != null && initialContent!.isNotEmpty) ||
+      (initialMediaIds != null && initialMediaIds!.isNotEmpty);
 
   @override
   ConsumerState<ComposerSheet> createState() => _ComposerSheetState();
@@ -63,6 +89,11 @@ class _ComposerSheetState extends ConsumerState<ComposerSheet> {
   bool _submitting = false;
   bool _draftSaving = false;
   String? _error;
+
+  // C2 编辑回填铁律：服务器拉到的原始 body，只作为 put 的底逐键复制。
+  // _editInitial 是预填时的字段快照，用于判定「用户实际改动了哪些字段」。
+  Map<String, dynamic> _originalBody = const {};
+  Map<String, dynamic> _editInitial = const {};
 
   // 相册分类
   String? _album; // 选中相册 id；null=暂不分类
@@ -86,11 +117,57 @@ class _ComposerSheetState extends ConsumerState<ComposerSheet> {
   @override
   void initState() {
     super.initState();
-    _loadStore();
+    if (widget.isEdit) {
+      _initFromEditRecord(widget.editRecord!);
+    } else if (widget.hasPrefill) {
+      // 聊天「记入时光」预填：跳过暂存恢复（避免把上一次草稿混进来），
+      // 但之后仍走同一套自动暂存 + client_id 幂等发布逻辑
+      _content.text = widget.initialContent ?? '';
+      for (final id in widget.initialMediaIds ?? const <String>[]) {
+        _media.add(ComposerMedia(
+            localFile: ChatLocalFile(path: '', name: 'media:$id'))
+          ..uploadedId = id);
+      }
+    } else {
+      _loadStore();
+    }
     Future.microtask(_fetchAlbums);
-    // 监听字段变化，自动暂存
+    // 监听字段变化，自动暂存（编辑态不写暂存，避免污染草稿文件）
     _title.addListener(_onFieldChanged);
     _content.addListener(_onFieldChanged);
+  }
+
+  /// C2 编辑预填：从服务器拉到的原始 body 逐键回填（保留未知字段作为提交底），
+  /// 媒体 id 直接作为已上传项，album 原样回填，「暂不分类」=空。
+  void _initFromEditRecord(Record r) {
+    _originalBody = Map<String, dynamic>.from(r.body);
+    _title.text = (r.body['title'] ?? '').toString();
+    _content.text = (r.body['content'] ?? '').toString();
+    final dateStr = (r.body['date'] ?? '').toString();
+    _date = DateTime.tryParse(dateStr) ?? DateTime.now();
+    _album = (r.body['album'] ?? '').toString().isEmpty
+        ? null
+        : r.body['album'].toString();
+    final mids = (r.body['media'] as List?) ?? const [];
+    for (final mid in mids) {
+      final id = mid.toString();
+      if (id.isEmpty) continue;
+      _media.add(ComposerMedia(
+          localFile: ChatLocalFile(path: '', name: 'media:$id'))
+        ..uploadedId = id);
+    }
+    // 预填快照：只记录客户端建模的五个字段，作为「是否改动」的基准；
+    // 原始 body 里的其它键（未知字段）一律不进快照、提交时也不碰。
+    _editInitial = {
+      'title': _title.text,
+      'content': _content.text,
+      'date': _fmtDate(_date),
+      'media': (r.body['media'] as List?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          <String>[],
+      'album': _album ?? '',
+    };
   }
 
   @override
@@ -143,6 +220,7 @@ class _ComposerSheetState extends ConsumerState<ComposerSheet> {
   }
 
   void _persistStore() {
+    if (widget.isEdit) return; // C2 编辑不走暂存（草稿文件属新建/记入时光）
     final store = ComposerStore(
       title: _title.text,
       content: _content.text,
@@ -409,6 +487,10 @@ class _ComposerSheetState extends ConsumerState<ComposerSheet> {
     setState(() { _submitting = true; _error = null; });
     try {
       final ids = await _uploadLocals();
+      if (widget.isEdit) {
+        await _submitEdit(title, content, ids);
+        return;
+      }
       final err = await ref.read(timelineControllerProvider.notifier).publish(
             content: content,
             date: _fmtDate(_date),
@@ -438,6 +520,45 @@ class _ComposerSheetState extends ConsumerState<ComposerSheet> {
       });
       _toast(msg, tone: ChatToastTone.error);
     }
+  }
+
+  /// C2 编辑提交：只把「用户实际改动」的字段放进 changes，交给控制器
+  /// 以服务器原始 body 为底合并后 PUT；客户端不认识/不建模的字段（含
+  /// permitted 集内未知字段）一律不碰，由原始 body 原样带回。
+  Future<void> _submitEdit(String title, String content, List<String> ids) async {
+    final changes = <String, dynamic>{};
+    // 只覆盖「用户实际改动」的字段：与预填快照逐一比对，未改动的不进
+    // changes，由控制器用原始 body 逐键复制时原样带回（含未知字段）。
+    if (_title.text.trim() != _editInitial['title']) {
+      changes['title'] = title;
+    }
+    if (content != _editInitial['content']) changes['content'] = content;
+    final dateStr = _fmtDate(_date);
+    if (dateStr != _editInitial['date']) changes['date'] = dateStr;
+    final initialMedia =
+        (_editInitial['media'] as List?)?.cast<String>() ?? <String>[];
+    if (!_sameList(initialMedia, ids)) changes['media'] = ids;
+    final newAlbum = _album ?? '';
+    if (newAlbum != _editInitial['album']) changes['album'] = newAlbum;
+
+    final err = await ref.read(timelineControllerProvider.notifier).editRecord(
+        widget.editRecord!.id, changes,
+        originalBody: _originalBody);
+    if (err != null) {
+      setState(() { _error = err; _submitting = false; });
+      _toast(err, tone: ChatToastTone.error);
+      return;
+    }
+    _toast('已保存修改', tone: ChatToastTone.success);
+    if (mounted) Navigator.of(context).pop();
+  }
+
+  bool _sameList(List<String> a, List<String> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
   }
 
   // ── 保存草稿 ───────────────────────────────────────────────
@@ -491,8 +612,11 @@ class _ComposerSheetState extends ConsumerState<ComposerSheet> {
           // 顶部通知宿主（复用聊天撤回提示同一套组件/位置/样式；空态 0 高不占位）
           const ChatToastHost(),
           Row(children: [
-            Expanded(child: Text('记录此刻', style: theme.textTheme.titleMedium)),
+            Expanded(child: Text(
+                widget.isEdit ? '编辑这一刻' : '记录此刻',
+                style: theme.textTheme.titleMedium)),
             IconButton(
+                tooltip: '关闭',
                 onPressed: () => Navigator.of(context).pop(),
                 icon: const Icon(Icons.close_rounded)),
           ]),
@@ -627,22 +751,23 @@ class _ComposerSheetState extends ConsumerState<ComposerSheet> {
             ),
           const SizedBox(height: 10),
           Row(children: [
-            // 保存草稿（次按钮）
-            OutlinedButton(
-              onPressed: _draftSaving ? null : _saveDraft,
-              child: _draftSaving
-                  ? const SizedBox(width: 16, height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Text('存草稿'),
-            ),
+            // 保存草稿（次按钮；C2 编辑态不走草稿）
+            if (!widget.isEdit)
+              OutlinedButton(
+                onPressed: _draftSaving ? null : _saveDraft,
+                child: _draftSaving
+                    ? const SizedBox(width: 16, height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Text('存草稿'),
+              ),
             const Spacer(),
-            // 发布（主按钮）
+            // 发布 / 保存修改（主按钮）
             FilledButton(
               onPressed: _submitting ? null : _submit,
               child: _submitting
                   ? const SizedBox(width: 18, height: 18,
                       child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                  : const Text('发布'),
+                  : Text(widget.isEdit ? '保存修改' : '发布'),
             ),
           ]),
         ]),

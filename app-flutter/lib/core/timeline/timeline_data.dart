@@ -125,6 +125,23 @@ List<Map<String, dynamic>> mergeCommentsByCid(
 bool canDeleteComment(Map<String, dynamic> comment, String myId) =>
     comment['author']?.toString() == myId;
 
+// ── 段二 C · 编辑 / 删除纯函数（可单测）────────────────────────
+
+/// C2 回填铁律：编辑提交的 body **必须以服务器拉到的原始 body 为底**，
+/// 逐键复制（含客户端不建模的字段、permitted 集内的未知字段），
+/// 只覆盖用户实际改动的字段（changes 里出现哪些键就改哪些）。
+/// 服务端 clean_body 只留 permitted 字段不是丢字段的借口——permitted
+/// 集内的未知字段同样要由这里原样带回。绝不允许按字段表拼装新 body。
+Map<String, dynamic> buildEditBody(
+    Map<String, dynamic> original, Map<String, dynamic> changes) {
+  final body = <String, dynamic>{...original}; // 深拷贝顶层：未知字段全部存活
+  body.addAll(changes); // 只覆盖用户实际改动的字段
+  return body;
+}
+
+/// C1 「⋯」菜单显隐：仅本人记录（服务端 editable 亦按 author 校验）
+bool isOwnPost(String author, String myId) => author == myId;
+
 // ── 时光卡片媒体网格宽度（Web static/style.css:602-609）────────────────
 // `.media-grid{grid-template-columns:repeat(3,1fr);gap:8px}`、
 // `.media-grid.single{grid-template-columns:1fr}`、

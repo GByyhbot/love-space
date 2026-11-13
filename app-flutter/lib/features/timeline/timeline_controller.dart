@@ -298,6 +298,91 @@ class TimelineController extends Notifier<TimelineState> {
     }
   }
 
+  // ── 段二 C · 编辑 / 删除（本卡原地更新 / 回填铁律）──────────────
+
+  /// C2 编辑：PUT /api/records/{rid} {kind, body}。
+  /// [changes] 只含用户实际改动的字段；服务端 clean_body 只留 permitted
+  /// 字段，故 body 必须以本卡从服务器拉到的原始 body 为底逐键复制后覆盖，
+  /// 客户端不建模的字段（含 permitted 集内未知字段）一律原样带回。
+  /// 成功后用服务端返回的完整记录本卡原地替换（不整列表重建）。
+  Future<String?> editRecord(String rid, Map<String, dynamic> changes,
+      {Map<String, dynamic>? originalBody}) async {
+    if (_disposed) return null;
+    final idx = state.posts.indexWhere((r) => r.id == rid);
+    if (idx < 0 && originalBody == null) return null;
+    // 以「服务器拉到的原始 body」为底：优先用 composer 打开时持有的那份
+    // （避免编辑期间 SSE 重拉把 state 里的 body 换掉），否则用当前卡的。
+    final base = originalBody ?? state.posts[idx].body;
+    final body = buildEditBody(base, changes); // 回填铁律
+    try {
+      final dio = await ref.read(api.dioProvider.future);
+      final r = await dio.put('/api/records/$rid', data: {
+        'kind': idx >= 0 ? state.posts[idx].kind : 'post',
+        'body': body,
+      });
+      if ((r.statusCode ?? 500) >= 400) {
+        final data = r.data;
+        if (data is Map && data['detail'] != null) {
+          return data['detail'].toString();
+        }
+        return '保存失败，请重试';
+      }
+      // 服务端返回 serialize 后的完整记录 → 只替换本卡（其余引用不变）
+      if (r.data is Map) {
+        final updated = api.Record.fromJson(
+            (r.data as Map).cast<String, dynamic>());
+        _patchWholeRecord(rid, updated);
+      }
+      return null; // 成功
+    } catch (e) {
+      return api.errorDetail(e);
+    }
+  }
+
+  /// 用服务端返回的完整 Record 本卡原地替换（保留 B 段本地乐观态）：
+  /// likes 用服务端值（编辑不动点赞），comments 按 cid 去重合并本地即时插入。
+  void _patchWholeRecord(String rid, api.Record updated) {
+    if (_disposed) return;
+    final idx = state.posts.indexWhere((r) => r.id == rid);
+    if (idx < 0) return;
+    final locals = _localComments.values
+        .where((c) => c['record_id']?.toString() == rid)
+        .toList();
+    final merged = locals.isEmpty
+        ? updated.comments
+        : mergeCommentsByCid(updated.comments, locals);
+    final next = List<api.Record>.of(state.posts);
+    next[idx] = _rebuildRecord(updated, comments: merged);
+    state = state.copyWith(posts: next);
+    // 服务端已回显的本地评论兜底清除
+    final serverCids = {for (final c in updated.comments) c['id']?.toString()};
+    _localComments.removeWhere((cid, _) => serverCids.contains(cid));
+  }
+
+  /// C3 删除：确认弹层由 UI 承担 → DELETE /api/records/{rid}（软删，
+  /// 进作者回收站 30 天可恢复；回收站 UI 归条目 7 本段不做）。
+  /// 成功后本卡原地移除（沿用 B 段 _patchRecord 机制，不整列表重建）。
+  Future<String?> deleteRecord(String rid) async {
+    if (_disposed) return null;
+    try {
+      final dio = await ref.read(api.dioProvider.future);
+      final r = await dio.delete('/api/records/$rid');
+      if ((r.statusCode ?? 500) >= 400) {
+        final data = r.data;
+        if (data is Map && data['detail'] != null) {
+          return data['detail'].toString();
+        }
+        return '删除失败，请重试';
+      }
+      // 本卡原地移除：其余元素引用不变、顺序不变、游标不变
+      final next = state.posts.where((r) => r.id != rid).toList();
+      state = state.copyWith(posts: next);
+      return null; // 成功
+    } catch (e) {
+      return api.errorDetail(e);
+    }
+  }
+
   /// 发布（composer 完整态）：POST /api/records {kind:'post', body, client_id}。
   /// client_id 幂等复用：失败保留同一 id 重试，成功清空。
   /// [album] 为相册 id（空/不传=不分类）；服务端校验相册存在。
