@@ -1,11 +1,13 @@
-/// Composer 基础态（条目 4 · 段一，决策 4 定版：页头按钮+FAB 双入口即接）：
-/// 标题（≤200 可选）/内容（≤20000）/日期（原生 showDatePicker）/媒体上传
-/// （图视频多选+音频文件，≤30、进度、可前移/移除——复用段二聊天上传链路：
-/// 白名单/250MB 预检/顺序上传/限流策略）；发布=POST /api/records {kind:'post',
-/// body, client_id}（client_id 幂等复用，成功清空表单+reset 列表+toast）。
-/// 草稿/录音/相册分类/本地暂存恢复归段二。
+/// Composer 完整态（条目 4 · 段二 · A 段）：
+/// 发布（标题/内容/日期/媒体，client_id 幂等）+ 保存草稿（kind:'draft'，成功
+/// 明确 toast）+ 表单本地暂存（字段+media+client_id 持久化，关弹层不丢、杀进程
+/// 重开恢复，未传完媒体提示重选）+ 录音 tile（record 插件）+ 相册分类 chips
+/// （kind:'album'，「暂不分类」=空 album 字段）。
+/// 媒体上传复用聊天链路（白名单/250MB 预检/顺序上传/限流策略）。
+/// 发布成功清空暂存；保存草稿成功保留工作态（草稿已落服务端，内容不丢）。
 library;
 
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -15,6 +17,8 @@ import 'package:image_picker/image_picker.dart';
 import '../../core/api/api_client.dart';
 import '../../core/chat/chat_media.dart';
 import '../../core/chat/chat_models.dart' show ChatLocalFile;
+import '../../features/chat/voice_recorder.dart';
+import 'composer_store.dart';
 import 'timeline_controller.dart';
 
 /// 打开 composer 弹层（FAB 与页头「记录此刻」共用入口）
@@ -36,6 +40,13 @@ class ComposerMedia {
   double progress = 0; // 0..1（上传中）
 }
 
+/// 相册分类项（kind:'album' 记录）
+class AlbumChoice {
+  const AlbumChoice({required this.id, required this.title});
+  final String id;
+  final String title;
+}
+
 class ComposerSheet extends ConsumerStatefulWidget {
   const ComposerSheet({super.key});
 
@@ -49,14 +60,51 @@ class _ComposerSheetState extends ConsumerState<ComposerSheet> {
   DateTime _date = DateTime.now();
   final _media = <ComposerMedia>[];
   bool _submitting = false;
+  bool _draftSaving = false;
   String? _error;
+
+  // 相册分类
+  String? _album; // 选中相册 id；null=暂不分类
+  List<AlbumChoice> _albums = const [];
+  bool _albumsLoading = false;
+
+  // 本地暂存
+  String? _postClientId;
+  String? _draftClientId;
+  bool _pendingMediaNotice = false; // 恢复出未传完媒体
+
+  // 录音
+  final VoiceRecorder _rec = VoiceRecorder();
+  bool _recording = false;
+  Duration _recElapsed = Duration.zero;
+  Timer? _recTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadStore();
+    Future.microtask(_fetchAlbums);
+    // 监听字段变化，自动暂存
+    _title.addListener(_onFieldChanged);
+    _content.addListener(_onFieldChanged);
+  }
 
   @override
   void dispose() {
+    _title.removeListener(_onFieldChanged);
+    _content.removeListener(_onFieldChanged);
     _title.dispose();
     _content.dispose();
+    _recTimer?.cancel();
+    _recTimer = null;
+    if (_recording) {
+      _rec.cancel().catchError((_) {});
+    }
+    _rec.dispose();
     super.dispose();
   }
+
+  void _onFieldChanged() => _persistStore();
 
   void _snack(String msg) {
     if (mounted) {
@@ -64,29 +112,105 @@ class _ComposerSheetState extends ConsumerState<ComposerSheet> {
     }
   }
 
+  // ── 本地暂存 ───────────────────────────────────────────────
+
+  Future<void> _loadStore() async {
+    final store = await readComposerStore();
+    if (store == null || store.isEmpty) return;
+    if (!mounted) return;
+    setState(() {
+      _title.text = store.title;
+      _content.text = store.content;
+      if (store.date.isNotEmpty) {
+        _date = DateTime.tryParse(store.date) ?? DateTime.now();
+      }
+      _album = store.album;
+      _postClientId = store.postClientId;
+      _draftClientId = store.draftClientId;
+      for (final m in store.media) {
+        _media.add(ComposerMedia(
+            localFile: ChatLocalFile(path: m.path, name: m.name))
+          ..uploadedId = m.uploadedId);
+      }
+      // 未传完媒体（无 uploadedId）：提示重选
+      _pendingMediaNotice = store.media.any((m) => m.uploadedId == null);
+    });
+  }
+
+  void _persistStore() {
+    final store = ComposerStore(
+      title: _title.text,
+      content: _content.text,
+      date: _fmtDate(_date),
+      album: _album,
+      postClientId: _postClientId,
+      draftClientId: _draftClientId,
+      media: _media
+          .map((m) => StoredMedia(
+              path: m.localFile.path,
+              name: m.localFile.name,
+              uploadedId: m.uploadedId))
+          .toList(),
+    );
+    writeComposerStore(store);
+  }
+
+  // ── 相册分类 ───────────────────────────────────────────────
+
+  Future<void> _fetchAlbums() async {
+    try {
+      final dio = await ref.read(dioProvider.future);
+      final r = await dio.get('/api/records',
+          queryParameters: {'kind': 'album', 'limit': 200});
+      if (!mounted) return;
+      final list = <AlbumChoice>[];
+      if (r.data is List) {
+        for (final e in r.data) {
+          if (e is Map) {
+            final body = (e['body'] ?? {}) as Map;
+            final id = (e['id'] ?? '').toString();
+            final title = (body['title'] ?? '').toString();
+            if (id.isNotEmpty) list.add(AlbumChoice(id: id, title: title));
+          }
+        }
+      }
+      setState(() { _albums = list; _albumsLoading = false; });
+    } catch (_) {
+      if (mounted) setState(() { _albumsLoading = false; });
+    }
+  }
+
+  void _selectAlbum(String? id) {
+    setState(() => _album = id);
+    _persistStore();
+  }
+
+  // ── 日期 ───────────────────────────────────────────────────
+
   Future<void> _pickDate() async {
     final d = await showDatePicker(
         context: context,
         initialDate: _date,
         firstDate: DateTime(2000),
         lastDate: DateTime.now().add(const Duration(days: 365)));
-    if (d != null) setState(() => _date = d);
+    if (d != null) {
+      setState(() => _date = d);
+      _persistStore();
+    }
   }
 
-  /// 图片/视频多选（对齐 Web composer 的 file input image/*,video/* multiple）
+  // ── 媒体选择 ───────────────────────────────────────────────
+
   Future<void> _pickImageVideo() async {
     final picked = await ImagePicker().pickMultiImage();
     if (picked.isEmpty) {
-      // 纯视频多选不支持 → 单选视频兜底
       final v = await ImagePicker().pickVideo(source: ImageSource.gallery);
-      if (v != null) _addMedia([v]);
+      if (v != null) await _addMedia([v]);
       return;
     }
     await _addMedia(picked);
   }
 
-  /// 音频文件（走媒体库半屏选择：与聊天「从相册选」同款策略；服务器音频
-  /// 已有 id 直接引用，不重复上传）
   Future<void> _pickFromLibrary() async {
     try {
       final dio = await ref.read(dioProvider.future);
@@ -116,6 +240,7 @@ class _ComposerSheetState extends ConsumerState<ComposerSheet> {
         setState(() => _media.add(ComposerMedia(
             localFile: ChatLocalFile(path: '', name: 'media:$picked'))
           ..uploadedId = picked));
+        _persistStore();
       }
     } catch (e) {
       _snack(errorDetail(e));
@@ -141,20 +266,86 @@ class _ComposerSheetState extends ConsumerState<ComposerSheet> {
         }
       });
     }
+    _persistStore();
   }
 
-  /// 前移（对齐 Web 媒体排序：把这一条往前挪一位）
   void _moveUp(int i) {
     if (i <= 0) return;
     setState(() {
       final m = _media.removeAt(i);
       _media.insert(i - 1, m);
     });
+    _persistStore();
   }
 
-  void _remove(int i) => setState(() => _media.removeAt(i));
+  void _remove(int i) {
+    setState(() => _media.removeAt(i));
+    _persistStore();
+  }
 
-  /// 发布：顺序上传（进度可见）→ POST 记录（client_id 幂等复用）
+  // ── 录音 tile ───────────────────────────────────────────────
+
+  Future<void> _toggleRecord() async {
+    if (_recording) {
+      final f = await _rec.stop();
+      _recTimer?.cancel();
+      _recTimer = null;
+      setState(() { _recording = false; _recElapsed = Duration.zero; });
+      await _rec.recycle();
+      if (f != null) {
+        setState(() => _media.add(ComposerMedia(
+            localFile: ChatLocalFile(path: f.path, name: f.name))));
+        _persistStore();
+      }
+      return;
+    }
+    // record 5.x：hasPermission() 首次调用即在 Android 触发系统授权弹窗，
+    // 无独立 requestPermission API；返回 false 视为已拒绝
+    if (!await _rec.hasPermission()) {
+      _snack('没有录音权限，请到系统设置里给 App 开启麦克风权限');
+      return;
+    }
+    try {
+      await _rec.start();
+      _recTimer?.cancel();
+      var ticks = 0;
+      _recTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+        ticks += 1;
+        if (mounted) setState(() => _recElapsed = Duration(seconds: ticks));
+      });
+      setState(() { _recording = true; _recElapsed = Duration.zero; });
+    } catch (e) {
+      _recTimer?.cancel();
+      _recTimer = null;
+      _snack(errorDetail(e));
+    }
+  }
+
+  // ── 上传本机文件 → ids ─────────────────────────────────────
+
+  Future<List<String>> _uploadLocals() async {
+    final ids = <String>[];
+    for (final m in _media) {
+      if (m.uploadedId != null) {
+        ids.add(m.uploadedId!);
+        continue;
+      }
+      final bytes = await File(m.localFile.path).readAsBytes();
+      final dio = await ref.read(dioProvider.future);
+      final id = await uploadChatMedia(dio, m.localFile.name, bytes,
+          onProgress: (p) {
+        if (!mounted) return;
+        setState(() => m.progress = p);
+      });
+      m.uploadedId = id;
+      ids.add(id);
+      if (mounted) setState(() {});
+    }
+    return ids;
+  }
+
+  // ── 发布 ───────────────────────────────────────────────────
+
   Future<void> _submit() async {
     if (_submitting) return;
     final content = _content.text.trim();
@@ -165,36 +356,20 @@ class _ComposerSheetState extends ConsumerState<ComposerSheet> {
     }
     setState(() { _submitting = true; _error = null; });
     try {
-      // ① 顺序上传本机文件（进度逐条可见；媒体库引用项已带 id 跳过）
-      final ids = <String>[];
-      for (final m in _media) {
-        if (m.uploadedId != null) {
-          ids.add(m.uploadedId!);
-          continue;
-        }
-        final bytes = await File(m.localFile.path).readAsBytes();
-        final dio = await ref.read(dioProvider.future);
-        final id = await uploadChatMedia(dio, m.localFile.name, bytes,
-            onProgress: (p) {
-          if (!mounted) return;
-          setState(() => m.progress = p);
-        });
-        m.uploadedId = id;
-        ids.add(id);
-        if (mounted) setState(() {});
-      }
-      // ② 发布（client_id 幂等复用：失败保留 id 重试不重复建记录）
+      final ids = await _uploadLocals();
       final err = await ref.read(timelineControllerProvider.notifier).publish(
             content: content,
             date: _fmtDate(_date),
             mediaIds: ids,
             title: title.isEmpty ? null : title,
+            album: _album,
+            clientId: _postClientId,
           );
       if (err != null) {
         setState(() { _error = err; _submitting = false; });
         return;
       }
-      // ③ 成功：清空表单 + reset 列表 + toast
+      await clearComposerStore();
       await ref.read(timelineControllerProvider.notifier).resetAfterPublish();
       if (mounted) {
         Navigator.of(context).pop();
@@ -205,6 +380,41 @@ class _ComposerSheetState extends ConsumerState<ComposerSheet> {
       setState(() {
         _error = e is MediaValidationError ? e.message : errorDetail(e);
         _submitting = false;
+      });
+    }
+  }
+
+  // ── 保存草稿 ───────────────────────────────────────────────
+
+  Future<void> _saveDraft() async {
+    if (_draftSaving) return;
+    // 草稿允许空内容（仅存结构），但至少给一个可辨识的占位，避免空草稿
+    final content = _content.text.trim();
+    setState(() { _draftSaving = true; _error = null; });
+    try {
+      final ids = await _uploadLocals();
+      final err = await ref.read(timelineControllerProvider.notifier).saveDraft(
+            content: content.isEmpty ? '（草稿）' : content,
+            date: _fmtDate(_date),
+            mediaIds: ids,
+            title: _title.text.trim().isEmpty ? null : _title.text.trim(),
+            album: _album,
+            clientId: _draftClientId,
+          );
+      if (err != null) {
+        setState(() { _error = err; _draftSaving = false; });
+        return;
+      }
+      // 成功：明确提示，绝不让用户以为按钮没反应
+      setState(() { _draftSaving = false; });
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('草稿已保存')));
+      }
+    } catch (e) {
+      setState(() {
+        _error = e is MediaValidationError ? e.message : errorDetail(e);
+        _draftSaving = false;
       });
     }
   }
@@ -228,6 +438,19 @@ class _ComposerSheetState extends ConsumerState<ComposerSheet> {
                 onPressed: () => Navigator.of(context).pop(),
                 icon: const Icon(Icons.close_rounded)),
           ]),
+          if (_pendingMediaNotice)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.tertiaryContainer.withValues(alpha: 0.6),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text('有未上传完成的媒体，请重新选择或移除',
+                    style: theme.textTheme.bodySmall),
+              ),
+            ),
           TextField(
             controller: _title,
             maxLength: 200,
@@ -244,6 +467,7 @@ class _ComposerSheetState extends ConsumerState<ComposerSheet> {
                 labelText: '这一刻想说的话', counterText: '', alignLabelWithHint: true),
           ),
           const SizedBox(height: 8),
+          // 日期 + 媒体入口
           Row(children: [
             Icon(Icons.event_rounded, size: 18, color: theme.colorScheme.primary),
             const SizedBox(width: 8),
@@ -265,6 +489,57 @@ class _ComposerSheetState extends ConsumerState<ComposerSheet> {
               label: const Text('音频'),
             ),
           ]),
+          // 录音 tile
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Row(children: [
+              Icon(Icons.mic_rounded, size: 18, color: theme.colorScheme.primary),
+              const SizedBox(width: 8),
+              Text('录音', style: theme.textTheme.bodyMedium),
+              const Spacer(),
+              TextButton.icon(
+                onPressed: _recording ? null : _toggleRecord,
+                icon: Icon(_recording ? Icons.stop_rounded : Icons.mic_rounded,
+                    size: 18,
+                    color: _recording
+                        ? theme.colorScheme.error
+                        : theme.colorScheme.primary),
+                label: Text(_recording
+                    ? _fmtDuration(_recElapsed)
+                    : '开始录音'),
+              ),
+              if (_recording)
+                IconButton(
+                  tooltip: '取消',
+                  visualDensity: VisualDensity.compact,
+                  onPressed: () async {
+                    await _rec.cancel();
+                    await _rec.recycle();
+                    setState(() { _recording = false; _recElapsed = Duration.zero; });
+                  },
+                  icon: const Icon(Icons.cancel_rounded, size: 18),
+                ),
+            ]),
+          ),
+          // 相册分类 chips
+          if (_albums.isNotEmpty || _albumsLoading)
+            Padding(
+              padding: const EdgeInsets.only(top: 8, bottom: 4),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('相册分类', style: theme.textTheme.bodyMedium),
+                const SizedBox(height: 6),
+                Wrap(spacing: 6, runSpacing: 6, children: [
+                  _albumChip(theme, '暂不分类', _album == null, () => _selectAlbum(null)),
+                  for (final a in _albums)
+                    _albumChip(theme, a.title, _album == a.id, () => _selectAlbum(a.id)),
+                ]),
+                if (_albumsLoading)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 4),
+                    child: Text('加载相册中…', style: TextStyle(color: Colors.grey)),
+                  ),
+              ]),
+            ),
           if (_media.isNotEmpty)
             ..._buildMediaList(theme),
           if (_error != null)
@@ -275,17 +550,57 @@ class _ComposerSheetState extends ConsumerState<ComposerSheet> {
                       ?.copyWith(color: theme.colorScheme.error)),
             ),
           const SizedBox(height: 10),
-          FilledButton(
-            onPressed: _submitting ? null : _submit,
-            child: _submitting
-                ? const SizedBox(width: 18, height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                : const Text('发布'),
-          ),
+          Row(children: [
+            // 保存草稿（次按钮）
+            OutlinedButton(
+              onPressed: _draftSaving ? null : _saveDraft,
+              child: _draftSaving
+                  ? const SizedBox(width: 16, height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Text('存草稿'),
+            ),
+            const Spacer(),
+            // 发布（主按钮）
+            FilledButton(
+              onPressed: _submitting ? null : _submit,
+              child: _submitting
+                  ? const SizedBox(width: 18, height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  : const Text('发布'),
+            ),
+          ]),
         ]),
       ),
     );
   }
+
+  Widget _albumChip(ThemeData theme, String label, bool selected, VoidCallback onTap) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(999),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: selected
+              ? theme.colorScheme.primaryContainer
+              : theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(
+              color: selected
+                  ? theme.colorScheme.primary
+                  : theme.colorScheme.outlineVariant),
+        ),
+        child: Text(label,
+            style: theme.textTheme.labelSmall?.copyWith(
+                color: selected
+                    ? theme.colorScheme.onPrimaryContainer
+                    : theme.colorScheme.outline)),
+      ),
+    );
+  }
+
+  String _fmtDuration(Duration d) =>
+    '${d.inMinutes.toString().padLeft(2, '0')}:${d.inSeconds.remainder(60).toString().padLeft(2, '0')}';
 
   List<Widget> _buildMediaList(ThemeData theme) {
     return [

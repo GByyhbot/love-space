@@ -58,6 +58,10 @@ class TimelineController extends Notifier<TimelineState> {
   /// 持久化暂存归段二）
   String? _activePostClientId;
 
+  /// 草稿保存幂等：与发布独立，成功清空（改内容再存走新 id 新建草稿，
+  /// 避免同 client_id 返回旧草稿不更新）
+  String? _activeDraftClientId;
+
   @override
   TimelineState build() {
     ref.onDispose(() => _disposed = true);
@@ -138,28 +142,33 @@ class TimelineController extends Notifier<TimelineState> {
     if (_loaded) await load(reset: true);
   }
 
-  /// 发布（composer 基础态）：POST /api/records {kind:'post', body, client_id}。
+  /// 发布（composer 完整态）：POST /api/records {kind:'post', body, client_id}。
   /// client_id 幂等复用：失败保留同一 id 重试，成功清空。
+  /// [album] 为相册 id（空/不传=不分类）；服务端校验相册存在。
   /// 返回 null=成功；否则为错误文案。
   Future<String?> publish({
     required String content,
     required String date,
     required List<String> mediaIds,
     String? title,
+    String? album,
+    String? clientId,
   }) async {
-    final clientId = _activePostClientId ??= newChatClientId();
+    final cid = clientId ?? _activePostClientId ?? newChatClientId();
+    _activePostClientId = cid; // 会话态同步（失败重试复用）
     final body = <String, dynamic>{
       'content': content,
       'date': date,
       'media': mediaIds,
       if (title != null && title.isNotEmpty) 'title': title,
+      if (album != null && album.isNotEmpty) 'album': album,
     };
     try {
       final dio = await ref.read(api.dioProvider.future);
       final r = await dio.post('/api/records', data: {
         'kind': 'post',
         'body': body,
-        'client_id': clientId,
+        'client_id': cid,
       });
       if ((r.statusCode ?? 500) >= 400) {
         final data = r.data;
@@ -167,6 +176,47 @@ class TimelineController extends Notifier<TimelineState> {
         return '发布失败，请重试';
       }
       _activePostClientId = null; // 成功清空（下次发布新 id）
+      return null;
+    } catch (e) {
+      return api.errorDetail(e);
+    }
+  }
+
+  /// 保存草稿（composer 完整态）：POST /api/records {kind:'draft', body, client_id}。
+  /// draft 属 PRIVATE（published=null，非作者不可见），body 字段与 post 同构。
+  /// client_id 幂等复用：失败保留同一 id 重试；成功清空（改内容再存走新 id 新建，
+  /// 避免同 client_id 命中旧草稿不更新）。
+  /// [album] 为相册 id（空/不传=不分类）。返回 null=成功；否则为错误文案。
+  Future<String?> saveDraft({
+    required String content,
+    required String date,
+    required List<String> mediaIds,
+    String? title,
+    String? album,
+    String? clientId,
+  }) async {
+    final cid = clientId ?? _activeDraftClientId ?? newChatClientId();
+    _activeDraftClientId = cid; // 会话态同步（失败重试复用）
+    final body = <String, dynamic>{
+      'content': content,
+      'date': date,
+      'media': mediaIds,
+      if (title != null && title.isNotEmpty) 'title': title,
+      if (album != null && album.isNotEmpty) 'album': album,
+    };
+    try {
+      final dio = await ref.read(api.dioProvider.future);
+      final r = await dio.post('/api/records', data: {
+        'kind': 'draft',
+        'body': body,
+        'client_id': cid,
+      });
+      if ((r.statusCode ?? 500) >= 400) {
+        final data = r.data;
+        if (data is Map && data['detail'] != null) return data['detail'].toString();
+        return '草稿保存失败，请重试';
+      }
+      _activeDraftClientId = null; // 成功清空（下次保存新 id）
       return null;
     } catch (e) {
       return api.errorDetail(e);
