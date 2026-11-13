@@ -86,6 +86,20 @@ class _TogetherPageState extends ConsumerState<TogetherPage> {
                 desc: '把一起想做的事，一件件实现',
                 route: '/together/wish',
               ),
+              _toolCard(
+                context,
+                emoji: '💭',
+                title: '情侣问答',
+                desc: '每天再多了解彼此一点',
+                route: '/together/question',
+              ),
+              _toolCard(
+                context,
+                emoji: '🌱',
+                title: '共同打卡',
+                desc: '和你一起，成为更好的我们',
+                route: '/together/habit',
+              ),
               if (st.error != null) ...[
                 const SizedBox(height: 12),
                 Text(st.error!,

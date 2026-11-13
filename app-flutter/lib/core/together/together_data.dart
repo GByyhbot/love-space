@@ -14,7 +14,7 @@
 ///   一次性/已过（days<0）跳过，取 days 最小者为「最近纪念日」。
 library;
 
-/// 「我们」页一条工具记录（mood/note/wish/anniversary…）。
+/// 「我们」页一条工具记录（mood/note/wish/anniversary/question/habit…）。
 /// body 保留原始 Map：编辑回填铁律需要原始 body 逐键复制。
 class TogetherRecord {
   const TogetherRecord({
@@ -23,6 +23,9 @@ class TogetherRecord {
     required this.body,
     required this.author,
     this.created = 0,
+    this.answers = const [],
+    this.answerCount = 0,
+    this.checks = const [],
   });
 
   final String id;
@@ -31,14 +34,39 @@ class TogetherRecord {
   final String author;
   final double created; // 服务端 created 时间戳（秒），列表排序用
 
+  /// question 附属答案（serializers.py:39-41：**内容按人过滤**——双方都答了
+  /// 才互相可见，未齐时只含自己的）；{record_id, author, content}
+  final List<Map<String, String>> answers;
+
+  /// question 答案总数（**不过滤、双方可见**，serializers.py:41——
+  /// UI 用它判断「双方都到齐」揭晓态）
+  final int answerCount;
+
+  /// habit 打卡（serializers.py:44，day 倒序）；{record_id, author, day}
+  final List<Map<String, String>> checks;
+
   factory TogetherRecord.fromJson(Map<String, dynamic> j) {
     final rawBody = (j['body'] ?? {}) as Map;
+    List<Map<String, String>> strMaps(Object? list) {
+      if (list is! List) return const [];
+      return [
+        for (final e in list)
+          if (e is Map)
+            {
+              for (final k in ['record_id', 'author', 'content', 'day'])
+                if (e[k] != null) k: e[k].toString(),
+            },
+      ];
+    }
     return TogetherRecord(
       id: (j['id'] ?? '').toString(),
       kind: (j['kind'] ?? '').toString(),
       body: Map<String, dynamic>.from(rawBody.cast<String, dynamic>()),
       author: (j['author'] ?? '').toString(),
       created: (j['created'] as num?)?.toDouble() ?? 0,
+      answers: strMaps(j['answers']),
+      answerCount: (j['answer_count'] as num?)?.toInt() ?? 0,
+      checks: strMaps(j['checks']),
     );
   }
 
@@ -115,6 +143,38 @@ const moodOptions = <String, String>{
 
 /// wish 分类选项（逐字对齐 Web recordForm wish 分支，app.js:1845）
 const wishCategories = ['日常', '旅行', '美食', '约会', '其他'];
+
+/// 情侣问答内置题库（逐字对齐 Web QUESTION_BANK，app.js:1249-1252，四组 40 条）
+const questionBank = <String, List<String>>{
+  '回忆': [
+    '第一次心动，是哪个瞬间？', '如果可以重温一天，你会选哪天？',
+    '你记得我说过最温柔的话是哪句？', '我们第一次见面，你心里在想什么？',
+    '你最想封存的一个我们共同的瞬间是？', '我做过最让你感动的事是什么？',
+    '你记得我们第一次吵架是为什么吗？', '有没有一个瞬间，你觉得"就是TA了"？',
+    '我们之间最默契的一次不用说话的经历是？', '你最想回到我们关系的哪个阶段？',
+  ],
+  '默契': [
+    '什么样的陪伴让你最有安全感？', '你觉得我们最像的地方是什么？',
+    '如果用一个词形容我们的关系，会是什么？', '你觉得我最懂你的时候是什么时候？',
+    '我们之间最不需要解释就能懂的事是什么？', '你觉得我们在一起后，彼此最大的变化是？',
+    '你最欣赏我性格里的哪一点？', '你觉得我们最互补的地方在哪？',
+    '如果我们的默契值满分是100，现在你打几分？', '你觉得我们最不像情侣的地方是什么？',
+  ],
+  '未来': [
+    '今年最想和我一起完成什么事？', '如果明年我们可以去任何地方，你最想去哪？',
+    '你觉得十年后的我们会是什么样子？', '你最想和我一起学的新技能是？',
+    '如果我们有一个只属于我们的传统，你希望是什么？', '你最想和我一起完成的三个愿望是？',
+    '你觉得我们未来最需要一起面对的挑战是？', '如果时间可以倒流但只能改一件事，你会改什么？',
+    '你最想和我一起过的一个节日是？', '你觉得我们在一起最应该坚持的习惯是？',
+  ],
+  '趣味': [
+    '如果我是一种动物，你觉得我是什么？', '你觉得我喝醉之后最可爱的地方是？',
+    '如果我们要一起拍一部电影，你最想演什么角色？', '你觉得我最像哪种食物？',
+    '如果我们要一起开一家店，你最想开什么？', '你觉得我最应该改掉的一个坏习惯是？',
+    '如果我们要一起学一门乐器，你最想学什么？', '你觉得我最应该在公众场合少做的事是？',
+    '如果我们要一起做一个短视频，你最想拍什么？', '你觉得我最应该尝试的一件新事物是？',
+  ],
+};
 
 /// 今天的 yyyy-MM-dd（本地时区；与 home_page._fmtDate 同口径）
 String todayDateStr() {

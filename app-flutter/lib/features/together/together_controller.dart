@@ -13,8 +13,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api/api_client.dart' as api;
 import '../../core/together/together_data.dart';
 
-/// 段 A 拉取的 kind 集（纪念日只读——管理页 B 段建，hub 展示卡先读）
-const togetherKinds = 'mood,note,wish,anniversary';
+/// 段 A/C 拉取的 kind 集（纪念日只读——管理页 B 段建；问答/打卡段 C）
+const togetherKinds = 'mood,note,wish,anniversary,question,habit';
 
 class TogetherState {
   const TogetherState({
@@ -148,6 +148,40 @@ class TogetherController extends Notifier<TogetherState> {
       final dio = await ref.read(api.dioProvider.future);
       await dio.delete('/api/records/$rid');
       await load();
+      return null;
+    } catch (e) {
+      return api.errorDetail(e);
+    }
+  }
+
+  // ── 段 C · 子资源操作（不走记录 PUT，口径与编辑分开）──────────────
+
+  /// 问答回答：POST /api/records/{rid}/answer {content 1..5000}。
+  /// 服务端 answers PK(record_id,author) + ON CONFLICT DO UPDATE ——
+  /// 每人一条答案、重复提交=覆盖自己的（可修改）。内容可见性由服务端
+  /// 序列化控制（双方都答了才互相可见）。返回 null=成功。
+  Future<String?> answer(String rid, String content) async {
+    if (_disposed) return null;
+    try {
+      final dio = await ref.read(api.dioProvider.future);
+      await dio.post('/api/records/$rid/answer', data: {'content': content});
+      await load(); // 重拉拿最新 answers/answer_count（揭晓态以服务端为准）
+      return null;
+    } catch (e) {
+      return api.errorDetail(e);
+    }
+  }
+
+  /// 打卡：POST /api/records/{rid}/check（无 body）。
+  /// 服务端 checks PK(record_id,author,day) + INSERT OR IGNORE ——
+  /// 同一天重复打卡幂等（不产生脏数据）；day 用服务端 space 时区。
+  /// 返回 null=成功。
+  Future<String?> checkHabit(String rid) async {
+    if (_disposed) return null;
+    try {
+      final dio = await ref.read(api.dioProvider.future);
+      await dio.post('/api/records/$rid/check');
+      await load(); // 重拉拿最新 checks（打卡状态以后端为准，不回弹）
       return null;
     } catch (e) {
       return api.errorDetail(e);
