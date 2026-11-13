@@ -46,3 +46,6 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
+
+# android 子项目构建产物（file_picker compileSdk patch 触发的本地构建）
+android/build/

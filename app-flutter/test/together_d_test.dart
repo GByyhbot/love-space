@@ -9,6 +9,7 @@
    ⑤ 歌单页：搜索→加入歌单（POST kind=music 带 song 字段）、试听走下载优先
       （GET /api/music/stream?u=，无 Range）、hub 三卡就位 */
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
@@ -491,19 +492,27 @@ void main() {
       addTearDown(container.dispose);
       await pumpPage(tester, container);
 
+      // 清缓存：downloadAudioToCache 命中即直接回本地文件、不发请求——
+      // 回归要断言请求本身，必须先删上一轮留下的 song_cache
+      final cacheDir = Directory(
+          '${Directory.systemTemp.path}${Platform.pathSeparator}song_cache');
+      if (cacheDir.existsSync()) cacheDir.deleteSync(recursive: true);
+
       await tester.tap(find.byTooltip('试听'));
       // 有界 pump：试听流程里有 indeterminate spinner（loading 态），不能用
-      // pumpAndSettle（会因动画永不停止而超时）
+      // pumpAndSettle（会因动画永不停止而超时）。总时长须 >3s——
+      // downloadAudioToCache 里 docs-dir 通道 Future 永不完成，等 3s 超时
+      // 回退 systemTemp 后才发下载请求（与 together_e_test 同口径）
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
-      await tester.pump(const Duration(seconds: 1));
+      await tester.pump(const Duration(seconds: 12));
       final dl = adapter.requests
           .firstWhere((r) => r.uri.path == '/api/music/stream');
       expect(dl.queryParameters['u'],
           'https://audio-ssl.itunes.apple.com/a.m4a');
       // 无 Range 头（全量 GET，规避中转线 Range 缺陷）
       expect(dl.headers.containsKey('range'), isFalse);
-      await tester.pump(const Duration(seconds: 1));
+      await tester.pump(const Duration(seconds: 3));
     });
   });
 

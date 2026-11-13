@@ -8,6 +8,8 @@
 ///   （对齐 Web lazyStickerVideos 的 IO 门控语义）。
 library;
 
+import 'dart:async';
+
 import 'dart:math' as math;
 
 import 'package:cached_network_image/cached_network_image.dart';
@@ -16,6 +18,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:video_player/video_player.dart';
 
+import '../../core/api/api_client.dart' as api;
 import '../../core/chat/chat_media.dart';
 import '../../core/chat/chat_models.dart';
 import 'chat_toast.dart' show ChatToastTone, chatToastProvider;
@@ -429,14 +432,21 @@ class _SongCardViewState extends ConsumerState<SongCardView> {
     if (player == null) {
       setState(() => _loading = true);
       try {
-        final base = await ref.read(chatBaseProvider.future);
-        final headers = await ref.read(mediaCookieHeadersProvider.future);
+        // 🔴 下载优先（与语音/歌单/选歌卡同款）：Dio 全量 GET（无 Range）→
+        // 本地缓存 → setFilePath——中转线对原生播放器 Range 请求有缺陷，
+        // setUrl 直拉远程流在该线不可靠。
+        final dio = await ref.read(api.dioProvider.future);
+        final file = hasMid
+            ? await downloadAudioToCache(dio,
+                cacheKey: 'mid_${widget.song.mid}',
+                urlPath: '/media/${widget.song.mid}',
+                query: const {'preview': 'true'})
+            : await downloadAudioToCache(dio,
+                cacheKey: 'src_${widget.song.src.hashCode}',
+                urlPath: '/api/music/stream',
+                query: {'u': widget.song.src});
         player = AudioPlayer();
-        await player.setUrl(
-            hasMid
-                ? mediaUrl(base, widget.song.mid)
-                : musicStreamUrl(base, widget.song.src),
-            headers: headers);
+        await player.setFilePath(file).timeout(const Duration(seconds: 15));
         player.playerStateStream.listen((st) {
           if (mounted) setState(() => _playing = st.playing);
         });
@@ -454,7 +464,8 @@ class _SongCardViewState extends ConsumerState<SongCardView> {
     if (_playing) {
       await player.pause();
     } else {
-      await player.play();
+      // 🔴 不 await：just_audio 的 play() Future 在播完才完成（假失败根因）
+      unawaited(player.play());
     }
   }
 

@@ -7,8 +7,11 @@
 /// 本地预检（不发请求）：格式白名单 + 250MB 上限（MAX_UPLOAD_MB 默认 250）。
 library;
 
+import 'dart:io';
+
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path_provider/path_provider.dart';
 
 import '../api/api_client.dart';
 
@@ -151,3 +154,36 @@ final mediaCookieHeadersProvider = FutureProvider<Map<String, String>>((ref) asy
 
 /// base URL Provider（媒体 URL 拼装用）
 final chatBaseProvider = FutureProvider<String>((ref) => ref.watch(baseProvider.future));
+
+/// 音频「下载优先」缓存（歌单试听 / 聊天选歌卡 / 聊天歌曲卡共用）：
+/// Dio **全量 GET（无 Range）** → 文档目录/song_cache/{cacheKey}.m4a → 本地路径。
+/// 🔴 背景：中转线（iepose）对原生播放器的 Range 流式请求有已知缺陷（语音
+/// 曾栽过），setUrl 直拉远程流在该线不可靠——一律先下载后播本地文件。
+/// 命中缓存直接返回（在线 30s 试听片段约几百 KB，重复试听零下载）。
+Future<String> downloadAudioToCache(
+  Dio dio, {
+  required String cacheKey,
+  required String urlPath,
+  Map<String, String> query = const {},
+}) async {
+  // 插件缺失/挂起兜底（测试环境 FakeAsync 下通道 Future 永不完成，必须
+  // timeout 再回退；真机正常毫秒级返回）
+  final docs = await getApplicationDocumentsDirectory()
+      .timeout(const Duration(seconds: 3))
+      .catchError((_) => Future<Directory>.value(Directory.systemTemp));
+  final dir = Directory('${docs.path}${Platform.pathSeparator}song_cache');
+  if (!dir.existsSync()) dir.createSync(recursive: true);
+  final safeKey = cacheKey.replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_');
+  final file = File('${dir.path}${Platform.pathSeparator}$safeKey.m4a');
+  if (file.existsSync()) return file.path; // 命中缓存
+  final r = await dio.get(urlPath, queryParameters: query,
+      options: Options(responseType: ResponseType.bytes));
+  final code = r.statusCode ?? 0;
+  if (code < 200 || code >= 300) {
+    throw Exception('HTTP $code');
+  }
+  final bytes = (r.data as List?)?.cast<int>() ?? const <int>[];
+  if (bytes.isEmpty) throw Exception('空响应体');
+  await file.writeAsBytes(bytes, flush: true);
+  return file.path;
+}

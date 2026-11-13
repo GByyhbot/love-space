@@ -7,6 +7,8 @@
 /// 搜索框 placeholder「搜歌名或歌手，例如：晚安」；空结果「没搜到，换个关键词试试。」
 library;
 
+import 'dart:async';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
@@ -86,6 +88,7 @@ class _SongSheetState extends ConsumerState<_SongSheet> {
   int _seq = 0;
   AudioPlayer? _previewPlayer;
   int? _previewingIdx;
+  StreamSubscription<PlayerState>? _previewSub; // 播完归位订阅
   // 共同歌单 tab（定版反转补齐：只做选择+发送，歌单管理归条目 6）
   String _tab = 'online';
   List<ChatRecord> _playlist = const [];
@@ -94,6 +97,7 @@ class _SongSheetState extends ConsumerState<_SongSheet> {
   @override
   void dispose() {
     _q.dispose();
+    _previewSub?.cancel();
     _previewPlayer?.dispose();
     super.dispose();
   }
@@ -142,7 +146,11 @@ class _SongSheetState extends ConsumerState<_SongSheet> {
         );
   }
 
-  /// 歌单歌曲试听：mid 走 /media/{mid} preview（带 Cookie）
+  /// 歌单歌曲试听：mid 走 /media/{mid} preview（带 Cookie）。
+  /// 🔴 下载优先（与语音/歌单同款）：downloadAudioToCache 全量 GET（无
+  /// Range）→ 本地 → setFilePath——中转线对原生播放器 Range 请求有缺陷。
+  /// 🔴 play() 不 await（just_audio 的 Future 在播完才完成——2.1.3 真机
+  /// 假失败根因），播完经 playerStateStream 自动归位。
   Future<void> _togglePlaylistPreview(int i, ChatRecord r) async {
     final m = _songMedia(r);
     if (m == null) return;
@@ -151,24 +159,40 @@ class _SongSheetState extends ConsumerState<_SongSheet> {
       if (st.playing) {
         await _previewPlayer!.pause();
       } else {
-        await _previewPlayer!.play();
+        unawaited(_previewPlayer!.play());
       }
       return;
     }
     try {
-      final base = await ref.read(chatBaseProvider.future);
-      final headers = await ref.read(mediaCookieHeadersProvider.future);
+      final dio = await ref.read(dioProvider.future);
+      final file = await downloadAudioToCache(dio,
+          cacheKey: 'mid_${m.id}',
+          urlPath: '/media/${m.id}',
+          query: const {'preview': 'true'});
       final player = _previewPlayer ?? AudioPlayer();
-      await player.setUrl(mediaUrl(base, m.id), headers: headers);
-      await player.play();
+      await player.stop().timeout(const Duration(seconds: 3));
+      await player.setFilePath(file).timeout(const Duration(seconds: 15));
+      _listenPreviewEnd(player);
       _previewPlayer = player;
       setState(() => _previewingIdx = i);
+      unawaited(player.play());
     } catch (_) {
       if (mounted) {
         ref.read(chatToastProvider.notifier).show('试听加载失败，稍后再试',
             tone: ChatToastTone.error);
       }
     }
+  }
+
+  /// 订阅播完归位（processingState==completed）
+  void _listenPreviewEnd(AudioPlayer player) {
+    _previewSub?.cancel();
+    _previewSub = player.playerStateStream.listen((st) {
+      if (st.processingState == ProcessingState.completed && mounted) {
+        _previewSub?.cancel();
+        setState(() => _previewingIdx = null);
+      }
+    });
   }
 
   /// 30 秒试听（单播放器：点另一行切歌；再点当前行暂停）
@@ -179,18 +203,23 @@ class _SongSheetState extends ConsumerState<_SongSheet> {
       if (st.playing) {
         await _previewPlayer!.pause();
       } else {
-        await _previewPlayer!.play();
+        unawaited(_previewPlayer!.play());
       }
       return;
     }
     try {
-      final base = await ref.read(chatBaseProvider.future);
-      final headers = await ref.read(mediaCookieHeadersProvider.future);
+      final dio = await ref.read(dioProvider.future);
+      final file = await downloadAudioToCache(dio,
+          cacheKey: 'src_${it.preview.hashCode}',
+          urlPath: '/api/music/stream',
+          query: {'u': it.preview});
       final player = _previewPlayer ?? AudioPlayer();
-      await player.setUrl(musicStreamUrl(base, it.preview), headers: headers);
-      await player.play();
+      await player.stop().timeout(const Duration(seconds: 3));
+      await player.setFilePath(file).timeout(const Duration(seconds: 15));
+      _listenPreviewEnd(player);
       _previewPlayer = player;
       setState(() => _previewingIdx = i);
+      unawaited(player.play());
     } catch (_) {
       if (mounted) {
         ref.read(chatToastProvider.notifier).show('试听加载失败，稍后再试',

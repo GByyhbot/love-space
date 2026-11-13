@@ -1,24 +1,26 @@
 /// 共同歌单（条目 6 · 段 D，kind=music，定案：只试听）：
 /// 列表（在线歌 body.song / 本地音频 media 附件两种形态都渲染）+ 搜索入单
-/// （GET /api/music/search?q=&limit=20 → 加入歌单 POST body 带 song 字段）。
-/// 🔴 试听走**下载优先**（语音同款）：Dio 全量 GET（无 Range）→ 本地缓存文件
-/// → setFilePath 播本地——中转线（iepose）对原生播放器 Range 请求有已知缺陷
-/// （语音栽过），绝不 setUrl 拉远程流；在线歌经 /api/music/stream?u= 转发。
-/// 本地音频上传（Web musicForm 的 file input）Flutter 未做——入单只走在线搜索。
+/// + 本地音频上传（与 Web musicForm 同构管线，返修 2.1.4 补齐）。
+/// 🔴 试听走**下载优先**（语音同款）：downloadAudioToCache 全量 GET（无 Range）
+/// → 本地缓存文件 → setFilePath 播本地——中转线（iepose）对原生播放器 Range
+/// 请求有已知缺陷（语音栽过），绝不 setUrl 拉远程流。
+/// 🔴 play() 的 Future 在整段音频播完才完成（just_audio 契约）——绝不当
+/// 「开始播放」的完成信号 await；播放态以 playerStateStream 为准
+/// （2.1.3 真机假失败根因：8s 守卫误杀 30 秒试听）。
+/// 播放呈现：底部控制条（歌名/播放暂停/停止/进度），播完或离页自动收起。
 library;
 
-import 'dart:io';
+import 'dart:async';
 
-import 'package:dio/dio.dart' show Dio, Options, ResponseType;
+import 'package:dio/dio.dart' show Dio;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:just_audio/just_audio.dart';
-import 'package:path_provider/path_provider.dart';
 
 import '../../core/api/api_client.dart' as api;
 import '../../core/chat/chat_media.dart'
-    show chatBaseProvider, uploadChatMedia, validateUploadFile;
+    show chatBaseProvider, downloadAudioToCache, uploadChatMedia, validateUploadFile;
 import '../../core/together/together_data.dart';
 import '../auth/auth_state.dart';
 import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
@@ -29,6 +31,14 @@ import 'tool_pages.dart' show ToolTile;
 const _musicUploadExts = ['mp3', 'm4a', 'wav', 'aac', 'ogg'];
 const _musicUploadMaxBytes = 20 * 1024 * 1024;
 
+/// 底部播放条元数据
+class _PreviewMeta {
+  const _PreviewMeta({required this.key, required this.title, required this.artist});
+  final String key;
+  final String title;
+  final String artist;
+}
+
 class MusicPage extends ConsumerStatefulWidget {
   const MusicPage({super.key});
   @override
@@ -37,8 +47,12 @@ class MusicPage extends ConsumerStatefulWidget {
 
 class _MusicPageState extends ConsumerState<MusicPage> {
   AudioPlayer? _player;
-  String? _playingKey; // 正在试听的 key（'song:{rid}' / 'mid:{mid}'）
+  StreamSubscription<PlayerState>? _playerSub;
+  /// 当前试听（key + 展示信息）——底部播放条据此渲染；null=无播放
+  _PreviewMeta? _previewMeta;
+  String? _playingKey;
   String? _loadingKey;
+  bool _paused = false; // 播放/暂停按钮态（playerStateStream 驱动）
 
   @override
   void initState() {
@@ -49,11 +63,39 @@ class _MusicPageState extends ConsumerState<MusicPage> {
 
   @override
   void dispose() {
+    _playerSub?.cancel();
     try {
       _player?.dispose().timeout(const Duration(seconds: 3));
     } catch (_) {// 插件不可用（测试环境）时直接忽略
     }
     super.dispose();
+  }
+
+  /// 🔴 play() 的 Future **在整段音频播完才完成**（just_audio 契约），绝不能
+  /// 当「开始播放」的完成信号 await——2.1.3 真机假失败的根因（8s 守卫误杀
+  /// 30 秒试听，声音在播却弹「试听失败」）。播放/暂停一律不 await，状态以
+  /// playerStateStream 为准；超时守卫只留真正会完成的加载步骤。
+  void _startPlay(AudioPlayer player) {
+    unawaited(player.play());
+  }
+
+  /// 订阅播放状态：播完（processingState==completed）自动归位收条。
+  void _listenPlayer(AudioPlayer player) {
+    _playerSub?.cancel();
+    _playerSub = player.playerStateStream.listen((st) {
+      if (!mounted) return;
+      setState(() => _paused = !st.playing);
+      if (st.processingState == ProcessingState.completed) {
+        _stopPlayer();
+        if (mounted) {
+          setState(() {
+            _playingKey = null;
+            _previewMeta = null;
+            _paused = false;
+          });
+        }
+      }
+    });
   }
 
   /// 试听入口：先下载到本地缓存（全量 GET，无 Range），再 setFilePath 播本地。
@@ -63,57 +105,70 @@ class _MusicPageState extends ConsumerState<MusicPage> {
     required String key,
     required String urlPath,
     required Map<String, String> query,
+    required String title,
+    required String artist,
   }) async {
     if (_loadingKey != null) return; // 一次一个，防连点
-    // 再点正在播的 → 停止
-    if (_playingKey == key) {
-      await _stopPlayer();
-      setState(() => _playingKey = null);
+    // 再点正在播的 → 播放/暂停切换（不 stop，保进度）
+    if (_playingKey == key && _player != null) {
+      if (_paused) {
+        _startPlay(_player!);
+        setState(() => _paused = false);
+      } else {
+        unawaited(_player!.pause().timeout(_playerTimeout)
+            .catchError((_) {}));
+        setState(() => _paused = true);
+      }
       return;
     }
-    setState(() => _loadingKey = key);
+    // 切歌：先停旧的
+    await _stopPlayer();
+    setState(() {
+      _loadingKey = key;
+      _previewMeta = _PreviewMeta(key: key, title: title, artist: artist);
+    });
     try {
       final dio = await ref.read(api.dioProvider.future);
-      final r = await dio.get(urlPath,
-          queryParameters: query,
-          options: Options(responseType: ResponseType.bytes));
-      final code = r.statusCode ?? 0;
-      if (code < 200 || code >= 300) {
-        throw Exception('HTTP $code');
-      }
-      final bytes = (r.data as List?)?.cast<int>() ?? const <int>[];
-      if (bytes.isEmpty) throw Exception('空响应体');
-      final dir = await getTemporaryDirectory();
-      final cacheDir = Directory('${dir.path}${Platform.pathSeparator}music_preview');
-      if (!cacheDir.existsSync()) cacheDir.createSync(recursive: true);
-      final file = File(
-          '${cacheDir.path}${Platform.pathSeparator}${key.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_')}.m4a');
-      await file.writeAsBytes(bytes, flush: true);
+      final filePath = await downloadAudioToCache(dio,
+          cacheKey: key, urlPath: urlPath, query: query);
       final player = _player ??= AudioPlayer();
-      // 播放器操作全部带超时守卫（语音同款）：插件不可用/挂起时不卡死调用方
-      await player.stop().timeout(_playerTimeout);
-      await player.setFilePath(file.path).timeout(_playerTimeout);
-      setState(() => _playingKey = key);
-      await player.play().timeout(_playerTimeout);
+      // 会完成的加载步骤才上超时守卫
+      await player.stop().timeout(_stopTimeout);
+      await player.setFilePath(filePath).timeout(_loadTimeout);
+      await player.seek(Duration.zero).timeout(_stopTimeout);
+      _listenPlayer(player);
+      setState(() {
+        _playingKey = key;
+        _paused = false;
+      });
+      _startPlay(player);
     } catch (e) {
       if (mounted) {
         ref.read(chatToastProvider.notifier).show('试听失败：$e',
             tone: ChatToastTone.error);
-        setState(() => _playingKey = null);
+        setState(() {
+          _playingKey = null;
+          _previewMeta = null;
+        });
       }
     } finally {
       if (mounted) setState(() => _loadingKey = null);
     }
   }
 
-  static const _playerTimeout = Duration(seconds: 8);
-
   Future<void> _stopPlayer() async {
+    _playerSub?.cancel();
     try {
-      await _player?.stop().timeout(_playerTimeout);
-    } catch (_) {// 停止失败不阻断 UI（含插件不可用的测试环境）
+      await _player?.stop().timeout(_stopTimeout);
+      await _player?.seek(Duration.zero).timeout(_stopTimeout);
+    } catch (_) {// 停止失败不阻断 UI
     }
   }
+
+  /// stop/seek：秒级会完成；setFilePath：本地读文件+解码，放宽到 15s
+  static const _stopTimeout = Duration(seconds: 3);
+  static const _loadTimeout = Duration(seconds: 15);
+  static const _playerTimeout = Duration(seconds: 8);
 
   @override
   Widget build(BuildContext context) {
@@ -143,6 +198,35 @@ class _MusicPageState extends ConsumerState<MusicPage> {
         icon: const Icon(Icons.search_rounded),
         label: const Text('搜歌入单'),
       ),
+      // 底部播放条（App 内播放器）：试听开始出现，播完/停止/离页自动收起
+      bottomNavigationBar:
+          (_previewMeta != null && _player != null)
+              ? _PreviewBar(
+                  player: _player!,
+                  meta: _previewMeta!,
+                  paused: _paused,
+                  onTogglePlay: () {
+                    if (_paused) {
+                      if (_player != null) _startPlay(_player!);
+                      setState(() => _paused = false);
+                    } else {
+                      unawaited(_player!.pause()
+                          .timeout(_playerTimeout).catchError((_) {}));
+                      setState(() => _paused = true);
+                    }
+                  },
+                  onStop: () async {
+                    await _stopPlayer();
+                    if (mounted) {
+                      setState(() {
+                        _playingKey = null;
+                        _previewMeta = null;
+                        _paused = false;
+                      });
+                    }
+                  },
+                )
+              : null,
       body: RefreshIndicator(
         onRefresh: () => ref.read(togetherControllerProvider.notifier).load(),
         child: ListView(
@@ -215,7 +299,9 @@ class _MusicPageState extends ConsumerState<MusicPage> {
         ),
         if (canPlay)
           IconButton(
-            tooltip: loading ? '准备中…' : (playing ? '停止试听' : '试听'),
+            tooltip: loading
+                ? '准备中…'
+                : (playing ? (_paused ? '继续试听' : '暂停试听') : '试听'),
             onPressed: loading
                 ? null
                 : () => online
@@ -223,19 +309,23 @@ class _MusicPageState extends ConsumerState<MusicPage> {
                         key: key,
                         urlPath: '/api/music/stream',
                         query: {'u': (song['src'] ?? '').toString()},
+                        title: (r.body['title'] ?? '未命名').toString(),
+                        artist: artist,
                       )
                     : _preview(
                         key: key,
                         urlPath: '/media/$mid',
                         query: const {'preview': 'true'},
+                        title: (r.body['title'] ?? '未命名').toString(),
+                        artist: artist,
                       ),
             icon: loading
                 ? const SizedBox(
                     width: 18,
                     height: 18,
                     child: CircularProgressIndicator(strokeWidth: 2))
-                : Icon(playing
-                    ? Icons.stop_circle_rounded
+                : Icon(playing && !_paused
+                    ? Icons.pause_circle_rounded
                     : Icons.play_circle_rounded,
                     size: 30, color: cs.primary),
           ),
@@ -549,5 +639,94 @@ Future<void> uploadMusicToPlaylist(
   } catch (e) {
     container.read(chatToastProvider.notifier).show('上传失败：$e',
         tone: ChatToastTone.error);
+  }
+}
+
+String _fmtDur(Duration d) {
+  final m = d.inMinutes, s = d.inSeconds % 60;
+  return '$m:${s.toString().padLeft(2, '0')}';
+}
+
+/// 底部播放条（App 内播放器，本包底线实现）：歌名/歌手 + 进度 + 播放暂停 +
+/// 停止。数据全部来自播放器状态流（position/playerState），不自算。
+/// 通知栏媒体显示（audio_service 等重型件）未引入——方案与代价另报等主人定。
+class _PreviewBar extends StatelessWidget {
+  const _PreviewBar({
+    required this.player,
+    required this.meta,
+    required this.paused,
+    required this.onTogglePlay,
+    required this.onStop,
+  });
+  final AudioPlayer player;
+  final _PreviewMeta meta;
+  final bool paused;
+  final VoidCallback onTogglePlay;
+  final VoidCallback onStop;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final dur = player.duration ?? Duration.zero;
+    return Container(
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest,
+        border: Border(top: BorderSide(color: cs.outlineVariant)),
+      ),
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
+      child: SafeArea(
+        top: false,
+        child: StreamBuilder<Duration>(
+          stream: player.positionStream,
+          builder: (context, snap) {
+            final pos = snap.data ?? Duration.zero;
+            final ratio = dur > Duration.zero
+                ? (pos.inMilliseconds / dur.inMilliseconds).clamp(0.0, 1.0)
+                : 0.0;
+            return Column(mainAxisSize: MainAxisSize.min, children: [
+              Row(children: [
+                Expanded(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(meta.title,
+                            maxLines: 1, overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.titleSmall),
+                        if (meta.artist.isNotEmpty)
+                          Text(meta.artist,
+                              maxLines: 1, overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.labelSmall
+                                  ?.copyWith(color: cs.outline)),
+                      ]),
+                ),
+                Text('${_fmtDur(pos)} / ${_fmtDur(dur)}',
+                    style: theme.textTheme.labelSmall
+                        ?.copyWith(color: cs.outline)),
+              ]),
+              const SizedBox(height: 6),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: LinearProgressIndicator(value: ratio, minHeight: 5),
+              ),
+              const SizedBox(height: 4),
+              Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+                IconButton(
+                  tooltip: paused ? '继续播放' : '暂停',
+                  onPressed: onTogglePlay,
+                  icon: Icon(paused
+                      ? Icons.play_arrow_rounded
+                      : Icons.pause_rounded),
+                ),
+                IconButton(
+                  tooltip: '停止',
+                  onPressed: onStop,
+                  icon: const Icon(Icons.stop_rounded),
+                ),
+              ]),
+            ]);
+          },
+        ),
+      ),
+    );
   }
 }

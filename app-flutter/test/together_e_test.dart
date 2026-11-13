@@ -6,6 +6,7 @@
    根因回归：段 D 漏扩 togetherKinds → 服务端 kind 过滤把存量 quest/music
    滤掉（自测夹具无视 kind 参数而漏网）。本文件第一例直接断言 kind 参数。 */
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
@@ -158,6 +159,12 @@ void main() {
 
     expect(find.text('唯一'), findsOneWidget, reason: '存量上传音乐必须可见');
     expect(find.byTooltip('试听'), findsOneWidget, reason: '本地音频可播');
+
+    // 清缓存：downloadAudioToCache 命中即直接回本地文件、不发请求——
+    // 回归要断言请求本身，必须先删上一轮留下的 song_cache
+    final cacheDir = Directory(
+        '${Directory.systemTemp.path}${Platform.pathSeparator}song_cache');
+    if (cacheDir.existsSync()) cacheDir.deleteSync(recursive: true);
 
     // 点试听 → 下载优先：GET /media/{mid}?preview=true（无 Range 流播）。
     // 测试环境无音频插件：下载成功后 setFilePath 挂起 → 8s 播放器超时
