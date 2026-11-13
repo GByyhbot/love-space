@@ -3,7 +3,12 @@
 /// chatToastProvider（同一组件、同位置——宿主顶部、同样式 _ToastPill）。
 /// 生成：flutter test --update-goldens test/composer_top_toast_test.dart
 /// 产物：test/goldens/composer_top_toast.png + chat_recall_toast.png（对比图）
+/// golden 比对仅 Windows 本地跑（基准 PNG 在 Windows + 微软雅黑下生成，
+/// Linux CI 渲染像素差 0.05~0.16% 必挂——flutter-ci 红灯根因之一，2026-11-13）；
+/// 行为断言（通知出现/SnackBar 清零）全平台保留。
 library;
+
+import 'dart:io' show Platform;
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
@@ -52,8 +57,10 @@ void main() {
     expect(find.text('草稿已保存'), findsOneWidget);
     expect(find.byType(SnackBar), findsNothing);
     // 取整页截图（含顶部宿主），与聊天撤回提示 golden 做同组件对比
-    await expectLater(find.byType(MaterialApp),
-        matchesGoldenFile('goldens/composer_top_toast.png'));
+    if (Platform.isWindows) {
+      await expectLater(find.byType(MaterialApp),
+          matchesGoldenFile('goldens/composer_top_toast.png'));
+    }
   });
 
   testWidgets('聊天撤回提示（对照组：同一 ChatToastHost 组件）', (tester) async {
@@ -72,7 +79,10 @@ void main() {
         .read(chatToastProvider.notifier)
         .show('你撤回了一条消息', tone: ChatToastTone.info);
     await tester.pumpAndSettle();
-    await expectLater(find.byType(ChatToastHost),
-        matchesGoldenFile('goldens/chat_recall_toast.png'));
+    expect(find.text('你撤回了一条消息'), findsOneWidget);
+    if (Platform.isWindows) {
+      await expectLater(find.byType(ChatToastHost),
+          matchesGoldenFile('goldens/chat_recall_toast.png'));
+    }
   });
 }
