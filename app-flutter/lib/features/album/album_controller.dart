@@ -16,35 +16,51 @@ enum AlbumView { byAlbum, byTime }
 class AlbumState {
   const AlbumState({
     this.photos = const [],
+    this.videos = const [],
+    this.items = const [],
     this.albums = const [],
     this.selectedAlbum = '', // 空=全部照片
     this.view = AlbumView.byAlbum,
+    this.coverPickAlbum = '', // 选图态目标相册（''=未在选图；D 段搭载项）
     this.loading = false,
     this.skeleton = false,
     this.error,
   });
+  /// 仅照片（当前筛选下，服务端 /api/photos?album= 已筛）——查看器数据集
+  /// （口径：视频不进照片查看器，翻页只走照片）。
   final List<PhotoItem> photos;
+  /// 全部视频（不按相册筛；条目自带 album 归属，客户端 videosForAlbum 筛）。
+  final List<PhotoItem> videos;
+  /// 网格展示列表 = 照片 + 当前相册视频，统一日期排序（mergePhotoVideo）。
+  final List<PhotoItem> items;
   final List<AlbumInfo> albums;
   final String selectedAlbum;
   final AlbumView view;
+  final String coverPickAlbum;
   final bool loading;
   final bool skeleton; // 首屏骨架（仅首次拉取）
   final String? error;
 
   AlbumState copyWith({
     List<PhotoItem>? photos,
+    List<PhotoItem>? videos,
+    List<PhotoItem>? items,
     List<AlbumInfo>? albums,
     String? selectedAlbum,
     AlbumView? view,
+    String? coverPickAlbum,
     bool? loading,
     bool? skeleton,
     String? error,
   }) =>
       AlbumState(
         photos: photos ?? this.photos,
+        videos: videos ?? this.videos,
+        items: items ?? this.items,
         albums: albums ?? this.albums,
         selectedAlbum: selectedAlbum ?? this.selectedAlbum,
         view: view ?? this.view,
+        coverPickAlbum: coverPickAlbum ?? this.coverPickAlbum,
         loading: loading ?? this.loading,
         skeleton: skeleton ?? this.skeleton,
         error: error,
@@ -69,7 +85,10 @@ class AlbumController extends Notifier<AlbumState> {
     if (!_loaded) await load();
   }
 
-  /// 拉取照片 + 分类（reset=true 用于筛选变更/SSE 重拉）
+  /// 拉取照片 + 视频 + 分类（reset=true 用于筛选变更/SSE 重拉）。
+  /// D 段：视频走 GET /api/records?kind=post&media_type=video（服务端遍历
+  /// 序列化 media 筛 video/*，B-① 口径），不按 album 筛——客户端按 body.album
+  /// 归属本地筛（/api/records 无 album 参数）。
   Future<void> load() async {
     if (_disposed) return;
     final seq = ++_reqSeq;
@@ -83,10 +102,19 @@ class AlbumController extends Notifier<AlbumState> {
       });
       final albumsR = await dio.get('/api/records',
           queryParameters: {'kind': 'album', 'limit': 200});
+      final videosR = await dio.get('/api/records', queryParameters: {
+        'kind': 'post',
+        'media_type': 'video',
+        'limit': 1000,
+      });
       if (_disposed || seq != _reqSeq) return; // 旧响应失效
+      final photos = parsePhotos(photosR.data);
+      final videos = parseVideos(videosR.data);
       state = state.copyWith(
-        photos: parsePhotos(photosR.data),
+        photos: photos,
+        videos: videos,
         albums: parseAlbumRecords(albumsR.data),
+        items: mergePhotoVideo(photos, videosForAlbum(videos, album)),
       );
       _skeletonSeen = true;
       state = state.copyWith(loading: false, skeleton: false);
@@ -100,17 +128,20 @@ class AlbumController extends Notifier<AlbumState> {
     _loaded = true;
   }
 
-  /// 切换相册筛选（空=全部照片）→ reset 重拉
+  /// 切换相册筛选（空=全部照片）→ reset 重拉；同时退出选图态（换相册即取消）。
   Future<void> selectAlbum(String id) async {
     if (state.selectedAlbum == id) return;
-    if (!_disposed) state = state.copyWith(selectedAlbum: id);
+    if (!_disposed) {
+      state = state.copyWith(selectedAlbum: id, coverPickAlbum: '');
+    }
     await load();
   }
 
-  /// 切换视图（按相册分类 / 按时间）：共用 photos，不重拉、不丢筛选
+  /// 切换视图（按相册分类 / 按时间）：共用 photos，不重拉、不丢筛选；
+  /// 退出选图态（换视图即取消，不误设）。
   void setView(AlbumView view) {
     if (_disposed || state.view == view) return;
-    state = state.copyWith(view: view);
+    state = state.copyWith(view: view, coverPickAlbum: '');
   }
 
   /// SSE other（相册 tab 激活时由页面调用）：reset 重拉
@@ -257,6 +288,34 @@ class AlbumController extends Notifier<AlbumState> {
     } catch (e) {
       return api.errorDetail(e);
     }
+  }
+
+  // ── 段 D · 选图态设封面（搭载项）───────────────────────────────
+  // 相册卡「⋯」→「设为封面」：切到该相册并进入选图态；网格顶部横幅提示
+  // 「点一张设为封面」；点照片即设、返回/取消/换相册/换视图一律不误设。
+  // 视频瓦片在选图态不可点（封面须为照片，AlbumCoverTile 按图片渲染）。
+
+  /// 进入选图态：切到 [albumId] 相册并标记选图。
+  Future<void> startCoverPick(String albumId) async {
+    if (albumId.isEmpty || _disposed) return;
+    state = state.copyWith(selectedAlbum: albumId, coverPickAlbum: albumId);
+    await load();
+  }
+
+  /// 退出选图态（返回/取消/设完即退）：不改封面。
+  void cancelCoverPick() {
+    if (_disposed || state.coverPickAlbum.isEmpty) return;
+    state = state.copyWith(coverPickAlbum: '');
+  }
+
+  /// 选图态点中一张照片：设为该相册封面并退出选图态（复用 setCover 回填铁律）。
+  /// 返回 null=成功。
+  Future<String?> pickCover(String mid) async {
+    final albumId = state.coverPickAlbum;
+    if (albumId.isEmpty) return '当前不在选图状态';
+    final err = await setCover(albumId, mid);
+    cancelCoverPick();
+    return err;
   }
 
   /// 仅重拉分类列表（新建/改名/设封面后刷新 chip 与封面，不重拉照片）。

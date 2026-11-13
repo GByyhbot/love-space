@@ -1,8 +1,11 @@
-/// 相册页（条目 5 · 段 A 页与网格 + 段 B 查看器联动）：
-/// heading + 两视图 + 分类 chips + 3 列网格（preview=true + Cookie 头 +
+/// 相册页（条目 5 · 段 A 页与网格 + 段 B 查看器联动 + 段 C 增删改封面 + 段 D 视频专项）：
+/// heading + 两视图 + 分类封面卡 + 3 列网格（preview=true + Cookie 头 +
 /// 占位色渐显）+ 空态两套 + 骨架 + SSE other 重拉。
 /// 段 B：缩略图 Hero tag ↔ 查看器双向；查看器翻页时通过 albumViewerIndexProvider
 /// 通知本页**预滚动**到当前查看那张，保证返回时 Hero 落点正确（不闪黑/不跳图）。
+/// 段 D：视频瓦片（?poster=true 首帧 + ▶ 角标）与照片同网格统一日期排序；
+/// 视频点击走 VideoPlayerPage 全屏播放（不进照片查看器数据集，翻页仍只走照片）；
+/// 选图态设封面（相册卡「⋯」→ 设为封面 → 点一张即设；返回/取消/换相册不误设）。
 /// 顶部通知由 App 根部全局 ChatToastHost 统一承载（本页不再单独挂宿主）。
 library;
 
@@ -15,6 +18,7 @@ import '../../core/album/album_data.dart';
 import '../../core/chat/chat_media.dart';
 import '../../core/sse/sse_client.dart';
 import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
+import '../chat/video_player_page.dart';
 import 'album_controller.dart';
 import 'album_cover_tile.dart';
 import '../timeline/composer_sheet.dart';
@@ -49,13 +53,19 @@ class _AlbumPageState extends ConsumerState<AlbumPage> {
   /// 段 B：查看器翻页 → 网格在后台预滚动到该照片（无动画，避免与 Hero 打架）。
   /// 只在 3 列网格视图且滚动控制器已挂载时生效；按时间视图用 ensureVisible 的
   /// 等价偏移（列表分组高度不固定，采用行偏移近似，误差 ≤ 一行）。
-  void _scrollToViewerIndex(int index) {
+  /// D 段：查看器索引按**仅照片**列表计（视频不进查看器数据集），先映射回
+  /// 网格展示列表（items，含视频）里的位置再算行偏移。
+  void _scrollToViewerIndex(int viewerIndex) {
     if (!_gridScroll.hasClients) return;
     final st = ref.read(albumControllerProvider);
-    if (st.photos.isEmpty) return;
+    if (viewerIndex < 0 || viewerIndex >= st.photos.length || st.items.isEmpty) {
+      return;
+    }
+    final gridIndex = st.items.indexOf(st.photos[viewerIndex]);
+    if (gridIndex < 0) return;
     final cell = albumCellSize(MediaQuery.sizeOf(context).width);
     final offset = albumGridScrollOffset(
-      index.clamp(0, st.photos.length - 1),
+      gridIndex,
       cellSize: cell,
       spacing: 8,
       viewportHeight: _gridScroll.position.viewportDimension,
@@ -84,19 +94,28 @@ class _AlbumPageState extends ConsumerState<AlbumPage> {
     });
 
     return SafeArea(
-      child: Scaffold(
-        backgroundColor: Colors.transparent,
-        floatingActionButton: FloatingActionButton(
-          tooltip: '上传照片',
-          onPressed: () => _openUpload(context, st.selectedAlbum),
-          child: const Icon(Icons.add_a_photo_rounded),
+      // D 段选图态：系统返回手势/返回键 = 取消选图（不误设封面），再按才退出 App
+      child: PopScope(
+        canPop: st.coverPickAlbum.isEmpty,
+        onPopInvokedWithResult: (didPop, result) {
+          if (!didPop) {
+            ref.read(albumControllerProvider.notifier).cancelCoverPick();
+          }
+        },
+        child: Scaffold(
+          backgroundColor: Colors.transparent,
+          floatingActionButton: FloatingActionButton(
+            tooltip: '上传照片',
+            onPressed: () => _openUpload(context, st.selectedAlbum),
+            child: const Icon(Icons.add_a_photo_rounded),
+          ),
+          body: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            _heading(context),
+            _viewTabs(context, st),
+            if (st.view == AlbumView.byAlbum) _albumCoverRow(context, st),
+            Expanded(child: _body(context, st)),
+          ]),
         ),
-        body: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          _heading(context),
-          _viewTabs(context, st),
-          if (st.view == AlbumView.byAlbum) _albumCoverRow(context, st),
-          Expanded(child: _body(context, st)),
-        ]),
       ),
     );
   }
@@ -166,6 +185,7 @@ class _AlbumPageState extends ConsumerState<AlbumPage> {
         headers: headers,
         selected: st.selectedAlbum == a.id,
         onTap: () => controller.selectAlbum(a.id),
+        onSetCover: () => controller.startCoverPick(a.id),
         onRename: () => _showRenameDialog(context, a),
         onDelete: () => _showDeleteConfirm(context, a),
       ));
@@ -228,6 +248,7 @@ class _AlbumPageState extends ConsumerState<AlbumPage> {
     required Map<String, String>? headers,
     required bool selected,
     required VoidCallback onTap,
+    required VoidCallback onSetCover,
     required VoidCallback onRename,
     required VoidCallback onDelete,
   }) {
@@ -269,11 +290,14 @@ class _AlbumPageState extends ConsumerState<AlbumPage> {
                       color: cs.onSurface.withValues(alpha: 0.7)),
                   padding: EdgeInsets.zero,
                   itemBuilder: (_) => const [
+                    PopupMenuItem(value: 'cover', child: Text('设为封面')),
                     PopupMenuItem(value: 'rename', child: Text('改名')),
                     PopupMenuItem(value: 'delete', child: Text('删除')),
                   ],
                   onSelected: (v) {
-                    if (v == 'rename') {
+                    if (v == 'cover') {
+                      onSetCover();
+                    } else if (v == 'rename') {
                       onRename();
                     } else if (v == 'delete') {
                       onDelete();
@@ -459,29 +483,75 @@ class _AlbumPageState extends ConsumerState<AlbumPage> {
 
   Widget _body(BuildContext context, AlbumState st) {
     if (st.skeleton) return _skeleton(context);
-    if (st.photos.isEmpty) {
+    final picking = st.coverPickAlbum.isNotEmpty;
+    if (st.items.isEmpty) {
       return _empty(context, filtered: st.selectedAlbum.isNotEmpty, error: st.error);
     }
-    if (st.view == AlbumView.byAlbum) return _albumGrid(context, st.photos);
-    return _timeList(context, st.photos);
+    final grid = st.view == AlbumView.byAlbum
+        ? _albumGrid(context, st)
+        : _timeList(context, st);
+    if (!picking) return grid;
+    return Column(children: [
+      _pickBanner(context, st),
+      Expanded(child: grid),
+    ]);
   }
 
-  Widget _albumGrid(BuildContext context, List<PhotoItem> photos) {
+  /// D 段选图态横幅：明示「点一张设为封面」，取消即退出（返回手势同效）。
+  Widget _pickBanner(BuildContext context, AlbumState st) {
+    final theme = Theme.of(context);
+    return Material(
+      color: theme.colorScheme.primaryContainer,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
+        child: Row(children: [
+          Expanded(
+            child: Text('点一张设为封面',
+                style: theme.textTheme.labelLarge
+                    ?.copyWith(color: theme.colorScheme.onPrimaryContainer)),
+          ),
+          TextButton(
+            onPressed: () =>
+                ref.read(albumControllerProvider.notifier).cancelCoverPick(),
+            child: const Text('取消'),
+          ),
+        ]),
+      ),
+    );
+  }
+
+  Widget _albumGrid(BuildContext context, AlbumState st) {
+    final items = st.items;
+    // 照片在「仅照片」列表里的位置（查看器数据集索引）；视频为 -1 不进查看器
+    final photoIndex = <PhotoItem, int>{
+      for (var i = 0; i < st.photos.length; i++) st.photos[i]: i,
+    };
+    final picking = st.coverPickAlbum.isNotEmpty;
     return RefreshIndicator(
       onRefresh: () => ref.read(albumControllerProvider.notifier).load(),
       child: GridView.builder(
         controller: _gridScroll, // 段 B：查看器翻页后预滚动，保证 Hero 落点
         padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-        itemCount: photos.length,
+        itemCount: items.length,
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: 3, mainAxisSpacing: 8, crossAxisSpacing: 8),
-        itemBuilder: (_, i) => _Thumb(photo: photos[i], all: photos, index: i),
+        itemBuilder: (_, i) => _Thumb(
+          item: items[i],
+          photoIndexOf: photoIndex[items[i]] ?? -1,
+          photosOnly: st.photos,
+          coverPicking: picking,
+        ),
       ),
     );
   }
 
-  Widget _timeList(BuildContext context, List<PhotoItem> photos) {
-    final groups = groupPhotosByMonth(photos);
+  Widget _timeList(BuildContext context, AlbumState st) {
+    final items = st.items;
+    final groups = groupPhotosByMonth(items);
+    final photoIndex = <PhotoItem, int>{
+      for (var i = 0; i < st.photos.length; i++) st.photos[i]: i,
+    };
+    final picking = st.coverPickAlbum.isNotEmpty;
     return RefreshIndicator(
       onRefresh: () => ref.read(albumControllerProvider.notifier).load(),
       child: ListView.builder(
@@ -506,9 +576,10 @@ class _AlbumPageState extends ConsumerState<AlbumPage> {
                         child: AspectRatio(
                           aspectRatio: 1,
                           child: _Thumb(
-                              photo: p,
-                              all: photos,
-                              index: photos.indexOf(p)),
+                              item: p,
+                              photoIndexOf: photoIndex[p] ?? -1,
+                              photosOnly: st.photos,
+                              coverPicking: picking),
                         ),
                       ),
                     ),
@@ -565,37 +636,62 @@ class _AlbumPageState extends ConsumerState<AlbumPage> {
   }
 }
 
-/// 缩略图：CachedNetworkImage（preview=true + Cookie）+ 占位色渐显 +
-/// Hero tag（段 B 共享元素转场双向）+ context.push 打开甲档查看器。
+/// 网格瓦片（段 D 重构）：照片 = Hero + CachedNetworkImage + context.push
+/// 打开甲档查看器；视频 = ?poster=true 首帧 + ▶ 角标，点击 Navigator.push
+/// 全屏 VideoPlayerPage（不进查看器数据集、无 Hero）。
+/// 选图态（段 D 搭载项）：照片点中即设为封面；视频不可当封面（点按禁用）。
 class _Thumb extends ConsumerWidget {
-  const _Thumb({required this.photo, required this.all, required this.index});
-  final PhotoItem photo;
-  final List<PhotoItem> all;
-  final int index;
+  const _Thumb({
+    required this.item,
+    required this.photoIndexOf,
+    required this.photosOnly,
+    required this.coverPicking,
+  });
+  final PhotoItem item;
+  /// 照片在 photosOnly（查看器数据集，仅照片）中的位置；视频为 -1。
+  final int photoIndexOf;
+  final List<PhotoItem> photosOnly;
+  final bool coverPicking;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final base = ref.watch(chatBaseProvider).valueOrNull ?? '';
     final headers = ref.watch(mediaCookieHeadersProvider).valueOrNull;
+    if (item.isVideo) {
+      return _VideoThumb(
+          item: item, base: base, headers: headers, coverPicking: coverPicking);
+    }
     return Hero(
-      tag: albumHeroTag(photo.id),
+      tag: albumHeroTag(item.id),
       child: GestureDetector(
         onTap: () async {
+          if (coverPicking) {
+            // 选图态：点中即设为封面（选图态只在该相册内出现，照片必属该相册）
+            final toast = ref.read(chatToastProvider.notifier);
+            final err = await ref
+                .read(albumControllerProvider.notifier)
+                .pickCover(item.id);
+            if (!context.mounted) return;
+            toast.show(err == null ? '已设为封面' : '设置失败：$err',
+                tone: err == null ? ChatToastTone.success : ChatToastTone.error);
+            return;
+          }
           // 打开前先把索引对齐到点开的这张（查看器 initState 会再写一次）
-          ref.read(albumViewerIndexProvider.notifier).state = index;
+          ref.read(albumViewerIndexProvider.notifier).state =
+              photoIndexOf.clamp(0, photosOnly.length - 1);
           // albumId 仅当正处于某个相册内才带上（全部照片视图不预填封面归属）
           final albumId = ref.read(albumControllerProvider).selectedAlbum;
           await context.push('/album/viewer',
               extra: {
-                'photos': all,
-                'index': index.clamp(0, all.length - 1),
+                'photos': photosOnly,
+                'index': photoIndexOf.clamp(0, photosOnly.length - 1),
                 'albumId': albumId,
               });
         },
         child: ClipRRect(
           borderRadius: BorderRadius.circular(10),
           child: CachedNetworkImage(
-            imageUrl: mediaUrl(base, photo.id),
+            imageUrl: mediaUrl(base, item.id),
             httpHeaders: headers,
             fit: BoxFit.cover,
             width: double.infinity,
@@ -611,6 +707,66 @@ class _Thumb extends ConsumerWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// 视频瓦片（段 D）：?poster=true 首帧（Cookie 头）+ ▶ 角标。
+/// poster 加载失败（旧视频无首帧 404 等）→ 兜底占位（影片图标），不留黑瓦片。
+/// 时长：服务端序列化 media 无 duration 字段（契约核实），本期不显示时长——
+/// 「有时长则显示」的条件分支预留，时长来源接入后直接在此渲染。
+class _VideoThumb extends ConsumerWidget {
+  const _VideoThumb({
+    required this.item,
+    required this.base,
+    required this.headers,
+    required this.coverPicking,
+  });
+  final PhotoItem item;
+  final String base;
+  final Map<String, String>? headers;
+  final bool coverPicking;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    return GestureDetector(
+      // 选图态封面须为照片：视频点按禁用，不误设
+      onTap: coverPicking
+          ? null
+          : () => Navigator.of(context).push(MaterialPageRoute<void>(
+              builder: (_) => VideoPlayerPage(mid: item.id))),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(10),
+        child: Stack(fit: StackFit.expand, children: [
+          CachedNetworkImage(
+            imageUrl: mediaUrl(base, item.id, preview: false, poster: true),
+            httpHeaders: headers,
+            fit: BoxFit.cover,
+            width: double.infinity,
+            height: double.infinity,
+            fadeInDuration: const Duration(milliseconds: 260),
+            placeholder: (_, _) => Container(
+                color: theme.colorScheme.surfaceContainerHighest),
+            errorWidget: (_, _, _) => Container(
+              color: theme.colorScheme.surfaceContainerHighest,
+              alignment: Alignment.center,
+              child: Icon(Icons.movie_outlined,
+                  size: 24, color: theme.colorScheme.outline),
+            ),
+          ),
+          // ▶ 播放角标（对齐聊天侧 VideoCardView 样式）
+          Center(
+            child: Container(
+              padding: const EdgeInsets.all(6),
+              decoration:
+                  const BoxDecoration(color: Colors.black45, shape: BoxShape.circle),
+              child: const Icon(Icons.play_arrow_rounded,
+                  color: Colors.white, size: 24),
+            ),
+          ),
+        ]),
       ),
     );
   }

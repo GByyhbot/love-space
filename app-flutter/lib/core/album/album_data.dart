@@ -8,7 +8,11 @@
 ///   key 倒序、组内 date 倒序；无 date 归「还没有填日期」）。
 library;
 
-/// 一张照片（/api/photos 返回项）
+/// 一张照片（/api/photos 返回项）。
+/// D 段起本模型也承载视频条目（mime=video/*，网格同一瓦片槽位渲染）：
+/// · [album] 仅视频条目有值（来自记录 body.album，客户端按它筛相册）；
+///   照片由服务端 /api/photos?album= 筛好，恒为空串；
+/// · [preview] 视频条目无意义（瓦片走 /media/{mid}?poster=true 首帧）。
 class PhotoItem {
   const PhotoItem({
     required this.id,
@@ -19,6 +23,7 @@ class PhotoItem {
     this.recordId = '',
     this.date = '',
     this.caption = '',
+    this.album = '',
   });
 
   final String id;
@@ -29,6 +34,9 @@ class PhotoItem {
   final String recordId;
   final String date; // post 的 body.date（发生日 yyyy-MM-dd）
   final String caption; // post 的 body.content
+  final String album; // 视频条目的归属相册（body.album）；照片恒为 ''
+
+  bool get isVideo => mime.startsWith('video/');
 
   factory PhotoItem.fromJson(Map<String, dynamic> j) => PhotoItem(
         id: (j['id'] ?? '').toString(),
@@ -39,6 +47,7 @@ class PhotoItem {
         recordId: (j['record_id'] ?? '').toString(),
         date: (j['date'] ?? '').toString(),
         caption: (j['caption'] ?? '').toString(),
+        album: (j['album'] ?? '').toString(),
       );
 }
 
@@ -201,3 +210,79 @@ List<double> zoomMatrixAroundCenter(double scale, double width, double height) {
 
 /// 下拉关闭阈值判定（位移过阈值 → 关闭；否则回弹）
 bool shouldDismissOnDrag(double dy, double threshold) => dy > threshold;
+
+// ── D 段 · 视频专项（B-① 口径）────────────────────────────────────
+// 数据源 = GET /api/records?kind=post&media_type=video（服务端遍历序列化
+// media 筛 video/*，main.py:1205-1206 实读，与口径同语义；不用 /api/media/videos）。
+
+/// 视频条目提取：序列化 post 记录列表 → video/* 媒体的 PhotoItem。
+/// · mime 判定用记录级序列化 media 字段（{id,name,mime,size,status,preview}，
+///   serializers.py:75 实读，无 duration 字段 → 时长本期无来源，瓦片只显示 ▶）；
+/// · 记录序 = 服务端 created 倒序；同一 mid 只留首次出现（**最新记录优先**，
+///   其 date/album/caption 生效——与 /api/photos 照片「同 mid 只留首次」口径一致）；
+/// · date=body.date（发生日）、caption=body.content、album=body.album（归属）。
+List<PhotoItem> parseVideos(Object? data) {
+  if (data is! List) return const [];
+  final out = <PhotoItem>[];
+  final seen = <String>{};
+  for (final e in data) {
+    if (e is! Map) continue;
+    final body = (e['body'] ?? {}) as Map;
+    final media = (e['media'] ?? []) as List?;
+    if (media == null) continue;
+    final date = (body['date'] ?? '').toString();
+    final caption = (body['content'] ?? '').toString();
+    final album = (body['album'] ?? '').toString();
+    for (final m in media) {
+      if (m is! Map) continue;
+      final mid = (m['id'] ?? '').toString();
+      final mime = (m['mime'] ?? '').toString();
+      if (mid.isEmpty || !mime.startsWith('video/')) continue;
+      if (!seen.add(mid)) continue; // 同一 mid 只出现一次（最新记录优先）
+      out.add(PhotoItem(
+        id: mid,
+        name: (m['name'] ?? '').toString(),
+        mime: mime,
+        status: (m['status'] ?? '').toString(),
+        preview: (m['preview'] ?? '').toString(),
+        recordId: (e['id'] ?? '').toString(),
+        date: date,
+        caption: caption,
+        album: album,
+      ));
+    }
+  }
+  return out;
+}
+
+/// 按当前相册筛视频（照片由服务端 /api/photos?album= 筛，视频客户端按
+/// body.album 筛——/api/records 无 album 参数）。空 albumId=全部照片视图。
+List<PhotoItem> videosForAlbum(List<PhotoItem> videos, String albumId) =>
+    albumId.isEmpty
+        ? videos
+        : videos.where((v) => v.album == albumId).toList();
+
+/// 合并照片与视频为统一网格列表（与照片在同一网格按日期统一排序）：
+/// · date 倒序；date 相同保持原相对序（照片先于视频，稳定）；
+/// · 空 date 排最后（对齐时间视图「还没有填日期」组）；
+/// · 跨类 mid 去重兜底（正常 image/video 不相交，纯保险）。
+List<PhotoItem> mergePhotoVideo(List<PhotoItem> photos, List<PhotoItem> videos) {
+  final merged = <PhotoItem>[...photos, ...videos];
+  final seen = <String>{};
+  final deduped = <PhotoItem>[
+    for (final p in merged)
+      if (p.id.isNotEmpty && seen.add(p.id)) p,
+  ];
+  final indexed = <int, PhotoItem>{
+    for (var i = 0; i < deduped.length; i++) i: deduped[i],
+  };
+  final order = indexed.keys.toList()
+    ..sort((a, b) {
+      final da = indexed[a]!.date;
+      final db = indexed[b]!.date;
+      if (da.isEmpty != db.isEmpty) return da.isEmpty ? 1 : -1; // 空 date 最后
+      final c = db.compareTo(da); // date 倒序（新在前）
+      return c != 0 ? c : a.compareTo(b); // 稳定：原序（照片在前）
+    });
+  return [for (final i in order) indexed[i]!];
+}

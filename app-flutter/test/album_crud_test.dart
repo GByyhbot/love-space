@@ -235,7 +235,7 @@ void main() {
 
   // ── ③ 相册页 UI：新建相册弹层可取消 ─────────────────────────
   group('③ 新建相册弹层', () {
-    ProviderContainer _widgetSetup(_FakeAdapter adapter) {
+    ProviderContainer widgetSetup(_FakeAdapter adapter) {
       final dio = Dio(BaseOptions(baseUrl: 'https://test.local'))
         ..httpClientAdapter = adapter;
       return ProviderContainer(overrides: [
@@ -254,7 +254,7 @@ void main() {
         }
         return _json([]);
       });
-      final container = _widgetSetup(adapter);
+      final container = widgetSetup(adapter);
       addTearDown(container.dispose);
       await tester.pumpWidget(UncontrolledProviderScope(
         container: container,
