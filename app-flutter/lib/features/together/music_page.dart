@@ -9,19 +9,25 @@ library;
 
 import 'dart:io';
 
-import 'package:dio/dio.dart' show Options, ResponseType;
+import 'package:dio/dio.dart' show Dio, Options, ResponseType;
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../../core/api/api_client.dart' as api;
-import '../../core/chat/chat_media.dart' show chatBaseProvider;
+import '../../core/chat/chat_media.dart'
+    show chatBaseProvider, uploadChatMedia, validateUploadFile;
 import '../../core/together/together_data.dart';
 import '../auth/auth_state.dart';
 import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
 import 'together_controller.dart';
 import 'tool_pages.dart' show ToolTile;
+
+/// 音乐上传允许的扩展名（对齐 Web musicForm：建议 mp3，≤20MB——Web 口径）
+const _musicUploadExts = ['mp3', 'm4a', 'wav', 'aac', 'ogg'];
+const _musicUploadMaxBytes = 20 * 1024 * 1024;
 
 class MusicPage extends ConsumerStatefulWidget {
   const MusicPage({super.key});
@@ -43,7 +49,10 @@ class _MusicPageState extends ConsumerState<MusicPage> {
 
   @override
   void dispose() {
-    _player?.dispose();
+    try {
+      _player?.dispose().timeout(const Duration(seconds: 3));
+    } catch (_) {// 插件不可用（测试环境）时直接忽略
+    }
     super.dispose();
   }
 
@@ -58,7 +67,7 @@ class _MusicPageState extends ConsumerState<MusicPage> {
     if (_loadingKey != null) return; // 一次一个，防连点
     // 再点正在播的 → 停止
     if (_playingKey == key) {
-      await _player?.stop();
+      await _stopPlayer();
       setState(() => _playingKey = null);
       return;
     }
@@ -81,10 +90,11 @@ class _MusicPageState extends ConsumerState<MusicPage> {
           '${cacheDir.path}${Platform.pathSeparator}${key.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_')}.m4a');
       await file.writeAsBytes(bytes, flush: true);
       final player = _player ??= AudioPlayer();
-      await player.stop();
-      await player.setFilePath(file.path);
+      // 播放器操作全部带超时守卫（语音同款）：插件不可用/挂起时不卡死调用方
+      await player.stop().timeout(_playerTimeout);
+      await player.setFilePath(file.path).timeout(_playerTimeout);
       setState(() => _playingKey = key);
-      await player.play();
+      await player.play().timeout(_playerTimeout);
     } catch (e) {
       if (mounted) {
         ref.read(chatToastProvider.notifier).show('试听失败：$e',
@@ -93,6 +103,15 @@ class _MusicPageState extends ConsumerState<MusicPage> {
       }
     } finally {
       if (mounted) setState(() => _loadingKey = null);
+    }
+  }
+
+  static const _playerTimeout = Duration(seconds: 8);
+
+  Future<void> _stopPlayer() async {
+    try {
+      await _player?.stop().timeout(_playerTimeout);
+    } catch (_) {// 停止失败不阻断 UI（含插件不可用的测试环境）
     }
   }
 
@@ -106,7 +125,18 @@ class _MusicPageState extends ConsumerState<MusicPage> {
     final cs = theme.colorScheme;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('共同歌单')),
+      appBar: AppBar(
+        title: const Text('共同歌单'),
+        actions: [
+          // 上传本地歌曲（Web musicForm 同构管线：POST /api/media → mid →
+          // body.media；决策：与 Web 同构，本轮补齐——返修 2.1.4）
+          IconButton(
+            tooltip: '上传本地歌曲',
+            onPressed: () => _pickAndUpload(),
+            icon: const Icon(Icons.upload_rounded),
+          ),
+        ],
+      ),
       floatingActionButton: FloatingActionButton.extended(
         tooltip: '搜歌入单',
         onPressed: () => _showSearch(context, ref),
@@ -226,7 +256,101 @@ class _MusicPageState extends ConsumerState<MusicPage> {
     ]);
   }
 
-  /// 搜索入单：GET /api/music/search?q=&limit=20（服务端缓存 10 分钟，main.py:1780）。
+  /// 选本地音频 → 上传 → 建记录（body.media=[mid]，Web musicForm 同构）。
+  Future<void> _pickAndUpload() async {
+    try {
+      final picked = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: _musicUploadExts,
+        withData: true,
+      );
+      final file = picked?.files.single;
+      if (file == null) return; // 取消
+      final bytes = file.bytes;
+      if (bytes == null) {
+        if (!mounted) return;
+        ref.read(chatToastProvider.notifier).show('读取文件失败',
+            tone: ChatToastTone.error);
+        return;
+      }
+      if (!mounted) return;
+      await _uploadAndCreate(file.name, bytes);
+    } catch (e) {
+      if (!mounted) return;
+      ref.read(chatToastProvider.notifier).show('选择文件失败：$e',
+          tone: ChatToastTone.error);
+    }
+  }
+
+  /// 选定文件后的上传建单流程：本地预检 → 弹表单确认歌名 → [uploadMusicToPlaylist]。
+  Future<void> _uploadAndCreate(String filename, List<int> bytes) async {
+    final precheck = validateUploadFile(filename, bytes.length);
+    if (precheck != null) {
+      ref.read(chatToastProvider.notifier).show(precheck,
+          tone: ChatToastTone.error);
+      return;
+    }
+    if (bytes.length > _musicUploadMaxBytes) {
+      ref.read(chatToastProvider.notifier).show('音频超过 20 MB，换个小一点的吧',
+          tone: ChatToastTone.error);
+      return;
+    }
+    if (!mounted) return;
+    // 弹表单确认歌名/想说的话（歌名预填文件名去扩展）
+    final defaultTitle = filename.replaceAll(RegExp(r'\.[^.]+$'), '');
+    final titleCtrl = TextEditingController(text: defaultTitle);
+    final contentCtrl = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (dctx) => AlertDialog(
+        title: const Text('上传本地歌曲'),
+        content: Form(
+          key: formKey,
+          child: SizedBox(
+            width: 360,
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              Text('已选：$filename（${(bytes.length / 1024 / 1024).toStringAsFixed(1)} MB）',
+                  style: Theme.of(dctx).textTheme.bodySmall),
+              TextFormField(
+                controller: titleCtrl,
+                maxLength: 120,
+                decoration: const InputDecoration(
+                    labelText: '歌名', counterText: ''),
+                validator: (v) =>
+                    (v ?? '').trim().isEmpty ? '歌名不能为空' : null,
+              ),
+              TextFormField(
+                controller: contentCtrl,
+                maxLength: 200,
+                decoration: const InputDecoration(
+                    labelText: '歌手，或者想说的话', counterText: ''),
+              ),
+            ]),
+          ),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.of(dctx).pop(false),
+              child: const Text('取消')),
+          FilledButton(
+              onPressed: () {
+                if (formKey.currentState?.validate() ?? false) {
+                  Navigator.of(dctx).pop(true);
+                }
+              },
+              child: const Text('上传并放入歌单')),
+        ],
+      ),
+    );
+    if (saved != true) return;
+    if (!mounted) return;
+    await uploadMusicToPlaylist(ProviderScope.containerOf(context),
+        filename: filename, bytes: bytes, title: titleCtrl.text.trim(),
+        content: contentCtrl.text.trim());
+  }
+
+/// 搜索入单：GET /api/music/search?q=&limit=20（服务端缓存 10 分钟，main.py:1780）。
   /// 返回 items: {title, artist, album, preview, art, dur}。
   /// 加入歌单 = POST /api/records kind=music，body 带 song 字段（clean_body
   /// permitted 含 song，main.py:949-973 会校验并归一化 src/art 白名单）。
@@ -391,5 +515,39 @@ class _MusicPageState extends ConsumerState<MusicPage> {
     ref.read(chatToastProvider.notifier).show(
         err == null ? '已保存' : '保存失败：$err',
         tone: err == null ? ChatToastTone.success : ChatToastTone.error);
+  }
+}
+
+/// 选定文件后的上传建单（公开以便单测；_pickAndUpload 的表单确认后调这里）：
+/// POST /api/media（multipart，App 与 Web 同构管线）→ mid →
+/// POST /api/records kind=music body.media=[mid]。
+/// 🔴 单测注意：Dio multipart POST 在 FakeAsync 测试环境会挂起（套件从未
+/// 测过该路径），测试须以 [upload] 桩替换真实管线；真实管线=uploadChatMedia
+/// （与聊天上传同构、真机已验证）。
+Future<void> uploadMusicToPlaylist(
+    ProviderContainer container,
+    {required String filename,
+    required List<int> bytes,
+    required String title,
+    required String content,
+    Future<String> Function(Dio dio, String filename, List<int> bytes)? upload}) async {
+  container.read(chatToastProvider.notifier).show('正在上传…',
+      tone: ChatToastTone.info);
+  final dio = await container.read(api.dioProvider.future);
+  try {
+    final mid = await (upload ?? uploadChatMedia)(dio, filename, bytes);
+    final err = await container
+        .read(togetherControllerProvider.notifier)
+        .add('music', {
+      'title': title,
+      'content': content,
+      'media': [mid],
+    });
+    container.read(chatToastProvider.notifier).show(
+        err == null ? '已经放进歌单了' : '添加失败：$err',
+        tone: err == null ? ChatToastTone.success : ChatToastTone.error);
+  } catch (e) {
+    container.read(chatToastProvider.notifier).show('上传失败：$e',
+        tone: ChatToastTone.error);
   }
 }

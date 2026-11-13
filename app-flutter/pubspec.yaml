@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 2.1.3+213
+version: 2.1.4+214
 
 environment:
   sdk: ^3.13.7
@@ -44,6 +44,7 @@ dependencies:
   cached_network_image: ^3.4.1
   # 头像/媒体选取（阶段 2 账号页头像上传先用，阶段 4 媒体全面使用）
   image_picker: ^1.1.2
+  file_picker: ^8.1.2
   # 本地缓存选 drift（SQLite/类型安全）：聊天与 records 是强结构数据，需要条件查询与游标分页，
   # 与服务端 records 模型对齐；理由按方案要求在脚手架提交说明中注明
   drift: ^2.20.0

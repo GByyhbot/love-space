@@ -13,8 +13,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api/api_client.dart' as api;
 import '../../core/together/together_data.dart';
 
-/// 段 A/C 拉取的 kind 集（纪念日只读——管理页 B 段建；问答/打卡段 C）
-const togetherKinds = 'mood,note,wish,anniversary,question,habit';
+/// 段 A/C/D 拉取的 kind 集。
+/// 🔴 返修教训（2.1.3→2.1.4）：段 D 新增 quest/ledger/music 三页时**漏扩此串**，
+/// 服务端按 kind 过滤导致存量记录永不返回（自测夹具无视 kind 参数而漏网）——
+/// 今后新增工具页必须同步扩这里 + 更新 together_test 的 load 断言。
+const togetherKinds =
+    'mood,note,wish,anniversary,question,habit,quest,ledger,music';
 
 class TogetherState {
   const TogetherState({

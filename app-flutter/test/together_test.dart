@@ -152,7 +152,7 @@ void main() {
 
   // ── ② 控制器 ─────────────────────────────────────────────────
   group('② 控制器', () {
-    test('load：一次全量 kind=mood,note,wish,anniversary,question,habit&limit=1000', () async {
+    test('load：一次全量 kind=mood,note,wish,anniversary,question,habit,quest,ledger,music&limit=1000', () async {
       final adapter = _FakeAdapter((options, i) {
         if (options.uri.path == '/api/records') {
           return _json([_toolRecord('m1', 'mood')]);
@@ -162,7 +162,8 @@ void main() {
       final container = await _setup(adapter);
       expect(container.read(togetherControllerProvider).records.single.id, 'm1');
       final req = adapter.requests.first;
-      expect(req.queryParameters['kind'], 'mood,note,wish,anniversary,question,habit');
+      expect(req.queryParameters['kind'],
+          'mood,note,wish,anniversary,question,habit,quest,ledger,music');
       expect(req.queryParameters['limit'], 1000);
     });
 
