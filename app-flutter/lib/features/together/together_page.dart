@@ -121,6 +121,20 @@ class _TogetherPageState extends ConsumerState<TogetherPage> {
                 desc: '把属于我们的歌，放在一起',
                 route: '/together/music',
               ),
+              _toolCard(
+                context,
+                emoji: '📊',
+                title: '数据看板',
+                desc: '把日子过成数据，也过成回忆',
+                route: '/together/dashboard',
+              ),
+              _toolCard(
+                context,
+                emoji: '📬',
+                title: '回忆周报',
+                desc: '把这一周，收进一封小小的信',
+                route: '/together/weekly',
+              ),
               if (st.error != null) ...[
                 const SizedBox(height: 12),
                 Text(st.error!,

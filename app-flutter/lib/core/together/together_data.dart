@@ -27,6 +27,8 @@ class TogetherRecord {
     this.answerCount = 0,
     this.checks = const [],
     this.media = const [],
+    this.likeCount = 0,
+    this.commentCount = 0,
   });
 
   final String id;
@@ -49,6 +51,10 @@ class TogetherRecord {
   /// 附件媒体（序列化 media：{id,name,mime,status,preview}）——music 记录的
   /// 本地音频走这里（在线歌走 body.song.src）
   final List<Map<String, String>> media;
+
+  /// 点赞 / 评论数（序列化记录的 likes/comments 数组长度；周报精选简卡用）
+  final int likeCount;
+  final int commentCount;
 
   factory TogetherRecord.fromJson(Map<String, dynamic> j) {
     final rawBody = (j['body'] ?? {}) as Map;
@@ -74,6 +80,8 @@ class TogetherRecord {
       answerCount: (j['answer_count'] as num?)?.toInt() ?? 0,
       checks: strMaps(j['checks']),
       media: strMaps(j['media']),
+      likeCount: j['likes'] is List ? (j['likes'] as List).length : 0,
+      commentCount: j['comments'] is List ? (j['comments'] as List).length : 0,
     );
   }
 
@@ -451,3 +459,223 @@ LedgerSummary ledgerSummary(
     trend: trend,
   );
 }
+
+// ── 段 E · 数据看板 / 回忆周报（只读） ────────────────────────────
+// 契约（app/main.py:2082 dashboard、:2126 weekly 实读，2026-11-14）：
+// · /api/dashboard：{total, by_kind, months(12 项旧→新, {month,count}),
+//   moods{emoji:n}, likes, comments, photos, days_together(可 null),
+//   wishes_total, wishes_done}
+// · /api/weekly?offset=：{offset, label, start(周一 ISO), end(周日 ISO),
+//   total, prev_total, delta, days_active, photos, by_kind, moods,
+//   top_mood(可 null), likes, comments, streak, last_record_days_ago
+//   (可 null), highlights(serialize_many 记录数组), message}
+//   offset>0 或 <-52 → 422（Web 同口径：下一周在 off>=0 禁用）。
+// 数字口径逐字对齐 Web dashboardPage/weeklyPage（app.js:1303/:1317）。
+
+/// kind 中文名（Web app.js:92 kindLabel 逐字）
+const kindLabel = {
+  'post': '时光动态', 'diary': '私密日记', 'draft': '草稿',
+  'surprise': '定时惊喜', 'anniversary': '纪念日', 'wish': '共同愿望',
+  'personal_wish': '个人心愿', 'mood': '每日心情', 'note': '留言板',
+  'question': '情侣问答', 'habit': '共同打卡', 'chat': '聊天',
+  'album': '相册', 'quest': '恋爱清单', 'ledger': '共同账本',
+  'period': '生理期', 'music': '共同歌单',
+};
+
+class MonthCount {
+  const MonthCount({required this.month, required this.count});
+  final String month;
+  final int count;
+}
+
+class DashboardData {
+  const DashboardData({
+    required this.total,
+    required this.byKind,
+    required this.months,
+    required this.moods,
+    required this.likes,
+    required this.comments,
+    required this.photos,
+    required this.daysTogether,
+    required this.wishesTotal,
+    required this.wishesDone,
+  });
+  final int total;
+  final Map<String, int> byKind;
+  final List<MonthCount> months; // 旧→新
+  final Map<String, int> moods;
+  final int likes;
+  final int comments;
+  final int photos;
+  final int? daysTogether;
+  final int wishesTotal;
+  final int wishesDone;
+
+  /// 记录构成行（Web 口径：过滤有中文标签的 kind，按数量降序）
+  List<(String, int)> get kindRows => (byKind.entries
+        .where((e) => kindLabel[e.key] != null)
+        .map((e) => (e.key, e.value))
+        .toList()
+      ..sort((a, b) => b.$2.compareTo(a.$2)));
+
+  /// 心情分布行（按数量降序）
+  List<(String, int)> get moodRows =>
+      (moods.entries.map((e) => (e.key, e.value)).toList()
+        ..sort((a, b) => b.$2.compareTo(a.$2)));
+}
+
+/// 解析 /api/dashboard 响应（畸形容错，绝不抛异常）
+DashboardData parseDashboard(Object? data) {
+  if (data is! Map) {
+    return DashboardData(
+        total: 0, byKind: const {}, months: const [], moods: const {},
+        likes: 0, comments: 0, photos: 0, daysTogether: null,
+        wishesTotal: 0, wishesDone: 0);
+  }
+  int asInt(Object? v) => v is num ? v.toInt() : (int.tryParse('${v ?? ''}') ?? 0);
+  final months = <MonthCount>[];
+  for (final e in (data['months'] ?? const []) as List) {
+    if (e is Map) {
+      months.add(MonthCount(
+          month: (e['month'] ?? '').toString(),
+          count: asInt(e['count'])));
+    }
+  }
+  Map<String, int> asIntMap(Object? raw) => {
+        for (final e in ((raw ?? const {}) as Map).entries)
+          e.key.toString(): asInt(e.value),
+      };
+  return DashboardData(
+    total: asInt(data['total']),
+    byKind: asIntMap(data['by_kind']),
+    months: months,
+    moods: asIntMap(data['moods']),
+    likes: asInt(data['likes']),
+    comments: asInt(data['comments']),
+    photos: asInt(data['photos']),
+    daysTogether:
+        data['days_together'] is num ? (data['days_together'] as num).toInt() : null,
+    wishesTotal: asInt(data['wishes_total']),
+    wishesDone: asInt(data['wishes_done']),
+  );
+}
+
+class WeeklyData {
+  const WeeklyData({
+    required this.offset,
+    required this.label,
+    required this.start,
+    required this.end,
+    required this.total,
+    required this.prevTotal,
+    required this.delta,
+    required this.daysActive,
+    required this.photos,
+    required this.byKind,
+    required this.moods,
+    required this.topMood,
+    required this.likes,
+    required this.comments,
+    required this.streak,
+    required this.lastRecordDaysAgo,
+    required this.highlights,
+    required this.message,
+  });
+  final int offset;
+  final String label;
+  final String start; // 周一 yyyy-MM-dd
+  final String end; // 周日 yyyy-MM-dd
+  final int total;
+  final int prevTotal;
+  final int delta;
+  final int daysActive;
+  final int photos;
+  final Map<String, int> byKind;
+  final Map<String, int> moods;
+  final String? topMood;
+  final int likes;
+  final int comments;
+  final int streak;
+  final int? lastRecordDaysAgo;
+  final List<TogetherRecord> highlights;
+  final String message;
+
+  /// 记录构成行 / 心情分布行（口径同 DashboardData）
+  List<(String, int)> get kindRows => (byKind.entries
+        .where((e) => kindLabel[e.key] != null)
+        .map((e) => (e.key, e.value))
+        .toList()
+      ..sort((a, b) => b.$2.compareTo(a.$2)));
+  List<(String, int)> get moodRows =>
+      (moods.entries.map((e) => (e.key, e.value)).toList()
+        ..sort((a, b) => b.$2.compareTo(a.$2)));
+
+  /// 周范围短标签（Web short=d.slice(5).replace('-','.')：'11.10'）
+  String get rangeLabel =>
+      '${start.substring(0, 4)} 年 · '
+      '${_short(start)} – ${_short(end)}';
+  static String _short(String d) =>
+      d.length >= 10 ? d.substring(5).replaceFirst('-', '.') : d;
+
+  /// delta 文案（Web app.js:1322 逐字）
+  String get deltaText => delta > 0
+      ? '比上一周多写了 $delta 条'
+      : delta < 0
+          ? '比上一周少了 ${-delta} 条'
+          : '和上一周一样多';
+
+  /// streak 行（Web app.js:1323 逐字）
+  String get streakLine => streak > 0
+      ? '🔥 已连续记录 $streak 天'
+      : lastRecordDaysAgo != null
+          ? '上次记录在 $lastRecordDaysAgo 天前'
+          : '还没有开始记录';
+}
+
+/// 解析 /api/weekly 响应（畸形容错；highlights 走 parseTogetherRecords）
+WeeklyData parseWeekly(Object? data) {
+  if (data is! Map) {
+    return WeeklyData(
+        offset: 0, label: '', start: '', end: '', total: 0, prevTotal: 0,
+        delta: 0, daysActive: 0, photos: 0, byKind: const {}, moods: const {},
+        topMood: null, likes: 0, comments: 0, streak: 0,
+        lastRecordDaysAgo: null, highlights: const [], message: '');
+  }
+  int asInt(Object? v) => v is num ? v.toInt() : (int.tryParse('${v ?? ''}') ?? 0);
+  Map<String, int> asIntMap(Object? raw) => {
+        for (final e in ((raw ?? const {}) as Map).entries)
+          e.key.toString(): asInt(e.value),
+      };
+  return WeeklyData(
+    offset: asInt(data['offset']),
+    label: (data['label'] ?? '').toString(),
+    start: (data['start'] ?? '').toString(),
+    end: (data['end'] ?? '').toString(),
+    total: asInt(data['total']),
+    prevTotal: asInt(data['prev_total']),
+    delta: asInt(data['delta']),
+    daysActive: asInt(data['days_active']),
+    photos: asInt(data['photos']),
+    byKind: asIntMap(data['by_kind']),
+    moods: asIntMap(data['moods']),
+    topMood: data['top_mood']?.toString(),
+    likes: asInt(data['likes']),
+    comments: asInt(data['comments']),
+    streak: asInt(data['streak']),
+    lastRecordDaysAgo: data['last_record_days_ago'] is num
+        ? (data['last_record_days_ago'] as num).toInt()
+        : null,
+    highlights: parseTogetherRecords(data['highlights']),
+    message: (data['message'] ?? '').toString(),
+  );
+}
+
+/// 周报复制文字版（Web app.js:2479 act('week-copy') 逐字 4 行）
+String weeklyCopyText(WeeklyData w) => [
+      '${w.label}的回忆周报（${w.start} 至 ${w.end}）',
+      w.message,
+      '记录 ${w.total} 条 · 照片 ${w.photos} 张 · 有记录 ${w.daysActive} 天',
+      '喜欢 ${w.likes} 次 · 留言与评论 ${w.comments} 条',
+    ].join('\n');
+

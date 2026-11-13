@@ -15,11 +15,13 @@ import 'features/chat/messages_page.dart';
 import 'features/shell/shell_page.dart';
 import 'features/together/anniversary_page.dart';
 import 'features/together/calendar_page.dart';
+import 'features/together/dashboard_page.dart';
 import 'features/together/ledger_page.dart';
 import 'features/together/music_page.dart';
 import 'features/together/question_habit_pages.dart';
 import 'features/together/quest_page.dart';
 import 'features/together/tool_pages.dart';
+import 'features/together/weekly_page.dart';
 
 void main() {
   runApp(const ProviderScope(child: LoveApp()));
@@ -63,6 +65,11 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/together/quest', builder: (_, _) => const QuestPage()),
       GoRoute(path: '/together/ledger', builder: (_, _) => const LedgerPage()),
       GoRoute(path: '/together/music', builder: (_, _) => const MusicPage()),
+      GoRoute(
+          path: '/together/dashboard',
+          builder: (_, _) => const DashboardPage()),
+      GoRoute(
+          path: '/together/weekly', builder: (_, _) => const WeeklyPage()),
       // 相册查看器（条目 5 · 段 B 甲档）：Hero 共享元素转场 + 跨相册翻页 +
       // InteractiveViewer 缩放 + 下拉跟手关闭 + 计数/caption/预加载 + 下载顶部通知。
       // 二级页一律 context.push：保留主页在路由栈，返回按钮/系统手势回网格。
