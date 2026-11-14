@@ -19,6 +19,7 @@ import 'package:flutter/services.dart'
     show HapticFeedback, PlatformException;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:record/record.dart' show Amplitude;
 
@@ -557,8 +558,9 @@ class _ChatComposeState extends ConsumerState<ChatCompose>
       case 'tool-wish':
       case 'tool-ledger':
         _snack('条目 6 迁移后开放');
-      case 'tool-period':
-        _snack('条目 8 迁移后开放');
+      case 'tool-period': // 条目 8 段 8-A：与 hub 🌸 宽卡同一 /period 二级页
+        _pickFunction();
+        context.push('/period');
       case 'dashboard':
       case 'weekly':
         _snack('条目 9 迁移后开放');

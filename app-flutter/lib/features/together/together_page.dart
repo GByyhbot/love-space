@@ -1,8 +1,10 @@
 /// 「我们」页 hub（条目 6 · 段 A/B）：
-/// heading + 纪念日只读展示卡（最近纪念日倒计时，段 B 起点击直达管理页——
-/// 决策点①定案：管理页归首页入口 + 本卡双入口）+ 已落地工具卡
-/// （共同年历 / 心情手记 / 悄悄留言 / 共同愿望），后续段页面落地后逐段增补卡，
-/// 🔴 不预放死卡。数据与工具页共用 togetherControllerProvider（一次全量）。
+/// heading + 🌸 生理期宽卡（条目 8 段 8-A 已落地，对齐 Web `app.js:1229`
+/// tools-grid 首位硬编码宽卡）+ 纪念日只读展示卡（最近纪念日倒计时，
+/// 段 B 起点击直达管理页——决策点①定案：管理页归首页入口 + 本卡双入口）
+/// + 已落地工具卡（共同年历 / 心情手记 / 悄悄留言 / 共同愿望），
+/// 后续段页面落地后逐段增补卡，🔴 不预放死卡。数据与工具页共用
+/// togetherControllerProvider（一次全量）。
 /// SSE other 且 tab 激活 → reset 重拉；顶部通知由全局 ChatToastHost 承载。
 library;
 
@@ -56,6 +58,11 @@ class _TogetherPageState extends ConsumerState<TogetherPage> {
                   style: theme.textTheme.bodySmall
                       ?.copyWith(color: theme.colorScheme.outline)),
               const SizedBox(height: 16),
+              // 条目 8 段 8-A（D1）：🌸 生理期宽卡置于 hub **顶部**，
+              // 文案与位置逐字对齐 Web `app.js:1229` tools-grid 首位硬编码宽卡
+              // 「🌸 生理期 / 记下周期，把照顾提前一点」；点击 push('/period')。
+              const _PeriodEntryCard(),
+              const SizedBox(height: 12),
               _AnniversaryCard(ann: ann),
               const SizedBox(height: 12),
               _toolCard(
@@ -148,7 +155,9 @@ class _TogetherPageState extends ConsumerState<TogetherPage> {
     );
   }
 
-  /// 工具入口卡（仅本段已落地页面；后续段随页面落地逐段增补，不预放死卡）
+  /// 工具入口卡（仅已落地页面；后续段随页面落地逐段增补，不预放死卡）。
+  /// 生理期为顶部独立宽卡 [_PeriodEntryCard]（条目 8 段 8-A 已落地），
+  /// 不走此模板；原「不预放死卡」注释针对未落地工具页，本段页面已落地故可增补。
   Widget _toolCard(BuildContext context,
       {required String emoji,
       required String title,
@@ -178,6 +187,52 @@ class _TogetherPageState extends ConsumerState<TogetherPage> {
               Icon(Icons.chevron_right_rounded, color: cs.outline),
             ]),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 🌸 生理期宽卡（条目 8 · 段 8-A · D1 · 决策点⑥「入口卡随条目 8 上」）。
+///
+/// 位置/文案对齐 Web `app.js:1229` tools-grid **首位硬编码宽卡**
+/// `🌸 生理期 / 记下周期，把照顾提前一点`（不在 `toolsList :1219` 的 11 项里）。
+/// 点击 `context.push('/period')` 进独立二级页：二级页 AppBar
+/// `automaticallyImplyLeading` 不关，返回按钮 + 系统手势都能回上一页。
+/// 聊天 ⊕ 面板 `chat_compose.dart` 的 `tool-period` 格改同一跳转，死入口清零。
+class _PeriodEntryCard extends StatelessWidget {
+  const _PeriodEntryCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    return Card(
+      margin: EdgeInsets.zero,
+      color: cs.primaryContainer,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () => context.push('/period'),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+          child: Row(children: [
+            const Text('🌸', style: TextStyle(fontSize: 30)),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('生理期',
+                        style: theme.textTheme.titleMedium
+                            ?.copyWith(color: cs.onPrimaryContainer)),
+                    const SizedBox(height: 2),
+                    Text('记下周期，把照顾提前一点',
+                        style: theme.textTheme.bodySmall
+                            ?.copyWith(color: cs.onPrimaryContainer)),
+                  ]),
+            ),
+            Icon(Icons.chevron_right_rounded, color: cs.onPrimaryContainer),
+          ]),
         ),
       ),
     );

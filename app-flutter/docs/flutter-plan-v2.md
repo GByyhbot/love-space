@@ -46,8 +46,8 @@
 5. **相册**：`/api/photos` + `/api/media/images|videos`，album 记录管理，大图浏览（共享元素转场），多选。
 6. **我们**：anniversary（annual 支持公历/农历/lunar、remind_days）、wish、mood、note、question（answer 子端点、双人作答齐了才互见的规则在服务端，客户端按返回渲染）、habit（check 子端点）、quest、ledger、music（歌单 + `/api/music/search|stream` 试听）。
 7. **个人角落**：diary/draft/surprise（publish_at 定时）/personal_wish（**必须走专属端点** `/api/personal-wishes` 与 `/{rid}/unlock`，通用 CRUD 会被服务端拒绝）、回收站（`trash=true` + restore）。
-8. **生理期**：period 记录走通用 records 接口（服务端自动分库），按 Web 端 period.js 的字段与推算展示实现。
-9. **设置与数据**：notices 通知中心、channels 渠道管理（10 种，配置表单按 Web 端字段）、deliveries、webpush 相关端点原生端跳过、export/backups/storage、imports 导入（可降级为仅查看，录入文件选择在原生端实现成本高，取舍在 PR 描述中注明）。
+8. **设置缺口 + 生理期**：period 记录走通用 records 接口（服务端自动分库），按 Web 端 period.js 的字段与推算展示实现；设置区块 8 卡（Web「我们」页底部）与生理期入口卡同归条目 8（口径见 `together-plan.md:51/:85` 与 `settings-period-plan.md` 定案第四节 D8）。原「条目 9」的编号取消，不复用。
+   **后续章「数据管理与通知渠道」**（原第 9 项内容，归后续章、不属于条目 8）：notices 通知中心、channels 渠道管理（10 种，配置表单按 Web 端字段）、deliveries、webpush 相关端点原生端跳过、export/backups/storage、imports 导入（可降级为仅查看，录入文件选择在原生端实现成本高，取舍在 PR 描述中注明）。端点说明保留，待主人逐段放行后单独立章实现。
 
 ## 阶段 3：聊天与输入区专章（原生实现要点）
 

@@ -14,6 +14,7 @@ import 'features/auth/login_page.dart';
 import 'features/chat/chat_toast.dart' show ChatToastHost;
 import 'features/chat/messages_page.dart';
 import 'features/personal/personal_page.dart';
+import 'features/period/period_page.dart';
 import 'features/shell/shell_page.dart';
 import 'features/together/anniversary_page.dart';
 import 'features/together/calendar_page.dart';
@@ -54,6 +55,9 @@ final routerProvider = Provider<GoRouter>((ref) {
       // 聊天（悄悄话）：二级页，Shell AppBar 私聊图标 push 进入（对齐 Web 顶栏入口）
       GoRoute(path: '/messages', builder: (_, _) => const MessagesPage()),
       GoRoute(path: '/profile', builder: (_, _) => const ProfilePage()),
+      // 条目 8 段 8-A（D1）：生理期独立二级页。hub 🌸 宽卡与聊天 ⊕ 面板
+      // 两入口都 context.push('/period')；AppBar 自动返回 + 系统手势可回上一页。
+      GoRoute(path: '/period', builder: (_, _) => const PeriodPage()),
       // 条目 7 段 7-A / 7-B / 7-C：个人角落五个二级页（一律 context.push，
       // 主页在栈；AppBar 自动返回按钮 + 系统手势都能回上一页）
       GoRoute(

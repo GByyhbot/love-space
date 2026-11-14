@@ -407,6 +407,12 @@ void main() {
         mediaCookieHeadersProvider.overrideWith((ref) async => <String, String>{}),
       ]);
       addTearDown(container.dispose);
+      // 条目 8 段 8-A：hub 顶部新增 🌸 生理期宽卡后，默认 800×600 视口
+      // 装不下前 6 张工具卡（ListView 只构建视口内 children），「共同打卡」
+      // 会被挤出视口造成假失败。放大视口（与 personal_c_test 同款夹具），
+      // 不改动任何产品行为。
+      tester.view.physicalSize = const Size(1080, 2400);
+      tester.view.devicePixelRatio = 1.0;
       await tester.pumpWidget(UncontrolledProviderScope(
         container: container,
         child: const MaterialApp(home: TogetherPage(active: true)),
