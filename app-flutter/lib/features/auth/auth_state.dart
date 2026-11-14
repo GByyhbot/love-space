@@ -10,6 +10,7 @@ import '../../core/api/api_client.dart';
 import '../../core/chat/chat_media.dart' show mediaCookieHeadersProvider;
 import '../../core/chat/chat_state.dart' show chatUnreadProvider;
 import '../../core/config.dart';
+import '../personal/personal_controller.dart' show personalControllerProvider;
 
 enum AuthPhase { checking, out, authed }
 
@@ -258,6 +259,14 @@ class AuthNotifier extends Notifier<AuthPhase> {
     } catch (_) {}
     me = null;
     state = AuthPhase.out;
+    // 🔴 P0-1 ② 换号隐私：根 ProviderScope 跨登录存活、NotifierProvider 非
+    // autoDispose，私密列表缓存会带到下一个账号。登出即作废 personal 控制器
+    // （timeline 已有 _boundUserId 换号重置；together/聊天态是共享或瞬态数据，
+    // 不承载 PRIVATE 记录，无需 invalidate）。
+    // personal 控制器经 personalCurrentUserProvider 依赖 authProvider，
+    // 用 ref.invalidate 会触发 Riverpod CircularDependencyError（依赖环断言）；
+    // 走 ref.container.invalidate 由容器层作废，绕过该断言但效果相同。
+    ref.container.invalidate(personalControllerProvider);
     // 客户端侧不留痕：清全部线路 jar 记录 + secure_storage 正本
     try {
       final jar = await ref.read(cookieJarProvider.future);

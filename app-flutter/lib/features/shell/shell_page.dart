@@ -11,6 +11,7 @@ import '../../core/chat/chat_state.dart';
 import '../../core/sse/sse_client.dart';
 import '../album/album_page.dart';
 import '../home/home_page.dart';
+import '../personal/personal_page.dart';
 import '../timeline/composer_sheet.dart';
 import '../timeline/timeline_page.dart';
 import '../together/together_page.dart';
@@ -44,18 +45,21 @@ class _ShellPageState extends ConsumerState<ShellPage> {
     final unread = ref.watch(chatUnreadProvider);
     final me = ref.watch(authProvider.notifier).me;
     final theme = Theme.of(context);
-    // IndexedStack 常驻四个 tab：时光列表/筛选状态切页不丢（时光页状态
-    // 挂 keepAlive controller，双保险）
+    // IndexedStack 常驻五个 tab：时光列表/筛选状态切页不丢（时光页状态
+    // 挂 keepAlive controller，双保险）；条目 7 段 7-A 新增「角落」第 5 页。
     final pages = [
       HomePage(onGoTab: (tab) => setState(() => _tab = tab)),
       TimelinePage(active: _tab == 1),
       AlbumPage(active: _tab == 2),
       // 条目 6 段 B：hub 宫格（纪念日展示卡直达管理页 /together/anniversary）
       TogetherPage(active: _tab == 3),
+      // 条目 7 段 7-A：个人角落（页内 diary / draft 两 tab；发布 post 由控制器
+      // 显式触发时光重拉，无需 active 门控，故不传 active 死参数）
+      const PersonalPage(),
     ];
     return Scaffold(
       appBar: AppBar(
-        title: Text(const ['首页', '时光', '相册', '我们'][_tab]),
+        title: Text(const ['首页', '时光', '相册', '我们', '个人角落'][_tab]),
         actions: [
           // 私聊入口（对齐 Web 顶栏「私聊」图标，带未读角标；>99 显示 99+）。
           // 🔴 阶段 2 通则：二级页一律 push 打开（保留主页在路由栈），
@@ -95,19 +99,46 @@ class _ShellPageState extends ConsumerState<ShellPage> {
       bottomNavigationBar: BottomAppBar(
         shape: const CircularNotchedRectangle(),
         notchMargin: 6,
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: [
-            _NavItem(icon: Icons.home_rounded, label: '首页', index: 0, current: _tab, onTap: () => setState(() => _tab = 0)),
-            _NavItem(icon: Icons.history_rounded, label: '时光', index: 1, current: _tab, onTap: () => setState(() => _tab = 1)),
+        // 🔴 P1-2：M3 BottomAppBar 默认左右各 16 padding（bottom_app_bar.dart
+        // :221-222），五个 tab 在 W<411 时会 RenderFlex overflow（QA 实测
+        // 320→44px / 360→24 / 393→7.5 / 400→4.0）。清零后可用宽 = W，
+        // 每侧 Expanded=(W−52)/2，右侧 3×44=132 ≤ (320−52)/2=134，六档全过。
+        padding: EdgeInsets.zero,
+        child: SizedBox(
+          height: 52,
+          // 五个 tab 分列中央 52px FAB 缺口两侧：两侧 Expanded 等宽 →
+          // 缺口恒在屏幕正中，不挤压 notch；单项宽 44 让右侧 3 项在 W=320
+          // 也放得下（3×44=132 ≤ (320−52)/2=134）。
+          child: Row(children: [
+            Expanded(
+              child: Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                _navItem(0, Icons.home_rounded, '首页'),
+                _navItem(1, Icons.history_rounded, '时光'),
+              ]),
+            ),
             const SizedBox(width: 52),
-            _NavItem(icon: Icons.photo_library_rounded, label: '相册', index: 2, current: _tab, onTap: () => setState(() => _tab = 2)),
-            _NavItem(icon: Icons.favorite_rounded, label: '我们', index: 3, current: _tab, onTap: () => setState(() => _tab = 3)),
-          ],
+            Expanded(
+              child: Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                _navItem(2, Icons.photo_library_rounded, '相册'),
+                _navItem(3, Icons.favorite_rounded, '我们'),
+                _navItem(4, Icons.lock_outline_rounded, '角落'),
+              ]),
+            ),
+          ]),
         ),
       ),
     );
   }
+  /// 单个导航项（[index] 0..4；onGoTab 由首页快捷入口传入，含 4=角落）
+  Widget _navItem(int index, IconData icon, String label) => _NavItem(
+        icon: icon,
+        label: label,
+        index: index,
+        current: _tab,
+        onTap: () => setState(() => _tab = index),
+      );
 }
 
 class _NavItem extends StatelessWidget {
@@ -125,7 +156,7 @@ class _NavItem extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(14),
       child: SizedBox(
-        width: 72,
+        width: 44,
         height: 52,
         child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
           Icon(icon, size: 22, color: active ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.outline),

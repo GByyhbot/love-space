@@ -29,9 +29,13 @@ import 'timeline_controller.dart';
 ///   post 态，与时光页发布共用暂存/client_id 幂等一套逻辑。
 /// · [initialAlbum] = 相册页上传预填（段 C）：非空时预填该相册分类并跳过
 ///   本地暂存恢复（干净起点，避免把上一次草稿混进当前相册）。
+/// · [editKind] = 编辑态强制 PUT 的 kind（条目 7 草稿箱「继续编辑」传
+///   'draft'：timelineController.editRecord 默认按时光列表里的卡取 kind，
+///   草稿不在该列表会被误判成 post；这里显式覆盖，不另造编辑器）。
 Future<void> showComposerSheet(
   BuildContext context, {
   Record? editRecord,
+  String? editKind,
   String? initialContent,
   List<String>? initialMediaIds,
   String? initialAlbum,
@@ -43,6 +47,7 @@ Future<void> showComposerSheet(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
     builder: (_) => ComposerSheet(
       editRecord: editRecord,
+      editKind: editKind,
       initialContent: initialContent,
       initialMediaIds: initialMediaIds,
       initialAlbum: initialAlbum,
@@ -69,11 +74,15 @@ class ComposerSheet extends ConsumerStatefulWidget {
   const ComposerSheet({
     super.key,
     this.editRecord,
+    this.editKind,
     this.initialContent,
     this.initialMediaIds,
     this.initialAlbum,
   });
   final Record? editRecord;
+
+  /// 编辑态强制 PUT kind（草稿箱继续编辑 = 'draft'）
+  final String? editKind;
   final String? initialContent;
   final List<String>? initialMediaIds;
   final String? initialAlbum;
@@ -553,7 +562,7 @@ class _ComposerSheetState extends ConsumerState<ComposerSheet> {
 
     final err = await ref.read(timelineControllerProvider.notifier).editRecord(
         widget.editRecord!.id, changes,
-        originalBody: _originalBody);
+        originalBody: _originalBody, kindOverride: widget.editKind);
     if (err != null) {
       setState(() { _error = err; _submitting = false; });
       _toast(err, tone: ChatToastTone.error);

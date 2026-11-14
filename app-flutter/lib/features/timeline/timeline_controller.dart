@@ -306,7 +306,7 @@ class TimelineController extends Notifier<TimelineState> {
   /// 客户端不建模的字段（含 permitted 集内未知字段）一律原样带回。
   /// 成功后用服务端返回的完整记录本卡原地替换（不整列表重建）。
   Future<String?> editRecord(String rid, Map<String, dynamic> changes,
-      {Map<String, dynamic>? originalBody}) async {
+      {Map<String, dynamic>? originalBody, String? kindOverride}) async {
     if (_disposed) return null;
     final idx = state.posts.indexWhere((r) => r.id == rid);
     if (idx < 0 && originalBody == null) return null;
@@ -317,7 +317,9 @@ class TimelineController extends Notifier<TimelineState> {
     try {
       final dio = await ref.read(api.dioProvider.future);
       final r = await dio.put('/api/records/$rid', data: {
-        'kind': idx >= 0 ? state.posts[idx].kind : 'post',
+        // 草稿箱「继续编辑」显式保持 kind=draft；其余沿用列表卡的 kind。
+        'kind': kindOverride ??
+            (idx >= 0 ? state.posts[idx].kind : 'post'),
         'body': body,
       });
       if ((r.statusCode ?? 500) >= 400) {
