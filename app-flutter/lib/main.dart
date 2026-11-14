@@ -54,7 +54,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       // 聊天（悄悄话）：二级页，Shell AppBar 私聊图标 push 进入（对齐 Web 顶栏入口）
       GoRoute(path: '/messages', builder: (_, _) => const MessagesPage()),
       GoRoute(path: '/profile', builder: (_, _) => const ProfilePage()),
-      // 条目 7 段 7-A：个人角落两个二级页（一律 context.push，主页在栈；
+      // 条目 7 段 7-A / 7-B：个人角落三个二级页（一律 context.push，主页在栈；
       // AppBar 自动返回按钮 + 系统手势都能回上一页）
       GoRoute(
         path: '/personal/diary-form',
@@ -68,6 +68,13 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (_, state) {
           final extra = (state.extra as Map?) ?? const {};
           return DraftPublishPage(draft: extra['draft']! as TogetherRecord);
+        },
+      ),
+      GoRoute(
+        path: '/personal/surprise-form',
+        builder: (_, state) {
+          final extra = (state.extra as Map?) ?? const {};
+          return SurpriseFormPage(record: extra['record'] as TogetherRecord?);
         },
       ),
       // 「我们」工具页（条目 6 · 段 A/B）：hub 宫格 push 进入，二级页规范

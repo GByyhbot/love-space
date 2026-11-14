@@ -1,15 +1,14 @@
 /* 条目 7 段 7-A 回归（2.1.7/VC217 · 个人角落骨架 + 私密日记 + 草稿箱）：
-   ① kind 串显式拉两类（防「漏扩 kinds」事故）
+   ① kind 串显式拉三类（7-B 起 personalKinds 扩为 diary,draft,surprise，
+      防「漏扩 kinds」事故）
    ② 跨账号隐私（B 账号 me fixture：列表只含 B 的记录，不含 A 的日记/草稿）
    ③ 编辑 PUT body 含原字段（回填铁律 mergeRecordBody）
    ④ 发布三选一：post→时光 / diary→日记 / 草稿箱消失；PUT merge 后完整 body；
       选 surprise 带未来 publish_at
-   ⑤ 删除弹层文案为私密专用（不套用共享类话术：无「30 天」、无
-      「删除后会进入回收站，30 天内可以恢复。」、无「可以恢复」）
-      —— 注：私密专用文案本身含「不进回收站 / 不可恢复」字样，是主人
-      产品口径，故断言的是「不套用共享类话术」而非字面不含「回收站」。
+   ⑤ 删除弹层文案：7-B 起统一标准口径「删除后会进入回收站，30 天内可以恢复。」
+      （与共享类一致；7-A 的「不进回收站、不可恢复」临时口径已作废）
    ⑥ tab 切换不丢状态（滚动位置 + 选中态）
-   ⑦ 无预置死卡（页面只 2 个 tab）
+   ⑦ 无预置死卡（7-A 2 tab → 7-B 4 tab；7-C 个人心愿仍不预置）
 
    夹具存量形状来源（2026-11-14 SSH 直查 NAS 容器 /data/love.db，app.db.body_decode
    解密 PRIVATE body 后导出，脱敏）：
@@ -131,6 +130,10 @@ _FakeAdapter _adapter({
     _FakeAdapter((options, i) {
       if (options.uri.path == '/api/me') return _json(_meFixture(uid: uid));
       if (options.method == 'GET' && options.uri.path == '/api/records') {
+        // 7-B 起个人角落会额外拉一次回收站；7-A 夹具无 deleted 记录，返回空
+        if (options.queryParameters['trash'] == true) {
+          return _json(<Object>[]);
+        }
         if (options.queryParameters['kind'] == 'album') {
           return _json(<Object>[]);
         }
@@ -200,12 +203,13 @@ RequestOptions _lastPut(List<RequestOptions> rs) =>
 void main() {
   // ── ① kind 串 / 骨架 ────────────────────────────────────────────
   group('① 显式 kind 拉取（防漏扩类事故）', () {
-    test('顶层常量 personalKinds = diary,draft 且两类都覆盖', () {
-      expect(personalKinds, 'diary,draft');
+    test('顶层常量 personalKinds = diary,draft,surprise 且三类都覆盖', () {
+      expect(personalKinds, 'diary,draft,surprise');
       final kinds = personalKinds.split(',');
       expect(kinds, contains('diary'));
       expect(kinds, contains('draft'));
-      expect(kinds.length, 2);
+      expect(kinds, contains('surprise'));
+      expect(kinds.length, 3);
     });
 
     testWidgets('load 请求 queryParameters[kind] == personalKinds + author 加固',
@@ -221,9 +225,9 @@ void main() {
       final personalGet = gets.firstWhere(
           (r) => r.queryParameters['kind'] == personalKinds,
           orElse: () => throw TestFailure('未发出显式 kind 的 /api/records 请求'));
-      expect(personalGet.queryParameters['kind'], 'diary,draft');
+      expect(personalGet.queryParameters['kind'], 'diary,draft,surprise');
       expect(personalGet.queryParameters['kind']!.split(','),
-          containsAll(<String>['diary', 'draft']));
+          containsAll(<String>['diary', 'draft', 'surprise']));
       expect(personalGet.queryParameters['author'], 'u1');
       // 两 tab 数据都渲染（客户端按 r.kind 分流）
       expect(find.text('今天只写给自己看的一段话'), findsWidgets);
@@ -434,9 +438,9 @@ void main() {
     });
   });
 
-  // ── ⑤ 删除弹层文案（私密专用） ───────────────────────────────────
-  group('⑤ 私密类删除文案', () {
-    testWidgets('弹层写明不进回收站不可恢复；取消不删、确认才 DELETE',
+  // ── ⑤ 删除弹层文案（7-B 起标准口径） ────────────────────────────
+  group('⑤ 三类统一标准删除文案', () {
+    testWidgets('弹层写明进回收站 30 天可恢复；取消不删、确认才 DELETE',
         (tester) async {
       final adapter = _adapter(records: _baseRecords);
       final container = await _setup(adapter);
@@ -445,8 +449,10 @@ void main() {
       await tester.tap(find.byTooltip('删除日记'));
       await tester.pumpAndSettle();
       expect(find.text(privateDeleteText), findsOneWidget);
-      expect(find.textContaining('30 天'), findsNothing);
-      expect(find.text('删除后会进入回收站，30 天内可以恢复。'), findsNothing);
+      expect(find.textContaining('30 天'), findsWidgets);
+      expect(find.text('删除后会进入回收站，30 天内可以恢复。'), findsOneWidget);
+      expect(find.textContaining('不进回收站'), findsNothing);
+      expect(find.textContaining('不可恢复'), findsNothing);
       // 可取消
       await tester.tap(find.text('取消'));
       await tester.pumpAndSettle();
@@ -467,7 +473,7 @@ void main() {
 
   // ── ⑥ tab 切换不丢状态 ──────────────────────────────────────────
   group('⑥ tab 切换不丢状态 + 无预置死卡', () {
-    testWidgets('滚动位置与选中态切换后保持；页面只有 2 个 tab',
+    testWidgets('滚动位置与选中态切换后保持；7-B 起 4 个 tab',
         (tester) async {
       final records = <Object?>[
         ..._baseRecords,
@@ -488,13 +494,15 @@ void main() {
       final container = await _setup(adapter);
       await _pump(tester, container);
 
-      // ⑦ 无死卡：只 2 个 tab，7-B/7-C 的 tab 一律不预置
-      expect(personalTabs.length, 2);
-      expect(personalTabs.map((t) => t.id).toList(), ['diary', 'draft']);
+      // ⑦ 无死卡：7-A 2 tab → 7-B 4 tab（surprise/trash 已落地），
+      // 7-C「个人心愿」仍不预置
+      expect(personalTabs.length, 4);
+      expect(personalTabs.map((t) => t.id).toList(),
+          ['diary', 'draft', 'surprise', 'trash']);
       expect(find.text('私密日记'), findsOneWidget);
       expect(find.text('草稿箱'), findsOneWidget);
-      expect(find.text('定时惊喜'), findsNothing);
-      expect(find.text('回收站'), findsNothing);
+      expect(find.text('定时惊喜'), findsOneWidget);
+      expect(find.text('回收站'), findsOneWidget);
       expect(find.text('个人心愿'), findsNothing);
 
       // 滚到页尾元素（ListView 懒构建）

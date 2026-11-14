@@ -1,11 +1,11 @@
-/// 「个人角落」段 7-A 页面（条目 7）。
+/// 「个人角落」段 7-A / 7-B 页面（条目 7）。
 ///
 /// · heading「我的小角落」/ 副标题「有些心事留给自己，有些惊喜留给未来。」；
-/// · tab 结构 = 可扩展数据表 [personalTabs]，**本段只 diary / draft 两项**，
-///   7-B（surprise/trash）、7-C（personal_wish）的 tab 一律不预置（无死卡纪律）；
-/// · 两 tab 顶部提示文案逐字对齐 Web app.js:1489；空态/入口按钮逐字对齐；
-/// · 二级页（日记表单 / 草稿发布选择）一律 context.push（AppBar 自动返回 +
-///   系统手势都能回上一页）；tab 间切换用 IndexedStack 常驻，不丢状态；
+/// · tab 结构 = 可扩展数据表 [personalTabs]：7-A 上 diary / draft，7-B 增补
+///   surprise / trash 共四项，7-C（personal_wish）不预置（无死卡纪律）；
+/// · 各 tab 顶部提示文案逐字对齐 Web app.js:1484-1490；
+/// · 二级页（日记表单 / 草稿发布选择 / 惊喜表单）一律 context.push（AppBar
+///   自动返回 + 系统手势都能回上一页）；tab 间切换用 IndexedStack 常驻，不丢状态；
 /// · 草稿「继续编辑 / 写一份草稿」直接对接正式 composer（不另造编辑器）。
 library;
 
@@ -19,8 +19,11 @@ import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
 import '../timeline/composer_sheet.dart';
 import 'personal_controller.dart';
 
-/// 7-A tab 数据表（可扩展：7-B/7-C 落地时在此追加，绝不预置死卡）。
-/// hint 两 tab 同句——Web app.js:1489 只有 surprise 用另一句。
+/// tab 数据表（可扩展：7-C 落地时在此追加，绝不预置死卡）。
+/// hint 逐字对齐 Web app.js:1489：
+/// · diary / draft 同句「这个角落只有你能看见。草稿主动发布后，才会进入共同空间。」
+/// · surprise 用「到约定的时间，惊喜才会被另一半看见。」
+/// trash 顶部文案逐字对齐 app.js:1488「删除的内容保留三十天，你可以恢复自己的记录。」
 const List<({String id, String label, String hint})> personalTabs = [
   (
     id: 'diary',
@@ -32,20 +35,23 @@ const List<({String id, String label, String hint})> personalTabs = [
     label: '草稿箱',
     hint: '这个角落只有你能看见。草稿主动发布后，才会进入共同空间。'
   ),
+  (
+    id: 'surprise',
+    label: '定时惊喜',
+    hint: '到约定的时间，惊喜才会被另一半看见。'
+  ),
+  (
+    id: 'trash',
+    label: '回收站',
+    hint: '删除的内容保留三十天，你可以恢复自己的记录。'
+  ),
 ];
 
-/// 私密类删除确认专用文案（7-A 暂时口径；与共享类 post_card.dart:271 /
-/// tool_pages.dart:160 的「删除后会进入回收站，30 天内可以恢复。」分开）。
-/// 🔴 主人 2026-11-14 12:10 定案**对齐 Web**（作废此前「App 内收紧」）：
-/// ① 事实层：main.py:1150-1156 的 `kind NOT IN (私密三类)` 只在**非 trash 且
-///   不带 kind** 的 else 分支；trash 分支只加 author + deleted；app.js:468 的
-///   kind 串来自 kindLabel（含 diary/draft/surprise），main.py:1443 restore 不区分
-///   kind → Web 上本人删掉的私密日记/草稿**会进回收站并可恢复**。
-/// ② 7-B 回收站按 Web 口径：kind 串含三类、restore 可用、后端零改动。
-/// ③ **本常量与相关测试断言本轮保持原样**，随 7-B 的包（2.1.8）改回标准
-///   口径「删除后进回收站、30 天内可恢复」，不单独出返修包。
-/// 详见 docs/personal-corner-plan.md「删除口径」。
-const String privateDeleteText = '私密内容删除后不进回收站、不可恢复';
+/// 🔴 7-B 搭载修正：删除文案统一标准口径（主人 2026-11-14「甲·对齐 Web」定案）。
+/// 三类（日记 / 草稿 / 惊喜）与共享类 post_card.dart:271 完全一致：
+/// 服务端 DELETE 是软删（main.py:1424），确实进回收站且 30 天内可 restore。
+/// 7-A 的「不进回收站、不可恢复」临时口径作废。
+const String privateDeleteText = '删除后会进入回收站，30 天内可以恢复。';
 
 class PersonalPage extends ConsumerStatefulWidget {
   const PersonalPage({super.key});
@@ -82,7 +88,7 @@ class _PersonalPageState extends ConsumerState<PersonalPage> {
                           ?.copyWith(color: theme.colorScheme.outline)),
                 ]),
           ),
-          // 可扩展 tab 行：只按 personalTabs 表渲染（本段 2 项）
+          // 可扩展 tab 行：只按 personalTabs 表渲染（7-A 2 项 → 7-B 4 项）
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
             child: Row(
@@ -90,9 +96,11 @@ class _PersonalPageState extends ConsumerState<PersonalPage> {
                 for (var i = 0; i < personalTabs.length; i++)
                   Expanded(
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      padding: const EdgeInsets.symmetric(horizontal: 2),
                       child: ChoiceChip(
-                        label: Center(child: Text(personalTabs[i].label)),
+                        label: Center(
+                            child: Text(personalTabs[i].label,
+                                style: const TextStyle(fontSize: 12))),
                         selected: _tab == i,
                         onSelected: (_) => setState(() => _tab = i),
                       ),
@@ -101,11 +109,16 @@ class _PersonalPageState extends ConsumerState<PersonalPage> {
               ],
             ),
           ),
-          // IndexedStack 常驻：两 tab 各自状态（滚动位置/加载态）切换不丢
+          // IndexedStack 常驻：四 tab 各自状态（滚动位置/加载态）切换不丢
           Expanded(
             child: IndexedStack(
               index: _tab,
-              children: const [_DiaryTab(), _DraftTab()],
+              children: const [
+                _DiaryTab(),
+                _DraftTab(),
+                _SurpriseTab(),
+                _TrashTab(),
+              ],
             ),
           ),
         ]),
@@ -114,20 +127,23 @@ class _PersonalPageState extends ConsumerState<PersonalPage> {
   }
 }
 
-/// 提示 + 入口按钮 + 空态/列表的公共骨架（两 tab 共用，文案逐字 Web）。
+/// 提示 + 入口按钮 + 空态/列表的公共骨架（四 tab 共用，文案逐字 Web）。
+/// [entryLabel] / [onEntry] 为空时不显示新建按钮（回收站无新建入口）。
 class _TabFrame extends ConsumerWidget {
   const _TabFrame({
     required this.hint,
-    required this.entryLabel,
-    required this.onEntry,
+    this.entryLabel,
+    this.onEntry,
     required this.emptyTitle,
+    this.emptyHint = '慢慢写，不着急。',
     required this.items,
     required this.tileBuilder,
   });
   final String hint;
-  final String entryLabel;
-  final VoidCallback onEntry;
+  final String? entryLabel;
+  final VoidCallback? onEntry;
   final String emptyTitle;
+  final String emptyHint;
   final List<TogetherRecord> items;
   final Widget Function(TogetherRecord record) tileBuilder;
 
@@ -135,21 +151,26 @@ class _TabFrame extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     return RefreshIndicator(
-      onRefresh: () => ref.read(personalControllerProvider.notifier).load(),
+      onRefresh: () async {
+        await ref.read(personalControllerProvider.notifier).load();
+        await ref.read(personalControllerProvider.notifier).loadTrash();
+      },
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
         children: [
           Text(hint,
               style: theme.textTheme.bodySmall
                   ?.copyWith(color: theme.colorScheme.outline)),
-          const SizedBox(height: 8),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: FilledButton.tonal(
-              onPressed: onEntry,
-              child: Text(entryLabel),
+          if (entryLabel != null && onEntry != null) ...[
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: FilledButton.tonal(
+                onPressed: onEntry,
+                child: Text(entryLabel!),
+              ),
             ),
-          ),
+          ],
           const SizedBox(height: 8),
           if (items.isEmpty)
             Padding(
@@ -160,7 +181,7 @@ class _TabFrame extends ConsumerWidget {
                 const SizedBox(height: 12),
                 Text(emptyTitle, style: theme.textTheme.titleMedium),
                 const SizedBox(height: 6),
-                Text('慢慢写，不着急。',
+                Text(emptyHint,
                     style: theme.textTheme.bodySmall
                         ?.copyWith(color: theme.colorScheme.outline)),
               ]),
@@ -603,4 +624,312 @@ class _DraftPublishPageState extends ConsumerState<DraftPublishPage> {
       '${d.day.toString().padLeft(2, '0')} '
       '${d.hour.toString().padLeft(2, '0')}:'
       '${d.minute.toString().padLeft(2, '0')}';
+}
+
+// ── tab ③ 定时惊喜（7-B） ─────────────────────────────────────────
+
+/// epoch 秒 → 'yyyy-MM-dd HH:mm'（本地时区；与 Web dateLabel 呈现同口径）
+String _fmtStamp(double seconds) {
+  if (seconds <= 0) return '';
+  final d = DateTime.fromMillisecondsSinceEpoch((seconds * 1000).round());
+  String two(int v) => v.toString().padLeft(2, '0');
+  return '${d.year}-${two(d.month)}-${two(d.day)} ${two(d.hour)}:${two(d.minute)}';
+}
+
+class _SurpriseTab extends ConsumerWidget {
+  const _SurpriseTab();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    ref.watch(personalControllerProvider); // 列表变更时重建本 tab
+    final items = ref.read(personalControllerProvider.notifier).surprises();
+    return _TabFrame(
+      hint: personalTabs[2].hint, // app.js:1489 惊喜口径，逐字
+      entryLabel: '准备惊喜',
+      onEntry: () => context.push('/personal/surprise-form'),
+      emptyTitle: '提前准备一份温柔的惊喜',
+      items: items,
+      tileBuilder: (r) => _SurpriseTile(record: r),
+    );
+  }
+}
+
+class _SurpriseTile extends ConsumerWidget {
+  const _SurpriseTile({required this.record});
+  final TogetherRecord record;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final at = (record.body['publish_at'] as num?)?.toDouble() ?? 0;
+    final now = DateTime.now().millisecondsSinceEpoch / 1000;
+    final revealed = at > 0 && at <= now;
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Expanded(
+              child: Text(
+                  revealed ? '已到约定时间 · 等待公开' : '待揭示',
+                  style: theme.textTheme.labelSmall
+                      ?.copyWith(color: cs.outline)),
+            ),
+            IconButton(
+              tooltip: '编辑惊喜',
+              visualDensity: VisualDensity.compact,
+              onPressed: () => context.push('/personal/surprise-form',
+                  extra: <String, Object?>{'record': record}),
+              icon: const Icon(Icons.edit_outlined, size: 20),
+            ),
+            IconButton(
+              tooltip: '删除惊喜',
+              visualDensity: VisualDensity.compact,
+              onPressed: () => confirmPrivateDelete(context, ref, record.id),
+              icon: Icon(Icons.delete_outline_rounded,
+                  size: 20, color: cs.error),
+            ),
+          ]),
+          Text(_recordTitle(record), style: theme.textTheme.titleSmall),
+          const SizedBox(height: 4),
+          Text((record.body['content'] ?? '').toString(),
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.bodyMedium),
+          const SizedBox(height: 6),
+          Row(children: [
+            Icon(Icons.schedule_rounded, size: 14, color: cs.outline),
+            const SizedBox(width: 4),
+            Text('公开时间：${_fmtStamp(at)}',
+                style: theme.textTheme.labelSmall
+                    ?.copyWith(color: cs.outline)),
+          ]),
+        ]),
+      ),
+    );
+  }
+}
+
+/// 惊喜简洁表单（正文 + 发布时间选择器；新建/编辑共用）。
+/// · publish_at 必填且未来（main.py:1127 窗口：now < t < now+50 年）；
+/// · 服务端 422 原文案经 api.errorDetail 透传到**顶部通知**，绝不静默失败；
+/// · 编辑走回填铁律（mergeRecordBody 全量 body，改期也走它）。
+/// 二级页：context.push 打开，AppBar 自动返回按钮 + 系统手势都能回上一页。
+class SurpriseFormPage extends ConsumerStatefulWidget {
+  const SurpriseFormPage({super.key, this.record});
+  final TogetherRecord? record;
+
+  @override
+  ConsumerState<SurpriseFormPage> createState() => _SurpriseFormPageState();
+}
+
+class _SurpriseFormPageState extends ConsumerState<SurpriseFormPage> {
+  late final TextEditingController _content = TextEditingController(
+      text: (widget.record?.body['content'] ?? '').toString());
+  DateTime? _publishAt;
+  String? _error;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final at = (widget.record?.body['publish_at'] as num?)?.toDouble();
+    if (at != null && at > 0) {
+      _publishAt = DateTime.fromMillisecondsSinceEpoch((at * 1000).round());
+    }
+  }
+
+  @override
+  void dispose() {
+    _content.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pick() async {
+    final now = DateTime.now();
+    final d = await showDatePicker(
+      context: context,
+      initialDate: _publishAt ?? now.add(const Duration(days: 1)),
+      firstDate: now,
+      lastDate: now.add(const Duration(days: 365 * 50)),
+    );
+    if (d == null || !mounted) return;
+    final t = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(
+          _publishAt ?? now.add(const Duration(hours: 1))),
+    );
+    if (t == null || !mounted) return;
+    setState(() {
+      _publishAt = DateTime(d.year, d.month, d.day, t.hour, t.minute);
+      _error = null;
+    });
+  }
+
+  Future<void> _save() async {
+    if (_saving) return;
+    final text = _content.text.trim();
+    if (text.isEmpty) {
+      setState(() => _error = '写点什么吧');
+      return;
+    }
+    final at = _publishAt;
+    if (at == null || !at.isAfter(DateTime.now())) {
+      setState(() => _error = '请选择未来的公开时间');
+      return;
+    }
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    final ctrl = ref.read(personalControllerProvider.notifier);
+    final err = widget.record == null
+        ? await ctrl.addSurprise(text, at)
+        : await ctrl.editSurprise(widget.record!, text, at);
+    if (!mounted) return;
+    if (err != null) {
+      setState(() {
+        _error = err;
+        _saving = false;
+      });
+      // 🔴 服务端 422 原文案（如「请选择未来的公开时间」）走顶部通知，
+      // 与表单内错误态双呈现，绝不静默失败。
+      ref.read(chatToastProvider.notifier).show(err,
+          tone: ChatToastTone.error);
+      return;
+    }
+    _toast(ref, null,
+        okMsg: widget.record == null ? '惊喜已藏好' : '已保存修改');
+    Navigator.of(context).pop(); // push 的返回路径：按钮/手势同栈
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Scaffold(
+      appBar: AppBar(
+          title: Text(widget.record == null ? '准备惊喜' : '编辑惊喜')),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Text(personalTabs[2].hint,
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(color: theme.colorScheme.outline)),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _content,
+            maxLines: 8,
+            minLines: 4,
+            maxLength: 20000,
+            autofocus: widget.record == null,
+            decoration: const InputDecoration(
+              labelText: '想说的话',
+              alignLabelWithHint: true,
+              border: OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 12),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.schedule_rounded),
+            title: Text(_publishAt == null
+                ? '选择未来的公开时间'
+                : '公开时间：${_fmtStamp(_publishAt!.millisecondsSinceEpoch / 1000)}'),
+            subtitle: const Text('到约定时间，惊喜才会被另一半看见'),
+            trailing: const Icon(Icons.chevron_right_rounded),
+            onTap: _pick,
+          ),
+          if (_error != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(_error!,
+                  style: theme.textTheme.bodySmall
+                      ?.copyWith(color: theme.colorScheme.error)),
+            ),
+          const SizedBox(height: 16),
+          FilledButton(
+            onPressed: _saving ? null : _save,
+            child: Text(_saving ? '保存中…' : '保存惊喜'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── tab ④ 回收站（7-B） ───────────────────────────────────────────
+
+class _TrashTab extends ConsumerStatefulWidget {
+  const _TrashTab();
+
+  @override
+  ConsumerState<_TrashTab> createState() => _TrashTabState();
+}
+
+class _TrashTabState extends ConsumerState<_TrashTab> {
+  @override
+  void initState() {
+    super.initState();
+    // 进页/切到本 tab 时重拉一次：回收站数据可能在别的 tab 被删改。
+    Future.microtask(
+        () => ref.read(personalControllerProvider.notifier).loadTrash());
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    ref.watch(personalControllerProvider);
+    final items = ref.read(personalControllerProvider).trash;
+    return _TabFrame(
+      hint: personalTabs[3].hint, // app.js:1488 逐字
+      // 🔴 Web 回收站只有「恢复」，没有「彻底删除」；App 不自创入口。
+      emptyTitle: '回收站是空的',
+      emptyHint: '你的回忆都在好好保存。',
+      items: items,
+      tileBuilder: (r) => _TrashTile(record: r),
+    );
+  }
+}
+
+class _TrashTile extends ConsumerWidget {
+  const _TrashTile({required this.record});
+  final TogetherRecord record;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(_recordTitle(record), style: theme.textTheme.titleSmall),
+          const SizedBox(height: 4),
+          Text('${kindLabel[record.kind] ?? record.kind} · '
+              '${_fmtStamp(record.deleted)} 删除',
+              style: theme.textTheme.labelSmall
+                  ?.copyWith(color: cs.outline)),
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: OutlinedButton.icon(
+              // Web app.js:1488 按钮文案「恢复这份回忆」逐字
+              onPressed: () async {
+                final err = await ref
+                    .read(personalControllerProvider.notifier)
+                    .restore(record.id, kind: record.kind);
+                if (context.mounted) {
+                  _toast(ref, err, okMsg: '回忆已恢复');
+                }
+              },
+              icon: const Icon(Icons.restore_rounded, size: 18),
+              label: const Text('恢复这份回忆'),
+            ),
+          ),
+        ]),
+      ),
+    );
+  }
 }

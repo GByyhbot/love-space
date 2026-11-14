@@ -29,6 +29,7 @@ class TogetherRecord {
     this.media = const [],
     this.likeCount = 0,
     this.commentCount = 0,
+    this.deleted = 0,
   });
 
   final String id;
@@ -36,6 +37,8 @@ class TogetherRecord {
   final Map<String, dynamic> body;
   final String author;
   final double created; // 服务端 created 时间戳（秒），列表排序用
+  /// 软删时间戳（秒）；0 = 未删除。回收站列表展示「X 删除」用（段 7-B）。
+  final double deleted;
 
   /// question 附属答案（serializers.py:39-41：**内容按人过滤**——双方都答了
   /// 才互相可见，未齐时只含自己的）；{record_id, author, content}
@@ -82,6 +85,7 @@ class TogetherRecord {
       media: strMaps(j['media']),
       likeCount: j['likes'] is List ? (j['likes'] as List).length : 0,
       commentCount: j['comments'] is List ? (j['comments'] as List).length : 0,
+      deleted: (j['deleted'] as num?)?.toDouble() ?? 0,
     );
   }
 
