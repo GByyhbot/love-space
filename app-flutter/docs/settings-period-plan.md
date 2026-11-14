@@ -8,16 +8,19 @@
 > 段 **8-A（生理期地基 + 入口 + 读写 + 推算引擎）已随 2.2.1 / VC221 落地**：
 > 一 commit、全项目 `dart analyze` / `flutter test` 全绿、后端 `app/` / `static/` /
 > `android-app/` 零改动；对拍结论见**附录 A**，C4 就此关闭（见第七节）。
+> 段 **8-B（生理期主页 UI：整月网格 / hero / 9 字段弹层 / 经期四动作 /
+> 预警与历史卡）已随 2.2.2 / VC222 落地**：网格逐日 245 格 × Web 实跑全等，
+> 结论见**附录 B**；**数据分析页（可选段 C）不做、主页不预置入口（无死卡）**，
+> 提醒不做（D3）。版本位自 **2.2.1 (VC221)** 起顺延。本章只补缺口，
+> **不重做 App 已有部分**。**C/D/E 段**仍按第五节分段表停等主人逐段放行。
 > 纪律：结论全部实读核实并附行号；未核实项见第七节，不作推测。
-> 版本位自 **2.2.1 (VC221)** 起顺延。本章只补缺口，**不重做 App 已有部分**。
-> 后续段（B/C/D/E）仍按第五节分段表停等主人逐段放行，**本段不预做、不留半成品入口**。
 > 体例沿用 `app-flutter/docs/together-plan.md`（调研稿）与 `personal-corner-plan.md`（契约逐条实读）。
 
 ---
 
 ## 一、边界与既有定案（主人已定，不再复议）
 
-- 🔴 **条目 7 已全部关闭**（主人 2026-11-14）；条目 8 **段 8-A 已随 2.2.1/VC221 落地**（对拍见附录 A），后续段停等主人逐段放行。
+- 🔴 **条目 7 已全部关闭**（主人 2026-11-14）；条目 8 **段 8-A 已随 2.2.1/VC221 落地**（对拍见附录 A）、**段 8-B 已随 2.2.2/VC222 落地**（网格逐日对拍见附录 B）；C/D/E 段停等主人逐段放行。
 - 🔴 **设置区块 8 卡全归条目 8**；**生理期入口卡随条目 8 上，条目 6 hub 不放**
   —— `together-plan.md:51`、决策点⑥ `:66`、`:85-86`。
 - 🔴 Web「我们」页底部「设置」区块 **8 卡**：空间信息 / 主题与外观 / 主页背景 /
@@ -394,12 +397,13 @@ AAD 绑定 kind+record_id），换错/丢失密钥 → period 记录不可解。
 > 沿用条目 6/7 纪律：**一段一 commit、一包、停等真机验收**；全项目 `dart analyze` +
 > `flutter test` 全绿；二级页一律 `context.push`；返回路径按钮 + 手势必验；后端零改动。
 > ✅ **8-A 已定案并随 2.2.1 (VC221) 落地**（一 commit、门禁全绿、对拍见附录 A）；
-> B/C/D/E 段仍待主人逐段放行，本段不预做、不留半成品入口。
+> ✅ **8-B 已定案并随 2.2.2 (VC222) 落地**（整月网格 245 格逐日对拍全等，见附录 B）；
+> C/D/E 段仍待主人逐段放行，本段不预做、不留半成品入口。
 
 | 段 | 版本 | 内容 | 主要端点 / 依赖 | 依赖决策点 |
 |---|---|---|---|---|
 | **A（8-A 已定案）** | **2.2.1 (VC221)** | **生理期地基 + 入口 + 读写**：hub 🌸宽卡、⊕ 面板死入口改真跳转、`/period` 二级页、`GET /api/records` 合并拉 period、两种记录形状解析、`periodData`/`cyclePhases`/`periodEpisodeOf` 客户端重算、经期区间与日记录的 POST/PUT/DELETE + `client_id` 幂等、软删/恢复接通用 `restore` | `GET/POST/PUT/DELETE /api/records`、`POST /api/records/{rid}/restore`；`period.js:34-141/:145-170`；`main.py:1141-1220/:1236-1275` | D1、D2、D6 |
-| **B** | **2.2.2 (VC222)** | **生理期主页 UI**：整月日历网格（四相位/预测/排卵/记录点）、hero 环形「周期第 N 天」、日记录 9 字段弹层、经期四动作（来了/走了/又来了/删整次）、`periodForm` 表单、预警 `periodWarnings`、症状排行、历史卡 | `period.js:174-193/:232-245/:246-315/:343-483/:484-519/:809-833` | D1、D2 |
+| **B（8-B 已定案/已落地 · 2.2.2/VC222）** | **2.2.2 (VC222)** | **生理期主页 UI**：整月日历网格（四相位/预测/排卵/记录点）、hero 环形「周期第 N 天」+ 受孕概率三档（不给百分比）、`phaseBar` 四段相对权重、日记录 9 字段弹层、经期四动作（来了/走了/又来了/删整次，全程无 `end` 键）、`periodForm` 表单、预警 `periodWarnings`、症状排行、历史卡；**数据分析入口本段删除（无死卡）**、提醒不做 | `period.js:174-193/:232-245/:246-315/:343-483/:484-519/:809-833`；`app.js:2507-2510` | D1、D2 |
 | **C** | **2.2.3 (VC223)** | **可选**：数据分析页 13 板块 + 手画图表 + 受孕概率三档（**主线做完停手等主人决定做不做**） | `period.js:532-587/:591-670/:674-807` | D7 |
 | **D** | **2.2.4 (VC224)** | **设置缺口（D4-c 范围）**：独立 `/settings` 二级页容器、hub 底部设置 8 卡（已落地项用跳转不复制 UI）、主题与外观（7 套 + custom）、主页背景、链路检测/手动切线路、检查更新/APK 下载链接 | `PUT /api/space`/`PUT /api/profile`、`GET /api/routes`、`GET /api/status`、`POST /api/backups`（若纳入）；`app.js:1368-1386/:1870-1942/:1943-1956` | D4、D5、D8 |
 | **E** | **2.2.5 (VC225)** | **可选（D7 定案，停等主人决定）**：通知渠道与提醒偏好 + `period` 提醒事件 + 数据导出 3 链接 + 备份/存储占用（仅 admin）+ imports/notices 若主人决定纳入 | `/api/channels` 系列 `main.py:2518-2564`、`/api/export*`、`/api/backups`、`/api/storage`、`/api/imports*` | D3、D4 |
@@ -602,7 +606,7 @@ for (const [name, c] of Object.entries(cases.cases)) {
 | `lib/main.dart` / `lib/features/together/together_page.dart` / `lib/features/chat/chat_compose.dart` / `pubspec.yaml` | `/period` 路由、hub 🌸 宽卡、⊕ 面板真跳转（死入口清零）、2.2.1+221 |
 
 门禁：全项目 `flutter analyze` **0 issues**、`flutter test` 全量全过；
-后端 `app/` / `static/` / `android-app/` 零改动；**停等真机验收、不自宣完成、不开 B 段**。
+后端 `app/` / `static/` / `android-app/` 零改动；**停等真机验收、不自宣完成、不开 B 段**（此为 8-A 当时的段边界记录；主人随后放行 8-B，见**附录 B**，B 段已随 2.2.2/VC222 落地）。
 
 ### A.6 时区与「固定 today」口径（D2 补充 · 主理人 2026-11-14 实读提醒）
 
@@ -636,6 +640,338 @@ for (const [name, c] of Object.entries(cases.cases)) {
 ---
 
 > **本轮交付（定案）**：调研稿转定案；**D1–D8 全部采纳清单推荐、不再复议**；
-> 段 **8-A 随 2.2.1 / VC221 落地**（一 commit、一包、停等真机验收）；
-> 对拍结论见附录 A、**C4 已关闭**；`flutter-plan-v2.md` 编号已同步。
-> 后端 `app/` / `static/` / `android-app/` 零改动；B/C/D/E 段仍待主人逐段放行。
+> 段 **8-A 随 2.2.1 / VC221 落地**、段 **8-B 随 2.2.2 / VC222 落地**
+> （各一 commit、一包、停等真机验收）；对拍结论见附录 A / **附录 B**、**C4 已关闭**；
+> `flutter-plan-v2.md` 编号已同步（8-B 段无需再改）。
+> 后端 `app/` / `static/` / `android-app/` 零改动；C/D/E 段仍待主人逐段放行。
+
+---
+
+## 附录 B · 8-B 对拍结论（2026-11-15 · Web `period.js` 实跑）
+
+### B.1 期望值生成方式（**沿用 8-A 的 Node `vm` 机制，绝不手算**）
+
+一次性脚本 `app-flutter/tool/gen_period_b_expected.js`（**跑完即删**，等价可复核
+全文见 B.1 折叠块（仅省去 GRID/WROTE 日志行与逐日计数断言；`esc` 用完整 HTML
+实体版，中文文案无 `<`/`&`，与实跑脚本产出完全一致）；运行：项目根
+`D:\Dev\love-space` 执行 `node app-flutter/tool/gen_period_b_expected.js`）：
+把 `static/period.js` **整份源码 + 求值 IIFE 拼成同一 script** 用 `vm` 执行，
+`periodMonthGrid / periodData / cyclePhases / periodWarnings / periodStart /
+periodEnd / periodMore / periodSaveDay / periodValueText / shiftMonth /
+cycleHero / phaseBar` **全是 Web 原函数、未被 mock 覆盖**。
+
+- **网格专用 sandbox 严格只注入** `recordsOf(kind)` / `today()` / `state`（+ `console`），
+  与 8-A 口径一致；期望值不是按公式重算，而是**解析 `periodMonthGrid(y,m,d)` 真实
+  产出的 HTML**：逐 `<button>` 抽 `class` token / `title` / `aria-label` / `data-day`。
+  `meta.gridSandboxGlobals` 写死该集合并由 Dart 测试自证。
+- **动作/日记录专用 sandbox** 另注入 `post/put/del/toast/refresh/uuid/esc` 只做
+  **记录**（不改函数体），捕获 Web 真实写请求与提示文案；`uuid()` 固定
+  `'uuid-fixed-8b'` 以消除随机性。
+- `today()` 恒注入固定 `'2026-11-14'`，`state.periodDay` = 该月选中日。
+- 产出**受版本控制**：`test/fixtures/period_b_cases.json`（Node / Dart 共用输入）、
+  `test/fixtures/period_b_expected.json`（Web 实跑期望值）；网格数据源取 8-A
+  `period_cases.json` 的 **multiCycle**（4 次真实经期 + 2 条日记录 + 双方作者 +
+  预测经期与排卵日）。
+
+<details>
+<summary>一次性生成脚本 · 等价可复核全文（tool/gen_period_b_expected.js 跑完即删）</summary>
+
+```js
+'use strict';
+const fs = require('fs');
+const path = require('path');
+const vm = require('vm');
+
+const ROOT = path.resolve(__dirname, '../..');
+const SRC = fs.readFileSync(path.join(ROOT, 'static/period.js'), 'utf8');
+const FIX = path.join(ROOT, 'app-flutter', 'test', 'fixtures');
+const aCases = JSON.parse(fs.readFileSync(path.join(FIX, 'period_cases.json'), 'utf8'));
+const bCases = JSON.parse(fs.readFileSync(path.join(FIX, 'period_b_cases.json'), 'utf8'));
+const UUID = 'uuid-fixed-8b';
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({
+  '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+}[c]));
+const norm = (v) => JSON.parse(JSON.stringify(v));
+
+/* 网格专用 sandbox：严格只注入 recordsOf / today / state */
+function gridSandbox(records, today, state) {
+  const s = { console, recordsOf: () => records, today: () => today, state: state || {} };
+  vm.createContext(s);
+  vm.runInContext(SRC, s); // 整份源码（Web 原函数）
+  return s;
+}
+
+/* 从 periodMonthGrid 真实产出的 HTML 中逐日抽出 class / title / aria-label */
+const gridEval = (y, m) => String.raw`(()=>{
+  const d = periodData();
+  const html = periodMonthGrid(${y}, ${m}, d);
+  const gridPart = html.slice(html.indexOf('<div class="calendar-grid'));
+  const attr = (tag, name) => {
+    const i = tag.indexOf(name + '="');
+    if (i < 0) return '';
+    const start = i + name.length + 2;
+    const end = tag.indexOf('"', start);
+    return end < 0 ? '' : tag.slice(start, end);
+  };
+  const lead = gridPart.split('<span></span>').length - 1;
+  const cells = {};
+  const chunks = gridPart.split('<button');
+  for (let i = 1; i < chunks.length; i++) {
+    const tag = chunks[i].slice(0, chunks[i].indexOf('>'));
+    const day = attr(tag, 'data-day');
+    if (!day) continue;
+    cells[day] = {
+      classes: attr(tag, 'class').split(' ').filter(Boolean),
+      title: attr(tag, 'title'),
+      aria: attr(tag, 'aria-label'),
+    };
+  }
+  return { lead, days: Object.keys(cells).length, cells };
+})()`;
+
+/* 通用 sandbox：额外注入 Web 全局写函数与提示（只记录，不改公式） */
+function actionSandbox(records, today) {
+  const calls = [];
+  const s = {
+    console,
+    recordsOf: () => records,
+    today: () => today,
+    state: {},
+    esc,
+    uuid: () => UUID,
+    post: (p, data) => { calls.push({ method: 'post', path: p, data }); return Promise.resolve({}); },
+    put: (p, data) => { calls.push({ method: 'put', path: p, data }); return Promise.resolve({}); },
+    del: (p) => { calls.push({ method: 'del', path: p }); return Promise.resolve({}); },
+    toast: (msg) => { calls.push({ toast: String(msg) }); },
+    refresh: () => { calls.push({ refresh: true }); return Promise.resolve({}); },
+  };
+  vm.createContext(s);
+  vm.runInContext(SRC, s);
+  return { s, calls };
+}
+
+function summarize(calls) {
+  return {
+    writes: norm(calls.filter((c) => c.method).map((c) => ({
+      method: c.method, path: c.path,
+      ...(c.data === undefined ? {} : { data: c.data }),
+    }))),
+    toasts: norm(calls.filter((c) => c.toast !== undefined).map((c) => c.toast)),
+    refreshed: calls.some((c) => c.refresh === true),
+  };
+}
+
+const derivedEval = String.raw`(()=>{
+  const d = periodData();
+  const hero = cycleHero(d, '');
+  const bar = phaseBar(d);
+  const num = (re, str) => { const m = re.exec(str); return m ? Number(m[1]) : null; };
+  const txt = (re, str) => { const m = re.exec(str); return m ? m[1] : ''; };
+  const strip = (s) => s.replace(/<[^>]*>/g, '');
+  const dayIn = num(/<text[^>]*>(\d+)<\/text>/, hero);
+  const ringC = num(/stroke-dasharray="([\d.]+)"/, hero);
+  const ringOffset = txt(/stroke-dashoffset="([-\d.]+)"/, hero);
+  const cyc = num(/共 (\d+) 天/, hero);
+  const title = strip(txt(/<strong class="cycle-hero-phase">([\s\S]*?)<\/strong>/, hero));
+  const tip = strip(txt(/<span class="cycle-hero-tip">([\s\S]*?)<\/span>/, hero));
+  const fertLevel = txt(/<b>([^<]*)<\/b>/, hero);
+  const fertDesc = txt(/<em>([^<]*)<\/em>/, hero);
+  const segs = [];
+  const segRe = /class="phase-seg s-(\w+)[^"]*"[^>]*style="flex:([\d.]+)"/g;
+  let sm; while ((sm = segRe.exec(bar))) segs.push([sm[1], Number(sm[2])]);
+  const cursorPos = num(/phase-cursor" style="left:([\d.]+)%/, bar);
+  return { empty: hero === '', dayIn, ringC, ringOffset, cyc, title, tip,
+    fertLevel, fertDesc, segs, cursorPos };
+})()`;
+
+(async () => {
+  const out = {
+    meta: {
+      source: 'static/period.js',
+      method: 'node vm: full source + eval IIFE in one script, Web original functions',
+      gridSandboxGlobals: ['recordsOf', 'today', 'state', 'console'],
+      actionSandboxGlobals: ['recordsOf', 'today', 'state', 'console', 'esc',
+        'uuid', 'post', 'put', 'del', 'toast', 'refresh'],
+      functions: ['periodData', 'cyclePhases', 'periodMonthGrid', 'periodDayLogs',
+        'periodWarnings', 'periodStart', 'periodEnd', 'periodMore', 'periodSaveDay',
+        'periodValueText', 'shiftMonth', 'cycleHero', 'phaseBar'],
+      today: bCases.meta.today,
+      gridSourceCase: bCases.meta.gridSourceCase,
+      uuid: UUID,
+      note: 'Web 实跑期望值；Dart 侧逐日/逐项断言全等，不许手算或硬编码。',
+    },
+    grids: {}, shiftMonth: [], valueText: {}, warnings: {},
+    actions: {}, dayLogs: {}, derived: {},
+  };
+
+  // ① 整月网格逐日（硬门槛）：multiCycle，8 个月
+  const multi = aCases.cases[bCases.meta.gridSourceCase];
+  for (const g of bCases.grid.months) {
+    const key = `${g.y}-${String(g.m).padStart(2, '0')}`;
+    const s = gridSandbox(multi.records, multi.today, { periodDay: g.picked });
+    vm.runInContext('globalThis.__R = ' + gridEval(g.y, g.m) + ';', s);
+    out.grids[key] = norm(s.__R);
+    if (Object.keys(out.grids[key].cells).length !== out.grids[key].days)
+      throw new Error(key + ' days/cells 不一致');
+    console.log('GRID', key, 'lead=' + out.grids[key].lead, 'days=' + out.grids[key].days);
+  }
+
+  // ② shiftMonth（Web 原函数）
+  {
+    const s = gridSandbox([], bCases.meta.today, {});
+    for (const c of bCases.shiftMonth) {
+      vm.runInContext(`globalThis.__R = shiftMonth(${JSON.stringify(c.day)}, ${c.delta});`, s);
+      out.shiftMonth.push({ ...c, result: norm(s.__R) });
+    }
+  }
+
+  // ③ periodValueText 逐键（9 字段 × 3 组）
+  {
+    const s = actionSandbox([], bCases.meta.today).s;
+    for (const c of bCases.valueTextCases) {
+      vm.runInContext(
+        `globalThis.__R = PERIOD_LOG_FIELDS.map(([k]) => [k, periodValueText(k, ${JSON.stringify(c.body)})]);`,
+        s);
+      out.valueText[c.name] = Object.fromEntries(norm(s.__R));
+    }
+  }
+
+  // ④ periodWarnings（四条规则 + 三组 8-A 真实夹具）
+  for (const c of bCases.warningCases) {
+    const s = gridSandbox(c.records, c.today, {});
+    vm.runInContext('globalThis.__R = periodWarnings(periodData());', s);
+    out.warnings[c.name] = norm(s.__R);
+  }
+  for (const name of Object.keys(aCases.cases)) {
+    const c = aCases.cases[name];
+    const s = gridSandbox(c.records, c.today, {});
+    vm.runInContext('globalThis.__R = periodWarnings(periodData());', s);
+    out.warnings[name] = norm(s.__R);
+  }
+
+  // ⑤ 经期四动作：捕获 Web 真实写请求 + 提示
+  for (const c of bCases.actionCases) {
+    const { s, calls } = actionSandbox(c.records, c.today);
+    const call = c.action === 'start'
+      ? `await periodStart(${JSON.stringify(c.day)});`
+      : c.action === 'end'
+        ? `await periodEnd(${JSON.stringify(c.day)});`
+        : `await periodMore(${JSON.stringify(c.day)});`;
+    vm.runInContext('globalThis.__P = (async()=>{ ' + call + ' })();', s);
+    await s.__P;
+    out.actions[c.name] = summarize(calls);
+  }
+
+  // ⑥ periodSaveDay：9 字段逐项 + 整份覆盖/清键/强制删 start
+  for (const c of bCases.dayLogCases) {
+    const { s, calls } = actionSandbox(c.records, c.today);
+    vm.runInContext(
+      `globalThis.__P = (async()=>{ await periodSaveDay(${JSON.stringify(c.day)}, ${JSON.stringify(c.patch)}); })();`,
+      s);
+    await s.__P;
+    out.dayLogs[c.name] = summarize(calls);
+  }
+
+  // ⑦ cycleHero / phaseBar 数值与文案（Web 实跑）
+  for (const d of bCases.derivedCases) {
+    const c = d.fromCases ? aCases.cases[d.name]
+      : bCases.warningCases.find((w) => w.name === d.name);
+    if (!c) throw new Error('derived case not found: ' + d.name);
+    const s = actionSandbox(c.records, c.today).s;
+    vm.runInContext('globalThis.__R = ' + derivedEval + ';', s);
+    out.derived[d.name] = norm(s.__R);
+  }
+
+  fs.writeFileSync(path.join(FIX, 'period_b_expected.json'),
+    JSON.stringify(out, null, 2) + '\n', 'utf8');
+  console.log('WROTE', path.join(FIX, 'period_b_expected.json'));
+})().catch((e) => { console.error(e); process.exitCode = 1; });
+```
+
+</details>
+
+### B.2 验收点① 硬门槛：整月网格逐日全等（`flutter test test/period_b_grid_portrait_test.dart` → 13/13）
+
+**8 个月 × 245 个日历日逐日断言「class 集合 + tip + aria-label」三项全等，无一日例外。**
+月份：2026-05（无阶段空月）、06（真实经期 + 日记录）、07（月首承接边界）、
+08、09（预测开始）、10、11（今天 / 选中 / 排卵）、12；`lead` 与 Web
+`getUTCDay` 全等：5 / 1 / 3 / 6 / 2 / 4 / 0 / 2。
+
+| class token | 出现天数 | 说明 |
+|---|---|---|
+| `cal-day` | 245 | 每格必有 |
+| `ph-period` | 35 | 月经期 |
+| `ph-follicular` | 28 | 卵泡期 |
+| `ph-fertile` | 49 | 排卵期 |
+| `ph-luteal` | 83 | 黄体期 |
+| **`ph-pred`** | **84** | 预测经期/阶段 |
+| **`ph-ovu`** | **7** | 排卵日 |
+| **`ph-start`** | **28** | 阶段首日（`:185`） |
+| **`has-rec`** | **4** | 经期第一天记录点 |
+| **`has-log`** | **2** | 日记录点 |
+| `is-today` / `picked` | 1 / 8 | 今天 / 选中日 |
+
+逐日样例（左 = Web 实跑，右 = Dart `buildPeriodMonthGrid` 逐日断言全等）：
+
+```
+2026-11-01  ph-fertile ph-pred                 排卵期（预测） · 点一下记这天
+2026-11-02  ph-fertile ph-pred ph-ovu         排卵期（预测） · 排卵日 · 点一下记这天
+2026-11-04  ph-luteal ph-pred ph-start       黄体期（预测） · 点一下记这天
+2026-11-14  ph-luteal ph-pred is-today picked 黄体期（预测） · 点一下记这天
+2026-11-16  ph-period ph-pred ph-start        月经期（预测） · 点一下记这天 ← 预测开始日
+2026-11-30  ph-fertile ph-pred ph-ovu         排卵期（预测） · 排卵日 · 点一下记这天
+2026-06-01  ph-period ph-start has-rec        月经期 · 这次经期的第一天 · 点一下记这天
+2026-06-02  ph-period has-log                 月经期 · 这天记过身体情况
+2026-06-28  ph-period ph-start has-rec        月经期 · 这次经期的第一天 · 点一下记这天
+2026-07-01  ph-period picked                  月经期 · 点一下记这天 ← **无 ph-start**
+2026-07-26  ph-period ph-start has-rec        月经期 · 这次经期的第一天 · 点一下记这天
+```
+
+🔴 **`2026-07-01` 承接 6/28 那次经期、Web 实跑不带 `ph-start`**：这是
+`period.js:179`「月初第一格取上月最后一天 phase 作 `prevPhase`」的直接证据；
+Dart 逐字照做并单列一条断言锁死（漏了就会把每月 1 号误标成阶段首日）。
+
+**边界守恒**：Dart `period_grid.dart` 只调引擎 `cyclePhases(d)` / `dayNum` /
+`dayStr`；源码级断言无 `DateTime.now()`、无 `.toLocal()`；`lead` 用
+`(4 + dayNum(月初)) % 7`（1970-01-01 是周四、JS `getUTCDay` = 4），
+`days` 用引擎 `dayStr` 逐日推进到「下月 1 号」，全 UTC、不读本机时区。
+
+### B.3 验收点②③④⑤ 逐项结论（Web 实跑期望值 × Dart）
+
+| 项 | 对拍内容 | 结果 |
+|---|---|---|
+| ② 四动作 | 10 组夹具 `start/end/more`：method / path / body / toast / refresh 逐项；另有 widget 全程各走一遍（**「走了」首日 DELETE 与中途改 `length` 两种情形**） | 全等；`end` 键全程 0 次 |
+| ② 删整次 | `app.js:2507-2510` 对 episode 全部碎片 id 逐个 DELETE（8-A `fragmentMerge` 5 行 → f1/f2/f3 + f4/f5） | 全等 |
+| ③ 9 字段 | 9 项逐项 POST / PUT body、`periodSaveDay` 整份覆盖 + 清 `''`/null/空数组键 + **强制删 `start`**；`periodValueText` 逐键 3 组；重开弹层选中态回显 | 全等；**日记录保存后 `periodData` 的 cycle/length/nextStart/inWindow/dayOfPeriod/episodes 全部不变**（有断言） |
+| ④ 预警 | `lt2 / short / long / longEpisode / missed / invalidGap / normal` 七组 + 三组 8-A 真实夹具；文案逐字；`invalidGap` 证明预警用的是**未过滤的相邻 gaps**（10 天不在 `d.gaps` 里仍触发） | 全等；真实数据下 App 与 Web 有无一致 |
+| ⑤ 切月 | `shiftMonth` 7 项（含 1/31 往前翻 → 2025-12-31、3/31 往前 → 2/28）；widget 点日 → 翻下月 → 翻回仍保留已选日期 | 全等；返回按钮 + 系统手势可回 hub |
+
+另对拍 `cycleHero`（`dayIn` / 环 `C=194.8` / `stroke-dashoffset` / 阶段标题 /
+照护提示 / 受孕三档文案）与 `phaseBar`（四段权重 `[len, max(1,ovuRel-5-len), 7,
+max(1,cyc-ovuRel-2)]` + 游标 `pos`，**相对天数、绝不用绝对 dayNum**）8 组派生夹具，
+全部与 Web 实跑数值/文案全等。免责原文逐字：
+`按日历推算，仅供参考，不能作为避孕依据。`（**带句号**）。
+
+### B.4 8-B 落地清单（随 2.2.2 / VC222 同一 commit）
+
+| 文件 | 作用 |
+|---|---|
+| `lib/features/period/period_grid.dart` | 纯 Dart 整月网格（只消费引擎 `cyclePhases`/`dayNum`/`dayStr`）+ `shiftMonth` |
+| `lib/features/period/period_meta.dart` | 常量表 9 字段 / 20 症状 / 受孕三档 / `periodValueText` / `periodSexEntries` / `periodWarnings` 四规则 / `greetWord` / hero 与 phaseBar 展示换算 / 症状统计 / 历史卡文案 |
+| `lib/features/period/period_actions.dart` | 四动作 + `periodSaveDay` + `periodForm` + 删整次 的纯函数写计划（全无 `end` 键） |
+| `lib/features/period/period_controller.dart` | `executePlan` 统一写入口（7-C 错误通道 + `/records`→`/api/records` 前缀映射）、`deleteEpisode`、`periodRows` |
+| `lib/features/period/period_page.dart` | `/period` 主页按 `:518` 顺序：headBar → hero → warnBlock → **【数据分析入口删除】** → 整月日历 → 当天记录 → 症状统计 → 历史卡；返回按钮/手势不变 |
+| `lib/features/period/period_form.dart` | `periodForm :809-833`（start/length/cycle/flow/symptoms/content，PUT 不带 client_id、POST 带；说明文案逐字；`presetDay` 由日历选中日预填） |
+| `lib/features/period/period_sheets.dart` | 9 字段底部弹层：单选再点清除 / 「没有症状」互斥 / 数字键盘范围校验 / 同房最多 8 次 + 措施多选 + 时间滚轮 / 日记 |
+| `test/period_b_grid_portrait_test.dart` / `test/period_b_contract_test.dart` / `test/period_b_test.dart` / `test/fixtures/period_b_*.json` | 网格逐日对拍 / 契约对拍 / 真实写路径 + widget 用例 / Web 实跑夹具 |
+| `test/period_page_test.dart` | 8-A 自测夹具的「B 段内容一律不做」断言按新定案更新为「8-B 已落地 + C 段无死卡」，数据层/恢复/错误通道用例不变 |
+| `pubspec.yaml` | `2.2.2+222` |
+
+**边界**：数据分析页是可选段 C，本段不做、主页**不预置入口**（`period.js:517` 的
+`analysis-entry` 在 App 里整块去掉，`find.textContaining('数据分析')` 断言 `findsNothing`）；
+提醒不做（D3）；返回路径沿用 8-A 的 `/period` 二级页，AppBar
+`automaticallyImplyLeading` 不关。**所有数字与着色只消费 8-A 引擎，无第二套公式。**
+
+门禁：全项目 `dart analyze` / `flutter analyze`（不带 lib 参数）**0 issues**、
+`flutter test` 全量全过；跑前 unset 八个代理变量；一 commit、`git status` 空；
+后端 `app/` / `static/` / `android-app/` 零改动；**停等真机验收、不自宣完成、不开 C 段**。

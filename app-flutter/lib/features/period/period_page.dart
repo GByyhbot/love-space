@@ -1,24 +1,24 @@
-/// 生理期独立二级页（条目 8 · 段 8-A · D1 / D2 / D6）。
+/// 生理期主页（条目 8 · 段 8-B · 2.2.2/VC222）。
 ///
-/// 边界（🔴 本段不越界、不留半成品入口）：
-/// · **状态摘要**：当前阶段 / 周期第几天 / 下次预测，**全部来自第 1 步移植的
-///   [periodData] / [todayPhase] / [dayInCycle] 引擎**，页面不另写一套推算；
-/// · **记录列表 + 两种形状的基本新建/编辑/删除**（经期区间 start/length/cycle/
-///   content；日记录 date/content），编辑走回填铁律，删除为软删；
-/// · 恢复**不新做入口**，接已有通用 restore（个人角落 · 回收站），
-///   见 `period_controller.dart` 文件头；
-/// · **B 段内容一律不做**：整月日历网格、9 字段弹层、经期四动作
-///   （来了/走了/又来了）、预警、数据分析页、滚轮/多选/数字键盘/受孕概率卡。
-///
-/// 入口与返回（D1）：hub 🌸 宽卡与聊天 ⊕ 面板都 `context.push('/period')`；
-/// 本页 `AppBar` 的 `automaticallyImplyLeading` 保持默认（不关），
-/// 返回按钮 + 系统返回手势都能回上一页（阶段 2 通则）。
-///
-/// 权限（D6）：双方可看可记可改可删，**不加 `author == uid` 门槛**——
-/// 每条记录的编辑/删除菜单对所有人开放；恢复限本人由服务端兜
-/// （`restore_period_record :1271-1272` 404「记录不存在」，经 7-C 返修后的
-/// 错误通道原文呈现，不静默、不发成功通知）。
+/// 主页顺序逐字对齐 `periodPage :518`：
+/// `headBar → hero → warnBlock → 【数据分析入口：本段删除】 → top(整月日历) →
+///  log(当天记录) → symBlock(症状统计) → hist(历史卡)`。
+/// · **🔴 数据分析页是可选段 C，本段不做、也不预置入口（无死卡）**：
+///   Web `period.js:517` 的 `<button class="card analysis-entry" data-action=
+///   "period-analysis">数据分析</button>` 在 App 里整块去掉，主页上不存在
+///   「数据分析」按钮或卡片。
+/// · **提醒不做**（D3 定案）：本页不碰通知渠道 / 提醒 UI。
+/// · **🔴 所有数字与着色只消费 8-A 引擎 [period_engine.dart] + 纯展示层
+///   [period_meta.dart] / [period_grid.dart]**：cycle / length / nextStart /
+///   phases / dayIn / inWindow / dayOfPeriod 一律不在此重算；日期只用引擎
+///   [dayNum] / [dayStr] / [spaceTodayIso]，不用本机时区 `DateTime.now()`
+///   直接取日历日。
+/// · 经期四动作全程**不出现 `end` 键**（`period.js` 全文无 end）。
+/// · 返回路径：8-A 已有 `/period` 二级页（`context.push`），本页 AppBar
+///   `automaticallyImplyLeading` 不关，返回按钮 + 系统手势都能回 hub。
 library;
+
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -27,8 +27,14 @@ import '../../core/api/api_client.dart' as api;
 import '../../core/sse/sse_client.dart';
 import '../../core/together/together_data.dart';
 import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
+import '../personal/personal_controller.dart';
+import 'period_actions.dart';
 import 'period_controller.dart';
 import 'period_engine.dart';
+import 'period_form.dart';
+import 'period_grid.dart';
+import 'period_meta.dart';
+import 'period_sheets.dart';
 
 /// 生理期页。
 class PeriodPage extends ConsumerStatefulWidget {
@@ -39,6 +45,11 @@ class PeriodPage extends ConsumerStatefulWidget {
 }
 
 class _PeriodPageState extends ConsumerState<PeriodPage> {
+  /// Web `state.periodDay`：选中日期。**切月不丢**（翻月用 [shiftMonth]
+  /// 把选中日夹到目标月，而不是重置回今天）。null = 今天。
+  String? _selectedDay;
+  bool _busy = false;
+
   @override
   void initState() {
     super.initState();
@@ -49,7 +60,7 @@ class _PeriodPageState extends ConsumerState<PeriodPage> {
   @override
   Widget build(BuildContext context) {
     final st = ref.watch(periodControllerProvider);
-    // 对方写记录 → 服务端 bump_shared → SSE other/refresh → 重拉（验收点②）。
+    // 对方写记录 → 服务端 bump_shared → SSE other/refresh → 重拉（8-A 验收点②）。
     ref.listen(sseEventsProvider, (prev, next) {
       final ev = next.value;
       if (ev?.other == true || ev?.refresh == true) {
@@ -57,56 +68,62 @@ class _PeriodPageState extends ConsumerState<PeriodPage> {
       }
     });
 
-    // 🔴 注入的是「空间时区（默认 Asia/Shanghai）日历日」，不是设备本机时区：
-    // 与 Web app.js:90 today() 1:1；引擎再把该字符串按 UTC 午夜解析（dayNum）。
-    final today = spaceTodayIso(DateTime.now().toUtc());
-    final d = periodData(_rowsOf(st.records), today: today);
-    final sorted = sortPeriodRecords(st.records);
+    // 🔴 空间时区（默认 Asia/Shanghai）日历日，不是设备本机时区。
+    final utcNow = DateTime.now().toUtc();
+    final today = spaceTodayIso(utcNow);
+    final nowTime = nowTimeOf(utcNow);
+    final rows = <PeriodRow>[
+      for (final r in st.records)
+        PeriodRow(id: r.id, author: r.author, body: r.body),
+    ];
+    final d = periodData(rows, today: today);
+    final selected = _selectedDay ?? today;
+    final grid = buildPeriodMonthGrid(
+      year: int.parse(selected.substring(0, 4)),
+      month: int.parse(selected.substring(5, 7)),
+      d: d,
+      records: rows,
+      today: today,
+      picked: selected,
+    );
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
+    final uid = ref.watch(personalCurrentUserProvider);
 
     return Scaffold(
       // 🔴 automaticallyImplyLeading 不关：返回按钮 + 系统手势都能回上一页。
       appBar: AppBar(title: const Text('生理期')),
       floatingActionButton: FloatingActionButton.extended(
-        tooltip: '记一笔',
-        onPressed: () => _pickNewShape(context, d),
-        icon: const Icon(Icons.add_rounded),
-        label: const Text('记一笔'),
+        tooltip: '记一次经期（详细表单）',
+        onPressed: () => _openEpisodeForm(null, selected, d, today),
+        icon: const Icon(Icons.edit_note_rounded),
+        label: const Text('记一次经期'),
       ),
       body: RefreshIndicator(
         onRefresh: () => ref.read(periodControllerProvider.notifier).load(),
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 88),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
           children: [
-            Text('记下周期，把照顾提前一点。',
+            // headBar（heading 的副标题；标题在 AppBar）
+            Text(periodHeadingSub,
                 style: theme.textTheme.bodySmall
                     ?.copyWith(color: cs.outline)),
             const SizedBox(height: 12),
-            _summaryCard(context, d, today),
-            const SizedBox(height: 10),
-            Text(
-              '两个人共同维护同一条周期，谁都能记、能改、能删；删除的记录进「个人角落 · 回收站」，30 天内可恢复（仅本人）。',
-              style: theme.textTheme.bodySmall?.copyWith(color: cs.outline),
-            ),
+            // hero（空态走 :489）
+            _heroCard(context, d, rows, today, utcNow),
+            // warnBlock（踩线才提示，正常时整块不存在）
+            _warnBlock(context, d),
+            // 🔴 数据分析入口：本段删除（不预置死卡）
             const SizedBox(height: 12),
-            if (sorted.isEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 40),
-                child: Column(children: [
-                  Icon(Icons.favorite_border_rounded,
-                      size: 44, color: cs.outline),
-                  const SizedBox(height: 12),
-                  Text('还没有记录', style: theme.textTheme.titleMedium),
-                  const SizedBox(height: 6),
-                  Text('点右下角「记一笔」，把这次的第一天记下来。',
-                      textAlign: TextAlign.center,
-                      style: theme.textTheme.bodySmall
-                          ?.copyWith(color: cs.outline)),
-                ]),
-              )
-            else
-              for (final r in sorted) _recordTile(context, r, d),
+            // top：整月日历
+            _calendarCard(context, grid, today, selected),
+            const SizedBox(height: 12),
+            // log：当天（选中日）记录卡
+            _logCard(context, d, rows, selected, today, nowTime),
+            // symBlock：症状统计
+            _symptomBlock(context, d, rows),
+            // hist：一次月经一张卡
+            ..._historyCards(context, d, rows, today, uid),
             if (st.error != null) ...[
               const SizedBox(height: 10),
               Text(st.error!,
@@ -119,171 +136,731 @@ class _PeriodPageState extends ConsumerState<PeriodPage> {
     );
   }
 
-  /// 把通用记录形状转成引擎入参（引擎只吃 `{id, author, body}`）。
-  List<PeriodRow> _rowsOf(List<TogetherRecord> src) => [
-        for (final r in src)
-          PeriodRow(id: r.id, author: r.author, body: r.body),
-      ];
+  // ── hero（cycleHero :246-277 + periodPage :487-489） ─────────────────
 
-  /// 状态摘要卡：当前阶段 / 周期第几天 / 下次预测，全部来自引擎。
-  Widget _summaryCard(BuildContext context, PeriodData d, String today) {
+  Widget _heroCard(BuildContext context, PeriodData d, List<PeriodRow> rows,
+      String today, DateTime utcNow) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
+    if (d.items.isEmpty) {
+      return Card(
+        margin: EdgeInsets.zero,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(periodEmptyTitle, style: theme.textTheme.titleMedium),
+                const SizedBox(height: 8),
+                Text(periodEmptyText,
+                    style: theme.textTheme.bodySmall
+                        ?.copyWith(color: cs.outline)),
+              ]),
+        ),
+      );
+    }
+
+    final dayIn = dayInCycle(d);
+    final cyc = d.cycle < 1 ? 1 : d.cycle;
     final ph = todayPhase(d, today: today);
-    final stage = ph == null
-        ? (d.items.isEmpty ? '还没有记录' : '周期还在推算')
-        : '${phaseNames[ph.phase] ?? ph.phase}${ph.predicted ? '（预测）' : ''}';
-    final next = d.nextStartStr == null
-        ? '记一次就能推算'
-        : '${d.nextStartStr}${d.estimated ? '（参考值）' : ''}';
-    final window =
-        d.inWindow ? '经期第 ${d.dayOfPeriod} 天' : '今天不在经期里';
+    final fert = fertilityOf(d, today);
+    final segs = phaseSegments(d);
+    final cursor = phaseCursor(d);
+    final dayRows = periodDayRowsOf(rows);
+
     return Card(
       margin: EdgeInsets.zero,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('🌸 周期概览', style: theme.textTheme.titleMedium),
-          const SizedBox(height: 12),
-          Row(children: [
-            Expanded(child: _stat(theme, cs, '当前阶段', stage)),
+          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Expanded(
-                child: _stat(
-                    theme, cs, '周期第', '${dayInCycle(d)} 天')),
-            Expanded(child: _stat(theme, cs, '下次预测', next)),
-          ]),
-          const SizedBox(height: 10),
-          Text('平均周期 ${d.cycle} 天 · 平均经期 ${d.length} 天 · $window',
-              style:
-                  theme.textTheme.bodySmall?.copyWith(color: cs.outline)),
-        ]),
-      ),
-    );
-  }
-
-  Widget _stat(ThemeData theme, ColorScheme cs, String label, String value) =>
-      Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(label,
-            style: theme.textTheme.labelSmall?.copyWith(color: cs.outline)),
-        const SizedBox(height: 2),
-        Text(value, style: theme.textTheme.bodyMedium),
-      ]);
-
-  /// 记录行：两种形状分别渲染；编辑/删除菜单**不加作者门槛**（D6）。
-  Widget _recordTile(
-      BuildContext context, TogetherRecord r, PeriodData d) {
-    final theme = Theme.of(context);
-    final cs = theme.colorScheme;
-    final shape = periodShapeOf(r.body);
-    final b = r.body;
-    final isEpisode = shape == PeriodShape.episode;
-    final dateLabel = isEpisode
-        ? (b['start'] ?? '').toString()
-        : (b['date'] ?? '').toString();
-    final title = isEpisode ? '经期 · $dateLabel 开始' : '这一天 · $dateLabel';
-    final details = isEpisode
-        ? '共 ${b['length'] ?? 1} 天 · 周期 ${b['cycle'] ?? '—'} 天'
-        : '';
-    final content = (b['content'] ?? '').toString();
-    final sub = <String>[
-      if (details.isNotEmpty) details,
-      if (content.isNotEmpty) content,
-    ].join(' · ');
-    return Card(
-      margin: const EdgeInsets.only(bottom: 10),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
-        child: Row(children: [
-          Expanded(
-            child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title, style: theme.textTheme.titleSmall),
-                  if (sub.isNotEmpty) ...[
-                    const SizedBox(height: 3),
-                    Text(sub,
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(greetWord(utcNow),
                         style: theme.textTheme.bodySmall
                             ?.copyWith(color: cs.outline)),
-                  ],
-                ]),
-          ),
-          // 🔴 D6：不加 `author == uid` 判断，双方都能编辑/删除任意一条。
-          PopupMenuButton<String>(
-            tooltip: '更多操作',
-            itemBuilder: (_) => const [
-              PopupMenuItem(value: 'edit', child: Text('编辑')),
-              PopupMenuItem(value: 'delete', child: Text('删除')),
-            ],
-            onSelected: (v) {
-              if (v == 'edit' && shape != PeriodShape.unknown) {
-                _openForm(context, shape, r, d);
-              }
-              if (v == 'delete') _confirmDelete(context, r);
-            },
-          ),
+                    const SizedBox(height: 4),
+                    Text(heroTitle(d, today),
+                        style: theme.textTheme.titleMedium),
+                    const SizedBox(height: 4),
+                    Text(heroTip(d, today),
+                        style: theme.textTheme.bodySmall
+                            ?.copyWith(color: cs.outline)),
+                    if (fert != null) ...[
+                      const SizedBox(height: 8),
+                      Wrap(crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            Text('受孕概率 ',
+                                style: theme.textTheme.bodySmall),
+                            Text(fert[0],
+                                style: theme.textTheme.titleSmall?.copyWith(
+                                    color: cs.primary,
+                                    fontWeight: FontWeight.bold)),
+                            const SizedBox(width: 6),
+                            Text(fert[1],
+                                style: theme.textTheme.bodySmall
+                                    ?.copyWith(color: cs.outline)),
+                          ]),
+                      // 🔴 免责原文逐字（`:228`，**带句号**），不给百分比。
+                      const SizedBox(height: 2),
+                      Text(fertilityNote,
+                          style: theme.textTheme.labelSmall
+                              ?.copyWith(color: cs.outline)),
+                    ],
+                  ]),
+            ),
+            const SizedBox(width: 12),
+            Column(children: [
+              Semantics(
+                label: '周期第 $dayIn 天，共 $cyc 天',
+                child: _CycleRing(dayIn: dayIn, percent: heroPercent(d)),
+              ),
+              const SizedBox(height: 4),
+              Text('周期第 $dayIn 天', style: theme.textTheme.labelSmall),
+            ]),
+          ]),
+          const SizedBox(height: 12),
+          // `:488` 下次预计（月/日 + 参考值 + 还有/已推迟）
+          Text(heroNextLine(d),
+              style: theme.textTheme.bodySmall?.copyWith(color: cs.outline)),
+          const SizedBox(height: 12),
+          // phaseBar `:281-289`：四段相对天数权重 + 今天游标
+          _phaseBar(context, segs, cursor, ph?.phase),
+          const SizedBox(height: 14),
+          // `:488` 三联统计（记录天数 = 日记录行数）
+          Row(children: [
+            _heroStat(context, '平均周期', '${d.cycle}', '天'),
+            _heroStat(context, '平均经期', '${d.length}', '天'),
+            _heroStat(context, '记录天数', '${dayRows.length}', '天'),
+          ]),
         ]),
       ),
     );
   }
 
-  /// 新建：先选两种形状之一，再打开对应基础表单。
-  Future<void> _pickNewShape(BuildContext context, PeriodData d) async {
-    final shape = await showDialog<PeriodShape>(
-      context: context,
-      builder: (dctx) => SimpleDialog(
-        title: const Text('记一笔'),
-        children: [
-          SimpleDialogOption(
-            onPressed: () => Navigator.of(dctx).pop(PeriodShape.episode),
-            child: const Padding(
-              padding: EdgeInsets.symmetric(vertical: 8),
-              child: Row(children: [
-                Icon(Icons.bloodtype_outlined),
-                SizedBox(width: 12),
-                Expanded(
-                    child: Text('记一次经期　开始日 / 天数 / 周期')),
-              ]),
-            ),
+  Widget _heroStat(
+          BuildContext context, String label, String value, String unit) =>
+      Expanded(
+        child: Column(children: [
+          Text(label,
+              style: Theme.of(context)
+                  .textTheme
+                  .labelSmall
+                  ?.copyWith(color: Theme.of(context).colorScheme.outline)),
+          const SizedBox(height: 2),
+          Row(mainAxisSize: MainAxisSize.min, children: [
+            Text(value, style: Theme.of(context).textTheme.titleMedium),
+            Text(unit, style: Theme.of(context).textTheme.labelSmall),
+          ]),
+        ]),
+      );
+
+  Widget _phaseBar(BuildContext context, List<PhaseSegment> segs,
+      double cursor, String? current) {
+    final colors = <String, Color>{
+      'period': const Color(0xFFEF3F68),
+      'follicular': const Color(0xFF81C784),
+      'fertile': const Color(0xFF9575CD),
+      'luteal': const Color(0xFFFFB74D),
+    };
+    return LayoutBuilder(builder: (ctx, constraints) {
+      final width = constraints.maxWidth;
+      final left = (cursor / 100 * width).clamp(0.0, width);
+      return SizedBox(
+        height: 34,
+        child: Stack(clipBehavior: Clip.none, children: [
+          Row(children: [
+            for (final s in segs)
+              Expanded(
+                flex: s.days,
+                child: Container(
+                  height: 34,
+                  margin: const EdgeInsets.symmetric(horizontal: 1),
+                  decoration: BoxDecoration(
+                    color: (colors[s.phase] ?? Colors.grey)
+                        .withValues(alpha: s.phase == current ? 0.95 : 0.45),
+                    borderRadius: BorderRadius.circular(5),
+                  ),
+                  alignment: Alignment.center,
+                  child: FittedBox(
+                    child: Text('${s.name} ${s.days}天',
+                        style: const TextStyle(
+                            fontSize: 10, color: Colors.white)),
+                  ),
+                ),
+              ),
+          ]),
+          Positioned(
+            left: (left - 1).clamp(0.0, width - 2),
+            top: -2,
+            bottom: -2,
+            child: Container(width: 2, color: Colors.black87),
           ),
-          SimpleDialogOption(
-            onPressed: () => Navigator.of(dctx).pop(PeriodShape.day),
-            child: const Padding(
-              padding: EdgeInsets.symmetric(vertical: 8),
-              child: Row(children: [
-                Icon(Icons.event_note_outlined),
-                SizedBox(width: 12),
-                Expanded(child: Text('记这一天　日期 / 想说的话')),
-              ]),
-            ),
-          ),
-        ],
-      ),
-    );
-    if (shape == null || !context.mounted) return;
-    await _openForm(context, shape, null, d);
+        ]),
+      );
+    });
   }
 
-  Future<void> _openForm(BuildContext context, PeriodShape shape,
-      TogetherRecord? record, PeriodData d) async {
+  // ── warnBlock（periodWarnings :232-245 + periodPage :515-516） ────────
+
+  Widget _warnBlock(BuildContext context, PeriodData d) {
+    final warns = periodWarnings(d);
+    if (warns.isEmpty) return const SizedBox.shrink();
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Card(
+        margin: EdgeInsets.zero,
+        color: cs.errorContainer.withValues(alpha: 0.35),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(warnBlockTitle,
+                    style: theme.textTheme.titleSmall
+                        ?.copyWith(color: cs.error)),
+                const SizedBox(height: 6),
+                for (final w in warns)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('· ',
+                              style: TextStyle(color: Colors.black54)),
+                          Expanded(
+                              child: Text(w,
+                                  style: theme.textTheme.bodySmall)),
+                        ]),
+                  ),
+                const SizedBox(height: 4),
+                Text(warnBlockNote,
+                    style: theme.textTheme.labelSmall
+                        ?.copyWith(color: cs.outline)),
+              ]),
+        ),
+      ),
+    );
+  }
+
+  // ── top：整月日历（periodMonthGrid :174-193 / periodTopCard :292-295） ──
+
+  Widget _calendarCard(BuildContext context, PeriodMonthGridData grid,
+      String today, String selected) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          // 月份栏：‹ / 今天 / ›
+          Row(children: [
+            Text('${grid.month} 月', style: theme.textTheme.titleMedium),
+            const SizedBox(width: 6),
+            Text('${grid.year} 年',
+                style: theme.textTheme.bodySmall
+                    ?.copyWith(color: cs.outline)),
+            const Spacer(),
+            IconButton(
+              tooltip: '上个月',
+              icon: const Text('‹', style: TextStyle(fontSize: 24)),
+              onPressed: () => _shiftMonth(-1, selected),
+            ),
+            TextButton(
+              onPressed: () => setState(() => _selectedDay = today),
+              child: const Text('今天'),
+            ),
+            IconButton(
+              tooltip: '下个月',
+              icon: const Text('›', style: TextStyle(fontSize: 24)),
+              onPressed: () => _shiftMonth(1, selected),
+            ),
+          ]),
+          const SizedBox(height: 6),
+          // 星期行
+          Row(children: [
+            for (var i = 0; i < 7; i++)
+              Expanded(
+                child: Center(
+                  child: Text(const ['日', '一', '二', '三', '四', '五', '六'][i],
+                      style: theme.textTheme.labelSmall?.copyWith(
+                          color: (i == 0 || i == 6) ? cs.error : cs.outline)),
+                ),
+              ),
+          ]),
+          const SizedBox(height: 6),
+          // 整月网格（lead 个空格 + 逐日格子）。
+          // 🔴 不用嵌套 GridView(shrinkWrap)：外层已是 ListView（viewport），
+          // 嵌套 shrinkWrap viewport 会让首帧布局反复震荡；按周切 Row 最稳。
+          _calendarRows(context, grid),
+          const SizedBox(height: 10),
+          // 图例四项（Web :294）
+          Wrap(spacing: 10, runSpacing: 4, children: [
+            _legend(cs, const Color(0xFFEF3F68), '月经期'),
+            _legend(cs, const Color(0xFFF8BBD0), '预测经期'),
+            _legend(cs, const Color(0xFF9575CD), '排卵期'),
+            _legend(cs, const Color(0xFF7E57C2), '排卵日', dot: true),
+          ]),
+        ]),
+      ),
+    );
+  }
+
+  /// 把 [PeriodMonthGridData] 铺成 7 列的行（周日起），无嵌套 viewport。
+  Widget _calendarRows(BuildContext context, PeriodMonthGridData grid) {
+    final cells = <Widget>[
+      for (var i = 0; i < grid.lead; i++)
+        const Expanded(child: SizedBox(height: 38)),
+      for (final cell in grid.cells)
+        Expanded(
+          child: SizedBox(
+            height: 38,
+            child: Padding(
+              padding: const EdgeInsets.all(1.5),
+              child: _dayCell(context, cell),
+            ),
+          ),
+        ),
+    ];
+    while (cells.length % 7 != 0) {
+      cells.add(const Expanded(child: SizedBox(height: 38)));
+    }
+    final rows = <Widget>[];
+    for (var i = 0; i < cells.length; i += 7) {
+      rows.add(Row(children: cells.sublist(i, i + 7)));
+    }
+    return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch, children: rows);
+  }
+
+  Widget _legend(ColorScheme cs, Color color, String label,
+      {bool dot = false}) =>
+      Row(mainAxisSize: MainAxisSize.min, children: [
+        Container(
+          width: 12,
+          height: 12,
+          decoration: BoxDecoration(
+            color: dot ? Colors.transparent : color.withValues(alpha: 0.55),
+            shape: dot ? BoxShape.circle : BoxShape.rectangle,
+            borderRadius: dot ? null : BorderRadius.circular(3),
+            border: dot ? Border.all(color: color, width: 2) : null,
+          ),
+        ),
+        const SizedBox(width: 4),
+        Text(label,
+            style: TextStyle(fontSize: 11, color: cs.outline)),
+      ]);
+
+  Widget _dayCell(BuildContext context, PeriodDayCell cell) {
+    final cs = Theme.of(context).colorScheme;
+    final base = _cellColor(cell, cs);
+    return Tooltip(
+      message: cell.tip,
+      child: Semantics(
+        label: cell.ariaLabel,
+        button: true,
+        child: InkWell(
+          key: Key('period-day-${cell.iso}'),
+          borderRadius: BorderRadius.circular(8),
+          onTap: () => setState(() => _selectedDay = cell.iso),
+          child: Container(
+            decoration: BoxDecoration(
+              color: base,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: cell.picked
+                    ? cs.primary
+                    : cell.isToday
+                        ? cs.onSurface
+                        : cell.isStart
+                            ? cs.primary.withValues(alpha: 0.55)
+                            : Colors.transparent,
+                width: cell.picked ? 2.5 : (cell.isToday ? 2 : 1),
+              ),
+            ),
+            child: Stack(alignment: Alignment.center, children: [
+              Text('${cell.day}',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: cell.isToday || cell.isStart
+                        ? FontWeight.bold
+                        : FontWeight.normal,
+                    color: _cellText(cell, cs),
+                  )),
+              if (cell.ovu)
+                Positioned(
+                  top: 2,
+                  right: 3,
+                  child: Container(
+                    width: 5,
+                    height: 5,
+                    decoration: const BoxDecoration(
+                        color: Colors.white, shape: BoxShape.circle),
+                  ),
+                ),
+              if (cell.hasRec)
+                const Positioned(
+                  bottom: 2,
+                  left: 4,
+                  child: Icon(Icons.circle, size: 5, color: Colors.white),
+                ),
+              if (cell.hasLog)
+                Positioned(
+                  bottom: 2,
+                  right: 4,
+                  child: Container(
+                    width: 4,
+                    height: 4,
+                    decoration: BoxDecoration(
+                        color: cs.onSurface.withValues(alpha: 0.65),
+                        shape: BoxShape.circle),
+                  ),
+                ),
+            ]),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Color _cellColor(PeriodDayCell cell, ColorScheme cs) {
+    if (cell.phase == null) return cs.surfaceContainerHighest;
+    if (cell.ovu) return const Color(0xFF7E57C2);
+    final alpha = cell.predicted ? 0.45 : 0.9;
+    switch (cell.phase) {
+      case 'period':
+        return const Color(0xFFEF3F68).withValues(alpha: alpha);
+      case 'follicular':
+        return const Color(0xFF81C784).withValues(alpha: alpha);
+      case 'fertile':
+        return const Color(0xFF9575CD).withValues(alpha: alpha);
+      case 'luteal':
+        return const Color(0xFFFFB74D).withValues(alpha: alpha);
+      default:
+        return cs.surfaceContainerHighest;
+    }
+  }
+
+  Color _cellText(PeriodDayCell cell, ColorScheme cs) {
+    if (cell.ovu) return Colors.white;
+    if (cell.phase == 'period' && !cell.predicted) return Colors.white;
+    return cs.onSurface;
+  }
+
+  /// `:195-201` 翻月夹到目标月最后一天；**选中日期状态保留**（只挪日期）。
+  void _shiftMonth(int delta, String selected) {
+    setState(() => _selectedDay = shiftMonth(selected, delta));
+  }
+
+  // ── log：当天记录卡（periodLogCard :298-315） ─────────────────────────
+
+  Widget _logCard(BuildContext context, PeriodData d, List<PeriodRow> rows,
+      String day, String today, String nowTime) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final log = periodDayLogOf(rows, day);
+    final n = dayNum(day);
+    final hit = periodEpisodeOf(d, n);
+    final on = hit != null;
+    final head = day == today
+        ? '今天'
+        : '${int.parse(day.substring(5, 7))} 月 '
+            '${int.parse(day.substring(8, 10))} 日';
+    final ownerRecord = hit == null ? null : _recordById(hit.owner.id);
+
+    return Card(
+      margin: const EdgeInsets.only(top: 12),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Expanded(
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(head, style: theme.textTheme.titleSmall),
+                    const SizedBox(height: 2),
+                    Text(on
+                        ? '经期第 ${n - hit.ep.start + 1} 天'
+                        : '记下这一天，周期会更准',
+                        style: theme.textTheme.bodySmall
+                            ?.copyWith(color: cs.outline)),
+                  ]),
+            ),
+            if (ownerRecord != null)
+              TextButton(
+                onPressed: () =>
+                    _openEpisodeForm(ownerRecord, day, d, today),
+                child: const Text('改经期长度'),
+              ),
+          ]),
+          const SizedBox(height: 6),
+          // 经期四动作（走了 / 又来了 / 来了）—— 全程无 end 键。
+          Row(children: [
+            const Text('🩸', style: TextStyle(fontSize: 18)),
+            const SizedBox(width: 8),
+            const SizedBox(width: 44, child: Text('经期')),
+            const Spacer(),
+            if (on) ...[
+              OutlinedButton(
+                onPressed: _busy
+                    ? null
+                    : () => _runAction(
+                        () => planEnd(d, day), '月经走了'),
+                child: const Text('月经走了'),
+              ),
+              const SizedBox(width: 6),
+              FilledButton.tonal(
+                onPressed: _busy
+                    ? null
+                    : () => _runAction(
+                        () => planMore(d, day), '月经又来了'),
+                child: const Text('月经又来了'),
+              ),
+            ] else
+              FilledButton(
+                onPressed: _busy
+                    ? null
+                    : () => _runAction(
+                        () => planStart(d, day,
+                            clientId: api.newClientId()),
+                        '月经来了'),
+                child: const Text('月经来了'),
+              ),
+          ]),
+          const Divider(height: 14),
+          // 9 字段行
+          for (final f in periodLogFields)
+            _logRow(context, f[0], f[1], f[2],
+                periodValueText(f[0], log), day, today, nowTime),
+          // 日记行（`:313`）
+          _logRow(context, periodDiaryKey, periodDiaryName, periodDiaryIcon,
+              _contentPreview(log), day, today, nowTime),
+        ]),
+      ),
+    );
+  }
+
+  String _contentPreview(Map<String, dynamic> log) {
+    final s = (log['content'] ?? '').toString();
+    return s.length > 16 ? s.substring(0, 16) : s;
+  }
+
+  Widget _logRow(BuildContext context, String key, String name, String icon,
+      String value, String day, String today, String nowTime) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    return InkWell(
+      onTap: () => showPeriodLogSheet(context,
+          field: key, day: day, today: today, nowTime: nowTime),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 9),
+        child: Row(children: [
+          Text(icon, style: const TextStyle(fontSize: 17)),
+          const SizedBox(width: 10),
+          SizedBox(width: 44, child: Text(name, style: theme.textTheme.bodyMedium)),
+          Expanded(
+            child: Text(value,
+                textAlign: TextAlign.right,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodySmall
+                    ?.copyWith(color: cs.outline)),
+          ),
+          const SizedBox(width: 6),
+          value.isEmpty
+              ? Icon(Icons.add_circle_outline, size: 16, color: cs.primary)
+              : Icon(Icons.chevron_right, size: 16, color: cs.outline),
+        ]),
+      ),
+    );
+  }
+
+  TogetherRecord? _recordById(String id) {
+    for (final r in ref.read(periodControllerProvider).records) {
+      if (r.id == id) return r;
+    }
+    return null;
+  }
+
+  /// 执行四动作计划（7-C 错误通道：失败只发 error tone，不发成功通知）。
+  Future<void> _runAction(
+      PeriodWritePlan Function() build, String actionName) async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    final plan = build();
+    final err = await ref
+        .read(periodControllerProvider.notifier)
+        .executePlan(plan);
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (err != null) {
+      ref
+          .read(chatToastProvider.notifier)
+          .show('操作失败：$err', tone: ChatToastTone.error);
+    } else {
+      // Web `toast(...)` 是普通提示；成功语义也走 info，不冒充成功通知。
+      ref.read(chatToastProvider.notifier).show(plan.message);
+    }
+  }
+
+  Future<void> _openEpisodeForm(TogetherRecord? record, String selected,
+      PeriodData d, String today) async {
     await showDialog<bool>(
       context: context,
       builder: (_) => PeriodFormDialog(
-        shape: shape,
         record: record,
-        // 默认天数也来自引擎（不另写推算）。
+        presetDay: selected,
         defaultLength: d.length,
         defaultCycle: d.cycle,
+        today: today,
       ),
     );
   }
 
-  /// 删除确认（服务端软删 → 个人角落 · 回收站）。
-  Future<void> _confirmDelete(BuildContext context, TogetherRecord r) async {
+  // ── symBlock：症状统计（periodPage :493-499） ─────────────────────────
+
+  Widget _symptomBlock(
+      BuildContext context, PeriodData d, List<PeriodRow> rows) {
+    final summary = symptomSummary(d, rows);
+    if (summary.items.isEmpty) return const SizedBox.shrink();
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    return Card(
+      margin: const EdgeInsets.only(top: 12),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('常出现的症状', style: theme.textTheme.titleSmall),
+          const SizedBox(height: 8),
+          for (final s in summary.items)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Row(children: [
+                SizedBox(width: 88, child: Text(s.name, style: theme.textTheme.bodySmall)),
+                Expanded(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: LinearProgressIndicator(
+                      value: (s.count / summary.total).clamp(0.0, 1.0),
+                      minHeight: 8,
+                      backgroundColor: cs.surfaceContainerHighest,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text('${s.count} 次', style: theme.textTheme.labelSmall),
+              ]),
+            ),
+          const SizedBox(height: 4),
+          Text(summary.note,
+              style: theme.textTheme.labelSmall
+                  ?.copyWith(color: cs.outline)),
+        ]),
+      ),
+    );
+  }
+
+  // ── hist：一次月经一张卡（periodPage :502-510） ───────────────────────
+
+  List<Widget> _historyCards(BuildContext context, PeriodData d,
+      List<PeriodRow> rows, String today, String uid) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final out = <Widget>[];
+    for (final ep in d.episodes.reversed) {
+      final startIso = dayStr(ep.start);
+      final endIso = dayStr(ep.end);
+      final details = episodeDetailDays(ep, rows);
+      final author = ep.frags.first.author;
+      final authorLabel = author == uid ? '我' : 'TA';
+      final chips = episodeSymptoms(ep);
+      final words = episodeWords(ep);
+      final firstRecord = _recordById(ep.frags.first.id);
+      final subtitle = <String>[
+        '共 ${ep.length} 天 · ${endIso.substring(5)} 结束',
+        if (details > 0) '记了 $details 天细节',
+        if (ep.frags.length > 1) '分 ${ep.frags.length} 段记的',
+        '$authorLabel 记录',
+      ].join(' · ');
+
+      out.add(Card(
+        margin: const EdgeInsets.only(top: 12),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
+          child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(children: [
+                  CircleAvatar(
+                      radius: 14,
+                      child: Text(authorLabel,
+                          style: const TextStyle(fontSize: 11))),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('${int.parse(startIso.substring(5, 7))} 月 '
+                              '${int.parse(startIso.substring(8, 10))} 日开始',
+                              style: theme.textTheme.titleSmall),
+                          const SizedBox(height: 2),
+                          Text(subtitle,
+                              style: theme.textTheme.labelSmall
+                                  ?.copyWith(color: cs.outline)),
+                        ]),
+                  ),
+                  PopupMenuButton<String>(
+                    tooltip: '更多操作',
+                    itemBuilder: (_) => const [
+                      PopupMenuItem(value: 'edit', child: Text('编辑')),
+                      PopupMenuItem(
+                          value: 'delete', child: Text('删除这次')),
+                    ],
+                    onSelected: (v) {
+                      if (v == 'edit' && firstRecord != null) {
+                        _openEpisodeForm(firstRecord, startIso, d, today);
+                      }
+                      if (v == 'delete') _confirmDeleteEpisode(ep);
+                    },
+                  ),
+                ]),
+                if (chips.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    children: [
+                      for (final s in chips)
+                        Chip(
+                            label: Text(s,
+                                style: const TextStyle(fontSize: 11)),
+                            visualDensity: VisualDensity.compact),
+                    ],
+                  ),
+                ],
+                if (words.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text(words, style: theme.textTheme.bodySmall),
+                ],
+              ]),
+        ),
+      ));
+    }
+    return out;
+  }
+
+  Future<void> _confirmDeleteEpisode(PeriodEpisode ep) async {
+    final ids = deleteEpisodeIds(ep);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dctx) => AlertDialog(
-        title: const Text('删除这条记录'),
-        content: const Text('删除后会进入「个人角落 · 回收站」，30 天内可以恢复。'),
+        title: Text(periodDeleteEpisodeTitle),
+        content: Text(periodDeleteEpisodeText(ids.length)),
         actions: [
           TextButton(
               onPressed: () => Navigator.of(dctx).pop(false),
@@ -297,238 +874,88 @@ class _PeriodPageState extends ConsumerState<PeriodPage> {
       ),
     );
     if (confirmed != true) return;
-    final err = await ref.read(periodControllerProvider.notifier).delete(r.id);
-    if (!context.mounted) return;
-    ref.read(chatToastProvider.notifier).show(
-        err == null ? '已删除，可在个人角落 · 回收站恢复' : '删除失败：$err',
-        tone:
-            err == null ? ChatToastTone.success : ChatToastTone.error);
-  }
-}
-
-/// 新建/编辑基础表单（**表单 State 的 initState 生成一次 clientId 复用**）。
-///
-/// 字段按形状：经期 `start/length/cycle/content`；日记录 `date/content`。
-/// 失败时：顶部通知（原文）+ 表单内联（原文）**双呈现**，不 pop、输入保留、
-/// 不发成功通知、不自动重试（7-C 返修后的错误通道）；请求中按钮禁用防连点。
-class PeriodFormDialog extends ConsumerStatefulWidget {
-  const PeriodFormDialog({
-    super.key,
-    required this.shape,
-    this.record,
-    required this.defaultLength,
-    required this.defaultCycle,
-  });
-
-  final PeriodShape shape;
-  final TogetherRecord? record;
-  final int defaultLength;
-  final int defaultCycle;
-
-  @override
-  ConsumerState<PeriodFormDialog> createState() => _PeriodFormDialogState();
-}
-
-class _PeriodFormDialogState extends ConsumerState<PeriodFormDialog> {
-  /// 🔴 7-C 教训前置执行：只在 initState 生成一次，失败重试带同一个值
-  /// （`api_client.dart:158` `newClientId()`；服务端 `find_by_client` 幂等）。
-  late final String _clientId;
-  late final TextEditingController _dateCtrl;
-  late final TextEditingController _lengthCtrl;
-  late final TextEditingController _cycleCtrl;
-  late final TextEditingController _contentCtrl;
-  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
-  String? _inlineError;
-  bool _submitting = false;
-
-  bool get _editing => widget.record != null;
-  bool get _isEpisode => widget.shape == PeriodShape.episode;
-
-  @override
-  void initState() {
-    super.initState();
-    _clientId = api.newClientId();
-    final b = widget.record?.body ?? const <String, dynamic>{};
-    final dayKey = _isEpisode ? 'start' : 'date';
-    final rawDate = (b[dayKey] ?? '').toString();
-    _dateCtrl = TextEditingController(
-        text: rawDate.isNotEmpty
-            ? rawDate
-            : spaceTodayIso(DateTime.now().toUtc()));
-    _lengthCtrl = TextEditingController(
-        text: (b['length'] ?? widget.defaultLength).toString());
-    _cycleCtrl = TextEditingController(
-        text: (b['cycle'] ?? widget.defaultCycle).toString());
-    _contentCtrl =
-        TextEditingController(text: (b['content'] ?? '').toString());
-  }
-
-  @override
-  void dispose() {
-    _dateCtrl.dispose();
-    _lengthCtrl.dispose();
-    _cycleCtrl.dispose();
-    _contentCtrl.dispose();
-    super.dispose();
-  }
-
-  Future<void> _pickDate() async {
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: DateTime.tryParse(_dateCtrl.text) ?? DateTime.now(),
-      firstDate: DateTime(2000),
-      lastDate: DateTime(2100),
-    );
-    if (picked != null) {
-      _dateCtrl.text =
-          '${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
-    }
-  }
-
-  Future<void> _submit() async {
-    if (_submitting) return; // 防连点：请求中不重复发
-    if (!(_formKey.currentState?.validate() ?? false)) return;
-    setState(() {
-      _submitting = true;
-      _inlineError = null;
-    });
-
-    final ctrl = ref.read(periodControllerProvider.notifier);
-    final date = _dateCtrl.text.trim();
-    final content = _contentCtrl.text.trim();
-    String? err;
-    if (_editing) {
-      // 回填铁律：edit() 内部以原始 body 为底 merge，这里只给改动键。
-      final changes = <String, dynamic>{
-        if (_isEpisode) ...{
-          'start': date,
-          'length': int.parse(_lengthCtrl.text.trim()),
-          'cycle': int.parse(_cycleCtrl.text.trim()),
-        } else ...{
-          'date': date,
-        },
-        'content': content,
-      };
-      err = await ctrl.edit(widget.record!, changes);
-    } else if (_isEpisode) {
-      err = await ctrl.addEpisode(
-        start: date,
-        length: int.parse(_lengthCtrl.text.trim()),
-        cycle: int.parse(_cycleCtrl.text.trim()),
-        content: content,
-        clientId: _clientId,
-      );
-    } else {
-      err = await ctrl.addDay(
-          date: date, content: content, clientId: _clientId);
-    }
+    final err = await ref
+        .read(periodControllerProvider.notifier)
+        .deleteEpisode(ids);
     if (!mounted) return;
-
-    if (err != null) {
-      // 🔴 失败：原文双呈现、不 pop、输入保留、不自动重试、不发成功通知。
-      setState(() {
-        _submitting = false;
-        _inlineError = err;
-      });
-      ref
-          .read(chatToastProvider.notifier)
-          .show('保存失败：$err', tone: ChatToastTone.error);
-      return;
-    }
     ref.read(chatToastProvider.notifier).show(
-        _editing ? '已保存' : '已记下',
-        tone: ChatToastTone.success);
-    Navigator.of(context).pop(true);
+        err == null
+            ? '已删除，可在个人角落 · 回收站恢复'
+            : '删除失败：$err',
+        tone: err == null ? ChatToastTone.info : ChatToastTone.error);
   }
+}
+
+/// 环形进度（对齐 `cycleHero :269-274` 的 SVG：R=31、C=194.8、
+/// `stroke-dashoffset=C*(1-pct/100)`、从 -90° 起画、中心写 dayIn）。
+/// [percent] 只取 [heroPercent]（引擎结果换算，Web 实跑对拍过的展示值）。
+class _CycleRing extends StatelessWidget {
+  const _CycleRing({required this.dayIn, required this.percent});
+
+  final int dayIn;
+  final int percent;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final cs = theme.colorScheme;
-    final title = _editing
-        ? (_isEpisode ? '编辑这次经期' : '编辑这一天')
-        : (_isEpisode ? '记一次经期' : '记这一天');
-    return AlertDialog(
-      title: Text(title),
-      content: Form(
-        key: _formKey,
-        child: SizedBox(
-          width: 360,
-          child: SingleChildScrollView(
-            child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  TextFormField(
-                    controller: _dateCtrl,
-                    readOnly: true,
-                    decoration: InputDecoration(
-                        labelText: _isEpisode ? '这次经期开始于' : '日期'),
-                    onTap: _pickDate,
-                    validator: (v) =>
-                        (v ?? '').length == 10 ? null : '请选择日期',
-                  ),
-                  if (_isEpisode) ...[
-                    const SizedBox(height: 10),
-                    Row(children: [
-                      Expanded(
-                        child: TextFormField(
-                          controller: _lengthCtrl,
-                          keyboardType: TextInputType.number,
-                          decoration:
-                              const InputDecoration(labelText: '经期几天'),
-                          validator: (v) {
-                            final n = int.tryParse((v ?? '').trim());
-                            return n != null && n >= 1 && n <= 15
-                                ? null
-                                : '经期需在 1–15 天之间';
-                          },
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: TextFormField(
-                          controller: _cycleCtrl,
-                          keyboardType: TextInputType.number,
-                          decoration:
-                              const InputDecoration(labelText: '周期几天'),
-                          validator: (v) {
-                            final n = int.tryParse((v ?? '').trim());
-                            return n != null && n >= 15 && n <= 60
-                                ? null
-                                : '周期需在 15–60 天之间';
-                          },
-                        ),
-                      ),
-                    ]),
-                  ],
-                  const SizedBox(height: 10),
-                  TextFormField(
-                    controller: _contentCtrl,
-                    maxLines: 3,
-                    maxLength: 2000,
-                    decoration: const InputDecoration(
-                        labelText: '想说的话（可选）', counterText: ''),
-                  ),
-                  if (_inlineError != null) ...[
-                    const SizedBox(height: 8),
-                    Text(_inlineError!,
-                        style: theme.textTheme.bodySmall
-                            ?.copyWith(color: cs.error)),
-                  ],
-                ]),
-          ),
+    final cs = Theme.of(context).colorScheme;
+    return SizedBox(
+      width: 72,
+      height: 72,
+      child: CustomPaint(
+        painter: _RingPainter(
+          track: cs.surfaceContainerHighest,
+          fill: cs.primary,
+          fraction: (percent / 100).clamp(0.0, 1.0),
+        ),
+        child: Center(
+          child: Text('$dayIn',
+              style: Theme.of(context)
+                  .textTheme
+                  .titleMedium
+                  ?.copyWith(fontWeight: FontWeight.bold)),
         ),
       ),
-      actions: [
-        TextButton(
-            onPressed:
-                _submitting ? null : () => Navigator.of(context).pop(false),
-            child: const Text('取消')),
-        FilledButton(
-            onPressed: _submitting ? null : _submit,
-            child: Text(_editing ? '保存' : '记下')),
-      ],
     );
   }
+}
+
+class _RingPainter extends CustomPainter {
+  const _RingPainter({
+    required this.track,
+    required this.fill,
+    required this.fraction,
+  });
+
+  final Color track;
+  final Color fill;
+  final double fraction;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const r = 31.0;
+    final center = Offset(size.width / 2, size.height / 2);
+    final trackPaint = Paint()
+      ..color = track
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 6;
+    final fillPaint = Paint()
+      ..color = fill
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 6
+      ..strokeCap = StrokeCap.round;
+    canvas.drawCircle(center, r, trackPaint);
+    canvas.drawArc(
+      Rect.fromCircle(center: center, radius: r),
+      -math.pi / 2,
+      2 * math.pi * fraction,
+      false,
+      fillPaint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_RingPainter oldDelegate) =>
+      oldDelegate.fraction != fraction ||
+      oldDelegate.track != track ||
+      oldDelegate.fill != fill;
 }

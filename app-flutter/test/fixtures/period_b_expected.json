@@ -1,0 +1,2896 @@
+{
+  "meta": {
+    "source": "static/period.js",
+    "method": "node vm: full source + eval IIFE in one script, Web original functions",
+    "gridSandboxGlobals": [
+      "recordsOf",
+      "today",
+      "state",
+      "console"
+    ],
+    "actionSandboxGlobals": [
+      "recordsOf",
+      "today",
+      "state",
+      "console",
+      "esc",
+      "uuid",
+      "post",
+      "put",
+      "del",
+      "toast",
+      "refresh"
+    ],
+    "functions": [
+      "periodData",
+      "cyclePhases",
+      "periodMonthGrid",
+      "periodDayLogs",
+      "periodWarnings",
+      "periodStart",
+      "periodEnd",
+      "periodMore",
+      "periodSaveDay",
+      "periodValueText",
+      "shiftMonth",
+      "cycleHero",
+      "phaseBar"
+    ],
+    "today": "2026-11-14",
+    "gridSourceCase": "multiCycle",
+    "uuid": "uuid-fixed-8b",
+    "note": "Web 实跑期望值；Dart 侧逐日/逐项断言全等，不许手算或硬编码。"
+  },
+  "grids": {
+    "2026-05": {
+      "lead": 5,
+      "days": 31,
+      "cells": {
+        "2026-05-01": {
+          "classes": [
+            "cal-day"
+          ],
+          "title": "还没有记录 · 点一下记这天",
+          "aria": "5 月 1 日，还没有记录 · 点一下记这天"
+        },
+        "2026-05-02": {
+          "classes": [
+            "cal-day"
+          ],
+          "title": "还没有记录 · 点一下记这天",
+          "aria": "5 月 2 日，还没有记录 · 点一下记这天"
+        },
+        "2026-05-03": {
+          "classes": [
+            "cal-day"
+          ],
+          "title": "还没有记录 · 点一下记这天",
+          "aria": "5 月 3 日，还没有记录 · 点一下记这天"
+        },
+        "2026-05-04": {
+          "classes": [
+            "cal-day"
+          ],
+          "title": "还没有记录 · 点一下记这天",
+          "aria": "5 月 4 日，还没有记录 · 点一下记这天"
+        },
+        "2026-05-05": {
+          "classes": [
+            "cal-day"
+          ],
+          "title": "还没有记录 · 点一下记这天",
+          "aria": "5 月 5 日，还没有记录 · 点一下记这天"
+        },
+        "2026-05-06": {
+          "classes": [
+            "cal-day"
+          ],
+          "title": "还没有记录 · 点一下记这天",
+          "aria": "5 月 6 日，还没有记录 · 点一下记这天"
+        },
+        "2026-05-07": {
+          "classes": [
+            "cal-day"
+          ],
+          "title": "还没有记录 · 点一下记这天",
+          "aria": "5 月 7 日，还没有记录 · 点一下记这天"
+        },
+        "2026-05-08": {
+          "classes": [
+            "cal-day"
+          ],
+          "title": "还没有记录 · 点一下记这天",
+          "aria": "5 月 8 日，还没有记录 · 点一下记这天"
+        },
+        "2026-05-09": {
+          "classes": [
+            "cal-day"
+          ],
+          "title": "还没有记录 · 点一下记这天",
+          "aria": "5 月 9 日，还没有记录 · 点一下记这天"
+        },
+        "2026-05-10": {
+          "classes": [
+            "cal-day"
+          ],
+          "title": "还没有记录 · 点一下记这天",
+          "aria": "5 月 10 日，还没有记录 · 点一下记这天"
+        },
+        "2026-05-11": {
+          "classes": [
+            "cal-day"
+          ],
+          "title": "还没有记录 · 点一下记这天",
+          "aria": "5 月 11 日，还没有记录 · 点一下记这天"
+        },
+        "2026-05-12": {
+          "classes": [
+            "cal-day"
+          ],
+          "title": "还没有记录 · 点一下记这天",
+          "aria": "5 月 12 日，还没有记录 · 点一下记这天"
+        },
+        "2026-05-13": {
+          "classes": [
+            "cal-day"
+          ],
+          "title": "还没有记录 · 点一下记这天",
+          "aria": "5 月 13 日，还没有记录 · 点一下记这天"
+        },
+        "2026-05-14": {
+          "classes": [
+            "cal-day"
+          ],
+          "title": "还没有记录 · 点一下记这天",
+          "aria": "5 月 14 日，还没有记录 · 点一下记这天"
+        },
+        "2026-05-15": {
+          "classes": [
+            "cal-day",
+            "picked"
+          ],
+          "title": "还没有记录 · 点一下记这天",
+          "aria": "5 月 15 日，还没有记录 · 点一下记这天"
+        },
+        "2026-05-16": {
+          "classes": [
+            "cal-day"
+          ],
+          "title": "还没有记录 · 点一下记这天",
+          "aria": "5 月 16 日，还没有记录 · 点一下记这天"
+        },
+        "2026-05-17": {
+          "classes": [
+            "cal-day"
+          ],
+          "title": "还没有记录 · 点一下记这天",
+          "aria": "5 月 17 日，还没有记录 · 点一下记这天"
+        },
+        "2026-05-18": {
+          "classes": [
+            "cal-day"
+          ],
+          "title": "还没有记录 · 点一下记这天",
+          "aria": "5 月 18 日，还没有记录 · 点一下记这天"
+        },
+        "2026-05-19": {
+          "classes": [
+            "cal-day"
+          ],
+          "title": "还没有记录 · 点一下记这天",
+          "aria": "5 月 19 日，还没有记录 · 点一下记这天"
+        },
+        "2026-05-20": {
+          "classes": [
+            "cal-day"
+          ],
+          "title": "还没有记录 · 点一下记这天",
+          "aria": "5 月 20 日，还没有记录 · 点一下记这天"
+        },
+        "2026-05-21": {
+          "classes": [
+            "cal-day"
+          ],
+          "title": "还没有记录 · 点一下记这天",
+          "aria": "5 月 21 日，还没有记录 · 点一下记这天"
+        },
+        "2026-05-22": {
+          "classes": [
+            "cal-day"
+          ],
+          "title": "还没有记录 · 点一下记这天",
+          "aria": "5 月 22 日，还没有记录 · 点一下记这天"
+        },
+        "2026-05-23": {
+          "classes": [
+            "cal-day"
+          ],
+          "title": "还没有记录 · 点一下记这天",
+          "aria": "5 月 23 日，还没有记录 · 点一下记这天"
+        },
+        "2026-05-24": {
+          "classes": [
+            "cal-day"
+          ],
+          "title": "还没有记录 · 点一下记这天",
+          "aria": "5 月 24 日，还没有记录 · 点一下记这天"
+        },
+        "2026-05-25": {
+          "classes": [
+            "cal-day"
+          ],
+          "title": "还没有记录 · 点一下记这天",
+          "aria": "5 月 25 日，还没有记录 · 点一下记这天"
+        },
+        "2026-05-26": {
+          "classes": [
+            "cal-day"
+          ],
+          "title": "还没有记录 · 点一下记这天",
+          "aria": "5 月 26 日，还没有记录 · 点一下记这天"
+        },
+        "2026-05-27": {
+          "classes": [
+            "cal-day"
+          ],
+          "title": "还没有记录 · 点一下记这天",
+          "aria": "5 月 27 日，还没有记录 · 点一下记这天"
+        },
+        "2026-05-28": {
+          "classes": [
+            "cal-day"
+          ],
+          "title": "还没有记录 · 点一下记这天",
+          "aria": "5 月 28 日，还没有记录 · 点一下记这天"
+        },
+        "2026-05-29": {
+          "classes": [
+            "cal-day"
+          ],
+          "title": "还没有记录 · 点一下记这天",
+          "aria": "5 月 29 日，还没有记录 · 点一下记这天"
+        },
+        "2026-05-30": {
+          "classes": [
+            "cal-day"
+          ],
+          "title": "还没有记录 · 点一下记这天",
+          "aria": "5 月 30 日，还没有记录 · 点一下记这天"
+        },
+        "2026-05-31": {
+          "classes": [
+            "cal-day"
+          ],
+          "title": "还没有记录 · 点一下记这天",
+          "aria": "5 月 31 日，还没有记录 · 点一下记这天"
+        }
+      }
+    },
+    "2026-06": {
+      "lead": 1,
+      "days": 30,
+      "cells": {
+        "2026-06-01": {
+          "classes": [
+            "cal-day",
+            "ph-period",
+            "ph-start",
+            "has-rec"
+          ],
+          "title": "月经期 · 这次经期的第一天 · 点一下记这天",
+          "aria": "6 月 1 日，月经期 · 这次经期的第一天 · 点一下记这天"
+        },
+        "2026-06-02": {
+          "classes": [
+            "cal-day",
+            "ph-period",
+            "has-log"
+          ],
+          "title": "月经期 · 这天记过身体情况",
+          "aria": "6 月 2 日，月经期 · 这天记过身体情况"
+        },
+        "2026-06-03": {
+          "classes": [
+            "cal-day",
+            "ph-period"
+          ],
+          "title": "月经期 · 点一下记这天",
+          "aria": "6 月 3 日，月经期 · 点一下记这天"
+        },
+        "2026-06-04": {
+          "classes": [
+            "cal-day",
+            "ph-period"
+          ],
+          "title": "月经期 · 点一下记这天",
+          "aria": "6 月 4 日，月经期 · 点一下记这天"
+        },
+        "2026-06-05": {
+          "classes": [
+            "cal-day",
+            "ph-period"
+          ],
+          "title": "月经期 · 点一下记这天",
+          "aria": "6 月 5 日，月经期 · 点一下记这天"
+        },
+        "2026-06-06": {
+          "classes": [
+            "cal-day",
+            "ph-follicular",
+            "ph-start"
+          ],
+          "title": "卵泡期 · 点一下记这天",
+          "aria": "6 月 6 日，卵泡期 · 点一下记这天"
+        },
+        "2026-06-07": {
+          "classes": [
+            "cal-day",
+            "ph-follicular"
+          ],
+          "title": "卵泡期 · 点一下记这天",
+          "aria": "6 月 7 日，卵泡期 · 点一下记这天"
+        },
+        "2026-06-08": {
+          "classes": [
+            "cal-day",
+            "ph-follicular"
+          ],
+          "title": "卵泡期 · 点一下记这天",
+          "aria": "6 月 8 日，卵泡期 · 点一下记这天"
+        },
+        "2026-06-09": {
+          "classes": [
+            "cal-day",
+            "ph-follicular"
+          ],
+          "title": "卵泡期 · 点一下记这天",
+          "aria": "6 月 9 日，卵泡期 · 点一下记这天"
+        },
+        "2026-06-10": {
+          "classes": [
+            "cal-day",
+            "ph-fertile",
+            "ph-start"
+          ],
+          "title": "排卵期 · 点一下记这天",
+          "aria": "6 月 10 日，排卵期 · 点一下记这天"
+        },
+        "2026-06-11": {
+          "classes": [
+            "cal-day",
+            "ph-fertile"
+          ],
+          "title": "排卵期 · 点一下记这天",
+          "aria": "6 月 11 日，排卵期 · 点一下记这天"
+        },
+        "2026-06-12": {
+          "classes": [
+            "cal-day",
+            "ph-fertile"
+          ],
+          "title": "排卵期 · 点一下记这天",
+          "aria": "6 月 12 日，排卵期 · 点一下记这天"
+        },
+        "2026-06-13": {
+          "classes": [
+            "cal-day",
+            "ph-fertile"
+          ],
+          "title": "排卵期 · 点一下记这天",
+          "aria": "6 月 13 日，排卵期 · 点一下记这天"
+        },
+        "2026-06-14": {
+          "classes": [
+            "cal-day",
+            "ph-fertile"
+          ],
+          "title": "排卵期 · 点一下记这天",
+          "aria": "6 月 14 日，排卵期 · 点一下记这天"
+        },
+        "2026-06-15": {
+          "classes": [
+            "cal-day",
+            "ph-fertile",
+            "ph-ovu",
+            "picked"
+          ],
+          "title": "排卵期 · 排卵日 · 点一下记这天",
+          "aria": "6 月 15 日，排卵期 · 排卵日 · 点一下记这天"
+        },
+        "2026-06-16": {
+          "classes": [
+            "cal-day",
+            "ph-fertile"
+          ],
+          "title": "排卵期 · 点一下记这天",
+          "aria": "6 月 16 日，排卵期 · 点一下记这天"
+        },
+        "2026-06-17": {
+          "classes": [
+            "cal-day",
+            "ph-luteal",
+            "ph-start"
+          ],
+          "title": "黄体期 · 点一下记这天",
+          "aria": "6 月 17 日，黄体期 · 点一下记这天"
+        },
+        "2026-06-18": {
+          "classes": [
+            "cal-day",
+            "ph-luteal"
+          ],
+          "title": "黄体期 · 点一下记这天",
+          "aria": "6 月 18 日，黄体期 · 点一下记这天"
+        },
+        "2026-06-19": {
+          "classes": [
+            "cal-day",
+            "ph-luteal"
+          ],
+          "title": "黄体期 · 点一下记这天",
+          "aria": "6 月 19 日，黄体期 · 点一下记这天"
+        },
+        "2026-06-20": {
+          "classes": [
+            "cal-day",
+            "ph-luteal"
+          ],
+          "title": "黄体期 · 点一下记这天",
+          "aria": "6 月 20 日，黄体期 · 点一下记这天"
+        },
+        "2026-06-21": {
+          "classes": [
+            "cal-day",
+            "ph-luteal"
+          ],
+          "title": "黄体期 · 点一下记这天",
+          "aria": "6 月 21 日，黄体期 · 点一下记这天"
+        },
+        "2026-06-22": {
+          "classes": [
+            "cal-day",
+            "ph-luteal"
+          ],
+          "title": "黄体期 · 点一下记这天",
+          "aria": "6 月 22 日，黄体期 · 点一下记这天"
+        },
+        "2026-06-23": {
+          "classes": [
+            "cal-day",
+            "ph-luteal"
+          ],
+          "title": "黄体期 · 点一下记这天",
+          "aria": "6 月 23 日，黄体期 · 点一下记这天"
+        },
+        "2026-06-24": {
+          "classes": [
+            "cal-day",
+            "ph-luteal"
+          ],
+          "title": "黄体期 · 点一下记这天",
+          "aria": "6 月 24 日，黄体期 · 点一下记这天"
+        },
+        "2026-06-25": {
+          "classes": [
+            "cal-day",
+            "ph-luteal"
+          ],
+          "title": "黄体期 · 点一下记这天",
+          "aria": "6 月 25 日，黄体期 · 点一下记这天"
+        },
+        "2026-06-26": {
+          "classes": [
+            "cal-day",
+            "ph-luteal"
+          ],
+          "title": "黄体期 · 点一下记这天",
+          "aria": "6 月 26 日，黄体期 · 点一下记这天"
+        },
+        "2026-06-27": {
+          "classes": [
+            "cal-day",
+            "ph-luteal"
+          ],
+          "title": "黄体期 · 点一下记这天",
+          "aria": "6 月 27 日，黄体期 · 点一下记这天"
+        },
+        "2026-06-28": {
+          "classes": [
+            "cal-day",
+            "ph-period",
+            "ph-start",
+            "has-rec"
+          ],
+          "title": "月经期 · 这次经期的第一天 · 点一下记这天",
+          "aria": "6 月 28 日，月经期 · 这次经期的第一天 · 点一下记这天"
+        },
+        "2026-06-29": {
+          "classes": [
+            "cal-day",
+            "ph-period"
+          ],
+          "title": "月经期 · 点一下记这天",
+          "aria": "6 月 29 日，月经期 · 点一下记这天"
+        },
+        "2026-06-30": {
+          "classes": [
+            "cal-day",
+            "ph-period"
+          ],
+          "title": "月经期 · 点一下记这天",
+          "aria": "6 月 30 日，月经期 · 点一下记这天"
+        }
+      }
+    },
+    "2026-07": {
+      "lead": 3,
+      "days": 31,
+      "cells": {
+        "2026-07-01": {
+          "classes": [
+            "cal-day",
+            "ph-period",
+            "picked"
+          ],
+          "title": "月经期 · 点一下记这天",
+          "aria": "7 月 1 日，月经期 · 点一下记这天"
+        },
+        "2026-07-02": {
+          "classes": [
+            "cal-day",
+            "ph-period"
+          ],
+          "title": "月经期 · 点一下记这天",
+          "aria": "7 月 2 日，月经期 · 点一下记这天"
+        },
+        "2026-07-03": {
+          "classes": [
+            "cal-day",
+            "ph-period"
+          ],
+          "title": "月经期 · 点一下记这天",
+          "aria": "7 月 3 日，月经期 · 点一下记这天"
+        },
+        "2026-07-04": {
+          "classes": [
+            "cal-day",
+            "ph-follicular",
+            "ph-start"
+          ],
+          "title": "卵泡期 · 点一下记这天",
+          "aria": "7 月 4 日，卵泡期 · 点一下记这天"
+        },
+        "2026-07-05": {
+          "classes": [
+            "cal-day",
+            "ph-follicular"
+          ],
+          "title": "卵泡期 · 点一下记这天",
+          "aria": "7 月 5 日，卵泡期 · 点一下记这天"
+        },
+        "2026-07-06": {
+          "classes": [
+            "cal-day",
+            "ph-follicular"
+          ],
+          "title": "卵泡期 · 点一下记这天",
+          "aria": "7 月 6 日，卵泡期 · 点一下记这天"
+        },
+        "2026-07-07": {
+          "classes": [
+            "cal-day",
+            "ph-fertile",
+            "ph-start"
+          ],
+          "title": "排卵期 · 点一下记这天",
+          "aria": "7 月 7 日，排卵期 · 点一下记这天"
+        },
+        "2026-07-08": {
+          "classes": [
+            "cal-day",
+            "ph-fertile"
+          ],
+          "title": "排卵期 · 点一下记这天",
+          "aria": "7 月 8 日，排卵期 · 点一下记这天"
+        },
+        "2026-07-09": {
+          "classes": [
+            "cal-day",
+            "ph-fertile"
+          ],
+          "title": "排卵期 · 点一下记这天",
+          "aria": "7 月 9 日，排卵期 · 点一下记这天"
+        },
+        "2026-07-10": {
+          "classes": [
+            "cal-day",
+            "ph-fertile"
+          ],
+          "title": "排卵期 · 点一下记这天",
+          "aria": "7 月 10 日，排卵期 · 点一下记这天"
+        },
+        "2026-07-11": {
+          "classes": [
+            "cal-day",
+            "ph-fertile"
+          ],
+          "title": "排卵期 · 点一下记这天",
+          "aria": "7 月 11 日，排卵期 · 点一下记这天"
+        },
+        "2026-07-12": {
+          "classes": [
+            "cal-day",
+            "ph-fertile",
+            "ph-ovu"
+          ],
+          "title": "排卵期 · 排卵日 · 点一下记这天",
+          "aria": "7 月 12 日，排卵期 · 排卵日 · 点一下记这天"
+        },
+        "2026-07-13": {
+          "classes": [
+            "cal-day",
+            "ph-fertile"
+          ],
+          "title": "排卵期 · 点一下记这天",
+          "aria": "7 月 13 日，排卵期 · 点一下记这天"
+        },
+        "2026-07-14": {
+          "classes": [
+            "cal-day",
+            "ph-luteal",
+            "ph-start"
+          ],
+          "title": "黄体期 · 点一下记这天",
+          "aria": "7 月 14 日，黄体期 · 点一下记这天"
+        },
+        "2026-07-15": {
+          "classes": [
+            "cal-day",
+            "ph-luteal"
+          ],
+          "title": "黄体期 · 点一下记这天",
+          "aria": "7 月 15 日，黄体期 · 点一下记这天"
+        },
+        "2026-07-16": {
+          "classes": [
+            "cal-day",
+            "ph-luteal"
+          ],
+          "title": "黄体期 · 点一下记这天",
+          "aria": "7 月 16 日，黄体期 · 点一下记这天"
+        },
+        "2026-07-17": {
+          "classes": [
+            "cal-day",
+            "ph-luteal"
+          ],
+          "title": "黄体期 · 点一下记这天",
+          "aria": "7 月 17 日，黄体期 · 点一下记这天"
+        },
+        "2026-07-18": {
+          "classes": [
+            "cal-day",
+            "ph-luteal"
+          ],
+          "title": "黄体期 · 点一下记这天",
+          "aria": "7 月 18 日，黄体期 · 点一下记这天"
+        },
+        "2026-07-19": {
+          "classes": [
+            "cal-day",
+            "ph-luteal"
+          ],
+          "title": "黄体期 · 点一下记这天",
+          "aria": "7 月 19 日，黄体期 · 点一下记这天"
+        },
+        "2026-07-20": {
+          "classes": [
+            "cal-day",
+            "ph-luteal"
+          ],
+          "title": "黄体期 · 点一下记这天",
+          "aria": "7 月 20 日，黄体期 · 点一下记这天"
+        },
+        "2026-07-21": {
+          "classes": [
+            "cal-day",
+            "ph-luteal"
+          ],
+          "title": "黄体期 · 点一下记这天",
+          "aria": "7 月 21 日，黄体期 · 点一下记这天"
+        },
+        "2026-07-22": {
+          "classes": [
+            "cal-day",
+            "ph-luteal"
+          ],
+          "title": "黄体期 · 点一下记这天",
+          "aria": "7 月 22 日，黄体期 · 点一下记这天"
+        },
+        "2026-07-23": {
+          "classes": [
+            "cal-day",
+            "ph-luteal"
+          ],
+          "title": "黄体期 · 点一下记这天",
+          "aria": "7 月 23 日，黄体期 · 点一下记这天"
+        },
+        "2026-07-24": {
+          "classes": [
+            "cal-day",
+            "ph-luteal"
+          ],
+          "title": "黄体期 · 点一下记这天",
+          "aria": "7 月 24 日，黄体期 · 点一下记这天"
+        },
+        "2026-07-25": {
+          "classes": [
+            "cal-day",
+            "ph-luteal"
+          ],
+          "title": "黄体期 · 点一下记这天",
+          "aria": "7 月 25 日，黄体期 · 点一下记这天"
+        },
+        "2026-07-26": {
+          "classes": [
+            "cal-day",
+            "ph-period",
+            "ph-start",
+            "has-rec"
+          ],
+          "title": "月经期 · 这次经期的第一天 · 点一下记这天",
+          "aria": "7 月 26 日，月经期 · 这次经期的第一天 · 点一下记这天"
+        },
+        "2026-07-27": {
+          "classes": [
+            "cal-day",
+            "ph-period"
+          ],
+          "title": "月经期 · 点一下记这天",
+          "aria": "7 月 27 日，月经期 · 点一下记这天"
+        },
+        "2026-07-28": {
+          "classes": [
+            "cal-day",
+            "ph-period"
+          ],
+          "title": "月经期 · 点一下记这天",
+          "aria": "7 月 28 日，月经期 · 点一下记这天"
+        },
+        "2026-07-29": {
+          "classes": [
+            "cal-day",
+            "ph-period"
+          ],
+          "title": "月经期 · 点一下记这天",
+          "aria": "7 月 29 日，月经期 · 点一下记这天"
+        },
+        "2026-07-30": {
+          "classes": [
+            "cal-day",
+            "ph-follicular",
+            "ph-start"
+          ],
+          "title": "卵泡期 · 点一下记这天",
+          "aria": "7 月 30 日，卵泡期 · 点一下记这天"
+        },
+        "2026-07-31": {
+          "classes": [
+            "cal-day",
+            "ph-follicular"
+          ],
+          "title": "卵泡期 · 点一下记这天",
+          "aria": "7 月 31 日，卵泡期 · 点一下记这天"
+        }
+      }
+    },
+    "2026-08": {
+      "lead": 6,
+      "days": 31,
+      "cells": {
+        "2026-08-01": {
+          "classes": [
+            "cal-day",
+            "ph-follicular"
+          ],
+          "title": "卵泡期 · 点一下记这天",
+          "aria": "8 月 1 日，卵泡期 · 点一下记这天"
+        },
+        "2026-08-02": {
+          "classes": [
+            "cal-day",
+            "ph-follicular"
+          ],
+          "title": "卵泡期 · 点一下记这天",
+          "aria": "8 月 2 日，卵泡期 · 点一下记这天"
+        },
+        "2026-08-03": {
+          "classes": [
+            "cal-day",
+            "ph-follicular"
+          ],
+          "title": "卵泡期 · 点一下记这天",
+          "aria": "8 月 3 日，卵泡期 · 点一下记这天"
+        },
+        "2026-08-04": {
+          "classes": [
+            "cal-day",
+            "ph-fertile",
+            "ph-start"
+          ],
+          "title": "排卵期 · 点一下记这天",
+          "aria": "8 月 4 日，排卵期 · 点一下记这天"
+        },
+        "2026-08-05": {
+          "classes": [
+            "cal-day",
+            "ph-fertile"
+          ],
+          "title": "排卵期 · 点一下记这天",
+          "aria": "8 月 5 日，排卵期 · 点一下记这天"
+        },
+        "2026-08-06": {
+          "classes": [
+            "cal-day",
+            "ph-fertile"
+          ],
+          "title": "排卵期 · 点一下记这天",
+          "aria": "8 月 6 日，排卵期 · 点一下记这天"
+        },
+        "2026-08-07": {
+          "classes": [
+            "cal-day",
+            "ph-fertile"
+          ],
+          "title": "排卵期 · 点一下记这天",
+          "aria": "8 月 7 日，排卵期 · 点一下记这天"
+        },
+        "2026-08-08": {
+          "classes": [
+            "cal-day",
+            "ph-fertile"
+          ],
+          "title": "排卵期 · 点一下记这天",
+          "aria": "8 月 8 日，排卵期 · 点一下记这天"
+        },
+        "2026-08-09": {
+          "classes": [
+            "cal-day",
+            "ph-fertile",
+            "ph-ovu"
+          ],
+          "title": "排卵期 · 排卵日 · 点一下记这天",
+          "aria": "8 月 9 日，排卵期 · 排卵日 · 点一下记这天"
+        },
+        "2026-08-10": {
+          "classes": [
+            "cal-day",
+            "ph-fertile"
+          ],
+          "title": "排卵期 · 点一下记这天",
+          "aria": "8 月 10 日，排卵期 · 点一下记这天"
+        },
+        "2026-08-11": {
+          "classes": [
+            "cal-day",
+            "ph-luteal",
+            "ph-start"
+          ],
+          "title": "黄体期 · 点一下记这天",
+          "aria": "8 月 11 日，黄体期 · 点一下记这天"
+        },
+        "2026-08-12": {
+          "classes": [
+            "cal-day",
+            "ph-luteal"
+          ],
+          "title": "黄体期 · 点一下记这天",
+          "aria": "8 月 12 日，黄体期 · 点一下记这天"
+        },
+        "2026-08-13": {
+          "classes": [
+            "cal-day",
+            "ph-luteal"
+          ],
+          "title": "黄体期 · 点一下记这天",
+          "aria": "8 月 13 日，黄体期 · 点一下记这天"
+        },
+        "2026-08-14": {
+          "classes": [
+            "cal-day",
+            "ph-luteal"
+          ],
+          "title": "黄体期 · 点一下记这天",
+          "aria": "8 月 14 日，黄体期 · 点一下记这天"
+        },
+        "2026-08-15": {
+          "classes": [
+            "cal-day",
+            "ph-luteal"
+          ],
+          "title": "黄体期 · 点一下记这天",
+          "aria": "8 月 15 日，黄体期 · 点一下记这天"
+        },
+        "2026-08-16": {
+          "classes": [
+            "cal-day",
+            "ph-luteal"
+          ],
+          "title": "黄体期 · 点一下记这天",
+          "aria": "8 月 16 日，黄体期 · 点一下记这天"
+        },
+        "2026-08-17": {
+          "classes": [
+            "cal-day",
+            "ph-luteal"
+          ],
+          "title": "黄体期 · 点一下记这天",
+          "aria": "8 月 17 日，黄体期 · 点一下记这天"
+        },
+        "2026-08-18": {
+          "classes": [
+            "cal-day",
+            "ph-luteal"
+          ],
+          "title": "黄体期 · 点一下记这天",
+          "aria": "8 月 18 日，黄体期 · 点一下记这天"
+        },
+        "2026-08-19": {
+          "classes": [
+            "cal-day",
+            "ph-luteal"
+          ],
+          "title": "黄体期 · 点一下记这天",
+          "aria": "8 月 19 日，黄体期 · 点一下记这天"
+        },
+        "2026-08-20": {
+          "classes": [
+            "cal-day",
+            "ph-luteal"
+          ],
+          "title": "黄体期 · 点一下记这天",
+          "aria": "8 月 20 日，黄体期 · 点一下记这天"
+        },
+        "2026-08-21": {
+          "classes": [
+            "cal-day",
+            "ph-luteal"
+          ],
+          "title": "黄体期 · 点一下记这天",
+          "aria": "8 月 21 日，黄体期 · 点一下记这天"
+        },
+        "2026-08-22": {
+          "classes": [
+            "cal-day",
+            "ph-luteal"
+          ],
+          "title": "黄体期 · 点一下记这天",
+          "aria": "8 月 22 日，黄体期 · 点一下记这天"
+        },
+        "2026-08-23": {
+          "classes": [
+            "cal-day"
+          ],
+          "title": "还没有记录 · 点一下记这天",
+          "aria": "8 月 23 日，还没有记录 · 点一下记这天"
+        },
+        "2026-08-24": {
+          "classes": [
+            "cal-day",
+            "ph-period",
+            "ph-start",
+            "has-rec"
+          ],
+          "title": "月经期 · 这次经期的第一天 · 点一下记这天",
+          "aria": "8 月 24 日，月经期 · 这次经期的第一天 · 点一下记这天"
+        },
+        "2026-08-25": {
+          "classes": [
+            "cal-day",
+            "ph-period",
+            "has-log",
+            "picked"
+          ],
+          "title": "月经期 · 这天记过身体情况",
+          "aria": "8 月 25 日，月经期 · 这天记过身体情况"
+        },
+        "2026-08-26": {
+          "classes": [
+            "cal-day",
+            "ph-period"
+          ],
+          "title": "月经期 · 点一下记这天",
+          "aria": "8 月 26 日，月经期 · 点一下记这天"
+        },
+        "2026-08-27": {
+          "classes": [
+            "cal-day",
+            "ph-period"
+          ],
+          "title": "月经期 · 点一下记这天",
+          "aria": "8 月 27 日，月经期 · 点一下记这天"
+        },
+        "2026-08-28": {
+          "classes": [
+            "cal-day",
+            "ph-period"
+          ],
+          "title": "月经期 · 点一下记这天",
+          "aria": "8 月 28 日，月经期 · 点一下记这天"
+        },
+        "2026-08-29": {
+          "classes": [
+            "cal-day",
+            "ph-follicular",
+            "ph-start"
+          ],
+          "title": "卵泡期 · 点一下记这天",
+          "aria": "8 月 29 日，卵泡期 · 点一下记这天"
+        },
+        "2026-08-30": {
+          "classes": [
+            "cal-day",
+            "ph-follicular"
+          ],
+          "title": "卵泡期 · 点一下记这天",
+          "aria": "8 月 30 日，卵泡期 · 点一下记这天"
+        },
+        "2026-08-31": {
+          "classes": [
+            "cal-day",
+            "ph-follicular"
+          ],
+          "title": "卵泡期 · 点一下记这天",
+          "aria": "8 月 31 日，卵泡期 · 点一下记这天"
+        }
+      }
+    },
+    "2026-09": {
+      "lead": 2,
+      "days": 30,
+      "cells": {
+        "2026-09-01": {
+          "classes": [
+            "cal-day",
+            "ph-follicular"
+          ],
+          "title": "卵泡期 · 点一下记这天",
+          "aria": "9 月 1 日，卵泡期 · 点一下记这天"
+        },
+        "2026-09-02": {
+          "classes": [
+            "cal-day",
+            "ph-fertile",
+            "ph-start"
+          ],
+          "title": "排卵期 · 点一下记这天",
+          "aria": "9 月 2 日，排卵期 · 点一下记这天"
+        },
+        "2026-09-03": {
+          "classes": [
+            "cal-day",
+            "ph-fertile"
+          ],
+          "title": "排卵期 · 点一下记这天",
+          "aria": "9 月 3 日，排卵期 · 点一下记这天"
+        },
+        "2026-09-04": {
+          "classes": [
+            "cal-day",
+            "ph-fertile"
+          ],
+          "title": "排卵期 · 点一下记这天",
+          "aria": "9 月 4 日，排卵期 · 点一下记这天"
+        },
+        "2026-09-05": {
+          "classes": [
+            "cal-day",
+            "ph-fertile"
+          ],
+          "title": "排卵期 · 点一下记这天",
+          "aria": "9 月 5 日，排卵期 · 点一下记这天"
+        },
+        "2026-09-06": {
+          "classes": [
+            "cal-day",
+            "ph-fertile"
+          ],
+          "title": "排卵期 · 点一下记这天",
+          "aria": "9 月 6 日，排卵期 · 点一下记这天"
+        },
+        "2026-09-07": {
+          "classes": [
+            "cal-day",
+            "ph-fertile",
+            "ph-ovu"
+          ],
+          "title": "排卵期 · 排卵日 · 点一下记这天",
+          "aria": "9 月 7 日，排卵期 · 排卵日 · 点一下记这天"
+        },
+        "2026-09-08": {
+          "classes": [
+            "cal-day",
+            "ph-fertile"
+          ],
+          "title": "排卵期 · 点一下记这天",
+          "aria": "9 月 8 日，排卵期 · 点一下记这天"
+        },
+        "2026-09-09": {
+          "classes": [
+            "cal-day",
+            "ph-luteal",
+            "ph-start"
+          ],
+          "title": "黄体期 · 点一下记这天",
+          "aria": "9 月 9 日，黄体期 · 点一下记这天"
+        },
+        "2026-09-10": {
+          "classes": [
+            "cal-day",
+            "ph-luteal"
+          ],
+          "title": "黄体期 · 点一下记这天",
+          "aria": "9 月 10 日，黄体期 · 点一下记这天"
+        },
+        "2026-09-11": {
+          "classes": [
+            "cal-day",
+            "ph-luteal"
+          ],
+          "title": "黄体期 · 点一下记这天",
+          "aria": "9 月 11 日，黄体期 · 点一下记这天"
+        },
+        "2026-09-12": {
+          "classes": [
+            "cal-day",
+            "ph-luteal"
+          ],
+          "title": "黄体期 · 点一下记这天",
+          "aria": "9 月 12 日，黄体期 · 点一下记这天"
+        },
+        "2026-09-13": {
+          "classes": [
+            "cal-day",
+            "ph-luteal"
+          ],
+          "title": "黄体期 · 点一下记这天",
+          "aria": "9 月 13 日，黄体期 · 点一下记这天"
+        },
+        "2026-09-14": {
+          "classes": [
+            "cal-day",
+            "ph-luteal"
+          ],
+          "title": "黄体期 · 点一下记这天",
+          "aria": "9 月 14 日，黄体期 · 点一下记这天"
+        },
+        "2026-09-15": {
+          "classes": [
+            "cal-day",
+            "ph-luteal"
+          ],
+          "title": "黄体期 · 点一下记这天",
+          "aria": "9 月 15 日，黄体期 · 点一下记这天"
+        },
+        "2026-09-16": {
+          "classes": [
+            "cal-day",
+            "ph-luteal"
+          ],
+          "title": "黄体期 · 点一下记这天",
+          "aria": "9 月 16 日，黄体期 · 点一下记这天"
+        },
+        "2026-09-17": {
+          "classes": [
+            "cal-day",
+            "ph-luteal"
+          ],
+          "title": "黄体期 · 点一下记这天",
+          "aria": "9 月 17 日，黄体期 · 点一下记这天"
+        },
+        "2026-09-18": {
+          "classes": [
+            "cal-day",
+            "ph-luteal"
+          ],
+          "title": "黄体期 · 点一下记这天",
+          "aria": "9 月 18 日，黄体期 · 点一下记这天"
+        },
+        "2026-09-19": {
+          "classes": [
+            "cal-day",
+            "ph-luteal"
+          ],
+          "title": "黄体期 · 点一下记这天",
+          "aria": "9 月 19 日，黄体期 · 点一下记这天"
+        },
+        "2026-09-20": {
+          "classes": [
+            "cal-day",
+            "ph-luteal"
+          ],
+          "title": "黄体期 · 点一下记这天",
+          "aria": "9 月 20 日，黄体期 · 点一下记这天"
+        },
+        "2026-09-21": {
+          "classes": [
+            "cal-day",
+            "ph-period",
+            "ph-pred",
+            "ph-start",
+            "picked"
+          ],
+          "title": "月经期（预测） · 点一下记这天",
+          "aria": "9 月 21 日，月经期（预测） · 点一下记这天"
+        },
+        "2026-09-22": {
+          "classes": [
+            "cal-day",
+            "ph-period",
+            "ph-pred"
+          ],
+          "title": "月经期（预测） · 点一下记这天",
+          "aria": "9 月 22 日，月经期（预测） · 点一下记这天"
+        },
+        "2026-09-23": {
+          "classes": [
+            "cal-day",
+            "ph-period",
+            "ph-pred"
+          ],
+          "title": "月经期（预测） · 点一下记这天",
+          "aria": "9 月 23 日，月经期（预测） · 点一下记这天"
+        },
+        "2026-09-24": {
+          "classes": [
+            "cal-day",
+            "ph-period",
+            "ph-pred"
+          ],
+          "title": "月经期（预测） · 点一下记这天",
+          "aria": "9 月 24 日，月经期（预测） · 点一下记这天"
+        },
+        "2026-09-25": {
+          "classes": [
+            "cal-day",
+            "ph-period",
+            "ph-pred"
+          ],
+          "title": "月经期（预测） · 点一下记这天",
+          "aria": "9 月 25 日，月经期（预测） · 点一下记这天"
+        },
+        "2026-09-26": {
+          "classes": [
+            "cal-day",
+            "ph-follicular",
+            "ph-pred",
+            "ph-start"
+          ],
+          "title": "卵泡期（预测） · 点一下记这天",
+          "aria": "9 月 26 日，卵泡期（预测） · 点一下记这天"
+        },
+        "2026-09-27": {
+          "classes": [
+            "cal-day",
+            "ph-follicular",
+            "ph-pred"
+          ],
+          "title": "卵泡期（预测） · 点一下记这天",
+          "aria": "9 月 27 日，卵泡期（预测） · 点一下记这天"
+        },
+        "2026-09-28": {
+          "classes": [
+            "cal-day",
+            "ph-follicular",
+            "ph-pred"
+          ],
+          "title": "卵泡期（预测） · 点一下记这天",
+          "aria": "9 月 28 日，卵泡期（预测） · 点一下记这天"
+        },
+        "2026-09-29": {
+          "classes": [
+            "cal-day",
+            "ph-follicular",
+            "ph-pred"
+          ],
+          "title": "卵泡期（预测） · 点一下记这天",
+          "aria": "9 月 29 日，卵泡期（预测） · 点一下记这天"
+        },
+        "2026-09-30": {
+          "classes": [
+            "cal-day",
+            "ph-fertile",
+            "ph-pred",
+            "ph-start"
+          ],
+          "title": "排卵期（预测） · 点一下记这天",
+          "aria": "9 月 30 日，排卵期（预测） · 点一下记这天"
+        }
+      }
+    },
+    "2026-10": {
+      "lead": 4,
+      "days": 31,
+      "cells": {
+        "2026-10-01": {
+          "classes": [
+            "cal-day",
+            "ph-fertile",
+            "ph-pred"
+          ],
+          "title": "排卵期（预测） · 点一下记这天",
+          "aria": "10 月 1 日，排卵期（预测） · 点一下记这天"
+        },
+        "2026-10-02": {
+          "classes": [
+            "cal-day",
+            "ph-fertile",
+            "ph-pred"
+          ],
+          "title": "排卵期（预测） · 点一下记这天",
+          "aria": "10 月 2 日，排卵期（预测） · 点一下记这天"
+        },
+        "2026-10-03": {
+          "classes": [
+            "cal-day",
+            "ph-fertile",
+            "ph-pred"
+          ],
+          "title": "排卵期（预测） · 点一下记这天",
+          "aria": "10 月 3 日，排卵期（预测） · 点一下记这天"
+        },
+        "2026-10-04": {
+          "classes": [
+            "cal-day",
+            "ph-fertile",
+            "ph-pred"
+          ],
+          "title": "排卵期（预测） · 点一下记这天",
+          "aria": "10 月 4 日，排卵期（预测） · 点一下记这天"
+        },
+        "2026-10-05": {
+          "classes": [
+            "cal-day",
+            "ph-fertile",
+            "ph-pred",
+            "ph-ovu"
+          ],
+          "title": "排卵期（预测） · 排卵日 · 点一下记这天",
+          "aria": "10 月 5 日，排卵期（预测） · 排卵日 · 点一下记这天"
+        },
+        "2026-10-06": {
+          "classes": [
+            "cal-day",
+            "ph-fertile",
+            "ph-pred"
+          ],
+          "title": "排卵期（预测） · 点一下记这天",
+          "aria": "10 月 6 日，排卵期（预测） · 点一下记这天"
+        },
+        "2026-10-07": {
+          "classes": [
+            "cal-day",
+            "ph-luteal",
+            "ph-pred",
+            "ph-start"
+          ],
+          "title": "黄体期（预测） · 点一下记这天",
+          "aria": "10 月 7 日，黄体期（预测） · 点一下记这天"
+        },
+        "2026-10-08": {
+          "classes": [
+            "cal-day",
+            "ph-luteal",
+            "ph-pred"
+          ],
+          "title": "黄体期（预测） · 点一下记这天",
+          "aria": "10 月 8 日，黄体期（预测） · 点一下记这天"
+        },
+        "2026-10-09": {
+          "classes": [
+            "cal-day",
+            "ph-luteal",
+            "ph-pred"
+          ],
+          "title": "黄体期（预测） · 点一下记这天",
+          "aria": "10 月 9 日，黄体期（预测） · 点一下记这天"
+        },
+        "2026-10-10": {
+          "classes": [
+            "cal-day",
+            "ph-luteal",
+            "ph-pred"
+          ],
+          "title": "黄体期（预测） · 点一下记这天",
+          "aria": "10 月 10 日，黄体期（预测） · 点一下记这天"
+        },
+        "2026-10-11": {
+          "classes": [
+            "cal-day",
+            "ph-luteal",
+            "ph-pred"
+          ],
+          "title": "黄体期（预测） · 点一下记这天",
+          "aria": "10 月 11 日，黄体期（预测） · 点一下记这天"
+        },
+        "2026-10-12": {
+          "classes": [
+            "cal-day",
+            "ph-luteal",
+            "ph-pred"
+          ],
+          "title": "黄体期（预测） · 点一下记这天",
+          "aria": "10 月 12 日，黄体期（预测） · 点一下记这天"
+        },
+        "2026-10-13": {
+          "classes": [
+            "cal-day",
+            "ph-luteal",
+            "ph-pred"
+          ],
+          "title": "黄体期（预测） · 点一下记这天",
+          "aria": "10 月 13 日，黄体期（预测） · 点一下记这天"
+        },
+        "2026-10-14": {
+          "classes": [
+            "cal-day",
+            "ph-luteal",
+            "ph-pred"
+          ],
+          "title": "黄体期（预测） · 点一下记这天",
+          "aria": "10 月 14 日，黄体期（预测） · 点一下记这天"
+        },
+        "2026-10-15": {
+          "classes": [
+            "cal-day",
+            "ph-luteal",
+            "ph-pred"
+          ],
+          "title": "黄体期（预测） · 点一下记这天",
+          "aria": "10 月 15 日，黄体期（预测） · 点一下记这天"
+        },
+        "2026-10-16": {
+          "classes": [
+            "cal-day",
+            "ph-luteal",
+            "ph-pred"
+          ],
+          "title": "黄体期（预测） · 点一下记这天",
+          "aria": "10 月 16 日，黄体期（预测） · 点一下记这天"
+        },
+        "2026-10-17": {
+          "classes": [
+            "cal-day",
+            "ph-luteal",
+            "ph-pred"
+          ],
+          "title": "黄体期（预测） · 点一下记这天",
+          "aria": "10 月 17 日，黄体期（预测） · 点一下记这天"
+        },
+        "2026-10-18": {
+          "classes": [
+            "cal-day",
+            "ph-luteal",
+            "ph-pred"
+          ],
+          "title": "黄体期（预测） · 点一下记这天",
+          "aria": "10 月 18 日，黄体期（预测） · 点一下记这天"
+        },
+        "2026-10-19": {
+          "classes": [
+            "cal-day",
+            "ph-period",
+            "ph-pred",
+            "ph-start",
+            "picked"
+          ],
+          "title": "月经期（预测） · 点一下记这天",
+          "aria": "10 月 19 日，月经期（预测） · 点一下记这天"
+        },
+        "2026-10-20": {
+          "classes": [
+            "cal-day",
+            "ph-period",
+            "ph-pred"
+          ],
+          "title": "月经期（预测） · 点一下记这天",
+          "aria": "10 月 20 日，月经期（预测） · 点一下记这天"
+        },
+        "2026-10-21": {
+          "classes": [
+            "cal-day",
+            "ph-period",
+            "ph-pred"
+          ],
+          "title": "月经期（预测） · 点一下记这天",
+          "aria": "10 月 21 日，月经期（预测） · 点一下记这天"
+        },
+        "2026-10-22": {
+          "classes": [
+            "cal-day",
+            "ph-period",
+            "ph-pred"
+          ],
+          "title": "月经期（预测） · 点一下记这天",
+          "aria": "10 月 22 日，月经期（预测） · 点一下记这天"
+        },
+        "2026-10-23": {
+          "classes": [
+            "cal-day",
+            "ph-period",
+            "ph-pred"
+          ],
+          "title": "月经期（预测） · 点一下记这天",
+          "aria": "10 月 23 日，月经期（预测） · 点一下记这天"
+        },
+        "2026-10-24": {
+          "classes": [
+            "cal-day",
+            "ph-follicular",
+            "ph-pred",
+            "ph-start"
+          ],
+          "title": "卵泡期（预测） · 点一下记这天",
+          "aria": "10 月 24 日，卵泡期（预测） · 点一下记这天"
+        },
+        "2026-10-25": {
+          "classes": [
+            "cal-day",
+            "ph-follicular",
+            "ph-pred"
+          ],
+          "title": "卵泡期（预测） · 点一下记这天",
+          "aria": "10 月 25 日，卵泡期（预测） · 点一下记这天"
+        },
+        "2026-10-26": {
+          "classes": [
+            "cal-day",
+            "ph-follicular",
+            "ph-pred"
+          ],
+          "title": "卵泡期（预测） · 点一下记这天",
+          "aria": "10 月 26 日，卵泡期（预测） · 点一下记这天"
+        },
+        "2026-10-27": {
+          "classes": [
+            "cal-day",
+            "ph-follicular",
+            "ph-pred"
+          ],
+          "title": "卵泡期（预测） · 点一下记这天",
+          "aria": "10 月 27 日，卵泡期（预测） · 点一下记这天"
+        },
+        "2026-10-28": {
+          "classes": [
+            "cal-day",
+            "ph-fertile",
+            "ph-pred",
+            "ph-start"
+          ],
+          "title": "排卵期（预测） · 点一下记这天",
+          "aria": "10 月 28 日，排卵期（预测） · 点一下记这天"
+        },
+        "2026-10-29": {
+          "classes": [
+            "cal-day",
+            "ph-fertile",
+            "ph-pred"
+          ],
+          "title": "排卵期（预测） · 点一下记这天",
+          "aria": "10 月 29 日，排卵期（预测） · 点一下记这天"
+        },
+        "2026-10-30": {
+          "classes": [
+            "cal-day",
+            "ph-fertile",
+            "ph-pred"
+          ],
+          "title": "排卵期（预测） · 点一下记这天",
+          "aria": "10 月 30 日，排卵期（预测） · 点一下记这天"
+        },
+        "2026-10-31": {
+          "classes": [
+            "cal-day",
+            "ph-fertile",
+            "ph-pred"
+          ],
+          "title": "排卵期（预测） · 点一下记这天",
+          "aria": "10 月 31 日，排卵期（预测） · 点一下记这天"
+        }
+      }
+    },
+    "2026-11": {
+      "lead": 0,
+      "days": 30,
+      "cells": {
+        "2026-11-01": {
+          "classes": [
+            "cal-day",
+            "ph-fertile",
+            "ph-pred"
+          ],
+          "title": "排卵期（预测） · 点一下记这天",
+          "aria": "11 月 1 日，排卵期（预测） · 点一下记这天"
+        },
+        "2026-11-02": {
+          "classes": [
+            "cal-day",
+            "ph-fertile",
+            "ph-pred",
+            "ph-ovu"
+          ],
+          "title": "排卵期（预测） · 排卵日 · 点一下记这天",
+          "aria": "11 月 2 日，排卵期（预测） · 排卵日 · 点一下记这天"
+        },
+        "2026-11-03": {
+          "classes": [
+            "cal-day",
+            "ph-fertile",
+            "ph-pred"
+          ],
+          "title": "排卵期（预测） · 点一下记这天",
+          "aria": "11 月 3 日，排卵期（预测） · 点一下记这天"
+        },
+        "2026-11-04": {
+          "classes": [
+            "cal-day",
+            "ph-luteal",
+            "ph-pred",
+            "ph-start"
+          ],
+          "title": "黄体期（预测） · 点一下记这天",
+          "aria": "11 月 4 日，黄体期（预测） · 点一下记这天"
+        },
+        "2026-11-05": {
+          "classes": [
+            "cal-day",
+            "ph-luteal",
+            "ph-pred"
+          ],
+          "title": "黄体期（预测） · 点一下记这天",
+          "aria": "11 月 5 日，黄体期（预测） · 点一下记这天"
+        },
+        "2026-11-06": {
+          "classes": [
+            "cal-day",
+            "ph-luteal",
+            "ph-pred"
+          ],
+          "title": "黄体期（预测） · 点一下记这天",
+          "aria": "11 月 6 日，黄体期（预测） · 点一下记这天"
+        },
+        "2026-11-07": {
+          "classes": [
+            "cal-day",
+            "ph-luteal",
+            "ph-pred"
+          ],
+          "title": "黄体期（预测） · 点一下记这天",
+          "aria": "11 月 7 日，黄体期（预测） · 点一下记这天"
+        },
+        "2026-11-08": {
+          "classes": [
+            "cal-day",
+            "ph-luteal",
+            "ph-pred"
+          ],
+          "title": "黄体期（预测） · 点一下记这天",
+          "aria": "11 月 8 日，黄体期（预测） · 点一下记这天"
+        },
+        "2026-11-09": {
+          "classes": [
+            "cal-day",
+            "ph-luteal",
+            "ph-pred"
+          ],
+          "title": "黄体期（预测） · 点一下记这天",
+          "aria": "11 月 9 日，黄体期（预测） · 点一下记这天"
+        },
+        "2026-11-10": {
+          "classes": [
+            "cal-day",
+            "ph-luteal",
+            "ph-pred"
+          ],
+          "title": "黄体期（预测） · 点一下记这天",
+          "aria": "11 月 10 日，黄体期（预测） · 点一下记这天"
+        },
+        "2026-11-11": {
+          "classes": [
+            "cal-day",
+            "ph-luteal",
+            "ph-pred"
+          ],
+          "title": "黄体期（预测） · 点一下记这天",
+          "aria": "11 月 11 日，黄体期（预测） · 点一下记这天"
+        },
+        "2026-11-12": {
+          "classes": [
+            "cal-day",
+            "ph-luteal",
+            "ph-pred"
+          ],
+          "title": "黄体期（预测） · 点一下记这天",
+          "aria": "11 月 12 日，黄体期（预测） · 点一下记这天"
+        },
+        "2026-11-13": {
+          "classes": [
+            "cal-day",
+            "ph-luteal",
+            "ph-pred"
+          ],
+          "title": "黄体期（预测） · 点一下记这天",
+          "aria": "11 月 13 日，黄体期（预测） · 点一下记这天"
+        },
+        "2026-11-14": {
+          "classes": [
+            "cal-day",
+            "ph-luteal",
+            "ph-pred",
+            "is-today",
+            "picked"
+          ],
+          "title": "黄体期（预测） · 点一下记这天",
+          "aria": "11 月 14 日，黄体期（预测） · 点一下记这天"
+        },
+        "2026-11-15": {
+          "classes": [
+            "cal-day",
+            "ph-luteal",
+            "ph-pred"
+          ],
+          "title": "黄体期（预测） · 点一下记这天",
+          "aria": "11 月 15 日，黄体期（预测） · 点一下记这天"
+        },
+        "2026-11-16": {
+          "classes": [
+            "cal-day",
+            "ph-period",
+            "ph-pred",
+            "ph-start"
+          ],
+          "title": "月经期（预测） · 点一下记这天",
+          "aria": "11 月 16 日，月经期（预测） · 点一下记这天"
+        },
+        "2026-11-17": {
+          "classes": [
+            "cal-day",
+            "ph-period",
+            "ph-pred"
+          ],
+          "title": "月经期（预测） · 点一下记这天",
+          "aria": "11 月 17 日，月经期（预测） · 点一下记这天"
+        },
+        "2026-11-18": {
+          "classes": [
+            "cal-day",
+            "ph-period",
+            "ph-pred"
+          ],
+          "title": "月经期（预测） · 点一下记这天",
+          "aria": "11 月 18 日，月经期（预测） · 点一下记这天"
+        },
+        "2026-11-19": {
+          "classes": [
+            "cal-day",
+            "ph-period",
+            "ph-pred"
+          ],
+          "title": "月经期（预测） · 点一下记这天",
+          "aria": "11 月 19 日，月经期（预测） · 点一下记这天"
+        },
+        "2026-11-20": {
+          "classes": [
+            "cal-day",
+            "ph-period",
+            "ph-pred"
+          ],
+          "title": "月经期（预测） · 点一下记这天",
+          "aria": "11 月 20 日，月经期（预测） · 点一下记这天"
+        },
+        "2026-11-21": {
+          "classes": [
+            "cal-day",
+            "ph-follicular",
+            "ph-pred",
+            "ph-start"
+          ],
+          "title": "卵泡期（预测） · 点一下记这天",
+          "aria": "11 月 21 日，卵泡期（预测） · 点一下记这天"
+        },
+        "2026-11-22": {
+          "classes": [
+            "cal-day",
+            "ph-follicular",
+            "ph-pred"
+          ],
+          "title": "卵泡期（预测） · 点一下记这天",
+          "aria": "11 月 22 日，卵泡期（预测） · 点一下记这天"
+        },
+        "2026-11-23": {
+          "classes": [
+            "cal-day",
+            "ph-follicular",
+            "ph-pred"
+          ],
+          "title": "卵泡期（预测） · 点一下记这天",
+          "aria": "11 月 23 日，卵泡期（预测） · 点一下记这天"
+        },
+        "2026-11-24": {
+          "classes": [
+            "cal-day",
+            "ph-follicular",
+            "ph-pred"
+          ],
+          "title": "卵泡期（预测） · 点一下记这天",
+          "aria": "11 月 24 日，卵泡期（预测） · 点一下记这天"
+        },
+        "2026-11-25": {
+          "classes": [
+            "cal-day",
+            "ph-fertile",
+            "ph-pred",
+            "ph-start"
+          ],
+          "title": "排卵期（预测） · 点一下记这天",
+          "aria": "11 月 25 日，排卵期（预测） · 点一下记这天"
+        },
+        "2026-11-26": {
+          "classes": [
+            "cal-day",
+            "ph-fertile",
+            "ph-pred"
+          ],
+          "title": "排卵期（预测） · 点一下记这天",
+          "aria": "11 月 26 日，排卵期（预测） · 点一下记这天"
+        },
+        "2026-11-27": {
+          "classes": [
+            "cal-day",
+            "ph-fertile",
+            "ph-pred"
+          ],
+          "title": "排卵期（预测） · 点一下记这天",
+          "aria": "11 月 27 日，排卵期（预测） · 点一下记这天"
+        },
+        "2026-11-28": {
+          "classes": [
+            "cal-day",
+            "ph-fertile",
+            "ph-pred"
+          ],
+          "title": "排卵期（预测） · 点一下记这天",
+          "aria": "11 月 28 日，排卵期（预测） · 点一下记这天"
+        },
+        "2026-11-29": {
+          "classes": [
+            "cal-day",
+            "ph-fertile",
+            "ph-pred"
+          ],
+          "title": "排卵期（预测） · 点一下记这天",
+          "aria": "11 月 29 日，排卵期（预测） · 点一下记这天"
+        },
+        "2026-11-30": {
+          "classes": [
+            "cal-day",
+            "ph-fertile",
+            "ph-pred",
+            "ph-ovu"
+          ],
+          "title": "排卵期（预测） · 排卵日 · 点一下记这天",
+          "aria": "11 月 30 日，排卵期（预测） · 排卵日 · 点一下记这天"
+        }
+      }
+    },
+    "2026-12": {
+      "lead": 2,
+      "days": 31,
+      "cells": {
+        "2026-12-01": {
+          "classes": [
+            "cal-day",
+            "ph-fertile",
+            "ph-pred"
+          ],
+          "title": "排卵期（预测） · 点一下记这天",
+          "aria": "12 月 1 日，排卵期（预测） · 点一下记这天"
+        },
+        "2026-12-02": {
+          "classes": [
+            "cal-day",
+            "ph-luteal",
+            "ph-pred",
+            "ph-start"
+          ],
+          "title": "黄体期（预测） · 点一下记这天",
+          "aria": "12 月 2 日，黄体期（预测） · 点一下记这天"
+        },
+        "2026-12-03": {
+          "classes": [
+            "cal-day",
+            "ph-luteal",
+            "ph-pred"
+          ],
+          "title": "黄体期（预测） · 点一下记这天",
+          "aria": "12 月 3 日，黄体期（预测） · 点一下记这天"
+        },
+        "2026-12-04": {
+          "classes": [
+            "cal-day",
+            "ph-luteal",
+            "ph-pred"
+          ],
+          "title": "黄体期（预测） · 点一下记这天",
+          "aria": "12 月 4 日，黄体期（预测） · 点一下记这天"
+        },
+        "2026-12-05": {
+          "classes": [
+            "cal-day",
+            "ph-luteal",
+            "ph-pred"
+          ],
+          "title": "黄体期（预测） · 点一下记这天",
+          "aria": "12 月 5 日，黄体期（预测） · 点一下记这天"
+        },
+        "2026-12-06": {
+          "classes": [
+            "cal-day",
+            "ph-luteal",
+            "ph-pred"
+          ],
+          "title": "黄体期（预测） · 点一下记这天",
+          "aria": "12 月 6 日，黄体期（预测） · 点一下记这天"
+        },
+        "2026-12-07": {
+          "classes": [
+            "cal-day",
+            "ph-luteal",
+            "ph-pred"
+          ],
+          "title": "黄体期（预测） · 点一下记这天",
+          "aria": "12 月 7 日，黄体期（预测） · 点一下记这天"
+        },
+        "2026-12-08": {
+          "classes": [
+            "cal-day",
+            "ph-luteal",
+            "ph-pred"
+          ],
+          "title": "黄体期（预测） · 点一下记这天",
+          "aria": "12 月 8 日，黄体期（预测） · 点一下记这天"
+        },
+        "2026-12-09": {
+          "classes": [
+            "cal-day",
+            "ph-luteal",
+            "ph-pred"
+          ],
+          "title": "黄体期（预测） · 点一下记这天",
+          "aria": "12 月 9 日，黄体期（预测） · 点一下记这天"
+        },
+        "2026-12-10": {
+          "classes": [
+            "cal-day",
+            "ph-luteal",
+            "ph-pred"
+          ],
+          "title": "黄体期（预测） · 点一下记这天",
+          "aria": "12 月 10 日，黄体期（预测） · 点一下记这天"
+        },
+        "2026-12-11": {
+          "classes": [
+            "cal-day",
+            "ph-luteal",
+            "ph-pred"
+          ],
+          "title": "黄体期（预测） · 点一下记这天",
+          "aria": "12 月 11 日，黄体期（预测） · 点一下记这天"
+        },
+        "2026-12-12": {
+          "classes": [
+            "cal-day",
+            "ph-luteal",
+            "ph-pred"
+          ],
+          "title": "黄体期（预测） · 点一下记这天",
+          "aria": "12 月 12 日，黄体期（预测） · 点一下记这天"
+        },
+        "2026-12-13": {
+          "classes": [
+            "cal-day",
+            "ph-luteal",
+            "ph-pred",
+            "picked"
+          ],
+          "title": "黄体期（预测） · 点一下记这天",
+          "aria": "12 月 13 日，黄体期（预测） · 点一下记这天"
+        },
+        "2026-12-14": {
+          "classes": [
+            "cal-day"
+          ],
+          "title": "还没有记录 · 点一下记这天",
+          "aria": "12 月 14 日，还没有记录 · 点一下记这天"
+        },
+        "2026-12-15": {
+          "classes": [
+            "cal-day"
+          ],
+          "title": "还没有记录 · 点一下记这天",
+          "aria": "12 月 15 日，还没有记录 · 点一下记这天"
+        },
+        "2026-12-16": {
+          "classes": [
+            "cal-day"
+          ],
+          "title": "还没有记录 · 点一下记这天",
+          "aria": "12 月 16 日，还没有记录 · 点一下记这天"
+        },
+        "2026-12-17": {
+          "classes": [
+            "cal-day"
+          ],
+          "title": "还没有记录 · 点一下记这天",
+          "aria": "12 月 17 日，还没有记录 · 点一下记这天"
+        },
+        "2026-12-18": {
+          "classes": [
+            "cal-day"
+          ],
+          "title": "还没有记录 · 点一下记这天",
+          "aria": "12 月 18 日，还没有记录 · 点一下记这天"
+        },
+        "2026-12-19": {
+          "classes": [
+            "cal-day"
+          ],
+          "title": "还没有记录 · 点一下记这天",
+          "aria": "12 月 19 日，还没有记录 · 点一下记这天"
+        },
+        "2026-12-20": {
+          "classes": [
+            "cal-day"
+          ],
+          "title": "还没有记录 · 点一下记这天",
+          "aria": "12 月 20 日，还没有记录 · 点一下记这天"
+        },
+        "2026-12-21": {
+          "classes": [
+            "cal-day"
+          ],
+          "title": "还没有记录 · 点一下记这天",
+          "aria": "12 月 21 日，还没有记录 · 点一下记这天"
+        },
+        "2026-12-22": {
+          "classes": [
+            "cal-day"
+          ],
+          "title": "还没有记录 · 点一下记这天",
+          "aria": "12 月 22 日，还没有记录 · 点一下记这天"
+        },
+        "2026-12-23": {
+          "classes": [
+            "cal-day"
+          ],
+          "title": "还没有记录 · 点一下记这天",
+          "aria": "12 月 23 日，还没有记录 · 点一下记这天"
+        },
+        "2026-12-24": {
+          "classes": [
+            "cal-day"
+          ],
+          "title": "还没有记录 · 点一下记这天",
+          "aria": "12 月 24 日，还没有记录 · 点一下记这天"
+        },
+        "2026-12-25": {
+          "classes": [
+            "cal-day"
+          ],
+          "title": "还没有记录 · 点一下记这天",
+          "aria": "12 月 25 日，还没有记录 · 点一下记这天"
+        },
+        "2026-12-26": {
+          "classes": [
+            "cal-day"
+          ],
+          "title": "还没有记录 · 点一下记这天",
+          "aria": "12 月 26 日，还没有记录 · 点一下记这天"
+        },
+        "2026-12-27": {
+          "classes": [
+            "cal-day"
+          ],
+          "title": "还没有记录 · 点一下记这天",
+          "aria": "12 月 27 日，还没有记录 · 点一下记这天"
+        },
+        "2026-12-28": {
+          "classes": [
+            "cal-day"
+          ],
+          "title": "还没有记录 · 点一下记这天",
+          "aria": "12 月 28 日，还没有记录 · 点一下记这天"
+        },
+        "2026-12-29": {
+          "classes": [
+            "cal-day"
+          ],
+          "title": "还没有记录 · 点一下记这天",
+          "aria": "12 月 29 日，还没有记录 · 点一下记这天"
+        },
+        "2026-12-30": {
+          "classes": [
+            "cal-day"
+          ],
+          "title": "还没有记录 · 点一下记这天",
+          "aria": "12 月 30 日，还没有记录 · 点一下记这天"
+        },
+        "2026-12-31": {
+          "classes": [
+            "cal-day"
+          ],
+          "title": "还没有记录 · 点一下记这天",
+          "aria": "12 月 31 日，还没有记录 · 点一下记这天"
+        }
+      }
+    }
+  },
+  "shiftMonth": [
+    {
+      "day": "2026-01-31",
+      "delta": 1,
+      "result": "2026-02-28"
+    },
+    {
+      "day": "2026-01-31",
+      "delta": -1,
+      "result": "2025-12-31"
+    },
+    {
+      "day": "2026-03-31",
+      "delta": -1,
+      "result": "2026-02-28"
+    },
+    {
+      "day": "2026-12-31",
+      "delta": 1,
+      "result": "2027-01-31"
+    },
+    {
+      "day": "2026-02-28",
+      "delta": 1,
+      "result": "2026-03-28"
+    },
+    {
+      "day": "2026-11-14",
+      "delta": -1,
+      "result": "2026-10-14"
+    },
+    {
+      "day": "2026-11-14",
+      "delta": 1,
+      "result": "2026-12-14"
+    }
+  ],
+  "valueText": {
+    "full": {
+      "flow": "中量",
+      "color": "鲜红色",
+      "pain": "非常痛",
+      "sex": "2 次 · 21:30 · 避孕套、紧急避孕药、其他措施",
+      "symptoms": "腰酸 · 腹痛 · 没有症状",
+      "mood": "🥰 心动",
+      "weight": "52.5 公斤",
+      "discharge": "蛋清状",
+      "temp": "36.6 ℃"
+    },
+    "legacy": {
+      "flow": "经量中",
+      "color": "",
+      "pain": "",
+      "sex": "2 次 · 避孕套",
+      "symptoms": "",
+      "mood": "😄 超开心",
+      "weight": "",
+      "discharge": "",
+      "temp": ""
+    },
+    "empty": {
+      "flow": "",
+      "color": "",
+      "pain": "",
+      "sex": "",
+      "symptoms": "",
+      "mood": "",
+      "weight": "",
+      "discharge": "",
+      "temp": ""
+    }
+  },
+  "warnings": {
+    "lt2": [],
+    "short": [
+      "最近三次里有 1 次周期只有 18 天，偏短——可能是一次点滴出血，也可能记漏了"
+    ],
+    "long": [
+      "最近三次里有 1 次周期到 40 天，偏长"
+    ],
+    "longEpisode": [
+      "这次经期记了 9 天，超过 7 天建议留意"
+    ],
+    "missed": [
+      "距离上一次经期已经 136 天，可能漏记了"
+    ],
+    "invalidGap": [
+      "最近三次里有 1 次周期只有 10 天，偏短——可能是一次点滴出血，也可能记漏了"
+    ],
+    "normal": [],
+    "multiCycle": [
+      "距离上一次经期已经 82 天，可能漏记了"
+    ],
+    "singleNoGap": [],
+    "fragmentMerge": []
+  },
+  "actions": {
+    "startNew": {
+      "writes": [
+        {
+          "method": "post",
+          "path": "/records",
+          "data": {
+            "kind": "period",
+            "body": {
+              "start": "2026-11-14",
+              "length": 5,
+              "cycle": 28
+            },
+            "client_id": "uuid-fixed-8b"
+          }
+        }
+      ],
+      "toasts": [
+        "已记下这次经期"
+      ],
+      "refreshed": true
+    },
+    "startAttach": {
+      "writes": [
+        {
+          "method": "put",
+          "path": "/records/s1",
+          "data": {
+            "kind": "period",
+            "body": {
+              "start": "2026-11-10",
+              "length": 5,
+              "cycle": 30,
+              "content": "第一天"
+            }
+          }
+        }
+      ],
+      "toasts": [
+        "已经把这次经期接到今天"
+      ],
+      "refreshed": true
+    },
+    "startFarGap": {
+      "writes": [
+        {
+          "method": "post",
+          "path": "/records",
+          "data": {
+            "kind": "period",
+            "body": {
+              "start": "2026-11-14",
+              "length": 5,
+              "cycle": 30
+            },
+            "client_id": "uuid-fixed-8b"
+          }
+        }
+      ],
+      "toasts": [
+        "已记下这次经期"
+      ],
+      "refreshed": true
+    },
+    "endFirstDay": {
+      "writes": [
+        {
+          "method": "del",
+          "path": "/records/e1"
+        }
+      ],
+      "toasts": [
+        "已撤掉这次经期"
+      ],
+      "refreshed": true
+    },
+    "endMiddle": {
+      "writes": [
+        {
+          "method": "put",
+          "path": "/records/e1",
+          "data": {
+            "kind": "period",
+            "body": {
+              "start": "2026-11-10",
+              "length": 2,
+              "cycle": 28
+            }
+          }
+        }
+      ],
+      "toasts": [
+        "这次经期到昨天为止"
+      ],
+      "refreshed": true
+    },
+    "endNotIn": {
+      "writes": [],
+      "toasts": [
+        "这天本来就不在经期里"
+      ],
+      "refreshed": false
+    },
+    "moreExtend": {
+      "writes": [
+        {
+          "method": "put",
+          "path": "/records/m1",
+          "data": {
+            "kind": "period",
+            "body": {
+              "start": "2026-11-10",
+              "length": 4,
+              "cycle": 28
+            }
+          }
+        }
+      ],
+      "toasts": [
+        "这次经期又多算一天"
+      ],
+      "refreshed": true
+    },
+    "moreIdempotent": {
+      "writes": [],
+      "toasts": [
+        "这次经期已经排到第 3 天了"
+      ],
+      "refreshed": false
+    },
+    "moreNotIn": {
+      "writes": [],
+      "toasts": [
+        "这天不在经期里"
+      ],
+      "refreshed": false
+    },
+    "endFragment": {
+      "writes": [
+        {
+          "method": "del",
+          "path": "/records/f3"
+        }
+      ],
+      "toasts": [
+        "已撤掉这次经期"
+      ],
+      "refreshed": true
+    }
+  },
+  "dayLogs": {
+    "flow": {
+      "writes": [
+        {
+          "method": "post",
+          "path": "/records",
+          "data": {
+            "kind": "period",
+            "body": {
+              "date": "2026-11-14",
+              "flow": 4
+            },
+            "client_id": "uuid-fixed-8b"
+          }
+        }
+      ],
+      "toasts": [],
+      "refreshed": true
+    },
+    "color": {
+      "writes": [
+        {
+          "method": "post",
+          "path": "/records",
+          "data": {
+            "kind": "period",
+            "body": {
+              "date": "2026-11-14",
+              "color": 3
+            },
+            "client_id": "uuid-fixed-8b"
+          }
+        }
+      ],
+      "toasts": [],
+      "refreshed": true
+    },
+    "pain": {
+      "writes": [
+        {
+          "method": "post",
+          "path": "/records",
+          "data": {
+            "kind": "period",
+            "body": {
+              "date": "2026-11-14",
+              "pain": 2
+            },
+            "client_id": "uuid-fixed-8b"
+          }
+        }
+      ],
+      "toasts": [],
+      "refreshed": true
+    },
+    "sex": {
+      "writes": [
+        {
+          "method": "post",
+          "path": "/records",
+          "data": {
+            "kind": "period",
+            "body": {
+              "date": "2026-11-14",
+              "sex": [
+                {
+                  "t": "21:30",
+                  "w": [
+                    2,
+                    5
+                  ]
+                },
+                {
+                  "t": "22:10",
+                  "w": [
+                    1
+                  ]
+                }
+              ]
+            },
+            "client_id": "uuid-fixed-8b"
+          }
+        }
+      ],
+      "toasts": [],
+      "refreshed": true
+    },
+    "symptoms": {
+      "writes": [
+        {
+          "method": "post",
+          "path": "/records",
+          "data": {
+            "kind": "period",
+            "body": {
+              "date": "2026-11-14",
+              "symptoms": [
+                "腰酸",
+                "腹痛"
+              ]
+            },
+            "client_id": "uuid-fixed-8b"
+          }
+        }
+      ],
+      "toasts": [],
+      "refreshed": true
+    },
+    "mood": {
+      "writes": [
+        {
+          "method": "post",
+          "path": "/records",
+          "data": {
+            "kind": "period",
+            "body": {
+              "date": "2026-11-14",
+              "mood": 7
+            },
+            "client_id": "uuid-fixed-8b"
+          }
+        }
+      ],
+      "toasts": [],
+      "refreshed": true
+    },
+    "weight": {
+      "writes": [
+        {
+          "method": "post",
+          "path": "/records",
+          "data": {
+            "kind": "period",
+            "body": {
+              "date": "2026-11-14",
+              "weight": 52.5
+            },
+            "client_id": "uuid-fixed-8b"
+          }
+        }
+      ],
+      "toasts": [],
+      "refreshed": true
+    },
+    "discharge": {
+      "writes": [
+        {
+          "method": "post",
+          "path": "/records",
+          "data": {
+            "kind": "period",
+            "body": {
+              "date": "2026-11-14",
+              "discharge": 1
+            },
+            "client_id": "uuid-fixed-8b"
+          }
+        }
+      ],
+      "toasts": [],
+      "refreshed": true
+    },
+    "temp": {
+      "writes": [
+        {
+          "method": "post",
+          "path": "/records",
+          "data": {
+            "kind": "period",
+            "body": {
+              "date": "2026-11-14",
+              "temp": 36.8
+            },
+            "client_id": "uuid-fixed-8b"
+          }
+        }
+      ],
+      "toasts": [],
+      "refreshed": true
+    },
+    "content": {
+      "writes": [
+        {
+          "method": "post",
+          "path": "/records",
+          "data": {
+            "kind": "period",
+            "body": {
+              "date": "2026-11-14",
+              "content": "今天有点累"
+            },
+            "client_id": "uuid-fixed-8b"
+          }
+        }
+      ],
+      "toasts": [],
+      "refreshed": true
+    },
+    "mergeSecond": {
+      "writes": [
+        {
+          "method": "put",
+          "path": "/records/d1",
+          "data": {
+            "kind": "period",
+            "body": {
+              "date": "2026-11-14",
+              "flow": 3,
+              "content": "第一天",
+              "pain": 2
+            }
+          }
+        }
+      ],
+      "toasts": [],
+      "refreshed": true
+    },
+    "clearField": {
+      "writes": [
+        {
+          "method": "put",
+          "path": "/records/d1",
+          "data": {
+            "kind": "period",
+            "body": {
+              "date": "2026-11-14",
+              "content": "第一天"
+            }
+          }
+        }
+      ],
+      "toasts": [],
+      "refreshed": true
+    },
+    "dropEmpty": {
+      "writes": [
+        {
+          "method": "put",
+          "path": "/records/d1",
+          "data": {
+            "kind": "period",
+            "body": {
+              "date": "2026-11-14",
+              "flow": 3
+            }
+          }
+        }
+      ],
+      "toasts": [],
+      "refreshed": true
+    },
+    "stripStart": {
+      "writes": [
+        {
+          "method": "put",
+          "path": "/records/d1",
+          "data": {
+            "kind": "period",
+            "body": {
+              "date": "2026-11-14",
+              "flow": 3,
+              "pain": 1
+            }
+          }
+        }
+      ],
+      "toasts": [],
+      "refreshed": true
+    }
+  },
+  "derived": {
+    "multiCycle": {
+      "empty": false,
+      "dayIn": 28,
+      "ringC": 194.8,
+      "ringOffset": "0.0",
+      "cyc": 28,
+      "title": "当前阶段：黄体期预测",
+      "tip": "容易情绪起伏，多担待一点",
+      "fertLevel": "低",
+      "fertDesc": "排卵已过，概率回落",
+      "segs": [
+        [
+          "period",
+          5
+        ],
+        [
+          "follicular",
+          4
+        ],
+        [
+          "fertile",
+          7
+        ],
+        [
+          "luteal",
+          12
+        ]
+      ],
+      "cursorPos": 100
+    },
+    "singleNoGap": {
+      "empty": false,
+      "dayIn": 5,
+      "ringC": 194.8,
+      "ringOffset": "163.6",
+      "cyc": 31,
+      "title": "当前阶段：经期",
+      "tip": "今天是经期第 5 天，多休息、保暖",
+      "fertLevel": "低",
+      "fertDesc": "经期几乎不会受孕",
+      "segs": [
+        [
+          "period",
+          6
+        ],
+        [
+          "follicular",
+          6
+        ],
+        [
+          "fertile",
+          7
+        ],
+        [
+          "luteal",
+          12
+        ]
+      ],
+      "cursorPos": 16.129032258064516
+    },
+    "fragmentMerge": {
+      "empty": false,
+      "dayIn": 30,
+      "ringC": 194.8,
+      "ringOffset": "0.0",
+      "cyc": 30,
+      "title": "当前阶段：排卵期预测",
+      "tip": "身体状态不错，别熬夜就行",
+      "fertLevel": "高",
+      "fertDesc": "排卵期前后，概率最高",
+      "segs": [
+        [
+          "period",
+          6
+        ],
+        [
+          "follicular",
+          5
+        ],
+        [
+          "fertile",
+          7
+        ],
+        [
+          "luteal",
+          12
+        ]
+      ],
+      "cursorPos": 100
+    },
+    "short": {
+      "empty": false,
+      "dayIn": 24,
+      "ringC": 194.8,
+      "ringOffset": "0.0",
+      "cyc": 24,
+      "title": "当前阶段：经期预测",
+      "tip": "多休息、保暖",
+      "fertLevel": "低",
+      "fertDesc": "经期几乎不会受孕",
+      "segs": [
+        [
+          "period",
+          5
+        ],
+        [
+          "follicular",
+          1
+        ],
+        [
+          "fertile",
+          7
+        ],
+        [
+          "luteal",
+          12
+        ]
+      ],
+      "cursorPos": 100
+    },
+    "long": {
+      "empty": false,
+      "dayIn": 7,
+      "ringC": 194.8,
+      "ringOffset": "153.9",
+      "cyc": 34,
+      "title": "当前阶段：卵泡期",
+      "tip": "状态正好，适合一起出门走走",
+      "fertLevel": "中",
+      "fertDesc": "越接近排卵日越高",
+      "segs": [
+        [
+          "period",
+          5
+        ],
+        [
+          "follicular",
+          10
+        ],
+        [
+          "fertile",
+          7
+        ],
+        [
+          "luteal",
+          12
+        ]
+      ],
+      "cursorPos": 20.588235294117645
+    },
+    "longEpisode": {
+      "empty": false,
+      "dayIn": 30,
+      "ringC": 194.8,
+      "ringOffset": "0.0",
+      "cyc": 30,
+      "title": "当前阶段：排卵期预测",
+      "tip": "身体状态不错，别熬夜就行",
+      "fertLevel": "高",
+      "fertDesc": "排卵期前后，概率最高",
+      "segs": [
+        [
+          "period",
+          7
+        ],
+        [
+          "follicular",
+          4
+        ],
+        [
+          "fertile",
+          7
+        ],
+        [
+          "luteal",
+          12
+        ]
+      ],
+      "cursorPos": 100
+    },
+    "missed": {
+      "empty": false,
+      "dayIn": 30,
+      "ringC": 194.8,
+      "ringOffset": "0.0",
+      "cyc": 30,
+      "title": "已推迟 106 天",
+      "tip": "记一次就能重新推算",
+      "fertLevel": "",
+      "fertDesc": "",
+      "segs": [
+        [
+          "period",
+          5
+        ],
+        [
+          "follicular",
+          6
+        ],
+        [
+          "fertile",
+          7
+        ],
+        [
+          "luteal",
+          12
+        ]
+      ],
+      "cursorPos": 100
+    },
+    "normal": {
+      "empty": false,
+      "dayIn": 1,
+      "ringC": 194.8,
+      "ringOffset": "187.0",
+      "cyc": 28,
+      "title": "当前阶段：经期",
+      "tip": "今天是经期第 1 天，多休息、保暖",
+      "fertLevel": "低",
+      "fertDesc": "经期几乎不会受孕",
+      "segs": [
+        [
+          "period",
+          5
+        ],
+        [
+          "follicular",
+          4
+        ],
+        [
+          "fertile",
+          7
+        ],
+        [
+          "luteal",
+          12
+        ]
+      ],
+      "cursorPos": 3.571428571428571
+    }
+  }
+}

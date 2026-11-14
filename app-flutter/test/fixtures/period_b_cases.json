@@ -1,0 +1,256 @@
+{
+  "meta": {
+    "today": "2026-11-14",
+    "source": "static/period.js",
+    "gridSourceCase": "multiCycle",
+    "note": "条目 8 · 段 8-B 夹具：Node vm 实跑 Web 原函数 + Dart 共用同一组输入。grid.months 用 period_cases.json 的 multiCycle（含预测与排卵日）；warningCases 四条规则各触发一次；actionCases 经期四动作；dayLogCases 9 字段逐项 + periodSaveDay 语义；valueTextCases 逐键文字化；derived 取 cycleHero/phaseBar 的 Web 实跑数值。"
+  },
+  "grid": {
+    "months": [
+      {"y": 2026, "m": 5, "picked": "2026-05-15"},
+      {"y": 2026, "m": 6, "picked": "2026-06-15"},
+      {"y": 2026, "m": 7, "picked": "2026-07-01"},
+      {"y": 2026, "m": 8, "picked": "2026-08-25"},
+      {"y": 2026, "m": 9, "picked": "2026-09-21"},
+      {"y": 2026, "m": 10, "picked": "2026-10-19"},
+      {"y": 2026, "m": 11, "picked": "2026-11-14"},
+      {"y": 2026, "m": 12, "picked": "2026-12-13"}
+    ]
+  },
+  "shiftMonth": [
+    {"day": "2026-01-31", "delta": 1},
+    {"day": "2026-01-31", "delta": -1},
+    {"day": "2026-03-31", "delta": -1},
+    {"day": "2026-12-31", "delta": 1},
+    {"day": "2026-02-28", "delta": 1},
+    {"day": "2026-11-14", "delta": -1},
+    {"day": "2026-11-14", "delta": 1}
+  ],
+  "valueTextCases": [
+    {
+      "name": "full",
+      "body": {
+        "date": "2026-11-14",
+        "flow": 3,
+        "color": 2,
+        "pain": 4,
+        "discharge": 5,
+        "mood": 9,
+        "sex": [{"t": "21:30", "w": [2, 5, 9]}, {"t": "22:10", "w": [1]}],
+        "symptoms": ["腰酸", "腹痛", "没有症状"],
+        "weight": 52.5,
+        "temp": 36.6,
+        "content": "今天有点累"
+      }
+    },
+    {
+      "name": "legacy",
+      "body": {
+        "date": "2026-11-14",
+        "flow": "中",
+        "sex": [2, 4],
+        "mood": 1,
+        "symptoms": [],
+        "weight": 0,
+        "temp": 0
+      }
+    },
+    {"name": "empty", "body": {"date": "2026-11-14"}}
+  ],
+  "warningCases": [
+    {
+      "name": "lt2",
+      "today": "2026-11-14",
+      "records": [
+        {"id": "w1", "author": "u1", "body": {"start": "2026-11-10", "length": 5, "cycle": 28}}
+      ]
+    },
+    {
+      "name": "short",
+      "today": "2026-11-14",
+      "records": [
+        {"id": "a1", "author": "u1", "body": {"start": "2026-09-01", "length": 5, "cycle": 28}},
+        {"id": "a2", "author": "u2", "body": {"start": "2026-09-19", "length": 5, "cycle": 28}},
+        {"id": "a3", "author": "u1", "body": {"start": "2026-10-19", "length": 5, "cycle": 28}}
+      ]
+    },
+    {
+      "name": "long",
+      "today": "2026-11-14",
+      "records": [
+        {"id": "b1", "author": "u1", "body": {"start": "2026-09-01", "length": 5, "cycle": 28}},
+        {"id": "b2", "author": "u2", "body": {"start": "2026-10-11", "length": 5, "cycle": 28}},
+        {"id": "b3", "author": "u1", "body": {"start": "2026-11-08", "length": 5, "cycle": 28}}
+      ]
+    },
+    {
+      "name": "longEpisode",
+      "today": "2026-11-14",
+      "records": [
+        {"id": "c1", "author": "u1", "body": {"start": "2026-09-01", "length": 5, "cycle": 28}},
+        {"id": "c2", "author": "u2", "body": {"start": "2026-10-01", "length": 9, "cycle": 28}}
+      ]
+    },
+    {
+      "name": "missed",
+      "today": "2026-11-14",
+      "records": [
+        {"id": "d1", "author": "u1", "body": {"start": "2026-06-01", "length": 5, "cycle": 28}},
+        {"id": "d2", "author": "u2", "body": {"start": "2026-07-01", "length": 5, "cycle": 28}}
+      ]
+    },
+    {
+      "name": "invalidGap",
+      "today": "2026-11-14",
+      "records": [
+        {"id": "e1", "author": "u1", "body": {"start": "2026-10-01", "length": 5, "cycle": 28}},
+        {"id": "e2", "author": "u2", "body": {"start": "2026-10-11", "length": 5, "cycle": 28}},
+        {"id": "e3", "author": "u1", "body": {"start": "2026-11-08", "length": 5, "cycle": 28}}
+      ]
+    },
+    {
+      "name": "normal",
+      "today": "2026-11-14",
+      "records": [
+        {"id": "f1", "author": "u1", "body": {"start": "2026-10-17", "length": 5, "cycle": 28}},
+        {"id": "f2", "author": "u2", "body": {"start": "2026-11-14", "length": 5, "cycle": 28}}
+      ]
+    }
+  ],
+  "actionCases": [
+    {"name": "startNew", "action": "start", "today": "2026-11-14", "day": "2026-11-14", "records": []},
+    {
+      "name": "startAttach",
+      "action": "start",
+      "today": "2026-11-14",
+      "day": "2026-11-14",
+      "records": [
+        {"id": "s1", "author": "u1", "body": {"start": "2026-11-10", "length": 3, "cycle": 30, "content": "第一天"}}
+      ]
+    },
+    {
+      "name": "startFarGap",
+      "action": "start",
+      "today": "2026-11-14",
+      "day": "2026-11-14",
+      "records": [
+        {"id": "s1", "author": "u1", "body": {"start": "2026-11-05", "length": 5, "cycle": 30}}
+      ]
+    },
+    {
+      "name": "endFirstDay",
+      "action": "end",
+      "today": "2026-11-14",
+      "day": "2026-11-14",
+      "records": [
+        {"id": "e1", "author": "u1", "body": {"start": "2026-11-14", "length": 5, "cycle": 28}}
+      ]
+    },
+    {
+      "name": "endMiddle",
+      "action": "end",
+      "today": "2026-11-14",
+      "day": "2026-11-12",
+      "records": [
+        {"id": "e1", "author": "u1", "body": {"start": "2026-11-10", "length": 6, "cycle": 28}}
+      ]
+    },
+    {
+      "name": "endNotIn",
+      "action": "end",
+      "today": "2026-11-14",
+      "day": "2026-11-14",
+      "records": [
+        {"id": "e1", "author": "u1", "body": {"start": "2026-11-01", "length": 5, "cycle": 28}}
+      ]
+    },
+    {
+      "name": "moreExtend",
+      "action": "more",
+      "today": "2026-11-14",
+      "day": "2026-11-12",
+      "records": [
+        {"id": "m1", "author": "u1", "body": {"start": "2026-11-10", "length": 3, "cycle": 28}}
+      ]
+    },
+    {
+      "name": "moreIdempotent",
+      "action": "more",
+      "today": "2026-11-14",
+      "day": "2026-11-10",
+      "records": [
+        {"id": "m1", "author": "u1", "body": {"start": "2026-11-10", "length": 3, "cycle": 28}}
+      ]
+    },
+    {
+      "name": "moreNotIn",
+      "action": "more",
+      "today": "2026-11-14",
+      "day": "2026-11-14",
+      "records": [
+        {"id": "m1", "author": "u1", "body": {"start": "2026-11-01", "length": 3, "cycle": 28}}
+      ]
+    },
+    {
+      "name": "endFragment",
+      "action": "end",
+      "today": "2026-11-14",
+      "day": "2026-09-06",
+      "records": [
+        {"id": "f1", "author": "u1", "body": {"start": "2026-09-01", "length": 3, "cycle": 28}},
+        {"id": "f2", "author": "u2", "body": {"start": "2026-09-04", "length": 2, "cycle": 28}},
+        {"id": "f3", "author": "u1", "body": {"start": "2026-09-06", "length": 2, "cycle": 28, "content": "又来了"}}
+      ]
+    }
+  ],
+  "dayLogCases": [
+    {"name": "flow", "today": "2026-11-14", "day": "2026-11-14", "records": [], "patch": {"flow": 4}},
+    {"name": "color", "today": "2026-11-14", "day": "2026-11-14", "records": [], "patch": {"color": 3}},
+    {"name": "pain", "today": "2026-11-14", "day": "2026-11-14", "records": [], "patch": {"pain": 2}},
+    {"name": "sex", "today": "2026-11-14", "day": "2026-11-14", "records": [], "patch": {"sex": [{"t": "21:30", "w": [2, 5]}, {"t": "22:10", "w": [1]}]}},
+    {"name": "symptoms", "today": "2026-11-14", "day": "2026-11-14", "records": [], "patch": {"symptoms": ["腰酸", "腹痛"]}},
+    {"name": "mood", "today": "2026-11-14", "day": "2026-11-14", "records": [], "patch": {"mood": 7}},
+    {"name": "weight", "today": "2026-11-14", "day": "2026-11-14", "records": [], "patch": {"weight": 52.5}},
+    {"name": "discharge", "today": "2026-11-14", "day": "2026-11-14", "records": [], "patch": {"discharge": 1}},
+    {"name": "temp", "today": "2026-11-14", "day": "2026-11-14", "records": [], "patch": {"temp": 36.8}},
+    {"name": "content", "today": "2026-11-14", "day": "2026-11-14", "records": [], "patch": {"content": "今天有点累"}},
+    {
+      "name": "mergeSecond",
+      "today": "2026-11-14",
+      "day": "2026-11-14",
+      "records": [{"id": "d1", "author": "u1", "body": {"date": "2026-11-14", "flow": 3, "content": "第一天"}}],
+      "patch": {"pain": 2}
+    },
+    {
+      "name": "clearField",
+      "today": "2026-11-14",
+      "day": "2026-11-14",
+      "records": [{"id": "d1", "author": "u1", "body": {"date": "2026-11-14", "flow": 3, "content": "第一天"}}],
+      "patch": {"flow": null}
+    },
+    {
+      "name": "dropEmpty",
+      "today": "2026-11-14",
+      "day": "2026-11-14",
+      "records": [{"id": "d1", "author": "u1", "body": {"date": "2026-11-14", "flow": 3, "symptoms": ["腰酸"]}}],
+      "patch": {"symptoms": [], "content": ""}
+    },
+    {
+      "name": "stripStart",
+      "today": "2026-11-14",
+      "day": "2026-11-14",
+      "records": [{"id": "d1", "author": "u1", "body": {"date": "2026-11-14", "flow": 3}}],
+      "patch": {"pain": 1, "start": "2026-11-10"}
+    }
+  ],
+  "derivedCases": [
+    {"name": "multiCycle", "fromCases": true},
+    {"name": "singleNoGap", "fromCases": true},
+    {"name": "fragmentMerge", "fromCases": true},
+    {"name": "short", "fromWarnings": true},
+    {"name": "long", "fromWarnings": true},
+    {"name": "longEpisode", "fromWarnings": true},
+    {"name": "missed", "fromWarnings": true},
+    {"name": "normal", "fromWarnings": true}
+  ]
+}

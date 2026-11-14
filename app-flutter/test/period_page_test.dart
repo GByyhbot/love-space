@@ -533,8 +533,11 @@ void main() {
     });
   });
 
-  // ── 页面：状态摘要 / 两入口 / 返回 / 双呈现 / D6 ──────────────────
-  group('页面（最小可用，不越界）', () {
+  // ── 页面：8-B 主页 UI / 两入口 / 返回 / 双呈现 / D6 ──────────────
+  // 🔴 段 8-B 起主页换成本段 UI（整月日历 + hero + 9 字段 + 四动作 +
+  //    预警 + 历史卡），8-A 的「B 段内容一律不做」断言已按新定案更新；
+  //    数据层 / 恢复 / 错误通道用例保持不变。
+  group('页面（8-B 主页 UI）', () {
     testWidgets('状态摘要全部来自引擎：阶段 / 周期第几天 / 下次预测 / 参考值',
         (tester) async {
       final s = _Store();
@@ -542,31 +545,26 @@ void main() {
       await _pump(tester, c);
       final startIso = dayStr(dayNum(_today()) - 2);
       final expectedNext = dayStr(dayNum(startIso) + 31);
-      expect(find.text('🌸 周期概览'), findsOneWidget);
-      expect(find.text('月经期'), findsOneWidget,
-          reason: 'todayPhase 来自引擎（实际记录，非预测）');
-      expect(find.text('3 天'), findsWidgets,
-          reason: '周期第 3 天（dayInCycle 来自引擎）');
-      expect(find.textContaining(expectedNext), findsWidgets,
-          reason: '下次预测与 Web 同口径');
-      expect(find.textContaining('$expectedNext（参考值）'), findsOneWidget,
-          reason: '无有效 gap → estimated=true');
-      expect(find.textContaining('平均周期 31 天'), findsOneWidget,
-          reason: 'C4：回落 body.cycle=31，不是后端硬 28');
-      expect(find.textContaining('平均经期 6 天'), findsOneWidget);
-      expect(find.textContaining('经期第 3 天'), findsOneWidget,
-          reason: 'inWindow / dayOfPeriod 来自引擎');
-      // 🔴 B 段内容一律不做，也不留半成品入口。
-      for (final forbidden in [
-        '数据分析',
-        '月经来了',
-        '月经走了',
-        '月经又来了',
-        '受孕概率',
-        '有几点需要留意',
-      ]) {
-        expect(find.textContaining(forbidden), findsNothing);
-      }
+      final nextM = int.parse(expectedNext.substring(5, 7));
+      final nextD = int.parse(expectedNext.substring(8, 10));
+      expect(find.text('周期第 3 天'), findsWidgets,
+          reason: 'dayInCycle 来自引擎（8-B hero 环形卡）');
+      expect(find.textContaining('$nextM 月 $nextD 日（参考值）'), findsOneWidget,
+          reason: '无有效 gap → estimated=true；下次预计来自引擎');
+      expect(find.text('平均周期'), findsOneWidget);
+      expect(find.text('平均经期'), findsOneWidget);
+      expect(find.text('记录天数'), findsOneWidget);
+      expect(find.textContaining('受孕概率'), findsOneWidget,
+          reason: '8-B 受孕概率三档（不给百分比）');
+      expect(find.text('按日历推算，仅供参考，不能作为避孕依据。'), findsOneWidget,
+          reason: '免责原文逐字、带句号');
+      expect(find.text('月经走了'), findsOneWidget,
+          reason: '今天在经期窗口内 → 四动作走了/又来了');
+      expect(find.text('月经又来了'), findsOneWidget);
+      expect(find.byTooltip('上个月'), findsOneWidget,
+          reason: '8-B 整月日历月份栏');
+      // 🔴 数据分析页是可选段 C，本段不做、主页不留死卡。
+      expect(find.textContaining('数据分析'), findsNothing);
       await _flush(tester);
     });
 
@@ -582,7 +580,8 @@ void main() {
 
       await tester.tap(find.text('生理期'));
       await tester.pumpAndSettle();
-      expect(find.text('🌸 周期概览'), findsOneWidget);
+      expect(find.byTooltip('上个月'), findsOneWidget,
+          reason: '8-B 整月日历已落地');
       expect(find.byType(BackButton), findsOneWidget,
           reason: 'AppBar automaticallyImplyLeading 不关');
 
@@ -590,7 +589,7 @@ void main() {
       await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();
       expect(find.text('关于我们，还有好多好多'), findsOneWidget);
-      expect(find.text('🌸 周期概览'), findsNothing);
+      expect(find.byTooltip('上个月'), findsNothing);
 
       // AppBar 返回按钮
       await tester.tap(find.text('生理期'));
@@ -619,14 +618,14 @@ void main() {
       addTearDown(c.dispose);
       await _pump(tester, c);
 
+      // 8-B：FAB 直接打开 periodForm（presetDay = 日历选中日），标题逐字。
       await tester.tap(find.byType(FloatingActionButton));
       await tester.pumpAndSettle();
-      await tester.tap(find.textContaining('记一次经期'));
-      await tester.pumpAndSettle();
-      expect(find.text('记一次经期'), findsOneWidget);
+      expect(find.text('记录这次经期'), findsOneWidget,
+          reason: 'periodForm :809 标题逐字');
       // 输入保留：往「想说的话」里写点东西，失败后应还在。
       await tester.enterText(find.byType(TextFormField).at(3), '保留的输入');
-      await tester.tap(find.text('记下'));
+      await tester.tap(find.text('保存'));
       await tester.pumpAndSettle();
 
       expect(find.text(s.postDetail), findsOneWidget,
@@ -637,13 +636,13 @@ void main() {
       expect(c.read(chatToastProvider)?.text, '保存失败：${s.postDetail}');
       expect(c.read(chatToastProvider)?.tone, ChatToastTone.error,
           reason: '失败绝不能发成功通知');
-      expect(find.text('已记下'), findsNothing);
-      expect(find.text('记一次经期'), findsOneWidget, reason: '失败不 pop');
+      expect(find.text('已记下这次'), findsNothing);
+      expect(find.text('记录这次经期'), findsOneWidget, reason: '失败不 pop');
       expect(find.text('保留的输入'), findsOneWidget, reason: '输入保留');
       expect(s.postCalls, 1, reason: '不自动重试');
 
       // 再点一次：client_id 必须复用同一个值（表单 State initState 生成一次）。
-      await tester.tap(find.text('记下'));
+      await tester.tap(find.text('保存'));
       await tester.pumpAndSettle();
       expect(s.postCalls, 2);
       final cids = s.postBodies.map((b) => b['client_id']).toSet();
@@ -651,27 +650,28 @@ void main() {
       await _flush(tester);
     });
 
-    testWidgets('D6：对方 author 的日记录也显示编辑/删除菜单（无作者门槛）',
+    testWidgets('D6：对方 author 的日记录与历史卡菜单都无作者门槛',
         (tester) async {
       final s = _Store();
       final c = await _setup(s);
       await _pump(tester, c);
       expect(find.textContaining('第一天有点累'), findsWidgets,
-          reason: '她记的日记录我这边可见（验收点②）');
-      // 每条记录都有「更多操作」菜单，且菜单含编辑/删除（不加 author 判断）。
-      expect(find.byTooltip('更多操作'), findsNWidgets(2));
-      // 列表按日期倒序：日记录（u2）在前，点它的菜单验证无作者门槛。
-      await tester.tap(find.byTooltip('更多操作').first);
+          reason: '她记的日记录我这边可见（8-B 日记行回显）');
+      // 8-B 历史卡「一次月经一张卡」，菜单对所有人开放（不加 author 判断）。
+      final menus = find.byTooltip('更多操作');
+      expect(menus, findsWidgets);
+      await tester.tap(menus.first);
       await tester.pumpAndSettle();
       expect(find.text('编辑'), findsOneWidget);
-      expect(find.text('删除'), findsWidgets); // 菜单里必须有删除
+      expect(find.text('删除这次'), findsOneWidget,
+          reason: '删整次走 period-del-episode 的 ids');
       await _flush(tester);
     });
   });
 
-  // ── 死入口清零 / 路由注册（源码级护栏）──────────────────────────
+  // ── 死入口清零 / 路由注册 / 8-B 落地护栏（源码级）────────────────
   group('入口与路由（源码级护栏）', () {
-    test('聊天 ⊕ 面板死入口清零，两入口与 /period 路由都落地', () {
+    test('聊天 ⊕ 面板死入口清零，两入口与 /period 路由都落地；8-B 已落地、C 段无死卡', () {
       final compose = File('lib/features/chat/chat_compose.dart')
           .readAsStringSync();
       expect(compose.contains("条目 8 迁移后开放"), isFalse,
@@ -685,19 +685,34 @@ void main() {
       final mainDart = File('lib/main.dart').readAsStringSync();
       expect(mainDart.contains("path: '/period'"), isTrue);
       expect(mainDart.contains('const PeriodPage()'), isTrue);
-      // B 段内容不许提前落地。
+
       final page =
           File('lib/features/period/period_page.dart').readAsStringSync();
-      for (final forbidden in [
-        'periodMonthGrid',
-        'periodStart(',
-        'periodEnd(',
-        'periodMore',
+      // 8-B 主页内容必须落地。
+      for (final required in [
+        'buildPeriodMonthGrid',
+        'planStart(',
+        'planEnd(',
+        'planMore',
         'periodWarnings',
-        'periodAnalysis',
+        'showPeriodLogSheet',
+        'PeriodFormDialog',
+        'periodHeadingSub',
       ]) {
-        expect(page.contains(forbidden), isFalse);
+        expect(page.contains(required), isTrue, reason: '8-B $required 应落地');
       }
+      // 🔴 数据分析页（C 段）不做、主页不预置入口（无死卡）；提醒不做。
+      // 只检查代码行：文档注释里描述「本段删除数据分析入口」时会提到该字面量。
+      final code = page
+          .split('\n')
+          .where((l) =>
+              !l.trimLeft().startsWith('//') &&
+              !l.trimLeft().startsWith('///'))
+          .join('\n');
+      expect(code.contains('periodAnalysis'), isFalse);
+      expect(code.contains('数据分析'), isFalse);
+      expect(code.contains('analysis-entry'), isFalse);
+      expect(code.contains('PERIOD_REMIND_DAYS'), isFalse);
     });
   });
 }

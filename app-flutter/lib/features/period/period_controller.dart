@@ -41,6 +41,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_client.dart' as api;
 import '../../core/together/together_data.dart';
+import 'period_actions.dart';
+import 'period_engine.dart';
 
 /// 显式单 kind（走 `only_period` 短路；见文件头「拉取方式与理由」）。
 const String periodKind = 'period';
@@ -272,6 +274,66 @@ class PeriodController extends Notifier<PeriodState> {
     state = state.copyWith(
         records: state.records.where((r) => r.id != rid).toList());
     await load();
+    return null;
+  }
+
+  // ── 段 8-B：统一写执行器（四动作 / 日记录 / 经期表单 / 删整次） ──────
+
+  /// 引擎入参形状（`{id, author, body}`）。页面与弹层共用同一份快照，
+  /// 保证 `periodData` / `planSaveDay` 看到的数据完全同源。
+  List<PeriodRow> get periodRows => <PeriodRow>[
+        for (final r in state.records)
+          PeriodRow(id: r.id, author: r.author, body: r.body),
+      ];
+
+  /// 执行 [PeriodWritePlan]（由 `period_actions.dart` 的纯函数产出）。
+  ///
+  /// 🔴 7-C 返修纪律：所有写都经 [_write] 显式调 `api.writeResponseError`
+  /// 判 4xx（服务端 `detail` 原文透传）；失败返回错误串（页面发 error tone、
+  /// **不发成功通知、不 pop、输入保留、不自动重试**）。
+  /// [plan.refresh] 为 true 时按 Web `await refresh()` 重拉全量。
+  Future<String?> executePlan(PeriodWritePlan plan) async {
+    if (_disposed) return null;
+    if (!plan.hasWrite) return null; // 只提示不写（幂等 / 不在经期）
+    final kind = plan.kind!;
+    // 🔴 路径映射：Web 的 `post/put/del('/records…')`（period.js:67/:68/:84/
+    // :98/:107/:827/:828）由 app.js 的 api() 统一加 `/api` 前缀；App 的 Dio
+    // baseUrl 不含该前缀（8-A 通用读写一律 `/api/records`），故在此补一层。
+    // 计划对象保留 Web 原路径以便与夹具逐项对拍，实际请求走 `/api/...`。
+    final path = '/api${plan.path!}';
+    final failure = await _write((dio) {
+      switch (kind) {
+        case PeriodWriteKind.post:
+          return dio.post(path, data: <String, dynamic>{
+            'kind': periodKind,
+            'body': plan.body,
+            'client_id': plan.clientId,
+          });
+        case PeriodWriteKind.put:
+          return dio.put(path, data: <String, dynamic>{
+            'kind': periodKind,
+            'body': plan.body,
+            // 🔴 PUT 不带 client_id（periodForm :827 / periodSaveDay :67）。
+          });
+        case PeriodWriteKind.delete:
+          return dio.delete(path);
+      }
+    });
+    if (failure != null) return failure;
+    if (plan.refresh) await load();
+    return null;
+  }
+
+  /// `app.js:2507-2510` `period-del-episode`：该次月经的全部碎片逐个 DELETE，
+  /// 全部成功后才 `refresh()`；中途失败立即返回原文、不发成功通知。
+  Future<String?> deleteEpisode(List<String> ids) async {
+    if (_disposed) return null;
+    for (final rid in ids) {
+      final failure =
+          await _write((dio) => dio.delete('/api/records/$rid'));
+      if (failure != null) return failure;
+    }
+    if (ids.isNotEmpty) await load();
     return null;
   }
 }
