@@ -259,13 +259,27 @@ Future<PersistCookieJar> createCookieJar() async {
   return PersistCookieJar(ignoreExpires: true, storage: FileStorage(store));
 }
 
+/// 全局状态码策略：4xx 也走「成功 Response」分支（不抛 DioException）。
+///
+/// 🔴 7-C 真机阻断级根因：本策略让 403 错密码 / 429 限速 / 422 校验失败 /
+/// 409 client_id 冲突都作为普通 [Response] 返回，只有 5xx 才抛
+/// `DioException(type: badResponse)`。任何写方法若只 `await dio.post` 而不
+/// 检查 statusCode，就会把 4xx 误判成成功（弹成功通知但服务端根本没写）。
+/// 因此所有写方法必须显式调用 [writeResponseError] 判定，不得依赖异常。
+///
+/// 生产 [buildDio] 与测试夹具**共用本函数**，杜绝「测试用 Dio 默认 <300、
+/// 真机用 <500」的形状漂移——那正是 7-C 旧夹具假通过的根因（段 D 漏扩
+/// 类同款教训）：测试里 4xx 抛异常恰好被 [errorDetail] 接住，掩盖了真机
+/// 「4xx 作为成功 Response 返回」的形状。
+bool validateAppStatus(int? status) => status != null && status < 500;
+
 Dio buildDio(String baseUrl, PersistCookieJar jar, {bool authHeader = true}) {
   final dio = Dio(BaseOptions(
     baseUrl: baseUrl,
     connectTimeout: const Duration(seconds: 10),
     receiveTimeout: const Duration(seconds: 20),
     // 401 也走响应分支，由拦截器统一处理会话失效
-    validateStatus: (s) => s != null && s < 500,
+    validateStatus: validateAppStatus,
   ));
   dio.httpClientAdapter = directAdapter();
   dio.interceptors.add(CookieManager(jar));
@@ -285,21 +299,49 @@ Dio buildDio(String baseUrl, PersistCookieJar jar, {bool authHeader = true}) {
   return dio;
 }
 
-/// 提取服务端中文错误文案（detail 直通 UI）
+/// 兜底错误文案（仅在服务端未提供 detail 时使用）
+const String genericErrorText = '出了点小问题，稍后再试';
+
+/// 从响应体提取服务端错误文案**原文**（FastAPI 两种形状）：
+/// · `{"detail": "中文原文"}`（手动 HTTPException / 业务校验，如 403/429/422）
+/// · `[{"msg": "..."}]`（Pydantic Field 校验型 422）
+/// 返回 null 表示响应体里没有可用文案。
+String? responseDetail(Object? data) {
+  if (data is Map && data['detail'] != null) return data['detail'].toString();
+  if (data is List && data.isNotEmpty) {
+    final first = data.first;
+    if (first is Map && first['msg'] != null) return first['msg'].toString();
+  }
+  return null;
+}
+
+/// 🔴 7-C 返修核心：判定「被 [validateAppStatus] 放行」的写请求 [Response]
+/// 是否真的成功。
+///
+/// 生产 4xx 不抛 DioException、而是作为成功 Response 返回；所有写方法必须
+/// 显式调用本函数，否则 403/429/422/409 会被当成成功（真机阻断级）。
+/// 返回 null = 真成功（2xx）；否则返回服务端 `data['detail']` **原文**
+/// （不是 [genericErrorText] 兜底文案），拿不到原文时才退兜底。
+/// 与 [errorDetail] 互补：后者只处理**已抛出的** DioException（5xx / 网络层 /
+/// 测试夹具使用 Dio 默认 validateStatus 的场景），本函数处理**成功返回的 4xx**。
+String? writeResponseError(Response<dynamic> response) {
+  final status = response.statusCode ?? 0;
+  if (status >= 200 && status < 300) return null;
+  return responseDetail(response.data) ?? genericErrorText;
+}
+
+/// 提取服务端中文错误文案（detail 直通 UI）：仅用于**已抛出的** DioException。
+/// 4xx 被 [validateAppStatus] 放行的场景请用 [writeResponseError]。
 String errorDetail(Object? e) {
   if (e is DioException) {
-    final data = e.response?.data;
-    if (data is Map && data['detail'] != null) return data['detail'].toString();
-    if (data is List && data.isNotEmpty) {
-      final first = data.first;
-      if (first is Map && first['msg'] != null) return first['msg'].toString();
-    }
+    final detail = responseDetail(e.response?.data);
+    if (detail != null) return detail;
     if (e.type == DioExceptionType.connectionError ||
         e.type == DioExceptionType.connectionTimeout) {
       return '网络连接不上，稍后再试';
     }
   }
-  return '出了点小问题，稍后再试';
+  return genericErrorText;
 }
 
 /// CookieJar（App 全局唯一实例；ApiClient 与 SSE 共用）

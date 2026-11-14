@@ -1,5 +1,20 @@
-/* 条目 7 段 7-C 自测夹具（2.1.9/VC219 · 个人心愿，条目 7 收尾段）。
-   覆盖验收点 ①–⑫：
+/* 条目 7 段 7-C 自测夹具（2.2.0/VC220 真机阻断级返修 · 个人心愿）。
+   7-C 初版 2.1.9/VC219 覆盖验收点 ①–⑫（本次同步回归，一条不改坏）；
+   🔴 2.2.0 返修新增 ⑬：按**真实响应形状**复验 unlock 失败分支 + 双条件门控
+   + client_id 幂等 + 连带写路径。
+
+   【夹具形状的关键修正（本次返修根因之一，证据先行）】
+   旧夹具 _setup 用 Dio 默认 validateStatus(200<=s<300) → 403/429/422 在
+   测试里抛 DioException，恰好被 api.errorDetail 接住拿到 detail 原文，于是
+   ②c/③/④「假通过」，从未覆盖真机 api.validateAppStatus (s<500) 下
+   「4xx 作为成功 Response 返回、不抛 DioException」的形状。本次 _setup
+   改为与生产 buildDio **共用** api.validateAppStatus；_adapterFor 直接返回
+   statusCode=403 / 429 的 ResponseBody，响应体逐字为
+     {"detail":"密码不正确，请向心愿本人确认"}
+     {"detail":"尝试过于频繁，请 15 分钟后再试"}
+   成功形状逐字为 {"content":"..."}，重拉列表该条 locked=false。
+
+   原覆盖验收点 ①–⑫：
    ① 三态渲染（作者免密 / 已解锁 / 待解锁；待解锁 content 不渲染、sealed 不渲染）
    ② 双机全程（我建 → 对象端锁态 → 错密码 403 原文 → 对密码解锁 → 重拉后
       content 出现 → 退出重进仍免密）
@@ -197,6 +212,8 @@ final List<Object?> _defaultWishes = [
 ];
 
 /// 可变后端状态：模拟服务端按当前 uid 重新 serialize 的三态 + 专属端点。
+/// 🔴 2.2.0 返修：unlock 200 会**真实**写 readers_sealed（重拉 locked:false），
+/// 失败 403/429 完全不写（重拉 locked:true），与 main.py:1350-1365 一致。
 class _Store {
   _Store({List<Object?>? wishes})
       : wishes = List<Object?>.from(wishes ?? _defaultWishes);
@@ -207,12 +224,56 @@ class _Store {
   String? createDetail;
   int unlockStatus = 200;
   String? unlockDetail;
+  /// 200 响应体是否含 content（门控条件①；false 专测「2xx 但无 content」）
+  bool unlockReturnsContent = true;
+  /// 200 后是否模拟服务端写 readers_sealed（重拉列表该条 locked:false）；
+  /// false 专测门控条件②「200 但重拉后仍 locked=true」（服务端异常/竞态）。
+  bool unlockWritesReaders = true;
   Completer<ResponseBody>? unlockGate;
   void Function(Map<String, Object?> body)? onCreateSuccess;
   int createCalls = 0;
   int unlockCalls = 0;
   final List<Map<String, Object?>> createBodies = [];
   final List<Map<String, Object?>> unlockBodies = [];
+
+  // 连带核查：其余写路径的 4xx 模拟（默认 200 全放行，不改变既有断言）
+  int recordsPostStatus = 200;
+  String? recordsPostDetail;
+  int putStatus = 200;
+  String? putDetail;
+  int deleteStatus = 200;
+  String? deleteDetail;
+  int restoreStatus = 200;
+  String? restoreDetail;
+}
+
+/// 模拟服务端 main.py:1355-1364 解锁成功后写 readers_sealed：
+/// 重拉列表时该 rid 的 serialize 形状变为 {title, locked:false, content}。
+/// 该 rid 原本不在列表（纯控制器用例）→ 追加一条已解锁记录，
+/// 保证「服务端确认成功 → 重拉 locked:false」的双条件闭环可测。
+void _markWishUnlocked(_Store s, String rid) {
+  for (var i = 0; i < s.wishes.length; i++) {
+    final w = s.wishes[i];
+    if (w is Map && w['id'] == rid) {
+      final updated = Map<String, Object?>.from(w);
+      updated['body'] = <String, Object?>{
+        'title': (w['body'] as Map)['title'] ?? '',
+        'locked': false,
+        'content': '想和你一起去看一次海',
+      };
+      s.wishes[i] = updated;
+      return;
+    }
+  }
+  s.wishes.add(_wishRec(
+    id: rid,
+    author: 'u2',
+    body: <String, Object?>{
+      'title': '已解锁心愿',
+      'locked': false,
+      'content': '想和你一起去看一次海',
+    },
+  ));
 }
 
 _FakeAdapter _adapterFor(_Store s) => _FakeAdapter((o, i) async {
@@ -244,12 +305,43 @@ _FakeAdapter _adapterFor(_Store s) => _FakeAdapter((o, i) async {
         s.unlockBodies.add(Map<String, Object?>.from(o.data as Map));
         final gate = s.unlockGate;
         if (gate != null) return await gate.future;
+        // 🔴 真实形状：403/429 是「成功返回但 statusCode 为 4xx」的 Response，
+        // 逐字响应体 {"detail":"..."}；夹具 Dio 用 api.validateAppStatus(s<500)
+        // 放行、不抛 DioException，与真机取证完全一致。
         if (s.unlockStatus >= 400) {
           return _json({'detail': s.unlockDetail}, s.unlockStatus);
         }
-        return _json({'content': '想和你一起去看一次海'});
+        if (s.unlockWritesReaders) {
+          final rid = path.split('/')[3]; // /api/personal-wishes/{rid}/unlock
+          _markWishUnlocked(s, rid);
+        }
+        // 200 成功形状逐字 {"content":"..."}；关掉开关专测门控条件①
+        return _json(s.unlockReturnsContent
+            ? <String, Object>{'content': '想和你一起去看一次海'}
+            : <String, Object>{});
+      }
+      if (o.method == 'POST' && path == '/api/records') {
+        if (s.recordsPostStatus >= 400) {
+          return _json({'detail': s.recordsPostDetail}, s.recordsPostStatus);
+        }
+        return _json(<String, Object>{});
+      }
+      if (o.method == 'PUT' && path.startsWith('/api/records/')) {
+        if (s.putStatus >= 400) {
+          return _json({'detail': s.putDetail}, s.putStatus);
+        }
+        return _json(<String, Object>{});
       }
       if (o.method == 'DELETE' && path.startsWith('/api/records/')) {
+        if (s.deleteStatus >= 400) {
+          return _json({'detail': s.deleteDetail}, s.deleteStatus);
+        }
+        return _json(<String, Object>{});
+      }
+      if (o.method == 'POST' && path.endsWith('/restore')) {
+        if (s.restoreStatus >= 400) {
+          return _json({'detail': s.restoreDetail}, s.restoreStatus);
+        }
         return _json(<String, Object>{});
       }
       return _json(<String, Object>{});
@@ -257,8 +349,13 @@ _FakeAdapter _adapterFor(_Store s) => _FakeAdapter((o, i) async {
 
 Future<ProviderContainer> _setup(_FakeAdapter adapter,
     {String uid = 'u1', StateProvider<String>? uidProvider}) async {
-  final dio = Dio(BaseOptions(baseUrl: 'https://test.local'))
-    ..httpClientAdapter = adapter;
+  // 🔴 2.2.0 返修：夹具 Dio 必须与生产 buildDio **共用同一个 validateStatus**。
+  // 旧夹具用 Dio 默认 <300，4xx 抛 DioException 恰好被 errorDetail 接住，
+  // 掩盖了真机「4xx 作为成功 Response 返回、不抛异常」的形状（假通过根因）。
+  final dio = Dio(BaseOptions(
+    baseUrl: 'https://test.local',
+    validateStatus: api.validateAppStatus,
+  ))..httpClientAdapter = adapter;
   final container = ProviderContainer(overrides: [
     api.dioProvider.overrideWith((ref) async => dio),
     chatBaseProvider.overrideWith((ref) async => 'https://test.local'),
@@ -1123,6 +1220,299 @@ void main() {
       // 与 7-B load() 对照：主列表带 author + 二次按 author 过滤，
       // wishes 绝不能复用（personal_wish 不在 db.PRIVATE，db.visible 双方 True）
       expect(personalKinds, 'diary,draft,surprise');
+    });
+  });
+
+  // ── ⑬ 2.2.0 真机阻断级返修：真实 4xx Response 形状 + 双条件门控 ──
+  group('⑬ 真实 4xx Response 形状（validateStatus: s<500 放行，不抛异常）', () {
+    // 逐字引用主理人真实 HTTP 取证（隔离 DATA_DIR + 真实 uvicorn + httpx）：
+    const wrongPwDetail = '密码不正确，请向心愿本人确认';
+    const rateLimitDetail = '尝试过于频繁，请 15 分钟后再试';
+    const okMsg = '已解锁，内容现在直接显示在心愿卡片里';
+    const lockedRid = '9ce5acfad9e04baaa8d5bdb50bb70a0f';
+
+    test('夹具自检：403/429 在 s<500 下确为「成功返回的 Response」，不抛异常',
+        () async {
+      // 若 403/429 抛 DioException，await 会直接抛出使用例失败 →
+      // 直接证明夹具与真机形状一致（7-C 旧夹具的 <300 形状会在这里露馅）。
+      final adapter = _FakeAdapter((o, i) async => _json(
+          {'detail': i == 0 ? wrongPwDetail : rateLimitDetail},
+          i == 0 ? 403 : 429));
+      final dio = Dio(BaseOptions(
+        baseUrl: 'https://test.local',
+        validateStatus: api.validateAppStatus,
+      ))..httpClientAdapter = adapter;
+      final r403 = await dio.post('/api/personal-wishes/w1/unlock',
+          data: {'password': 'wrong-999'});
+      expect(r403.statusCode, 403);
+      expect((r403.data as Map)['detail'], wrongPwDetail);
+      expect(api.writeResponseError(r403), wrongPwDetail,
+          reason: 'writeResponseError 从成功返回的 4xx 里取服务端原文');
+      final r429 = await dio.post('/api/personal-wishes/w1/unlock',
+          data: {'password': 'wrong-999'});
+      expect(r429.statusCode, 429);
+      expect((r429.data as Map)['detail'], rateLimitDetail);
+      expect(api.writeResponseError(r429), rateLimitDetail);
+      // 对照：4xx 不是 DioException，errorDetail 只能给兜底文案 →
+      // 这正是不能用 errorDetail 处理放行 4xx 的原因。
+      expect(api.errorDetail('anything'), api.genericErrorText);
+    });
+
+    testWidgets(
+        '① 错密码 403 → 不发成功通知、顶部+内联为服务端原文、密码框保留、卡片仍 locked',
+        (tester) async {
+      final store = _Store();
+      store.unlockStatus = 403;
+      store.unlockDetail = wrongPwDetail;
+      final adapter = _adapterFor(store);
+      final container = await _setup(adapter);
+      await _pump(tester, container);
+      await _openWishTab(tester);
+      await _tapUnlockEntry(tester);
+      await tester.enterText(find.byType(TextField).first, 'wrong-999');
+      await tester.tap(find.text('解锁心愿'));
+      await tester.pumpAndSettle();
+
+      expect(store.unlockCalls, 1, reason: '403 不自动重试');
+      expect(
+          adapter.requests
+              .where((r) => r.uri.path.endsWith('/unlock'))
+              .length,
+          1);
+      // 服务端原文逐字：表单内联 + 顶部通知双呈现
+      expect(find.text(wrongPwDetail).evaluate().length,
+          greaterThanOrEqualTo(2));
+      expect(container.read(chatToastProvider)?.text, wrongPwDetail);
+      expect(container.read(chatToastProvider)?.tone, ChatToastTone.error);
+      // 真机现象的反面：绝不发成功通知
+      expect(find.text(okMsg), findsNothing);
+      expect(container.read(chatToastProvider)?.tone,
+          isNot(ChatToastTone.success));
+      // 密码框保留可重输、不 pop、按钮恢复可用
+      expect(find.text('打开这份个人心愿'), findsOneWidget,
+          reason: '失败不 pop');
+      final tf = tester.widget<TextField>(find.byType(TextField).first);
+      expect(tf.controller?.text, 'wrong-999', reason: '密码框保留可重输');
+      expect(
+          tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
+          isNotNull,
+          reason: '按钮恢复可用，不禁用');
+      // 卡片保持锁定态：失败不重拉、不自记解锁态、不缓存 content
+      final wish = container
+          .read(personalControllerProvider)
+          .wishes
+          .firstWhere((w) => w.id == lockedRid);
+      expect(wish.body['locked'], true);
+      expect(wish.body.containsKey('content'), isFalse);
+      await _flush(tester);
+    });
+
+    testWidgets('② 429 限速 → 同上且不自动重试、请求恰好 1 次', (tester) async {
+      final store = _Store();
+      store.unlockStatus = 429;
+      store.unlockDetail = rateLimitDetail;
+      final adapter = _adapterFor(store);
+      final container = await _setup(adapter);
+      await _pump(tester, container);
+      await _openWishTab(tester);
+      await _tapUnlockEntry(tester);
+      await tester.enterText(find.byType(TextField).first, 'wrong-999');
+      await tester.tap(find.text('解锁心愿'));
+      await tester.pumpAndSettle();
+
+      expect(store.unlockCalls, 1);
+      expect(
+          adapter.requests
+              .where((r) => r.uri.path.endsWith('/unlock'))
+              .length,
+          1,
+          reason: '429 配额敏感，请求恰好 1 次，绝不自动重试');
+      expect(find.text(rateLimitDetail).evaluate().length,
+          greaterThanOrEqualTo(2));
+      expect(container.read(chatToastProvider)?.text, rateLimitDetail);
+      expect(container.read(chatToastProvider)?.tone, ChatToastTone.error);
+      expect(find.text(okMsg), findsNothing);
+      expect(find.text('打开这份个人心愿'), findsOneWidget);
+      final tf = tester.widget<TextField>(find.byType(TextField).first);
+      expect(tf.controller?.text, 'wrong-999', reason: '密码框保留');
+      final wish = container
+          .read(personalControllerProvider)
+          .wishes
+          .firstWhere((w) => w.id == lockedRid);
+      expect(wish.body['locked'], true);
+      await _flush(tester);
+    });
+
+    testWidgets(
+        '③ 正确密码 200 {"content":"..."} + 重拉 locked=false → 才发成功通知',
+        (tester) async {
+      final store = _Store(); // 200 + 服务端写 readers_sealed
+      final adapter = _adapterFor(store);
+      final container = await _setup(adapter);
+      await _pump(tester, container);
+      await _openWishTab(tester);
+      await _tapUnlockEntry(tester);
+      await tester.enterText(find.byType(TextField).first, '123456');
+      await tester.tap(find.text('解锁心愿'));
+      await tester.pumpAndSettle();
+
+      expect(store.unlockCalls, 1);
+      expect(container.read(chatToastProvider)?.text, okMsg);
+      expect(container.read(chatToastProvider)?.tone, ChatToastTone.success);
+      expect(find.text(okMsg), findsOneWidget);
+      expect(find.text('打开这份个人心愿'), findsNothing,
+          reason: '成功后 pop 回列表');
+      final wish = container
+          .read(personalControllerProvider)
+          .wishes
+          .firstWhere((w) => w.id == lockedRid);
+      expect(wish.body['locked'], false);
+      // 客户端不自记解锁态：成功后必须重拉列表确认
+      final wishGets = adapter.requests
+          .where((r) =>
+              r.method == 'GET' &&
+              r.uri.path == '/api/records' &&
+              r.queryParameters['kind'] == personalWishKinds)
+          .length;
+      expect(wishGets, greaterThanOrEqualTo(2));
+      await _flush(tester);
+    });
+
+    testWidgets('④ 200 但重拉后仍 locked=true → 不发成功通知、走失败分支',
+        (tester) async {
+      final store = _Store();
+      store.unlockWritesReaders = false; // 服务端异常：没写 readers_sealed
+      final adapter = _adapterFor(store);
+      final container = await _setup(adapter);
+      await _pump(tester, container);
+      await _openWishTab(tester);
+      await _tapUnlockEntry(tester);
+      await tester.enterText(find.byType(TextField).first, '123456');
+      await tester.tap(find.text('解锁心愿'));
+      await tester.pumpAndSettle();
+
+      expect(store.unlockCalls, 1);
+      expect(find.text(okMsg), findsNothing, reason: '双条件门控拦住成功通知');
+      expect(container.read(chatToastProvider)?.tone, ChatToastTone.error);
+      expect(container.read(chatToastProvider)?.text,
+          unlockNotEffectiveText);
+      expect(find.text(unlockNotEffectiveText).evaluate().length,
+          greaterThanOrEqualTo(2), reason: '顶部+内联双呈现');
+      expect(find.text('打开这份个人心愿'), findsOneWidget,
+          reason: '门控不通过不 pop');
+      final tf = tester.widget<TextField>(find.byType(TextField).first);
+      expect(tf.controller?.text, '123456', reason: '密码框保留可重输');
+      final wish = container
+          .read(personalControllerProvider)
+          .wishes
+          .firstWhere((w) => w.id == lockedRid);
+      expect(wish.body['locked'], true, reason: '卡片保持锁定态');
+      await _flush(tester);
+    });
+
+    test('④b 200 但响应体无 content → 门控条件①不通过，不重拉、不发成功通知',
+        () async {
+      final store = _Store();
+      store.unlockReturnsContent = false;
+      final adapter = _adapterFor(store);
+      final container = await _setup(adapter);
+      final err = await container
+          .read(personalControllerProvider.notifier)
+          .unlockPersonalWish('w1', '123456');
+      expect(err, unlockNotEffectiveText);
+      expect(store.unlockCalls, 1);
+      final wishGets = adapter.requests
+          .where((r) =>
+              r.method == 'GET' &&
+              r.uri.path == '/api/records' &&
+              r.queryParameters['kind'] == personalWishKinds)
+          .length;
+      expect(wishGets, 0, reason: '条件①不通过不重拉列表');
+    });
+
+    testWidgets('⑤ client_id 表单内失败重试复用同值（Web app.js:1801 对齐）',
+        (tester) async {
+      final store = _Store();
+      store.createStatus = 422;
+      store.createDetail = '这个密码已经用于另一条个人心愿，请为每条心愿设置不同密码';
+      final adapter = _adapterFor(store);
+      final container = await _setup(adapter);
+      await _pump(tester, container);
+      await _openWishTab(tester);
+      await tester.tap(find.text('许下心愿'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).at(0), '心愿甲');
+      await tester.enterText(find.byType(TextField).at(1), '内容甲');
+      await tester.enterText(find.byType(TextField).at(2), '123456');
+      await tester.tap(find.text('加密保存'));
+      await tester.pumpAndSettle();
+      expect(store.createCalls, 1);
+      expect(find.text('许下一份个人心愿'), findsOneWidget,
+          reason: '422 失败不 pop，表单 State 存活');
+      // 同一表单 State 内第二次提交：client_id 必须复用
+      await tester.tap(find.text('加密保存'));
+      await tester.pumpAndSettle();
+      expect(store.createCalls, 2);
+      expect(store.createBodies.length, 2);
+      final first = store.createBodies[0]['client_id'];
+      final second = store.createBodies[1]['client_id'];
+      expect(first, isNotEmpty);
+      expect(second, first,
+          reason: '表单生命周期内失败重试复用同一个 client_id');
+      expect(find.text('这份个人心愿已加密保存'), findsNothing,
+          reason: '422 绝不弹成功通知');
+      await _flush(tester);
+    });
+
+    test('⑥ 连带核查：personal 其余写路径 4xx 同样返回服务端原文（不当成功）',
+        () async {
+      final store = _Store();
+      store.createStatus = 422;
+      store.createDetail = '撞密码原文';
+      store.unlockStatus = 403;
+      store.unlockDetail = wrongPwDetail;
+      store.recordsPostStatus = 422;
+      store.recordsPostDetail = '请选择未来的公开时间';
+      store.putStatus = 422;
+      store.putDetail = '编辑被拒原文';
+      store.deleteStatus = 403;
+      store.deleteDetail = '删除被拒原文';
+      store.restoreStatus = 404;
+      store.restoreDetail = '恢复被拒原文';
+      final adapter = _adapterFor(store);
+      final container = await _setup(adapter);
+      final ctrl = container.read(personalControllerProvider.notifier);
+      final future = DateTime.now().add(const Duration(days: 1));
+      final rec = TogetherRecord(
+        id: 'r1',
+        kind: 'diary',
+        author: 'u1',
+        body: <String, dynamic>{'content': '原文', 'date': '2026-01-01'},
+      );
+      final draft = TogetherRecord(
+        id: 'd1',
+        kind: 'draft',
+        author: 'u1',
+        body: <String, dynamic>{'content': '草稿'},
+      );
+
+      // 10 条写路径逐条验证：4xx 一律 detail 原文，绝不 return null=成功
+      expect(await ctrl.addPersonalWish('标题', '内容', '123456'), '撞密码原文');
+      expect(await ctrl.unlockPersonalWish('w1', '000000'), wrongPwDetail);
+      expect(await ctrl.addSurprise('服务端会拒的惊喜', future),
+          '请选择未来的公开时间');
+      expect(await ctrl.addDiary('日记'), '请选择未来的公开时间');
+      expect(await ctrl.editSurprise(rec, '改', future), '编辑被拒原文');
+      expect(await ctrl.editDiary(rec, '改'), '编辑被拒原文');
+      expect(await ctrl.publishDraft(draft, 'diary'), '编辑被拒原文');
+      expect(await ctrl.delete('r1'), '删除被拒原文');
+      expect(await ctrl.deleteWish('w1'), '删除被拒原文');
+      expect(await ctrl.restore('r1'), '恢复被拒原文');
+      // 失败路径不应触发任何成功后的重拉（列表 GET）
+      final listGets = adapter.requests
+          .where((r) => r.method == 'GET' && r.uri.path == '/api/records')
+          .length;
+      expect(listGets, 0, reason: '4xx 不当成功，不重拉列表、不改本地 state');
     });
   });
 }

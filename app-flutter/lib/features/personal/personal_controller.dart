@@ -24,8 +24,12 @@
 ///   参数在函数体内完全未使用 → 服务端 PUT **不 merge**。
 /// · 发布草稿：PUT 改 kind（main.py:1400 仅 draft→post/diary/surprise），
 ///   surprise 需 body.publish_at 为未来时间戳（main.py:1127，否则 422）。
+/// · 🔴 7-C 返修（2.2.0/VC220）：全局 [api.validateAppStatus] 让 4xx 不抛
+///   DioException、作为成功 Response 返回，故**全部写方法**统一经
+///   [_writeResponse] 显式判 statusCode；解锁另加双条件门控（见方法注释）。
 library;
 
+import 'package:dio/dio.dart' show Dio, Response;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_client.dart' as api;
@@ -48,6 +52,13 @@ const personalKinds = 'diary,draft,surprise';
 /// 复用 personalKinds 会同时踩两个坑：①按 author 把对方心愿过滤掉；
 /// ②服务端不带 kind 的隐式排除让 personal_wish 漏出 kind 串。
 const personalWishKinds = 'personal_wish';
+
+/// 🔴 7-C 返修：服务端返回 2xx 但双条件门控未通过时的失败文案。
+/// 场景：200 响应体无 content、或重拉列表后该条仍 locked=true（服务端
+/// readers_sealed 写入异常 / 竞态）、或重拉后该条已不在列表。
+/// 页面据此不发成功通知、走错误通知、保留密码框可重输、不 pop。
+/// 服务端**明确**失败（403/429/422）时不用本文案，一律用响应 detail 原文。
+const String unlockNotEffectiveText = '解锁未生效，请稍后再试或重新输入密码';
 
 /// 🔴 7-C 隐私红线（serializers.py:23-36 实读）：
 /// 列表 GET 的 personal_wish body 是 serialize **重建**出来的，不是 stored 原文：
@@ -376,6 +387,27 @@ class PersonalController extends Notifier<PersonalState> {
         .toList());
   }
 
+  /// 🔴 7-C 返修统一写入口：执行写请求并**显式判定 4xx**。
+  ///
+  /// 生产 [api.validateAppStatus] 让 403 错密码 / 429 限速 / 422 校验失败 /
+  /// 409 client_id 冲突都**不抛** DioException，而是作为成功 [Response] 返回。
+  /// 旧实现「await 完直接 return null」会把它们全部误判成功（真机阻断级：
+  /// 错密码弹成功通知但卡片仍锁定）。本入口统一：2xx → 返回 null；4xx →
+  /// 返回服务端 `data['detail']` 原文；真正抛出的异常（5xx / 网络层，或测试
+  /// 夹具用 Dio 默认 validateStatus）→ [api.errorDetail] 兜底。
+  /// personal 的全部写方法都必须经此入口（[unlockPersonalWish] 因需响应体
+  /// content 字段单独判定，但同样先过 [api.writeResponseError]），杜绝漏改。
+  Future<String?> _writeResponse(
+      Future<Response<dynamic>> Function(Dio dio) request) async {
+    try {
+      final dio = await ref.read(api.dioProvider.future);
+      final resp = await request(dio);
+      return api.writeResponseError(resp);
+    } catch (e) {
+      return api.errorDetail(e);
+    }
+  }
+
   /// 新建个人心愿：`POST /api/personal-wishes`（main.py:1306-1332）。
   /// · 客户端先拦空 **+ 拦 Field 越界**（title 1..100 / content 1..20000 /
   ///   password 6..128，对齐 Web minlength=6 与 PersonalWishInput 的 Field
@@ -384,13 +416,16 @@ class PersonalController extends Notifier<PersonalState> {
   ///   toString 成一坨英文结构化文本；只有先拦住越界，服务端回的都是手动抛的
   ///   中文原文（422 空字段 / 422 撞密码 / 409），才能原样透传给 UI。
   /// · 撞密码是**空间级**约束（服务端遍历所有 personal_wish 的 password_hash，
-  ///   含对方的心愿）→ 422 原文由 [api.errorDetail] 透传给 UI 双呈现，绝不吞。
-  /// · client_id 用 [newChatClientId]（幂等；撞其他 kind 由服务端回 409）。
+  ///   含对方的心愿）→ 422 原文原样透传给 UI 双呈现，绝不吞。
+  /// · [clientId] 由表单 State 在 initState 用 `newChatClientId()` 生成一次后
+  ///   传入，表单生命周期内失败重试复用同值（Web app.js:1801 同款幂等）；
+  ///   未传时退化为单次生成（仅非表单调用/单测兼容），**不改服务端幂等语义**。
   /// 🔴 密码只在本次请求体里过一遍：不落本地存储、不进 state、不进日志/缓存；
   /// 加解密全在服务端，客户端不实现任何加密。成功后重拉 wishes。
   /// 返回 null=成功。
   Future<String?> addPersonalWish(
-      String title, String content, String password) async {
+      String title, String content, String password,
+      {String? clientId}) async {
     if (_disposed) return null;
     final t = title.trim();
     final c = content.trim();
@@ -403,19 +438,18 @@ class PersonalController extends Notifier<PersonalState> {
     if (c.length > 20000) return '具体心愿内容最多 20000 字';
     if (password.length < 6) return '密码至少 6 位（建议纯数字）';
     if (password.length > 128) return '密码最多 128 位';
-    try {
-      final dio = await ref.read(api.dioProvider.future);
-      await dio.post('/api/personal-wishes', data: {
-        'title': t,
-        'content': c,
-        'password': password,
-        'client_id': newChatClientId(),
-      });
-      await loadWishes();
-      return null;
-    } catch (e) {
-      return api.errorDetail(e);
-    }
+    final failure = await _writeResponse((dio) => dio.post(
+          '/api/personal-wishes',
+          data: {
+            'title': t,
+            'content': c,
+            'password': password,
+            'client_id': clientId ?? newChatClientId(),
+          },
+        ));
+    if (failure != null) return failure;
+    await loadWishes();
+    return null;
   }
 
   /// 解锁：`POST /api/personal-wishes/{rid}/unlock`（main.py:1335-1365）。
@@ -423,8 +457,15 @@ class PersonalController extends Notifier<PersonalState> {
   ///   对方首次输密码调用；成功后服务端写 readers_sealed（永久可见）。
   /// · 客户端**重拉列表确认状态**，不自己记解锁态、不本地缓存 content。
   /// · 错密码 403「密码不正确，请向心愿本人确认」/ 超频 429
-  ///   「尝试过于频繁，请 15 分钟后再试」原文由 [api.errorDetail] 透传，
+  ///   「尝试过于频繁，请 15 分钟后再试」原文原样透传，
   ///   不吞、**不自动重试**（限流配额按 每条心愿·每人 计，main.py:1351）。
+  /// · 🔴 7-C 返修：成功通知**双条件门控**——
+  ///   ① 服务端确认成功 = HTTP 2xx **且**响应体含 `content` 字段；
+  ///   ② 重拉列表后该条 `locked == false`。
+  ///   任一不满足都返回失败文案（页面因此不发成功通知、走错误通知、保留
+  ///   密码框可重输、不 pop、不自动重试），卡片保持锁定态。
+  ///   服务端**明确**失败（403/429）时用响应 `data['detail']` 原文，绝不用
+  ///   [api.genericErrorText] 兜底文案冒充。
   /// 🔴 密码只在请求体里过一遍，不落本地、不进日志/缓存。返回 null=成功。
   /// 解锁页**只拦空**：后端 `PersonalWishUnlockInput.password` 是
   /// `min_length=1`（main.py:921-922），**不是 6**，绝不套创建页的 ≥6 校验，
@@ -434,10 +475,23 @@ class PersonalController extends Notifier<PersonalState> {
     if (password.isEmpty) return '请输入心愿密码';
     try {
       final dio = await ref.read(api.dioProvider.future);
-      await dio.post('/api/personal-wishes/$rid/unlock', data: {
+      final resp = await dio.post('/api/personal-wishes/$rid/unlock', data: {
         'password': password,
       });
+      // 门控条件①：显式判 4xx（validateStatus: s<500 放行、不抛异常），
+      // 失败直接返回服务端 detail 原文——不重拉、不自动重试（429 配额敏感）。
+      final failure = api.writeResponseError(resp);
+      if (failure != null) return failure;
+      final data = resp.data;
+      if (data is! Map || data['content'] == null) {
+        return unlockNotEffectiveText;
+      }
+      // 门控条件②：以服务端重拉结果为准，客户端不自记解锁态、不缓存 content。
       await loadWishes();
+      final matches = state.wishes.where((w) => w.id == rid).toList();
+      final confirmed = matches.isNotEmpty &&
+          matches.every((w) => w.body['locked'] == false);
+      if (!confirmed) return unlockNotEffectiveText;
       return null;
     } catch (e) {
       return api.errorDetail(e);
@@ -451,24 +505,22 @@ class PersonalController extends Notifier<PersonalState> {
   /// 返回 null=成功。
   Future<String?> deleteWish(String rid) async {
     if (_disposed) return null;
-    try {
-      final dio = await ref.read(api.dioProvider.future);
-      await dio.delete('/api/records/$rid');
-      state = state.copyWith(
-          wishes: state.wishes.where((r) => r.id != rid).toList());
-      await loadWishes();
-      if (_disposed) return null;
-      await loadTrash();
-      return null;
-    } catch (e) {
-      return api.errorDetail(e);
-    }
+    final failure = await _writeResponse(
+        (dio) => dio.delete('/api/records/$rid'));
+    if (failure != null) return failure;
+    state = state.copyWith(
+        wishes: state.wishes.where((r) => r.id != rid).toList());
+    await loadWishes();
+    if (_disposed) return null;
+    await loadTrash();
+    return null;
   }
 
   /// 新建定时惊喜：POST {kind:'surprise', body, client_id}。
   /// body.publish_at 为 epoch 秒数值（main.py:1127：now < t < now+50 年，
-  /// 否则 422「请选择未来的公开时间」，原文由 api.errorDetail 透传给顶部通知）。
-  /// 本地先校验，服务端 422 也照样把原文返回给 UI，绝不静默失败。
+  /// 否则 422「请选择未来的公开时间」，原文由 [api.writeResponseError] 透传
+  /// 给顶部通知 + 表单内联双呈现）。
+  /// 本地先校验，服务端 422 也照样把原文返回给 UI，绝不静默失败/当成功。
   /// 成功后整列表 reload。返回 null=成功。
   Future<String?> addSurprise(String content, DateTime publishAt) async {
     if (_disposed) return null;
@@ -479,23 +531,22 @@ class PersonalController extends Notifier<PersonalState> {
     if (t <= now || t >= now + 50 * 366 * 86400) {
       return '请选择未来的公开时间';
     }
-    try {
-      final dio = await ref.read(api.dioProvider.future);
-      await dio.post('/api/records', data: {
-        'kind': 'surprise',
-        'body': {
-          'content': text,
-          'date': todayDateStr(),
-          'media': <String>[],
-          'publish_at': t,
-        },
-        'client_id': newChatClientId(),
-      });
-      await load();
-      return null;
-    } catch (e) {
-      return api.errorDetail(e);
-    }
+    final failure = await _writeResponse((dio) => dio.post(
+          '/api/records',
+          data: {
+            'kind': 'surprise',
+            'body': {
+              'content': text,
+              'date': todayDateStr(),
+              'media': <String>[],
+              'publish_at': t,
+            },
+            'client_id': newChatClientId(),
+          },
+        ));
+    if (failure != null) return failure;
+    await load();
+    return null;
   }
 
   /// 编辑定时惊喜（含改期）：PUT 全量 body（**回填铁律**，原始 body 逐键复制 +
@@ -511,20 +562,19 @@ class PersonalController extends Notifier<PersonalState> {
     if (t <= now || t >= now + 50 * 366 * 86400) {
       return '请选择未来的公开时间';
     }
-    try {
-      final dio = await ref.read(api.dioProvider.future);
-      await dio.put('/api/records/${record.id}', data: {
-        'kind': 'surprise',
-        'body': mergeRecordBody(record.body, {
-          'content': text,
-          'publish_at': t,
-        }),
-      });
-      await load();
-      return null;
-    } catch (e) {
-      return api.errorDetail(e);
-    }
+    final failure = await _writeResponse((dio) => dio.put(
+          '/api/records/${record.id}',
+          data: {
+            'kind': 'surprise',
+            'body': mergeRecordBody(record.body, {
+              'content': text,
+              'publish_at': t,
+            }),
+          },
+        ));
+    if (failure != null) return failure;
+    await load();
+    return null;
   }
 
   /// 回收站恢复（段 7-B）：POST /api/records/{rid}/restore（main.py:1443）。
@@ -533,25 +583,22 @@ class PersonalController extends Notifier<PersonalState> {
   /// 返回 null=成功。
   Future<String?> restore(String rid, {String? kind}) async {
     if (_disposed) return null;
-    try {
-      final dio = await ref.read(api.dioProvider.future);
-      await dio.post('/api/records/$rid/restore');
-      state = state.copyWith(
-          trash: state.trash.where((r) => r.id != rid).toList());
-      await load();
-      if (_disposed) return null;
-      await loadTrash();
-      // 恢复一条时光（post）后必须显式重拉时光列表（同 publishDraft 的 post
-      // 分支：timeline 的 SSE 监听有 active 门控，IndexedStack 切回不触发 load）。
-      if (kind == 'post') {
-        await ref
-            .read(timelineControllerProvider.notifier)
-            .resetAfterPublish();
-      }
-      return null;
-    } catch (e) {
-      return api.errorDetail(e);
+    final failure = await _writeResponse(
+        (dio) => dio.post('/api/records/$rid/restore'));
+    if (failure != null) return failure;
+    state = state.copyWith(
+        trash: state.trash.where((r) => r.id != rid).toList());
+    await load();
+    if (_disposed) return null;
+    await loadTrash();
+    // 恢复一条时光（post）后必须显式重拉时光列表（同 publishDraft 的 post
+    // 分支：timeline 的 SSE 监听有 active 门控，IndexedStack 切回不触发 load）。
+    if (kind == 'post') {
+      await ref
+          .read(timelineControllerProvider.notifier)
+          .resetAfterPublish();
     }
+    return null;
   }
 
   /// 新建私密日记：POST {kind:'diary', body, client_id}。
@@ -563,22 +610,21 @@ class PersonalController extends Notifier<PersonalState> {
     if (_disposed) return null;
     final text = content.trim();
     if (text.isEmpty) return '写点什么吧';
-    try {
-      final dio = await ref.read(api.dioProvider.future);
-      await dio.post('/api/records', data: {
-        'kind': 'diary',
-        'body': {
-          'content': text,
-          'date': todayDateStr(),
-          'media': <String>[],
-        },
-        'client_id': newChatClientId(),
-      });
-      await load();
-      return null;
-    } catch (e) {
-      return api.errorDetail(e);
-    }
+    final failure = await _writeResponse((dio) => dio.post(
+          '/api/records',
+          data: {
+            'kind': 'diary',
+            'body': {
+              'content': text,
+              'date': todayDateStr(),
+              'media': <String>[],
+            },
+            'client_id': newChatClientId(),
+          },
+        ));
+    if (failure != null) return failure;
+    await load();
+    return null;
   }
 
   /// 编辑私密日记：PUT 全量 body（**回填铁律**，原始 body 逐键复制 + 只盖 content）。
@@ -587,17 +633,16 @@ class PersonalController extends Notifier<PersonalState> {
     if (_disposed) return null;
     final text = content.trim();
     if (text.isEmpty) return '写点什么吧';
-    try {
-      final dio = await ref.read(api.dioProvider.future);
-      await dio.put('/api/records/${record.id}', data: {
-        'kind': 'diary',
-        'body': mergeRecordBody(record.body, {'content': text}),
-      });
-      await load();
-      return null;
-    } catch (e) {
-      return api.errorDetail(e);
-    }
+    final failure = await _writeResponse((dio) => dio.put(
+          '/api/records/${record.id}',
+          data: {
+            'kind': 'diary',
+            'body': mergeRecordBody(record.body, {'content': text}),
+          },
+        ));
+    if (failure != null) return failure;
+    await load();
+    return null;
   }
 
   /// 发布草稿：PUT 改 kind（post→时光 / diary→日记 / surprise→定时惊喜）。
@@ -621,42 +666,41 @@ class PersonalController extends Notifier<PersonalState> {
       if (targetKind == 'surprise')
         'publish_at': publishAt!.millisecondsSinceEpoch / 1000,
     }); // 回填铁律：main.py:925 PUT 服务端不 merge，原 body 必须逐键带回
-    try {
-      final dio = await ref.read(api.dioProvider.future);
-      await dio.put('/api/records/${draft.id}', data: {
-        'kind': targetKind,
-        'body': body,
-      });
-      final next = state.records.where((r) => r.id != draft.id).toList();
-      if (targetKind == 'diary') {
-        next.add(TogetherRecord(
-          id: draft.id,
-          kind: 'diary',
-          body: body,
-          author: draft.author,
-          created: draft.created,
-          answers: draft.answers,
-          answerCount: draft.answerCount,
-          checks: draft.checks,
-          media: draft.media,
-          likeCount: draft.likeCount,
-          commentCount: draft.commentCount,
+    final failure = await _writeResponse((dio) => dio.put(
+          '/api/records/${draft.id}',
+          data: {
+            'kind': targetKind,
+            'body': body,
+          },
         ));
-      }
-      state = state.copyWith(records: next);
-      if (targetKind == 'post') {
-        // 🔴 P1-3：draft→post 服务端已置 published=now()（main.py:1408），
-        // 但时光 tab 的 SSE 监听有 widget.active 门控、IndexedStack 切回不触发
-        // load → 必须显式重拉（与 composer_sheet.dart:527 同款）。
-        // Web navigate() 到 timeline 也会显式 loadTimeline(true)（app.js:427）。
-        await ref
-            .read(timelineControllerProvider.notifier)
-            .resetAfterPublish();
-      }
-      return null;
-    } catch (e) {
-      return api.errorDetail(e);
+    if (failure != null) return failure;
+    final next = state.records.where((r) => r.id != draft.id).toList();
+    if (targetKind == 'diary') {
+      next.add(TogetherRecord(
+        id: draft.id,
+        kind: 'diary',
+        body: body,
+        author: draft.author,
+        created: draft.created,
+        answers: draft.answers,
+        answerCount: draft.answerCount,
+        checks: draft.checks,
+        media: draft.media,
+        likeCount: draft.likeCount,
+        commentCount: draft.commentCount,
+      ));
     }
+    state = state.copyWith(records: next);
+    if (targetKind == 'post') {
+      // 🔴 P1-3：draft→post 服务端已置 published=now()（main.py:1408），
+      // 但时光 tab 的 SSE 监听有 widget.active 门控、IndexedStack 切回不触发
+      // load → 必须显式重拉（与 composer_sheet.dart:527 同款）。
+      // Web navigate() 到 timeline 也会显式 loadTimeline(true)（app.js:427）。
+      await ref
+          .read(timelineControllerProvider.notifier)
+          .resetAfterPublish();
+    }
+    return null;
   }
 
   /// 删除（DELETE 服务端软删，main.py:1424）。删除后进回收站（标准口径：
@@ -664,16 +708,13 @@ class PersonalController extends Notifier<PersonalState> {
   /// 返回 null=成功。
   Future<String?> delete(String rid) async {
     if (_disposed) return null;
-    try {
-      final dio = await ref.read(api.dioProvider.future);
-      await dio.delete('/api/records/$rid');
-      state = state.copyWith(
-          records: state.records.where((r) => r.id != rid).toList());
-      await loadTrash();
-      return null;
-    } catch (e) {
-      return api.errorDetail(e);
-    }
+    final failure = await _writeResponse(
+        (dio) => dio.delete('/api/records/$rid'));
+    if (failure != null) return failure;
+    state = state.copyWith(
+        records: state.records.where((r) => r.id != rid).toList());
+    await loadTrash();
+    return null;
   }
 }
 

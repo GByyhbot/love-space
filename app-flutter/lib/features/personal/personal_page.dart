@@ -16,6 +16,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/api/api_client.dart' as api;
+import '../../core/chat/chat_repository.dart' show newChatClientId;
 import '../../core/together/together_data.dart';
 import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
 import '../timeline/composer_sheet.dart';
@@ -1108,8 +1109,18 @@ class _PersonalWishFormPageState
   final TextEditingController _title = TextEditingController();
   final TextEditingController _content = TextEditingController();
   final TextEditingController _password = TextEditingController();
+  // 🔴 7-C 返修：client_id 在表单生命周期内只生成**一次**，失败重试复用同值，
+  // 逐字对齐 Web app.js:1801（打开表单生成一次、失败重试不换 id）。
+  // 服务端按 (author, client_id) 幂等，重试换 id 会重复创建。
+  late final String _clientId;
   String? _error;
   bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _clientId = newChatClientId();
+  }
 
   @override
   void dispose() {
@@ -1127,18 +1138,23 @@ class _PersonalWishFormPageState
     });
     final err = await ref
         .read(personalControllerProvider.notifier)
-        .addPersonalWish(_title.text, _content.text, _password.text);
+        .addPersonalWish(_title.text, _content.text, _password.text,
+            clientId: _clientId);
     if (!mounted) return;
     if (err != null) {
       setState(() {
         _error = err;
         _saving = false;
       });
-      // 服务端 422 原文（撞密码 / 空字段）双呈现：表单内联 + 顶部通知。
+      // 🔴 失败一律走错误通知：err 是服务端 data['detail'] 原文（422 撞密码 /
+      // 409 冲突），或客户端本地校验文案；表单内联 + 顶部通知双呈现，绝不吞。
+      // 表单不 pop、密码框保留、按钮恢复可用 → 可原地重输重试（复用 _clientId）。
       ref.read(chatToastProvider.notifier).show(err,
           tone: ChatToastTone.error);
       return;
     }
+    // 🔴 只有控制器返回 null 才发成功通知；4xx 已被 writeResponseError 拦下，
+    // 不会再出现「失败却弹已加密保存」的真机阻断级现象。
     _toast(ref, null, okMsg: '这份个人心愿已加密保存');
     Navigator.of(context).pop(); // push 的返回路径：按钮/手势同栈
   }
@@ -1263,13 +1279,21 @@ class _PersonalWishUnlockPageState
     if (err != null) {
       setState(() {
         _error = err;
-        _unlocking = false;
+        _unlocking = false; // 按钮恢复可用，不禁用
       });
-      // 403 / 429 原文双呈现，绝不静默失败；且**不自动重试**（限流配额敏感）。
+      // 🔴 7-C 返修：失败一律走错误通知。err 是服务端 data['detail'] 原文
+      //（403「密码不正确，请向心愿本人确认」/ 429「尝试过于频繁，请 15 分钟后再试」），
+      // 或双条件门控未通过的失败文案；表单内联 + 顶部通知双呈现，绝不静默
+      // 失败、**不自动重试**（限流配额敏感）。不清空 _password、不 pop →
+      // 密码框保留可原地重输；卡片保持锁定态。
       ref.read(chatToastProvider.notifier).show(err,
           tone: ChatToastTone.error);
       return;
     }
+    // 🔴 只有控制器双条件门控全通过才返回 null：
+    //   ① 服务端确认成功（HTTP 2xx 且响应体含 content）；
+    //   ② 重拉列表后该条 locked == false。
+    // 任一不满足控制器已返回非 null，绝不会走到这里的成功通知（真机阻断级根修）。
     _toast(ref, null, okMsg: '已解锁，内容现在直接显示在心愿卡片里');
     Navigator.of(context).pop(); // push 的返回路径：按钮/手势同栈
   }
