@@ -8,7 +8,8 @@
    ⑤ 删除弹层文案：7-B 起统一标准口径「删除后会进入回收站，30 天内可以恢复。」
       （与共享类一致；7-A 的「不进回收站、不可恢复」临时口径已作废）
    ⑥ tab 切换不丢状态（滚动位置 + 选中态）
-   ⑦ 无预置死卡（7-A 2 tab → 7-B 4 tab；7-C 个人心愿仍不预置）
+   ⑦ 无死卡（7-A 2 tab → 7-B 4 tab → 7-C 5 tab；7-C 已落地 personal_wish，
+      之后无 7-D 死卡）
 
    夹具存量形状来源（2026-11-14 SSH 直查 NAS 容器 /data/love.db，app.db.body_decode
    解密 PRIVATE body 后导出，脱敏）：
@@ -473,7 +474,7 @@ void main() {
 
   // ── ⑥ tab 切换不丢状态 ──────────────────────────────────────────
   group('⑥ tab 切换不丢状态 + 无预置死卡', () {
-    testWidgets('滚动位置与选中态切换后保持；7-B 起 4 个 tab',
+    testWidgets('滚动位置与选中态切换后保持；7-C 起 5 个 tab',
         (tester) async {
       final records = <Object?>[
         ..._baseRecords,
@@ -494,16 +495,16 @@ void main() {
       final container = await _setup(adapter);
       await _pump(tester, container);
 
-      // ⑦ 无死卡：7-A 2 tab → 7-B 4 tab（surprise/trash 已落地），
-      // 7-C「个人心愿」仍不预置
-      expect(personalTabs.length, 4);
+      // ⑦ 无死卡：7-A 2 tab → 7-B 4 tab → 7-C 5 tab（personal_wish 已落地），
+      // 条目 7 收尾，之后无 7-D、无预置空卡
+      expect(personalTabs.length, 5);
       expect(personalTabs.map((t) => t.id).toList(),
-          ['diary', 'draft', 'surprise', 'trash']);
+          ['diary', 'draft', 'surprise', 'trash', 'personal_wish']);
       expect(find.text('私密日记'), findsOneWidget);
       expect(find.text('草稿箱'), findsOneWidget);
       expect(find.text('定时惊喜'), findsOneWidget);
       expect(find.text('回收站'), findsOneWidget);
-      expect(find.text('个人心愿'), findsNothing);
+      expect(find.text('个人心愿'), findsOneWidget);
 
       // 滚到页尾元素（ListView 懒构建）
       await tester.scrollUntilVisible(find.text('末尾标题'), 250);

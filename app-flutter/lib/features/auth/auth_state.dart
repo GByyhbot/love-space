@@ -263,6 +263,9 @@ class AuthNotifier extends Notifier<AuthPhase> {
     // autoDispose，私密列表缓存会带到下一个账号。登出即作废 personal 控制器
     // （timeline 已有 _boundUserId 换号重置；together/聊天态是共享或瞬态数据，
     // 不承载 PRIVATE 记录，无需 invalidate）。
+    // 7-C 确认：PersonalState.wishes（个人心愿）也在同一个 Notifier 里，
+    // 本 invalidate 会把 records / trash / wishes 三路 state 一并归零；
+    // 重新登录后 build() 的 userChanged 兜底 + bootstrap 会重拉三路列表。
     // personal 控制器经 personalCurrentUserProvider 依赖 authProvider，
     // 用 ref.invalidate 会触发 Riverpod CircularDependencyError（依赖环断言）；
     // 走 ref.container.invalidate 由容器层作废，绕过该断言但效果相同。

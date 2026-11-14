@@ -1,11 +1,13 @@
-/// 「个人角落」段 7-A / 7-B 页面（条目 7）。
+/// 「个人角落」段 7-A / 7-B / 7-C 页面（条目 7 收尾段）。
 ///
 /// · heading「我的小角落」/ 副标题「有些心事留给自己，有些惊喜留给未来。」；
 /// · tab 结构 = 可扩展数据表 [personalTabs]：7-A 上 diary / draft，7-B 增补
-///   surprise / trash 共四项，7-C（personal_wish）不预置（无死卡纪律）；
-/// · 各 tab 顶部提示文案逐字对齐 Web app.js:1484-1490；
-/// · 二级页（日记表单 / 草稿发布选择 / 惊喜表单）一律 context.push（AppBar
-///   自动返回 + 系统手势都能回上一页）；tab 间切换用 IndexedStack 常驻，不丢状态；
+///   surprise / trash，7-C 收尾增补 personal_wish 共**五项**（无死卡纪律：
+///   Web 能点的 App 才有去向，7-C 后条目 7 无后续段）；
+/// · 各 tab 顶部提示文案逐字对齐 Web app.js:1484-1490 / :1302；
+/// · 二级页（日记表单 / 草稿发布选择 / 惊喜表单 / 个人心愿创建 / 解锁）一律
+///   context.push（AppBar 自动返回按钮 + 系统手势都能回上一页）；tab 间切换用
+///   IndexedStack 常驻，不丢状态；
 /// · 草稿「继续编辑 / 写一份草稿」直接对接正式 composer（不另造编辑器）。
 library;
 
@@ -19,11 +21,12 @@ import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
 import '../timeline/composer_sheet.dart';
 import 'personal_controller.dart';
 
-/// tab 数据表（可扩展：7-C 落地时在此追加，绝不预置死卡）。
-/// hint 逐字对齐 Web app.js:1489：
+/// tab 数据表（可扩展：7-C 追加第 5 项 personal_wish，绝不预置死卡）。
+/// hint 逐字对齐 Web app.js:1489 / :1302：
 /// · diary / draft 同句「这个角落只有你能看见。草稿主动发布后，才会进入共同空间。」
 /// · surprise 用「到约定的时间，惊喜才会被另一半看见。」
-/// trash 顶部文案逐字对齐 app.js:1488「删除的内容保留三十天，你可以恢复自己的记录。」
+/// · trash 用 app.js:1488「删除的内容保留三十天，你可以恢复自己的记录。」
+/// · personal_wish 用 app.js:1302 personalWishPage 的 hint（逐字）。
 const List<({String id, String label, String hint})> personalTabs = [
   (
     id: 'diary',
@@ -45,7 +48,18 @@ const List<({String id, String label, String hint})> personalTabs = [
     label: '回收站',
     hint: '删除的内容保留三十天，你可以恢复自己的记录。'
   ),
+  (
+    id: 'personal_wish',
+    label: '个人心愿',
+    hint: '心愿名称彼此可见。密码至少 6 位（建议纯数字），每条心愿都要不同；告诉对方后，对方解锁一次即可永久查看。'
+  ),
 ];
+
+/// Web personalWishPage 页头副标题（app.js:1302 heading 第二参，逐字）。
+/// App 是「我的小角落」下的第 5 个 tab，页头标题由 tab 标签承担，副标题在
+/// tab 内单独呈现，不自创文案。
+const String personalWishSubtitle =
+    '写下的人可以直接回看，对方输入一次密码后就能一直看到。';
 
 /// 🔴 7-B 搭载修正：删除文案统一标准口径（主人 2026-11-14「甲·对齐 Web」定案）。
 /// 三类（日记 / 草稿 / 惊喜）与共享类 post_card.dart:271 完全一致：
@@ -88,7 +102,7 @@ class _PersonalPageState extends ConsumerState<PersonalPage> {
                           ?.copyWith(color: theme.colorScheme.outline)),
                 ]),
           ),
-          // 可扩展 tab 行：只按 personalTabs 表渲染（7-A 2 项 → 7-B 4 项）
+          // 可扩展 tab 行：只按 personalTabs 表渲染（7-A 2 项 → 7-B 4 项 → 7-C 5 项）
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
             child: Row(
@@ -109,7 +123,7 @@ class _PersonalPageState extends ConsumerState<PersonalPage> {
               ],
             ),
           ),
-          // IndexedStack 常驻：四 tab 各自状态（滚动位置/加载态）切换不丢
+          // IndexedStack 常驻：五 tab 各自状态（滚动位置/加载态）切换不丢
           Expanded(
             child: IndexedStack(
               index: _tab,
@@ -118,6 +132,7 @@ class _PersonalPageState extends ConsumerState<PersonalPage> {
                 _DraftTab(),
                 _SurpriseTab(),
                 _TrashTab(),
+                _WishTab(),
               ],
             ),
           ),
@@ -127,21 +142,27 @@ class _PersonalPageState extends ConsumerState<PersonalPage> {
   }
 }
 
-/// 提示 + 入口按钮 + 空态/列表的公共骨架（四 tab 共用，文案逐字 Web）。
-/// [entryLabel] / [onEntry] 为空时不显示新建按钮（回收站无新建入口）。
+/// 提示 + 入口按钮 + 空态/列表的公共骨架（五 tab 共用，文案逐字 Web）。
+/// [entryLabel] / [onEntry] 为空时不显示新建按钮（回收站无新建入口）；
+/// [subtitle] 为 Web 页头副标题（7-C 个人心愿 tab 用）；[emptyEntryLabel]
+/// 为 Web 空态里的第二入口按钮（如「许下第一份心愿」），复用 [onEntry]。
 class _TabFrame extends ConsumerWidget {
   const _TabFrame({
     required this.hint,
+    this.subtitle,
     this.entryLabel,
     this.onEntry,
+    this.emptyEntryLabel,
     required this.emptyTitle,
     this.emptyHint = '慢慢写，不着急。',
     required this.items,
     required this.tileBuilder,
   });
   final String hint;
+  final String? subtitle;
   final String? entryLabel;
   final VoidCallback? onEntry;
+  final String? emptyEntryLabel;
   final String emptyTitle;
   final String emptyHint;
   final List<TogetherRecord> items;
@@ -154,10 +175,17 @@ class _TabFrame extends ConsumerWidget {
       onRefresh: () async {
         await ref.read(personalControllerProvider.notifier).load();
         await ref.read(personalControllerProvider.notifier).loadTrash();
+        await ref.read(personalControllerProvider.notifier).loadWishes();
       },
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
         children: [
+          if (subtitle != null) ...[
+            Text(subtitle!,
+                style: theme.textTheme.bodySmall
+                    ?.copyWith(color: theme.colorScheme.outline)),
+            const SizedBox(height: 6),
+          ],
           Text(hint,
               style: theme.textTheme.bodySmall
                   ?.copyWith(color: theme.colorScheme.outline)),
@@ -184,6 +212,13 @@ class _TabFrame extends ConsumerWidget {
                 Text(emptyHint,
                     style: theme.textTheme.bodySmall
                         ?.copyWith(color: theme.colorScheme.outline)),
+                if (emptyEntryLabel != null && onEntry != null) ...[
+                  const SizedBox(height: 14),
+                  FilledButton.tonal(
+                    onPressed: onEntry,
+                    child: Text(emptyEntryLabel!),
+                  ),
+                ],
               ]),
             )
           else
@@ -202,8 +237,11 @@ void _toast(WidgetRef ref, String? err, {required String okMsg}) {
 }
 
 /// 私密类删除确认（可取消）→ DELETE → 本地移除。
+/// [wish] = true 时走 7-C 的 [PersonalController.deleteWish]（重拉 wishes +
+/// trash）；确认弹层文案两路都是 7-B 统一的 [privateDeleteText] 标准口径。
 Future<void> confirmPrivateDelete(
-    BuildContext context, WidgetRef ref, String rid) async {
+    BuildContext context, WidgetRef ref, String rid,
+    {bool wish = false}) async {
   final confirmed = await showDialog<bool>(
     context: context,
     builder: (dctx) => AlertDialog(
@@ -223,7 +261,8 @@ Future<void> confirmPrivateDelete(
     ),
   );
   if (confirmed != true) return;
-  final err = await ref.read(personalControllerProvider.notifier).delete(rid);
+  final ctrl = ref.read(personalControllerProvider.notifier);
+  final err = wish ? await ctrl.deleteWish(rid) : await ctrl.delete(rid);
   if (context.mounted) _toast(ref, err, okMsg: '已删除');
 }
 
@@ -929,6 +968,348 @@ class _TrashTile extends ConsumerWidget {
             ),
           ),
         ]),
+      ),
+    );
+  }
+}
+
+// ── tab ⑤ 个人心愿（7-C · 条目 7 收尾段） ─────────────────────────
+
+/// 三态列表（作者免密 / 对方已解锁 / 对方待解锁），文案逐字 Web
+/// personalWishPage（app.js:1302）+ personalWishCard（app.js:2009）。
+/// 数据来自独立的 PersonalController.loadWishes（不按 author 过滤）。
+class _WishTab extends ConsumerWidget {
+  const _WishTab();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    ref.watch(personalControllerProvider); // 列表变更时重建本 tab
+    final items = ref.read(personalControllerProvider.notifier).wishes();
+    return _TabFrame(
+      subtitle: personalWishSubtitle,
+      hint: personalTabs[4].hint,
+      entryLabel: '许下心愿',
+      onEntry: () => context.push('/personal/wish-form'),
+      emptyTitle: '留一份只差密码就能打开的心愿',
+      emptyHint: '对方能看见心愿名称，具体内容仍由你掌握。',
+      emptyEntryLabel: '许下第一份心愿',
+      items: items,
+      tileBuilder: (r) => _WishTile(record: r),
+    );
+  }
+}
+
+class _WishTile extends ConsumerWidget {
+  const _WishTile({required this.record});
+  final TogetherRecord record;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    // 🔴 隐私红线（serializers.py:23-36 实读；数据层 sanitizeWishBody 已收敛一次）：
+    // 只取 title / locked / content 三个键，其余字段（作者额外下发的 sealed
+    // 密文、以及任何 stored/畸形字段）一律忽略——不渲染、不缓存、不进日志/
+    // 通知/搜索。locked 态绝不呈现 content，即便响应里被畸形塞进来。
+    final String title = (record.body['title'] ?? '').toString();
+    final bool open = record.body['locked'] == false;
+    final String content =
+        open ? (record.body['content'] ?? '').toString() : '';
+    final String uid = ref.read(personalCurrentUserProvider);
+    final bool own = record.author == uid;
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Expanded(
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(own ? '你的个人心愿' : 'TA的个人心愿',
+                        style: theme.textTheme.labelLarge),
+                    const SizedBox(height: 2),
+                    Text(
+                        open
+                            ? '已解锁 · 内容只有你们两人能看见'
+                            : '具体内容已加密保存',
+                        style: theme.textTheme.labelSmall
+                            ?.copyWith(color: cs.outline)),
+                  ]),
+            ),
+            // 🔴 Web 无编辑（personalWishCard 只有作者卡片菜单「删除」）；
+            // clean_body 对 personal_wish 明确 422「个人心愿请使用专属加密接口
+            // 保存」→ App 不自创编辑入口，也不自创彻底删除。
+            if (own)
+              IconButton(
+                tooltip: '删除心愿',
+                visualDensity: VisualDensity.compact,
+                onPressed: () => confirmPrivateDelete(context, ref, record.id,
+                    wish: true),
+                icon: Icon(Icons.delete_outline_rounded,
+                    size: 20, color: cs.error),
+              ),
+          ]),
+          const SizedBox(height: 6),
+          Text(title, style: theme.textTheme.titleSmall),
+          const SizedBox(height: 4),
+          if (open)
+            Text(content, style: theme.textTheme.bodyMedium)
+          else ...[
+            Text(
+                own
+                    ? '这是你写下的个人心愿，输入密码即可回看内容。'
+                    : 'TA 留了一份心愿给你，输入一次密码后就能一直读到内容。',
+                style: theme.textTheme.bodyMedium
+                    ?.copyWith(color: cs.outline)),
+            // 🔴 作者免密直达：作者态列表恒下发 locked:false + content，
+            // 不需要任何额外请求。仅「对方待解锁」出现解锁入口，避免作者
+            // 误发解锁请求（服务端退化锁定态也不自发重试）。
+            if (!own) ...[
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: OutlinedButton.icon(
+                  onPressed: () => context.push('/personal/wish-unlock',
+                      extra: <String, Object?>{
+                        'rid': record.id,
+                        'title': title,
+                      }),
+                  icon: const Icon(Icons.lock_outline_rounded, size: 18),
+                  label: const Text('输入密码查看'),
+                ),
+              ),
+            ],
+          ],
+        ]),
+      ),
+    );
+  }
+}
+
+/// 创建表单（Web personalWishForm，app.js:1801 逐字）。
+/// · 二级页 context.push：AppBar 自动返回按钮 + 系统手势都能回上一页；
+/// · 客户端先拦空（title/content 非空、password 6..128）再发请求；
+/// · 422 原文（撞密码等）**表单内联 + 顶部通知双呈现**，绝不吞。
+/// 🔴 密码只在请求里过一遍：三个 controller 用完 dispose，不设 autofillHints
+/// （避免系统密码管理器落盘）、不写任何本地存储、不打印、不进任何缓存；
+/// 加解密全在服务端（main.py:1306-1332），客户端不实现任何加密。
+class PersonalWishFormPage extends ConsumerStatefulWidget {
+  const PersonalWishFormPage({super.key});
+
+  @override
+  ConsumerState<PersonalWishFormPage> createState() =>
+      _PersonalWishFormPageState();
+}
+
+class _PersonalWishFormPageState
+    extends ConsumerState<PersonalWishFormPage> {
+  final TextEditingController _title = TextEditingController();
+  final TextEditingController _content = TextEditingController();
+  final TextEditingController _password = TextEditingController();
+  String? _error;
+  bool _saving = false;
+
+  @override
+  void dispose() {
+    _title.dispose();
+    _content.dispose();
+    _password.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    if (_saving) return; // 请求中按钮禁用，不连点叠加
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    final err = await ref
+        .read(personalControllerProvider.notifier)
+        .addPersonalWish(_title.text, _content.text, _password.text);
+    if (!mounted) return;
+    if (err != null) {
+      setState(() {
+        _error = err;
+        _saving = false;
+      });
+      // 服务端 422 原文（撞密码 / 空字段）双呈现：表单内联 + 顶部通知。
+      ref.read(chatToastProvider.notifier).show(err,
+          tone: ChatToastTone.error);
+      return;
+    }
+    _toast(ref, null, okMsg: '这份个人心愿已加密保存');
+    Navigator.of(context).pop(); // push 的返回路径：按钮/手势同栈
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Scaffold(
+      appBar: AppBar(title: const Text('许下一份个人心愿')),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Text(personalTabs[4].hint,
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(color: theme.colorScheme.outline)),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _title,
+            maxLength: 100,
+            autofocus: true,
+            decoration: const InputDecoration(
+              labelText: '心愿名称（对方可见）',
+              hintText: '例如：有一天想和你去看海',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _content,
+            maxLines: 8,
+            minLines: 4,
+            maxLength: 20000,
+            decoration: const InputDecoration(
+              labelText: '具体心愿内容（需要密码才能查看）',
+              hintText: '写下想留给自己的心愿…',
+              alignLabelWithHint: true,
+              border: OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _password,
+            obscureText: true,
+            maxLength: 128,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(
+              labelText: '这条心愿的独立密码',
+              hintText: '至少 6 位，建议纯数字',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '每条心愿都要设置不同密码。写下心愿的你可以直接回看内容；把密码告诉对方后，对方输入一次就能看到，之后不必再输。忘记密码无法找回。',
+            style: theme.textTheme.bodySmall
+                ?.copyWith(color: theme.colorScheme.outline),
+          ),
+          if (_error != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(_error!,
+                  style: theme.textTheme.bodySmall
+                      ?.copyWith(color: theme.colorScheme.error)),
+            ),
+          const SizedBox(height: 16),
+          FilledButton(
+            onPressed: _saving ? null : _save,
+            child: Text(_saving ? '加密保存中…' : '加密保存'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 解锁页（Web unlockPersonalWish，app.js:1802 逐字）。
+/// · 二级页 context.push；只传 rid + title（title 双方本就可见），不传 body；
+/// · 作者本人 / 已解锁者列表已下发 content，不会走到这里；
+/// · 403「密码不正确，请向心愿本人确认」/ 429「尝试过于频繁，请 15 分钟后再试」
+///   服务端原文双呈现（表单内联 + 顶部通知），不吞、不自动重试；
+/// · 成功后服务端写 readers_sealed，控制器重拉列表确认状态，客户端不自记
+///   解锁态、不本地缓存 content。
+/// 🔴 密码只在请求里过一遍：controller 用完 dispose，不设 autofillHints、
+/// 不落本地存储、不进日志；请求中标量标志禁用按钮，不连点叠加。
+class PersonalWishUnlockPage extends ConsumerStatefulWidget {
+  const PersonalWishUnlockPage(
+      {super.key, required this.rid, required this.title});
+  final String rid;
+  final String title;
+
+  @override
+  ConsumerState<PersonalWishUnlockPage> createState() =>
+      _PersonalWishUnlockPageState();
+}
+
+class _PersonalWishUnlockPageState
+    extends ConsumerState<PersonalWishUnlockPage> {
+  final TextEditingController _password = TextEditingController();
+  String? _error;
+  bool _unlocking = false;
+
+  @override
+  void dispose() {
+    _password.dispose();
+    super.dispose();
+  }
+
+  Future<void> _unlock() async {
+    if (_unlocking) return; // 🔴 请求中直接丢弃后续点击，绝不叠加请求
+    if (_password.text.isEmpty) {
+      setState(() => _error = '请输入心愿密码');
+      return;
+    }
+    setState(() {
+      _unlocking = true;
+      _error = null;
+    });
+    final err = await ref
+        .read(personalControllerProvider.notifier)
+        .unlockPersonalWish(widget.rid, _password.text);
+    if (!mounted) return;
+    if (err != null) {
+      setState(() {
+        _error = err;
+        _unlocking = false;
+      });
+      // 403 / 429 原文双呈现，绝不静默失败；且**不自动重试**（限流配额敏感）。
+      ref.read(chatToastProvider.notifier).show(err,
+          tone: ChatToastTone.error);
+      return;
+    }
+    _toast(ref, null, okMsg: '已解锁，内容现在直接显示在心愿卡片里');
+    Navigator.of(context).pop(); // push 的返回路径：按钮/手势同栈
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Scaffold(
+      appBar: AppBar(title: const Text('打开这份个人心愿')),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Text('「${widget.title}」的内容已加密，请输入心愿本人交给你的密码。',
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(color: theme.colorScheme.outline)),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _password,
+            obscureText: true,
+            maxLength: 128,
+            autofocus: true,
+            decoration: const InputDecoration(
+              labelText: '心愿密码',
+              hintText: '向心愿本人获取这条心愿的密码',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          if (_error != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(_error!,
+                  style: theme.textTheme.bodySmall
+                      ?.copyWith(color: theme.colorScheme.error)),
+            ),
+          const SizedBox(height: 16),
+          FilledButton(
+            onPressed: _unlocking ? null : _unlock,
+            child: Text(_unlocking ? '解锁中…' : '解锁心愿'),
+          ),
+        ],
       ),
     );
   }

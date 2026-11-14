@@ -8,7 +8,8 @@
       恢复走 POST /restore 且回到原列表；对象账号回收站无我的条目
    ⑦ 三类删除文案统一标准口径（进回收站、30 天可恢复）
    ⑧ 返回路径（按钮 + 系统手势）；无「彻底删除」（Web 没有，不自创）
-   ⑨ 无死卡（4 tab，7-C 个人心愿仍不预置）
+   ⑨ 无死卡（7-A 2 tab → 7-B 4 tab → 7-C 5 tab；7-C 已落地 personal_wish，
+      之后无 7-D；Web 无「彻底删除」，App 不自创）
 
    夹具存量形状来源（2026-11-14 SSH 直查 NAS 容器 /data/love.db，
    app.db.body_decode 解密 PRIVATE body 后导出，脱敏）：
@@ -633,15 +634,18 @@ void main() {
       await _flush(tester);
     });
 
-    testWidgets('4 个 tab；7-C 个人心愿不预置；回收站无新建入口',
+    testWidgets('5 个 tab；7-C 个人心愿已落地、无 7-D 死卡；回收站无新建入口',
         (tester) async {
       final adapter = _adapter();
       final container = await _setup(adapter);
       await _pump(tester, container);
-      expect(personalTabs.length, 4);
+      expect(personalTabs.length, 5);
       expect(personalTabs.map((t) => t.id).toList(),
-          ['diary', 'draft', 'surprise', 'trash']);
-      expect(find.text('个人心愿'), findsNothing);
+          ['diary', 'draft', 'surprise', 'trash', 'personal_wish']);
+      expect(find.text('个人心愿'), findsOneWidget);
+      expect(
+          personalTabs.every((t) => t.label.isNotEmpty && t.hint.isNotEmpty),
+          isTrue, reason: '每项都有去向，无 7-D 死卡');
       await tester.tap(find.text('回收站'));
       await tester.pumpAndSettle();
       expect(find.text('恢复这份回忆'), findsWidgets);
