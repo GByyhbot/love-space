@@ -1127,7 +1127,7 @@ void main() {
       expect(apiSrc.contains('dio.put('), isFalse, reason: '无 PUT /api/channels 编辑');
     });
 
-    test('D9：⊕ 面板旧编号占位留痕 + 与 2dcb4a4 逐字一致（护栏加强）', () async {
+    test('D9：⊕ 面板旧编号占位留痕 + 无真跳转（语义护栏）', () {
       final String src =
           File('lib/features/chat/chat_compose.dart').readAsStringSync();
       // ① 正向：历史占位仍在（D9 仅文档层面口径定案，不改行为）。
@@ -1135,29 +1135,19 @@ void main() {
       expect(src.contains("case 'weekly':"), isTrue);
       expect(src.contains("_snack('条目 9 迁移后开放')"), isTrue,
           reason: 'D9 仅文档层面口径定案；占位原样保留为历史留痕');
-      expect(src.contains("context.push('/together/dashboard')"), isFalse,
-          reason: '本段不改 ⊕ 面板行为（条目 6 段 G 回归面）');
-      expect(src.contains("context.push('/together/weekly')"), isFalse);
-      // ② 加强：与基线 2dcb4a4 的 git blob **全文逐字比对**——比原「lib 内
-      // 无旧编号字面」护栏更强，实证本段对该文件零改动。
-      // Windows checkout 把 LF 转 CRLF，两侧统一规范化行尾后再比；
-      // stdoutEncoding:null 取 bytes 再 utf8.decode，避免系统编码把中文解乱。
-      final ProcessResult r = await Process.run(
-        'git',
-        <String>[
-          'show',
-          '2dcb4a4:app-flutter/lib/features/chat/chat_compose.dart',
-        ],
-        stdoutEncoding: null,
-        stderrEncoding: null,
-      );
-      expect(r.exitCode, 0,
-          reason: 'git 基线 blob 必须可读取（exit ${r.exitCode}）');
-      final String baseline =
-          utf8.decode(r.stdout as List<int>).replaceAll('\r\n', '\n');
-      final String actual = src.replaceAll('\r\n', '\n');
-      expect(actual, baseline,
-          reason: 'chat_compose.dart 必须与 2dcb4a4 逐字一致（本段零改动）');
+      // ② 反向：不得出现 ⊕ 面板 → 工具页的**真导航调用**（占位必须还是占位）。
+      expect(src.contains("push('/together/dashboard')"), isFalse,
+          reason: 'D9：dashboard 占位不得改成真跳转');
+      expect(src.contains("push('/together/weekly')"), isFalse,
+          reason: 'D9：weekly 占位不得改成真跳转');
+      expect(src.contains("go('/together/dashboard')"), isFalse,
+          reason: 'D9：dashboard 占位不得改成真跳转（go 形态）');
+      expect(src.contains("go('/together/weekly')"), isFalse,
+          reason: 'D9：weekly 占位不得改成真跳转（go 形态）');
+      // ③ 段 A（2.2.8）起本护栏由「与 2dcb4a4 全文逐字比对」改为**语义断言**：
+      //    错误通道清偿是合法改动（chat_compose 的 catch 分支接 MediaValidationError
+      //    detail 直通），逐字比对会误红；行为红线只针对 D9 本身——占位仍在 +
+      //    无真跳转，以上 ①② 已完整覆盖，护栏强度不弱化。
     });
 
     test('hub 第 8 张提醒设置卡：key / 顺序 / 跳转', () {

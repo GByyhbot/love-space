@@ -10,6 +10,7 @@ library;
 import 'package:dio/dio.dart';
 import 'package:uuid/uuid.dart';
 
+import '../api/api_client.dart' show writeResponseError;
 import 'chat_models.dart';
 
 const _uuid = Uuid();
@@ -56,6 +57,11 @@ Future<ChatRecord> sendChatText(Dio dio, String content, String clientId) async 
 /// 发送任意聊天 body（段二扩展：媒体 {content, media:[mid...]}、贴纸
 /// {content:'', sticker:path}；服务端 clean_body 白名单过滤未知字段）。
 /// 幂等：同 (author, client_id) 重发返回既有记录。
+/// 🔴 段 A（7-C）：`validateAppStatus` 放行 4xx——不显式判定时 422/403 会在
+/// fromJson 里抛畸形字段错，pending 落失败态但**拿不到 detail 原文**。改为
+/// 显式判：失败把响应包回 `DioException(badResponse)` 上抛（与 5xx 同通道），
+/// `_postPendingBody` 照常落 pending 失败态（保留可重试），呈现方既有
+/// `catch (e) + errorDetail(e)` 即取到服务端 `detail` 原文。
 Future<ChatRecord> sendChatBody(
     Dio dio, Map<String, dynamic> body, String clientId) async {
   final r = await dio.post('/api/records', data: {
@@ -63,6 +69,14 @@ Future<ChatRecord> sendChatBody(
     'body': body,
     'client_id': clientId,
   });
+  final err = writeResponseError(r);
+  if (err != null) {
+    throw DioException(
+      requestOptions: r.requestOptions,
+      response: r,
+      type: DioExceptionType.badResponse,
+    );
+  }
   return ChatRecord.fromJson((r.data as Map).cast<String, dynamic>());
 }
 

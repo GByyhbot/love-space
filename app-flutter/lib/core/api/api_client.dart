@@ -42,12 +42,26 @@ final statusProvider = FutureProvider<SpaceStatus>((ref) async {
 });
 
 /// 上传媒体文件（头像等）：multipart 字段名 file（与 Web uploadFile 一致），
-/// 返回 {id, mime, name, status=pending}，转码由服务端 worker 异步完成
+/// 返回 {id, mime, name, status=pending}，转码由服务端 worker 异步完成。
+/// 🔴 段 A（7-C 错误通道）：`validateAppStatus` 放行 4xx——422 校验失败 /
+/// 413 超限等会作为「成功 Response」返回且 body 里没有 id，不显式判定会拿到
+/// `"null"` mid = 假成功链。失败把响应包回 `DioException(badResponse)` 上抛
+/// （与 5xx 同一呈现通道）：调用方既有 `catch (e) + errorDetail(e)` 即可取到
+/// 服务端 `detail` **原文**，不新增异常类型（本库无法引用 chat_media 的
+/// MediaValidationError，避免反向依赖）。
 Future<String> uploadMedia(Dio dio, String filename, List<int> bytes) async {
   final form = FormData.fromMap({
     'file': MultipartFile.fromBytes(bytes, filename: filename),
   });
   final r = await dio.post('/api/media', data: form);
+  final err = writeResponseError(r);
+  if (err != null) {
+    throw DioException(
+      requestOptions: r.requestOptions,
+      response: r,
+      type: DioExceptionType.badResponse,
+    );
+  }
   return (r.data as Map)['id'].toString();
 }
 

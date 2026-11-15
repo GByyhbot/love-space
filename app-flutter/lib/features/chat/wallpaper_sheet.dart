@@ -82,7 +82,8 @@ class _WallpaperSheetState extends ConsumerState<_WallpaperSheet> {
       final mid = await uploadChatMedia(dio, x.name, bytes);
       setState(() { _bg = 'photo'; _media = mid; });
     } catch (e) {
-      _snack(errorDetail(e));
+      // 段 A：上传 4xx（detail 原文）以 MediaValidationError 抛出，直通呈现
+      _snack(e is MediaValidationError ? e.message : errorDetail(e));
     }
   }
 
@@ -134,7 +135,11 @@ class _WallpaperSheetState extends ConsumerState<_WallpaperSheet> {
     setState(() => _saving = true);
     try {
       final dio = await ref.read(dioProvider.future);
-      await dio.put('/api/space', data: payload);
+      final r = await dio.put('/api/space', data: payload);
+      // 段 A：validateAppStatus 放行 4xx——失败原文呈现，不 reload、不 pop
+      // （结构沿用上方 _snack(err) 校验分支，只补显式判）
+      final err = writeResponseError(r);
+      if (err != null) { _snack(err); return; }
       // 本地即时生效：重拉 me（space 原样对象已含新背景）+ bump 聊天页 UI 时钟
       await ref.read(authProvider.notifier).reload();
       ref.read(chatUiTickProvider.notifier).state++;

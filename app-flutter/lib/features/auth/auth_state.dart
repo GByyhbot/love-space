@@ -265,7 +265,11 @@ class AuthNotifier extends Notifier<AuthPhase> {
   Future<void> logout() async {
     try {
       final dio = await ref.read(dioProvider.future);
-      await dio.post('/api/logout');
+      final r = await dio.post('/api/logout');
+      // 段 A（7-C）：validateAppStatus 放行 4xx——顺手显式判以满足错误通道
+      // 纪律；但登出以**本地清态为准**，服务端 4xx（会话已失效等）不阻断登出、
+      // 不弹错（此时更需要登出成功），注释留痕不静默漏改。
+      writeResponseError(r);
     } catch (_) {}
     me = null;
     state = AuthPhase.out;

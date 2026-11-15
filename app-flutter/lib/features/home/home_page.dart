@@ -7,6 +7,7 @@
 /// on-this-day / 小年报（归属待主人定，小结对照清单已注明）。
 library;
 
+import 'package:dio/dio.dart' show Response;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -761,16 +762,28 @@ class _MoodRow extends ConsumerWidget {
         'content': contentCtrl.text.trim(),
         'media': [],
       };
+      final Response<dynamic> r;
       if (record == null) {
-        await dio.post(
+        r = await dio.post(
           '/api/records',
           data: {'kind': 'mood', 'body': body, 'client_id': newClientId()},
         );
       } else {
-        await dio.put(
+        r = await dio.put(
           '/api/records/${record!.id}',
           data: {'kind': 'mood', 'body': body, 'client_id': record!.clientId},
         );
+      }
+      // 段 A（7-C）：validateAppStatus 放行 4xx——显式判定；失败 detail 原文
+      // 直通呈现、不 invalidate（不刷新假数据）。
+      final err = writeResponseError(r);
+      if (err != null) {
+        if (context.mounted) {
+          ref
+              .read(chatToastProvider.notifier)
+              .show(err, tone: ChatToastTone.error);
+        }
+        return;
       }
       ref.invalidate(recordsProvider);
       ref.invalidate(dashboardProvider);
@@ -778,7 +791,7 @@ class _MoodRow extends ConsumerWidget {
       if (context.mounted) {
         ref
             .read(chatToastProvider.notifier)
-            .show('保存失败：$e', tone: ChatToastTone.error);
+            .show(errorDetail(e), tone: ChatToastTone.error);
       }
     }
   }

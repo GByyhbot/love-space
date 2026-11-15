@@ -18,7 +18,8 @@ import '../api/api_client.dart';
 /// 上传上限（服务端 MAX_UPLOAD_MB 默认 250；本地预检先行，超限不发请求）
 const int maxUploadMb = 250;
 
-/// 本地预检 / 链路校验失败的可读异常（message 直通 UI，不走 errorDetail 兜底文案）
+/// 本地预检 / 链路校验失败 / 服务端拒绝上传（4xx detail 原文）的可读异常
+/// （message 直通 UI，不走 errorDetail 兜底文案）
 class MediaValidationError implements Exception {
   const MediaValidationError(this.message);
   final String message;
@@ -73,8 +74,14 @@ String mimeOfName(String filename) {
 }
 
 /// 上传单个媒体文件（multipart 字段 file；onSendProgress 进度回调 0..1）。
-/// 返回服务端 {id, mime, name, status} 的 id；422/413 中文 detail 由调用方
-/// errorDetail(e) 直通。
+/// 返回服务端 {id, mime, name, status} 的 id。
+/// 🔴 段 A（7-C 错误通道）：`validateAppStatus` 放行 4xx——422 校验失败 /
+/// 413 超限等会作为「成功 Response」返回且 body 里没有 id，若不显式判定
+/// 会拿到 `"null"` mid 继续发消息 = 假成功链。因此这里接住 Response 后
+/// 显式调 [writeResponseError] 判定：失败抛 [MediaValidationError]（message =
+/// 服务端 detail 原文，直通 UI；调用方现有 catch 均能接住，且不会把
+/// `"null"` mid 带进任何后续请求 / 本地状态）。真正抛出的异常（5xx /
+/// 网络层）照常向上传播。
 Future<String> uploadChatMedia(
   Dio dio,
   String filename,
@@ -88,6 +95,8 @@ Future<String> uploadChatMedia(
       onSendProgress: (sent, total) {
     if (onProgress != null && total > 0) onProgress(sent / total);
   });
+  final err = writeResponseError(r);
+  if (err != null) throw MediaValidationError(err);
   return ((r.data ?? const {}) as Map)['id'].toString();
 }
 

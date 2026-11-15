@@ -20,7 +20,12 @@ import 'package:just_audio/just_audio.dart';
 
 import '../../core/api/api_client.dart' as api;
 import '../../core/chat/chat_media.dart'
-    show chatBaseProvider, downloadAudioToCache, uploadChatMedia, validateUploadFile;
+    show
+        MediaValidationError,
+        chatBaseProvider,
+        downloadAudioToCache,
+        uploadChatMedia,
+        validateUploadFile;
 import '../../core/together/together_data.dart';
 import '../auth/auth_state.dart';
 import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
@@ -637,7 +642,10 @@ Future<void> uploadMusicToPlaylist(
         err == null ? '已经放进歌单了' : '添加失败：$err',
         tone: err == null ? ChatToastTone.success : ChatToastTone.error);
   } catch (e) {
-    container.read(chatToastProvider.notifier).show('上传失败：$e',
+    // 段 A：上传 4xx（detail 原文）以 MediaValidationError 抛出，直通呈现；
+    // 其余（5xx / 网络层）走 errorDetail 兜底，不裸 `$e` 打印异常对象
+    final msg = e is MediaValidationError ? e.message : api.errorDetail(e);
+    container.read(chatToastProvider.notifier).show('上传失败：$msg',
         tone: ChatToastTone.error);
   }
 }

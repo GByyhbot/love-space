@@ -119,7 +119,17 @@ class _BubbleSkinSheetState extends ConsumerState<_BubbleSkinSheet> {
       final dio = await ref.read(dioProvider.future);
       final payload =
           applyChatSkinPayload(me.spaceRaw, skin: skin.skin, fg: skin.fg, swap: skin.swap);
-      await dio.put('/api/space', data: payload);
+      final r = await dio.put('/api/space', data: payload);
+      // 段 A：validateAppStatus 放行 4xx——失败原文呈现，不 reload、不 pop
+      // （照 wallpaper_sheet._save 同款结构，只补显式判）
+      final err = writeResponseError(r);
+      if (err != null) {
+        if (mounted) {
+          ref.read(chatToastProvider.notifier).show(err,
+              tone: ChatToastTone.error);
+        }
+        return;
+      }
       await ref.read(authProvider.notifier).reload();
       ref.read(chatUiTickProvider.notifier).state++;
       if (mounted) Navigator.of(context).pop();

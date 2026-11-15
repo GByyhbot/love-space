@@ -188,7 +188,10 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
         _replyNotifier.value = (record.id, record.body.content);
       case 'pin':
         try {
-          await ref.read(chatControllerProvider.notifier).pinMessage(record.id);
+          final err =
+              await ref.read(chatControllerProvider.notifier).pinMessage(record.id);
+          // 段 A：4xx detail 原文呈现，本地 pinned 态不动
+          if (err != null) _snack(err, tone: ChatToastTone.error);
         } catch (e) {
           _snack(errorDetail(e), tone: ChatToastTone.error);
         }
@@ -225,7 +228,13 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
     );
     if (ok != true) return;
     try {
-      await ref.read(chatControllerProvider.notifier).recallMessage(record.id);
+      final err =
+          await ref.read(chatControllerProvider.notifier).recallMessage(record.id);
+      if (err != null) {
+        // 段 A：撤回失败（2 分钟窗口/仅本人 403/404）原文呈现，不假撤回
+        _snack(err, tone: ChatToastTone.error);
+        return;
+      }
       _snack('已撤回', tone: ChatToastTone.success);
     } catch (e) {
       _snack(errorDetail(e), tone: ChatToastTone.error);

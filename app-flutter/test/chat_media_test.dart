@@ -140,7 +140,8 @@ void main() {
       }
       return jsonOk(const []); // GET 对账：无历史
     });
-    final dio = Dio(BaseOptions(baseUrl: 'https://test.local'))
+    final dio = Dio(BaseOptions(baseUrl: 'https://test.local',
+        validateStatus: validateAppStatus)) // 🔴 段 A：夹具与生产共用同一形状
       ..httpClientAdapter = adapter;
     final container = ProviderContainer(overrides: [
       dioProvider.overrideWith((ref) async => dio),
@@ -181,7 +182,8 @@ void main() {
       }
       return jsonOk(const []);
     });
-    final dio = Dio(BaseOptions(baseUrl: 'https://test.local'))
+    final dio = Dio(BaseOptions(baseUrl: 'https://test.local',
+        validateStatus: validateAppStatus)) // 🔴 段 A：夹具与生产共用同一形状
       ..httpClientAdapter = adapter;
     final container = ProviderContainer(overrides: [
       dioProvider.overrideWith((ref) async => dio),
@@ -206,6 +208,21 @@ void main() {
     final stored = store.pendings.values.single;
     expect(stored.phase, ChatPendingPhase.upload); // 落盘保持 upload：重试重传
     expect(stored.mediaFiles.single.path, file.path);
+  });
+
+  // ── 段 A：4xx 显式判定（夹具与生产共用 validateAppStatus 形状）──
+  test('uploadChatMedia 4xx：detail 原文以 MediaValidationError.message 抛出（不假成功）',
+      () async {
+    final adapter = _FakeAdapter((options, _) =>
+        _err422('文件内容与声明的类型不符，请重新选择'));
+    final dio = Dio(BaseOptions(baseUrl: 'https://test.local',
+        validateStatus: validateAppStatus))
+      ..httpClientAdapter = adapter;
+    await expectLater(
+        uploadChatMedia(dio, 'p.png', [1, 2, 3]),
+        throwsA(isA<MediaValidationError>().having(
+            (e) => e.message, 'message', '文件内容与声明的类型不符，请重新选择')));
+    expect(adapter.posts, hasLength(1)); // 请求已发出、被显式判拦下而非异常通道
   });
 
   // ── ③ 媒体链路重试复用同一 client_id ──────────────────────────────
@@ -234,7 +251,8 @@ void main() {
       }
       return jsonOk(const []);
     });
-    final dio = Dio(BaseOptions(baseUrl: 'https://test.local'))
+    final dio = Dio(BaseOptions(baseUrl: 'https://test.local',
+        validateStatus: validateAppStatus)) // 🔴 段 A：夹具与生产共用同一形状
       ..httpClientAdapter = adapter;
     final container = ProviderContainer(overrides: [
       dioProvider.overrideWith((ref) async => dio),
@@ -285,7 +303,8 @@ void main() {
       }
       return jsonOk(const []);
     });
-    final dio = Dio(BaseOptions(baseUrl: 'https://test.local'))
+    final dio = Dio(BaseOptions(baseUrl: 'https://test.local',
+        validateStatus: validateAppStatus)) // 🔴 段 A：夹具与生产共用同一形状
       ..httpClientAdapter = adapter;
     final container = ProviderContainer(overrides: [
       dioProvider.overrideWith((ref) async => dio),
@@ -311,7 +330,8 @@ void main() {
   test('超 30 个附件：本地直接拒绝、一个请求都不发（QA 回归根因防御）', () async {
     final store = _MemStore();
     final adapter = _FakeAdapter((options, _) => jsonOk(const {}));
-    final dio = Dio(BaseOptions(baseUrl: 'https://test.local'))
+    final dio = Dio(BaseOptions(baseUrl: 'https://test.local',
+        validateStatus: validateAppStatus)) // 🔴 段 A：夹具与生产共用同一形状
       ..httpClientAdapter = adapter;
     final container = ProviderContainer(overrides: [
       dioProvider.overrideWith((ref) async => dio),

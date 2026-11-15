@@ -493,7 +493,8 @@ class _ChatComposeState extends ConsumerState<ChatCompose>
           .read(myStickersProvider.notifier)
           .add(me?.user.id ?? '', mid, x.name);
     } catch (e) {
-      _snack(errorDetail(e));
+      // 段 A：上传 4xx（detail 原文）以 MediaValidationError 抛出，直通呈现
+      _snack(e is MediaValidationError ? e.message : errorDetail(e));
     }
   }
 

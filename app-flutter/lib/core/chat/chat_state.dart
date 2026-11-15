@@ -513,29 +513,42 @@ class ChatController extends Notifier<ChatState> {
   }
 
   /// 置顶/取消置顶 toggle（POST /api/records/{id}/pin → {ok, pinned}），
-  /// 本地按返回值原地更新该行（对端经 SSE 对账同步）
-  Future<void> pinMessage(String id) async {
+  /// 本地按返回值原地更新该行（对端经 SSE 对账同步）。
+  /// 🔴 段 A：失败返回 detail 原文且**不更新本地 pinned 态**（validateAppStatus
+  /// 放行 4xx，不判会误把置顶失败当成功）。
+  Future<String?> pinMessage(String id) async {
     final dio = await ref.read(dioProvider.future);
     final r = await dio.post('/api/records/$id/pin');
+    final err = writeResponseError(r);
+    if (err != null) return err;
     final pinned = ((r.data ?? const {}) as Map)['pinned'] == true;
     await _patchRecordLocally(id, (rec) => _copyRecord(rec, pinned: pinned));
+    return null;
   }
 
   /// 撤回（POST /api/records/{id}/recall → {ok}；资格判定在页面用 canRecallChat），
-  /// 服务端清空 content/media 并置 recalled=true，本地同步
-  Future<void> recallMessage(String id) async {
+  /// 服务端清空 content/media 并置 recalled=true，本地同步。
+  /// 🔴 段 A：失败返回 detail 原文且**不做 _patchRecordLocally 假撤回**
+  /// （撤回有 2 分钟窗口 / 仅本人约束，403/404 原文对用户有意义）。
+  Future<String?> recallMessage(String id) async {
     final dio = await ref.read(dioProvider.future);
-    await dio.post('/api/records/$id/recall');
+    final r = await dio.post('/api/records/$id/recall');
+    final err = writeResponseError(r);
+    if (err != null) return err;
     await _patchRecordLocally(id, _recalledCopy);
+    return null;
   }
 
-  /// 记入时光（主人定版=最小发布弹窗）：POST /api/records kind=post
-  Future<void> sendToMoment(String content, String date, List<String> mediaIds) async {
+  /// 记入时光（主人定版=最小发布弹窗）：POST /api/records kind=post。
+  /// 🔴 段 A：失败返回 detail 原文（不假成功）；当前无调用方
+  /// （messages_page 记入时光走 ComposerSheet），签名按错误通道口径先行对齐。
+  Future<String?> sendToMoment(String content, String date, List<String> mediaIds) async {
     final dio = await ref.read(dioProvider.future);
-    await dio.post('/api/records', data: {
+    final r = await dio.post('/api/records', data: {
       'kind': 'post',
       'body': {'content': content, 'date': date, 'media': mediaIds},
     });
+    return writeResponseError(r);
   }
 
   /// 本地原地更新一条已确认记录（pin/recall 后即时反馈；SSE 对账幂等）
@@ -741,12 +754,17 @@ class ChatController extends Notifier<ChatState> {
   }
 
   /// 进入聊天页清未读：本地角标清零 + POST /api/notices/read?event=chat
-  /// （Web navigate('messages') 的行为；失败静默，下次进页再试）
+  /// （Web navigate('messages') 的行为；失败静默，下次进页再试）。
+  /// 🔴 段 A：显式判 4xx/5xx 但**保持静默**——角标链路高频调用（每次进页都
+  /// 发），失败弹 toast 会骚扰；本地角标已清零、下次进页/SSE me 重拉会再播种，
+  /// 服务端未读数不受影响，故失败不提示、不重试、不假成功（留痕于此注释）。
   Future<void> markRead() async {
     ref.read(chatUnreadProvider.notifier).clear();
     try {
       final dio = await ref.read(dioProvider.future);
-      await dio.post('/api/notices/read', queryParameters: {'event': 'chat'});
+      final r = await dio.post('/api/notices/read', queryParameters: {'event': 'chat'});
+      // 4xx 被 validateAppStatus 放行：显式判定后按上述口径静默丢弃
+      if (writeResponseError(r) != null) return;
     } catch (_) {}
   }
 

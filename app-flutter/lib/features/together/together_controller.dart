@@ -102,15 +102,19 @@ class TogetherController extends Notifier<TogetherState> {
 
   /// 新增：POST /api/records {kind, body, client_id}（client_id 幂等）。
   /// 成功后整列表 reload。返回 null=成功。
+  /// 🔴 段 A（7-C）：`validateAppStatus` 放行 4xx——显式判 `writeResponseError`，
+  /// 失败返回 detail 原文且**不 reload**（不刷新假数据，签名沿用 String?）。
   Future<String?> add(String kind, Map<String, dynamic> body) async {
     if (_disposed) return null;
     try {
       final dio = await ref.read(api.dioProvider.future);
-      await dio.post('/api/records', data: {
+      final r = await dio.post('/api/records', data: {
         'kind': kind,
         'body': body,
         'client_id': DateTime.now().microsecondsSinceEpoch.toString(),
       });
+      final err = api.writeResponseError(r);
+      if (err != null) return err;
       await load();
       return null;
     } catch (e) {
@@ -120,16 +124,18 @@ class TogetherController extends Notifier<TogetherState> {
 
   /// 编辑：PUT /api/records/{rid} {kind, body: mergeRecordBody(original, changes)}
   /// 回填铁律：原始 body（页面打开编辑时持有的那份）逐键复制 + 只盖 changes。
-  /// 成功后整列表 reload。返回 null=成功。
+  /// 成功后整列表 reload。返回 null=成功。4xx 同 [add]：原文返回、不 reload。
   Future<String?> edit(String rid, String kind, Map<String, dynamic> original,
       Map<String, dynamic> changes) async {
     if (_disposed) return null;
     try {
       final dio = await ref.read(api.dioProvider.future);
-      await dio.put('/api/records/$rid', data: {
+      final r = await dio.put('/api/records/$rid', data: {
         'kind': kind,
         'body': mergeRecordBody(original, changes),
       });
+      final err = api.writeResponseError(r);
+      if (err != null) return err;
       await load();
       return null;
     } catch (e) {
@@ -152,12 +158,14 @@ class TogetherController extends Notifier<TogetherState> {
   }
 
   /// 删除（服务端软删，回收站 30 天）。仅本人（非本人服务端 403 → 错误文案）。
-  /// 成功后整列表 reload。返回 null=成功。
+  /// 成功后整列表 reload。返回 null=成功。4xx 同 [add]：原文返回、不 reload。
   Future<String?> delete(String rid) async {
     if (_disposed) return null;
     try {
       final dio = await ref.read(api.dioProvider.future);
-      await dio.delete('/api/records/$rid');
+      final r = await dio.delete('/api/records/$rid');
+      final err = api.writeResponseError(r);
+      if (err != null) return err;
       await load();
       return null;
     } catch (e) {
@@ -171,11 +179,15 @@ class TogetherController extends Notifier<TogetherState> {
   /// 服务端 answers PK(record_id,author) + ON CONFLICT DO UPDATE ——
   /// 每人一条答案、重复提交=覆盖自己的（可修改）。内容可见性由服务端
   /// 序列化控制（双方都答了才互相可见）。返回 null=成功。
+  /// 4xx 同 [add]：原文返回、不 reload。
   Future<String?> answer(String rid, String content) async {
     if (_disposed) return null;
     try {
       final dio = await ref.read(api.dioProvider.future);
-      await dio.post('/api/records/$rid/answer', data: {'content': content});
+      final r =
+          await dio.post('/api/records/$rid/answer', data: {'content': content});
+      final err = api.writeResponseError(r);
+      if (err != null) return err;
       await load(); // 重拉拿最新 answers/answer_count（揭晓态以服务端为准）
       return null;
     } catch (e) {
@@ -186,12 +198,14 @@ class TogetherController extends Notifier<TogetherState> {
   /// 打卡：POST /api/records/{rid}/check（无 body）。
   /// 服务端 checks PK(record_id,author,day) + INSERT OR IGNORE ——
   /// 同一天重复打卡幂等（不产生脏数据）；day 用服务端 space 时区。
-  /// 返回 null=成功。
+  /// 返回 null=成功。4xx 同 [add]：原文返回、不 reload。
   Future<String?> checkHabit(String rid) async {
     if (_disposed) return null;
     try {
       final dio = await ref.read(api.dioProvider.future);
-      await dio.post('/api/records/$rid/check');
+      final r = await dio.post('/api/records/$rid/check');
+      final err = api.writeResponseError(r);
+      if (err != null) return err;
       await load(); // 重拉拿最新 checks（打卡状态以后端为准，不回弹）
       return null;
     } catch (e) {
