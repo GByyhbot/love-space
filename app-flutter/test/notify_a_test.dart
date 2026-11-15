@@ -1173,9 +1173,21 @@ void main() {
       expect(src.contains("title: '提醒设置'"), isTrue);
     });
 
-    test('版本位 2.2.5+225（VC225）', () {
+    test('版本位 ≥ 2.2.5+225（VC225 落定；段 B 起顺延为 2.2.6+226）', () {
       final String pubspec = File('pubspec.yaml').readAsStringSync();
-      expect(pubspec.contains('version: 2.2.5+225'), isTrue);
+      // D10 版本位定案：段 A 落 2.2.5 (VC225)，后续段按分段表顺延不回退
+      final m = RegExp(r'^version:\s*(\d+)\.(\d+)\.(\d+)\+(\d+)\s*$',
+              multiLine: true)
+          .firstMatch(pubspec);
+      expect(m, isNotNull);
+      final major = int.parse(m!.group(1)!);
+      final minor = int.parse(m.group(2)!);
+      final patch = int.parse(m.group(3)!);
+      final build = int.parse(m.group(4)!);
+      final segA =
+          (major > 2) || (major == 2 && minor > 2) || (major == 2 && minor == 2 && patch >= 5);
+      expect(segA, isTrue, reason: '不得低于段 A 版本位 2.2.5');
+      expect(build >= 225, isTrue, reason: 'VC ≥ 225，单调不回退');
       expect(pubspec.contains('2.2.4+224'), isFalse);
     });
 

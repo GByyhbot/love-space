@@ -33,6 +33,7 @@ import '../../core/chat/chat_media.dart'
 import '../../core/config.dart';
 import '../auth/auth_state.dart';
 import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
+import 'export_api.dart';
 import 'settings_state.dart';
 
 /// `/settings` 独立二级页。
@@ -69,6 +70,12 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   Uint8List? _pickedBytes;
   String? _coverError;
   bool _coverBusy = false;
+
+  // ── 数据导出（段 B · D3 定案：复用 downloads/ 落盘范式，不引新依赖）──
+  // 🔴 全卡统一忙碌态：三个导出共用服务端限流桶（records/markdown 共用
+  // rate_limit('export',10,300)、ics 无限流），任一在途时全卡禁用，
+  // 避免连撞 429，也天然做到单按钮防重入。
+  bool _exportBusy = false;
 
   // ── 链路检测 ─────────────────────────────────────────────────────
   List<LinkRoute> _routes = const <LinkRoute>[];
@@ -190,6 +197,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             const SizedBox(height: 16),
             _heading(context, '连接'),
             _linkCard(context),
+            const SizedBox(height: 16),
+            _exportCard(context),
             const SizedBox(height: 16),
             _heading(context, '关于'),
             _aboutCard(context),
@@ -900,6 +909,103 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           ),
       ];
     });
+  }
+
+  // ── 数据导出三件（Web settingsPage 数据管理卡 app.js:1481-1482 · 段 B）──
+  // · 三个下载入口逐字对齐 Web：/api/export · /api/export/markdown ·
+  //   /api/export/ics（W8–W10）；Web 的 admin「完整备份与存储占用」按钮与
+  //   存储摘要条属段 C，本段不加。
+  // · 承接按 D3 定案：downloadExport 落 downloads/ + 顶部通知报文件名；
+  //   不做分享/打开文件通道、不做进度条、不做加密。
+  // · 4xx 原文透传（429「尝试过于频繁…」/ 404「还没有可导出的纪念日或
+  //   计划」）：error tone 顶部通知，不吞、不改写、不假成功。
+  Widget _exportCard(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final busy = _exportBusy;
+    Widget row(
+      ExportKind kind,
+      String key,
+      String label,
+      IconData icon,
+    ) => ListTile(
+      key: Key(key),
+      contentPadding: EdgeInsets.zero,
+      leading: Icon(icon, size: 22),
+      title: Text(label),
+      // 任一在途：该按钮点不动（统一禁用，防共享限流桶连撞 429）
+      trailing: busy
+          ? const SizedBox(
+              width: 14,
+              height: 14,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : Icon(Icons.download_rounded, size: 20, color: cs.outline),
+      enabled: !busy,
+      onTap: busy ? null : () => _startExport(kind),
+    );
+    return _card(
+      context,
+      title: exportCardTitle,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          row(
+            ExportKind.records,
+            'settings-export-records',
+            exportRecordsLabel,
+            Icons.folder_zip_outlined,
+          ),
+          row(
+            ExportKind.markdown,
+            'settings-export-markdown',
+            exportMarkdownLabel,
+            Icons.article_outlined,
+          ),
+          row(
+            ExportKind.ics,
+            'settings-export-ics',
+            exportIcsLabel,
+            Icons.event_outlined,
+          ),
+          if (busy)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Text(
+                '导出中…',
+                style: Theme.of(context).textTheme.labelSmall
+                    ?.copyWith(color: cs.outline),
+              ),
+            ),
+          Text(
+            exportCardNote,
+            style: Theme.of(context).textTheme.bodySmall
+                ?.copyWith(color: cs.outline),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _startExport(ExportKind kind) async {
+    if (_exportBusy) return; // 在途防重入：请求未回不许叠发
+    setState(() => _exportBusy = true);
+    try {
+      final dio = await ref.read(api.dioProvider.future);
+      final (saved, err) = await downloadExport(dio, kind);
+      if (!mounted) return;
+      if (err != null) {
+        // 失败：服务端 detail 原文（429/404 同样），不假成功
+        ref.read(chatToastProvider.notifier).show(err, tone: ChatToastTone.error);
+        return;
+      }
+      // 成功：通知里报的文件名与实际落盘文件名同源（同一字符串）
+      ref
+          .read(chatToastProvider.notifier)
+          .show('已保存到本地：downloads/${saved!.filename}',
+              tone: ChatToastTone.success);
+    } finally {
+      if (mounted) setState(() => _exportBusy = false);
+    }
   }
 
   // ── 检查更新 + 复制下载链接（app.js:2593-2612 / :2569） ───────────
