@@ -156,9 +156,10 @@ class _TogetherPageState extends ConsumerState<TogetherPage> {
                   desc: '把这一周，收进一封小小的信',
                   route: '/together/weekly',
                 ),
-                // 条目 8 段 D：hub 底部「⚙️ 设置」7 张卡（对齐 app.js:1229
-                // settings-section-heading + settings-tools；**不加提醒设置卡**，
-                // 随后续通知章再加，无死卡纪律）。
+                // 「数据管理与通知渠道」章 段 A：hub 底部「⚙️ 设置」8 张卡
+                //（对齐 app.js:1229 settings-tools 8 卡顺序）；第 7 张
+                // 「🔔 提醒设置」在邀请另一半入住之后、全部设置之前，
+                // context.push('/channels')，逐张点通无死卡。
                 const SizedBox(height: 18),
                 _settingsHeading(theme),
                 const SizedBox(height: 8),
@@ -213,6 +214,15 @@ class _TogetherPageState extends ConsumerState<TogetherPage> {
                   desc: '把你们的专属空间分享给 TA',
                   onTap: () => context.push('/profile'),
                 ),
+                // 段 A 第 8 张卡：位置对齐 Web 8 卡（邀请之后、全部设置之前）。
+                _settingsCard(
+                  context,
+                  key: 'settings-hub-remind',
+                  emoji: '🔔',
+                  title: '提醒设置',
+                  desc: '通知渠道与提醒偏好',
+                  onTap: () => context.push('/channels'),
+                ),
                 _settingsCard(
                   context,
                   key: 'settings-hub-all',
@@ -247,7 +257,7 @@ class _TogetherPageState extends ConsumerState<TogetherPage> {
     ],
   );
 
-  /// hub 设置卡（**只做导航，不复制已有能力的 UI**；7 张逐张点通、无死卡）。
+  /// hub 设置卡（**只做导航，不复制已有能力的 UI**；8 张逐张点通、无死卡）。
   Widget _settingsCard(
     BuildContext context, {
     required String key,

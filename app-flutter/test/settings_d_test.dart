@@ -1,5 +1,5 @@
 /* 条目 8 · 段 D · 设置缺口单测 / widget 用例。
-   覆盖验收点 ②③④⑤ 与「防抹除」「7 卡无死卡」「两段返回路径」。
+   覆盖验收点 ②③④⑤ 与「防抹除」「8 卡无死卡（段 A 补提醒设置）」「两段返回路径」。
    跑前 unset 八个代理变量（flutter_tester 本地 WebSocket 会被代理劫持）。 */
 import 'dart:async';
 import 'dart:convert';
@@ -530,7 +530,7 @@ void main() {
     });
   });
 
-  // ── 页面：ThemeData 真生效 / 7 卡 / 返回路径 ──────────────────────
+  // ── 页面：ThemeData 真生效 / 8 卡 / 返回路径 ──────────────────────
   group('页面与路由（验收点 ②④⑤）', () {
     testWidgets('换主题色 App 立刻变（ThemeData 真的吃到 space.theme）', (tester) async {
       final store = _Store();
@@ -584,7 +584,7 @@ void main() {
       expect(mainSrc.contains('ColorScheme.fromSeed('), isTrue);
     });
 
-    testWidgets('hub 底部 7 张设置卡逐张点通、无死卡；提醒设置卡不加', (tester) async {
+    testWidgets('hub 底部 8 张设置卡逐张点通、无死卡；提醒设置卡已加', (tester) async {
       final store = _Store();
       final c = await _container(store);
       final router = GoRouter(
@@ -614,6 +614,12 @@ void main() {
             builder: (_, _) =>
                 const Scaffold(body: Center(child: Text('page-settings'))),
           ),
+          // 段 A：第 8 张「提醒设置」卡 → /channels（占位页验证点通）。
+          GoRoute(
+            path: '/channels',
+            builder: (_, _) =>
+                const Scaffold(body: Center(child: Text('page-channels'))),
+          ),
         ],
       );
       await _pump(tester, _app(c, router: router));
@@ -627,11 +633,16 @@ void main() {
         '聊天背景',
         '聊天气泡',
         '邀请另一半入住',
+        '提醒设置',
         '全部设置',
       ]) {
         expect(find.text(t), findsOneWidget, reason: '$t 卡必须存在');
       }
-      expect(find.text('提醒设置'), findsNothing, reason: '提醒设置卡不加（随后续通知章再加）');
+      expect(
+        find.byKey(const Key('settings-hub-remind')),
+        findsOneWidget,
+        reason: '段 A 第 8 张提醒设置卡（对齐 Web 8 卡顺序）',
+      );
 
       final cases = <(String, String)>[
         ('settings-hub-space', 'page-home'),
@@ -640,6 +651,7 @@ void main() {
         ('settings-hub-chat-bg', 'page-messages'),
         ('settings-hub-chat-bubble', 'page-messages'),
         ('settings-hub-invite', 'page-profile'),
+        ('settings-hub-remind', 'page-channels'),
         ('settings-hub-all', 'page-settings'),
       ];
       for (final (key, marker) in cases) {
@@ -649,6 +661,8 @@ void main() {
         await tester.pumpAndSettle();
         final finder = find.byKey(Key(key));
         expect(finder, findsOneWidget, reason: '$key 卡存在');
+        await tester.ensureVisible(finder);
+        await tester.pumpAndSettle();
         await tester.tap(finder);
         await tester.pumpAndSettle();
         expect(

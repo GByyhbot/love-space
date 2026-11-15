@@ -15,6 +15,8 @@ import 'features/auth/auth_state.dart';
 import 'features/auth/login_page.dart';
 import 'features/chat/chat_toast.dart' show ChatToastHost;
 import 'features/chat/messages_page.dart';
+import 'features/notify/channels_page.dart';
+import 'features/notify/notices_page.dart';
 import 'features/personal/personal_page.dart';
 import 'features/period/period_analysis_page.dart';
 import 'features/period/period_page.dart';
@@ -61,6 +63,11 @@ final routerProvider = Provider<GoRouter>((ref) {
       // 条目 8 段 D：设置缺口独立二级页（context.push；AppBar 自动返回 +
       // 系统手势可回）。账号资料页 profile_page.dart 完全不动。
       GoRoute(path: '/settings', builder: (_, _) => const SettingsPage()),
+      // 「数据管理与通知渠道」章 段 A：通知渠道 / 通知中心二级页。
+      // 一律 context.push（主页在路由栈）；AppBar 自动返回按钮 +
+      // 系统返回手势都能回上一页（widget 用例两条独立路径）。
+      GoRoute(path: '/channels', builder: (_, _) => const ChannelsPage()),
+      GoRoute(path: '/notices', builder: (_, _) => const NoticesPage()),
       // 条目 8 段 8-A（D1）：生理期独立二级页。hub 🌸 宽卡与聊天 ⊕ 面板
       // 两入口都 context.push('/period')；AppBar 自动返回 + 系统手势可回上一页。
       GoRoute(path: '/period', builder: (_, _) => const PeriodPage()),

@@ -10,6 +10,7 @@ import '../../core/api/api_client.dart';
 import '../../core/chat/chat_media.dart' show mediaCookieHeadersProvider;
 import '../../core/chat/chat_state.dart' show chatUnreadProvider;
 import '../../core/config.dart';
+import '../notify/system_unread_provider.dart';
 import '../personal/personal_controller.dart' show personalControllerProvider;
 import '../settings/settings_state.dart' show spaceAppearanceProvider;
 
@@ -109,6 +110,10 @@ class AuthNotifier extends Notifier<AuthPhase> {
         // 聊天未读角标播种（/api/me 的 chat_unread 字段名已在 app/main.py 实读确认）：
         // 角标挂独立 Notifier（chat_state），变化不必打断 authed 态
         ref.read(chatUnreadProvider.notifier).set(me!.chatUnread);
+        // 段 A：铃铛角标播种 /api/me 的 unread（未读总数，main.py:723），
+        // 与聊天未读 chat_unread 严格区分。通知中心进页 / 写成功后
+        // reload() 会重新播种，角标始终以服务端为准，不本地推算。
+        ref.read(systemUnreadProvider.notifier).state = me!.unread;
         // 段 D：`/api/me` 的 space 播种主题外观（冷启动 / 对象端刷新 / reload
         // 都会走到这里），MaterialApp 因此按 space.theme/custom_color 生成
         // ThemeData；空间设置保存后另有 commit() 立刻生效，不必等重拉。

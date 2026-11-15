@@ -11,6 +11,7 @@ import '../../core/chat/chat_state.dart';
 import '../../core/sse/sse_client.dart';
 import '../album/album_page.dart';
 import '../home/home_page.dart';
+import '../notify/system_unread_provider.dart';
 import '../personal/personal_page.dart';
 import '../timeline/composer_sheet.dart';
 import '../timeline/timeline_page.dart';
@@ -43,6 +44,9 @@ class _ShellPageState extends ConsumerState<ShellPage> {
       }
     });
     final unread = ref.watch(chatUnreadProvider);
+    // 🔴 段 A：铃铛用「系统未读」/api/me 的 unread（main.py:723），私聊用
+    // chatUnreadProvider 的 chat_unread；两个字段严格区分，别写反。
+    final systemUnread = ref.watch(systemUnreadProvider);
     final me = ref.watch(authProvider.notifier).me;
     final theme = Theme.of(context);
     // IndexedStack 常驻五个 tab：时光列表/筛选状态切页不丢（时光页状态
@@ -61,6 +65,20 @@ class _ShellPageState extends ConsumerState<ShellPage> {
       appBar: AppBar(
         title: Text(const ['首页', '时光', '相册', '我们', '个人角落'][_tab]),
         actions: [
+          // 「数据管理与通知渠道」章 段 A：通知中心铃铛（对齐 Web 顶栏
+          // 「通知」图标 `app.js:325`）。角标用 me.unread（系统未读总数，
+          // main.py:723），>99 显示 99+；与下方私聊的 chat_unread 严格
+          // 区分。context.push('/notices')，返回按钮 / 系统手势可回。
+          IconButton(
+            key: const Key('shell-notices'),
+            tooltip: '通知',
+            onPressed: () => context.push('/notices'),
+            icon: Badge(
+              isLabelVisible: systemUnread > 0,
+              label: Text(unreadBadgeLabel(systemUnread)),
+              child: const Icon(Icons.notifications_none_rounded),
+            ),
+          ),
           // 私聊入口（对齐 Web 顶栏「私聊」图标，带未读角标；>99 显示 99+）。
           // 🔴 阶段 2 通则：二级页一律 push 打开（保留主页在路由栈），
           // 返回按钮与系统手势都能回上一页。
