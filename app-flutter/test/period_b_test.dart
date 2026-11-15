@@ -528,8 +528,9 @@ void main() {
       final c = _setupWidget(s);
       await _pump(tester, c);
       expect(find.text('有几点需要留意'), findsNothing);
-      // 🔴 C 段数据分析入口不存在（无死卡）。
-      expect(find.textContaining('数据分析'), findsNothing);
+      // 🔴 段 C 已落地：数据分析入口是活卡（非死卡），逐字对齐 period.js:517。
+      expect(find.text('数据分析'), findsOneWidget);
+      expect(find.text('周期、流量、痛经、体温的变化'), findsOneWidget);
       await _flush(tester);
     });
 

@@ -563,8 +563,9 @@ void main() {
       expect(find.text('月经又来了'), findsOneWidget);
       expect(find.byTooltip('上个月'), findsOneWidget,
           reason: '8-B 整月日历月份栏');
-      // 🔴 数据分析页是可选段 C，本段不做、主页不留死卡。
-      expect(find.textContaining('数据分析'), findsNothing);
+      // 🔴 段 C 已落地：数据分析入口是活卡（非死卡），逐字对齐 period.js:517。
+      expect(find.text('数据分析'), findsOneWidget);
+      expect(find.text('周期、流量、痛经、体温的变化'), findsOneWidget);
       await _flush(tester);
     });
 
@@ -671,7 +672,7 @@ void main() {
 
   // ── 死入口清零 / 路由注册 / 8-B 落地护栏（源码级）────────────────
   group('入口与路由（源码级护栏）', () {
-    test('聊天 ⊕ 面板死入口清零，两入口与 /period 路由都落地；8-B 已落地、C 段无死卡', () {
+    test('聊天 ⊕ 面板死入口清零，两入口与 /period 路由都落地；8-B / C 段均落地', () {
       final compose = File('lib/features/chat/chat_compose.dart')
           .readAsStringSync();
       expect(compose.contains("条目 8 迁移后开放"), isFalse,
@@ -701,18 +702,23 @@ void main() {
       ]) {
         expect(page.contains(required), isTrue, reason: '8-B $required 应落地');
       }
-      // 🔴 数据分析页（C 段）不做、主页不预置入口（无死卡）；提醒不做。
-      // 只检查代码行：文档注释里描述「本段删除数据分析入口」时会提到该字面量。
+      // 🔴 段 C 已落地：数据分析入口是活卡，context.push('/period/analysis')。
+      // 只检查代码行（文档注释里也会提到这些字面量）。
       final code = page
           .split('\n')
           .where((l) =>
               !l.trimLeft().startsWith('//') &&
               !l.trimLeft().startsWith('///'))
           .join('\n');
-      expect(code.contains('periodAnalysis'), isFalse);
-      expect(code.contains('数据分析'), isFalse);
-      expect(code.contains('analysis-entry'), isFalse);
-      expect(code.contains('PERIOD_REMIND_DAYS'), isFalse);
+      expect(code.contains("context.push('/period/analysis')"), isTrue,
+          reason: 'C 段分析入口必须真跳转，不许死卡');
+      expect(code.contains('数据分析'), isTrue);
+      expect(code.contains('周期、流量、痛经、体温的变化'), isTrue);
+      final mainDartC = File('lib/main.dart').readAsStringSync();
+      expect(mainDartC.contains("path: '/period/analysis'"), isTrue);
+      expect(mainDartC.contains('const PeriodAnalysisPage()'), isTrue);
+      expect(code.contains('PERIOD_REMIND_DAYS'), isFalse,
+          reason: '提醒（D3）仍不做');
     });
   });
 }

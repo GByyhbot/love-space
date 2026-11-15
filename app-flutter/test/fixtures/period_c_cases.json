@@ -1,0 +1,140 @@
+{
+  "meta": {
+    "today": "2026-11-14",
+    "source": "static/period.js",
+    "note": "条目 8 段 C 分析对拍输入夹具。Node 与 Dart 共用；配合 period_cases.json 的 multiCycle/singleNoGap/fragmentMerge 三组一起喂给 Node vm 与纯 Dart 统计层。records 形状 {id,author,body}；经期行有 start/length/cycle，日记录行只有 date + 9 字段。",
+    "reuseFromPeriodCases": ["multiCycle", "singleNoGap", "fragmentMerge"]
+  },
+  "cases": {
+    "analysisRich": {
+      "today": "2026-11-14",
+      "records": [
+        {"id":"a1","author":"u1","body":{"start":"2026-06-01","length":5,"cycle":28,"flow":3,"symptoms":["腰酸"],"content":"六月"}},
+        {"id":"a2","author":"u2","body":{"start":"2026-06-29","length":6,"cycle":28,"flow":2,"symptoms":["腹痛"]}},
+        {"id":"a3","author":"u1","body":{"start":"2026-07-27","length":4,"cycle":28,"flow":4,"symptoms":["头痛"]}},
+        {"id":"a4","author":"u2","body":{"start":"2026-08-24","length":5,"cycle":29,"flow":3,"symptoms":["腰酸","疲惫"]}},
+        {"id":"d01","author":"u1","body":{"date":"2026-06-01","flow":3,"pain":2,"color":2,"discharge":3,"mood":1,"symptoms":["腰酸"],"weight":50.2,"temp":36.5}},
+        {"id":"d02","author":"u2","body":{"date":"2026-06-02","flow":2,"pain":3,"color":3,"discharge":2,"mood":4,"symptoms":["腹痛","腰酸"],"weight":50.4,"temp":36.6}},
+        {"id":"d03","author":"u1","body":{"date":"2026-06-03","flow":4,"pain":4,"color":4,"discharge":4,"mood":9,"symptoms":["头痛"],"weight":50.1,"temp":36.7}},
+        {"id":"d04","author":"u2","body":{"date":"2026-06-04","flow":1,"pain":1,"color":1,"discharge":1,"mood":12,"symptoms":["没有症状"],"weight":50.0,"temp":36.5}},
+        {"id":"d05","author":"u1","body":{"date":"2026-06-05","flow":2,"pain":2,"color":2,"discharge":2,"mood":2,"symptoms":[],"sex":[{"t":"21:00","w":[2]}],"weight":49.9,"temp":36.4}},
+        {"id":"d06","author":"u2","body":{"date":"2026-06-29","flow":3,"pain":3,"color":2,"discharge":3,"mood":3,"symptoms":["腰酸"],"weight":50.5,"temp":36.6}},
+        {"id":"d07","author":"u1","body":{"date":"2026-06-30","flow":4,"pain":2,"color":3,"discharge":4,"mood":5,"symptoms":["疲惫"],"weight":50.6,"temp":36.8}},
+        {"id":"d08","author":"u2","body":{"date":"2026-07-01","flow":5,"pain":5,"color":5,"discharge":5,"mood":16,"symptoms":["腹痛","头痛"],"weight":50.8,"temp":37.0,"sex":[{"t":"22:00","w":[1]},{"t":"23:10","w":[3]}]}},
+        {"id":"d09","author":"u1","body":{"date":"2026-07-02","flow":2,"pain":1,"color":2,"discharge":2,"mood":7,"symptoms":["粉刺"],"weight":50.3,"temp":36.7}},
+        {"id":"d10","author":"u2","body":{"date":"2026-07-03","content":"只写了日记","symptoms":[],"sex":[]}},
+        {"id":"d11","author":"u1","body":{"date":"2026-07-04","temp":36.6,"weight":50.2}},
+        {"id":"d12","author":"u2","body":{"date":"2026-07-27","flow":3,"pain":4,"color":3,"discharge":3,"mood":11,"symptoms":["腰酸"],"weight":50.7,"temp":36.9,"sex":[{"t":"20:30","w":[2]}]}},
+        {"id":"d13","author":"u1","body":{"date":"2026-07-28","flow":2,"pain":3,"color":2,"discharge":2,"mood":8,"symptoms":["疲惫"],"weight":50.6,"temp":36.8}},
+        {"id":"d14","author":"u2","body":{"date":"2026-07-29","flow":1,"pain":2,"color":1,"discharge":1,"mood":6,"symptoms":[],"weight":50.4,"temp":36.6}},
+        {"id":"d15","author":"u1","body":{"date":"2026-07-30","flow":2,"pain":1,"color":2,"discharge":2,"mood":1,"symptoms":["没有症状"],"weight":50.2,"temp":36.5}},
+        {"id":"d16","author":"u2","body":{"date":"2026-08-24","flow":4,"pain":3,"color":3,"discharge":4,"mood":4,"symptoms":["腰酸","腹痛"],"weight":51.0,"temp":36.7,"sex":[{"t":"21:00","w":[2]}]}},
+        {"id":"d17","author":"u1","body":{"date":"2026-08-25","flow":3,"pain":2,"color":2,"discharge":3,"mood":9,"symptoms":["头痛"],"weight":50.9,"temp":36.8}},
+        {"id":"d18","author":"u2","body":{"date":"2026-08-26","flow":2,"pain":1,"color":1,"discharge":2,"mood":13,"symptoms":["疲惫"],"weight":50.7,"temp":36.6}},
+        {"id":"d19","author":"u1","body":{"date":"2026-08-27","flow":1,"pain":1,"color":1,"discharge":1,"mood":15,"symptoms":[],"weight":50.5,"temp":36.5}},
+        {"id":"d20","author":"u2","body":{"date":"2026-08-28","flow":2,"pain":2,"color":2,"discharge":2,"mood":3,"symptoms":["粉刺"],"weight":50.4,"temp":36.4}},
+        {"id":"d21","author":"u1","body":{"date":"2026-09-03","temp":36.3,"weight":50.1,"mood":2,"symptoms":["腰酸"],"sex":[{"t":"22:00","w":[2]}]}},
+        {"id":"d22","author":"u2","body":{"date":"2026-09-18","temp":36.5,"weight":50.3,"mood":5,"symptoms":["疲惫"]}},
+        {"id":"d23","author":"u1","body":{"date":"2026-10-02","temp":36.6,"weight":50.5,"mood":7,"sex":[{"t":"21:00","w":[1]},{"t":"21:30","w":[2]}]}},
+        {"id":"d24","author":"u2","body":{"date":"2026-10-16","temp":36.7,"weight":50.6,"mood":10,"symptoms":["头痛"]}},
+        {"id":"d25","author":"u1","body":{"date":"2026-11-01","temp":36.8,"weight":50.8,"mood":14,"symptoms":["腰酸"]}},
+        {"id":"d26","author":"u2","body":{"date":"2026-11-10","temp":36.9,"weight":51.0,"mood":18,"sex":[{"t":"23:00","w":[3]}]}}
+      ]
+    },
+    "scoreNullTwoEps": {
+      "today": "2026-11-14",
+      "records": [
+        {"id":"b1","author":"u1","body":{"start":"2026-09-01","length":4,"cycle":28}},
+        {"id":"b2","author":"u2","body":{"start":"2026-09-29","length":5,"cycle":28}},
+        {"id":"bd1","author":"u1","body":{"date":"2026-09-01","flow":3,"pain":2,"color":2,"discharge":3,"mood":1,"symptoms":["腰酸"],"temp":36.5,"weight":50.0}},
+        {"id":"bd2","author":"u2","body":{"date":"2026-09-02","flow":2,"pain":3,"color":3,"discharge":2,"mood":4,"symptoms":["腹痛"],"temp":36.6,"weight":50.1}},
+        {"id":"bd3","author":"u1","body":{"date":"2026-09-29","flow":4,"pain":4,"color":4,"discharge":4,"mood":9,"symptoms":["头痛"],"temp":36.8,"weight":50.3,"sex":[{"t":"21:00","w":[2]}]}},
+        {"id":"bd4","author":"u2","body":{"date":"2026-09-30","flow":3,"pain":3,"color":3,"discharge":3,"mood":5,"symptoms":["疲惫"],"temp":36.7,"weight":50.2}},
+        {"id":"bd5","author":"u1","body":{"date":"2026-10-01","temp":36.6,"weight":50.1,"mood":2}}
+      ]
+    },
+    "empty": {
+      "today": "2026-11-14",
+      "records": [
+        {"id":"e1","author":"u1","body":{"date":"2026-10-02","flow":2,"mood":3,"symptoms":["腰酸"],"temp":36.5,"weight":50.0}},
+        {"id":"e2","author":"u2","body":{"date":"2026-10-03","temp":36.6,"weight":50.1,"mood":5}}
+      ]
+    },
+    "completenessEdge": {
+      "today": "2026-11-14",
+      "records": [
+        {"id":"c1","author":"u1","body":{"start":"2026-08-01","length":3,"cycle":28}},
+        {"id":"c2","author":"u2","body":{"start":"2026-08-29","length":3,"cycle":28}},
+        {"id":"c3","author":"u1","body":{"start":"2026-09-26","length":3,"cycle":28}},
+        {"id":"cd1","author":"u1","body":{"date":"2026-08-01","flow":null,"pain":"","symptoms":[],"sex":[],"content":"空","temp":null,"weight":""}},
+        {"id":"cd2","author":"u2","body":{"date":"2026-08-02","flow":0}},
+        {"id":"cd3","author":"u1","body":{"date":"2026-08-03","mood":0}},
+        {"id":"cd4","author":"u2","body":{"date":"2026-08-29","sex":[{"t":"20:00","w":[1]}]}},
+        {"id":"cd5","author":"u1","body":{"date":"2026-08-30","content":"只有日记"}},
+        {"id":"cd6","author":"u2","body":{"date":"2026-08-31","weight":52.5}},
+        {"id":"cd7","author":"u1","body":{"date":"2026-09-26","temp":36.8}},
+        {"id":"cd8","author":"u2","body":{"date":"2026-09-27"}},
+        {"id":"cd9","author":"u1","body":{"date":"2026-09-28","discharge":5,"color":2,"pain":3,"flow":1,"mood":20,"symptoms":["腰酸"],"sex":[{"t":"22:00","w":[2]}],"temp":37.1,"weight":53.0}}
+      ]
+    },
+    "tempWeightSeries": {
+      "today": "2026-11-14",
+      "records": [
+        {"id":"t1","author":"u1","body":{"start":"2026-06-01","length":3,"cycle":28}},
+        {"id":"t2","author":"u2","body":{"start":"2026-06-22","length":3,"cycle":28}},
+        {"id":"t3","author":"u1","body":{"start":"2026-07-27","length":3,"cycle":28}},
+        {"id":"td01","author":"u1","body":{"date":"2026-06-01","flow":2,"pain":1,"temp":36.5,"weight":50.0}},
+        {"id":"td02","author":"u2","body":{"date":"2026-06-02","flow":3,"pain":2,"temp":36.6,"weight":50.1}},
+        {"id":"td03","author":"u1","body":{"date":"2026-06-03","flow":2,"pain":3,"temp":36.7,"weight":50.2}},
+        {"id":"td04","author":"u2","body":{"date":"2026-06-22","flow":3,"pain":2,"temp":36.8,"weight":50.3}},
+        {"id":"td05","author":"u1","body":{"date":"2026-06-23","flow":4,"pain":3,"temp":36.9,"weight":50.4}},
+        {"id":"td06","author":"u2","body":{"date":"2026-06-24","flow":3,"pain":2,"temp":37.0,"weight":50.5}},
+        {"id":"td07","author":"u1","body":{"date":"2026-07-27","flow":4,"pain":3,"temp":37.1,"weight":50.6}},
+        {"id":"td08","author":"u2","body":{"date":"2026-07-28","flow":3,"pain":2,"temp":36.9,"weight":50.5}},
+        {"id":"td09","author":"u1","body":{"date":"2026-07-29","flow":2,"pain":1,"temp":36.7,"weight":50.4}},
+        {"id":"td10","author":"u2","body":{"date":"2026-08-05","temp":36.6,"weight":50.3}},
+        {"id":"td11","author":"u1","body":{"date":"2026-08-20","temp":36.5,"weight":50.2}},
+        {"id":"td12","author":"u2","body":{"date":"2026-09-10","temp":36.7,"weight":50.4}},
+        {"id":"td13","author":"u1","body":{"date":"2026-10-11","temp":36.8,"weight":50.6}},
+        {"id":"td14","author":"u2","body":{"date":"2026-11-12","temp":36.9,"weight":50.8}}
+      ]
+    },
+    "wobble": {
+      "today": "2026-11-14",
+      "records": [
+        {"id":"w1","author":"u1","body":{"start":"2026-05-01","length":3,"cycle":28}},
+        {"id":"w2","author":"u2","body":{"start":"2026-05-23","length":3,"cycle":28}},
+        {"id":"w3","author":"u1","body":{"start":"2026-06-26","length":3,"cycle":28}},
+        {"id":"wd1","author":"u1","body":{"date":"2026-05-01","flow":2,"pain":2,"color":2,"discharge":3,"mood":1,"symptoms":["腰酸"],"temp":36.5,"weight":50.0}},
+        {"id":"wd2","author":"u2","body":{"date":"2026-05-02","flow":3,"pain":3,"color":3,"discharge":2,"mood":5,"symptoms":["腹痛"],"temp":36.6,"weight":50.1}},
+        {"id":"wd3","author":"u1","body":{"date":"2026-05-23","flow":2,"pain":1,"color":2,"discharge":3,"mood":9,"symptoms":["疲惫"],"temp":36.7,"weight":50.2}},
+        {"id":"wd4","author":"u2","body":{"date":"2026-05-24","flow":4,"pain":4,"color":4,"discharge":4,"mood":4,"symptoms":["头痛"],"temp":36.8,"weight":50.3}},
+        {"id":"wd5","author":"u1","body":{"date":"2026-06-26","flow":3,"pain":2,"color":3,"discharge":3,"mood":7,"symptoms":["腰酸"],"temp":36.9,"weight":50.4}},
+        {"id":"wd6","author":"u2","body":{"date":"2026-06-27","flow":1,"pain":1,"color":1,"discharge":1,"mood":12,"symptoms":["粉刺"],"temp":36.6,"weight":50.2}},
+        {"id":"wd7","author":"u1","body":{"date":"2026-07-10","temp":36.5,"weight":50.1,"mood":2,"sex":[{"t":"21:00","w":[2]}]}}
+      ]
+    },
+    "flowPainNoHist": {
+      "today": "2026-11-14",
+      "records": [
+        {"id":"n1","author":"u1","body":{"start":"2026-10-01","length":4,"cycle":30}},
+        {"id":"nd1","author":"u1","body":{"date":"2026-10-01","flow":3,"pain":2,"color":3,"discharge":2,"mood":1,"symptoms":["腰酸"],"temp":36.5,"weight":50.0}},
+        {"id":"nd2","author":"u2","body":{"date":"2026-10-02","flow":4,"pain":5,"color":4,"discharge":3,"mood":9,"symptoms":["腹痛"],"temp":36.7,"weight":50.2,"sex":[{"t":"22:00","w":[2]}]}},
+        {"id":"nd3","author":"u1","body":{"date":"2026-10-03","flow":2,"pain":1,"color":2,"discharge":1,"mood":4,"symptoms":[],"temp":36.6,"weight":50.1}},
+        {"id":"nd4","author":"u2","body":{"date":"2026-10-04","flow":1,"pain":0,"color":1,"discharge":2,"mood":12,"symptoms":["疲惫"],"temp":36.4,"weight":50.0}},
+        {"id":"nd5","author":"u1","body":{"date":"2026-10-20","temp":36.8,"weight":50.3,"mood":6}}
+      ]
+    },
+    "noFlowPain": {
+      "today": "2026-11-14",
+      "records": [
+        {"id":"z1","author":"u1","body":{"start":"2026-08-01","length":3,"cycle":28}},
+        {"id":"z2","author":"u2","body":{"start":"2026-08-29","length":3,"cycle":28}},
+        {"id":"zd1","author":"u1","body":{"date":"2026-08-01","mood":3,"symptoms":["腰酸"],"temp":36.5,"weight":50.0,"sex":[{"t":"21:00","w":[2]}]}},
+        {"id":"zd2","author":"u2","body":{"date":"2026-08-02","mood":5,"symptoms":["疲惫"]}},
+        {"id":"zd3","author":"u1","body":{"date":"2026-08-29","mood":9,"symptoms":["疲惫"],"temp":36.6,"weight":50.1}},
+        {"id":"zd4","author":"u2","body":{"date":"2026-08-30","mood":2,"temp":36.7}}
+      ]
+    }
+  }
+}

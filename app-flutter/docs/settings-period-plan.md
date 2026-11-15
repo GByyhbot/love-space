@@ -10,9 +10,12 @@
 > `android-app/` 零改动；对拍结论见**附录 A**，C4 就此关闭（见第七节）。
 > 段 **8-B（生理期主页 UI：整月网格 / hero / 9 字段弹层 / 经期四动作 /
 > 预警与历史卡）已随 2.2.2 / VC222 落地**：网格逐日 245 格 × Web 实跑全等，
-> 结论见**附录 B**；**数据分析页（可选段 C）不做、主页不预置入口（无死卡）**，
-> 提醒不做（D3）。版本位自 **2.2.1 (VC221)** 起顺延。本章只补缺口，
-> **不重做 App 已有部分**。**C/D/E 段**仍按第五节分段表停等主人逐段放行。
+> 结论见**附录 B**；提醒不做（D3）。
+> 段 **C（生理数据分析页 13 板块 + Web 实跑对拍）已定案/已落地**（对拍结论见
+> **附录 C**；主页 `period.js:517` 数据分析入口卡已补回为**活入口**）；
+> 段 **D（设置缺口）已定案/已落地**（落地清单见**附录 D**）。
+> 版本位自 **2.2.1 (VC221)** 起顺延。本章只补缺口，
+> **不重做 App 已有部分**。**E 段**仍按第五节分段表停等主人逐段放行。
 > 纪律：结论全部实读核实并附行号；未核实项见第七节，不作推测。
 > 体例沿用 `app-flutter/docs/together-plan.md`（调研稿）与 `personal-corner-plan.md`（契约逐条实读）。
 
@@ -404,8 +407,8 @@ AAD 绑定 kind+record_id），换错/丢失密钥 → period 记录不可解。
 |---|---|---|---|---|
 | **A（8-A 已定案）** | **2.2.1 (VC221)** | **生理期地基 + 入口 + 读写**：hub 🌸宽卡、⊕ 面板死入口改真跳转、`/period` 二级页、`GET /api/records` 合并拉 period、两种记录形状解析、`periodData`/`cyclePhases`/`periodEpisodeOf` 客户端重算、经期区间与日记录的 POST/PUT/DELETE + `client_id` 幂等、软删/恢复接通用 `restore` | `GET/POST/PUT/DELETE /api/records`、`POST /api/records/{rid}/restore`；`period.js:34-141/:145-170`；`main.py:1141-1220/:1236-1275` | D1、D2、D6 |
 | **B（8-B 已定案/已落地 · 2.2.2/VC222）** | **2.2.2 (VC222)** | **生理期主页 UI**：整月日历网格（四相位/预测/排卵/记录点）、hero 环形「周期第 N 天」+ 受孕概率三档（不给百分比）、`phaseBar` 四段相对权重、日记录 9 字段弹层、经期四动作（来了/走了/又来了/删整次，全程无 `end` 键）、`periodForm` 表单、预警 `periodWarnings`、症状排行、历史卡；**数据分析入口本段删除（无死卡）**、提醒不做 | `period.js:174-193/:232-245/:246-315/:343-483/:484-519/:809-833`；`app.js:2507-2510` | D1、D2 |
-| **C** | **2.2.3 (VC223)** | **可选**：数据分析页 13 板块 + 手画图表 + 受孕概率三档（**主线做完停手等主人决定做不做**） | `period.js:532-587/:591-670/:674-807` | D7 |
-| **D** | **2.2.4 (VC224)** | **设置缺口（D4-c 范围）**：独立 `/settings` 二级页容器、hub 底部设置 8 卡（已落地项用跳转不复制 UI）、主题与外观（7 套 + custom）、主页背景、链路检测/手动切线路、检查更新/APK 下载链接 | `PUT /api/space`/`PUT /api/profile`、`GET /api/routes`、`GET /api/status`、`POST /api/backups`（若纳入）；`app.js:1368-1386/:1870-1942/:1943-1956` | D4、D5、D8 |
+| **C（已定案/已落地）** | **2.2.4 (VC224) 包内第 1 个 commit** | **数据分析页 13 板块 + 手画图表 CustomPaint + 受孕概率三档**：`/period/analysis` 独立二级页、主页 `analysis-entry` 活卡、Web 实跑对拍硬门槛（附录 C） | `period.js:517/:524-587/:591-670/:674-807` | D7 |
+| **D（已定案/已落地）** | **2.2.4 (VC224)** | **设置缺口（D4-c 范围）**：独立 `/settings` 二级页容器、hub 底部设置 **7 卡**（提醒设置卡不加；已落地项用跳转不复制 UI）、主题与外观（7 套 + custom，`ThemeData` 真生效）、主页背景（防抹除全量 merge）、链路检测/手动切线路、检查更新/APK 下载链接 | `PUT /api/space`/`PUT /api/profile`、`POST /api/media`、`GET /api/routes`、`GET /api/status`；`app.js:1229/:1368-1386/:1870-1942/:1943-1956/:2569/:2843` | D4、D5、D8 |
 | **E** | **2.2.5 (VC225)** | **可选（D7 定案，停等主人决定）**：通知渠道与提醒偏好 + `period` 提醒事件 + 数据导出 3 链接 + 备份/存储占用（仅 admin）+ imports/notices 若主人决定纳入 | `/api/channels` 系列 `main.py:2518-2564`、`/api/export*`、`/api/backups`、`/api/storage`、`/api/imports*` | D3、D4 |
 
 **明确不做（除非主人改定案）**：App 已有项（2.3 全表，不重做）；figure 摆拍
@@ -975,3 +978,429 @@ max(1,cyc-ovuRel-2)]` + 游标 `pos`，**相对天数、绝不用绝对 dayNum**
 门禁：全项目 `dart analyze` / `flutter analyze`（不带 lib 参数）**0 issues**、
 `flutter test` 全量全过；跑前 unset 八个代理变量；一 commit、`git status` 空；
 后端 `app/` / `static/` / `android-app/` 零改动；**停等真机验收、不自宣完成、不开 C 段**。
+
+---
+
+## 附录 C · 段 C 分析对拍结论（2026-11-15 · Web `static/period.js` 实跑）
+
+> **段 C 已定案/已落地**：生理数据分析页独立二级页 `/period/analysis`、13 板块、
+> 主页 `period.js:517` 数据分析入口活卡、6 张手画图表（CustomPaint，不引 Chart.js）。
+> 版本位随 2.2.4 / VC224 的**第 1 个 commit** 落地（该 commit **pubspec 保持
+> 2.2.2+222 不动**）；`flutter-plan-v2.md` 无需再改。
+
+### C.1 期望值生成方式（**来自 Web 实跑，不许手算**）
+
+沿用 8-A / 8-B 机制：一次性脚本 `app-flutter/tool/gen_period_c_expected.js`
+（**跑完即删**，无未跟踪残留；全文如下等价可复核；运行：项目根
+`D:/Dev/love-space` 执行 `node app-flutter/tool/gen_period_c_expected.js`）：
+
+- Node `vm.createContext` 后把 `static/period.js` **整份源码 + 求值 IIFE 拼成同一
+  script** 执行 —— 因此 `periodData / periodAnalysis / periodAnalysisPage /
+  periodWarnings / periodDayLogs / periodDayRows / dayNum / dayStr / paMean /
+  paSd / paRound / paMD / paGrouped / paVBars / paLine / paDotRows` 全是
+  **Web 原函数**，未被 mock 覆盖。
+- `meta.sandboxGlobals` 写死并由 Dart 测试自证，严格只注入 **7 个必要全局**：
+  `recordsOf / today / state / esc / button / icon / console`。`esc`（`app.js:18`）
+  与 `button`（`app.js:221`）逐字 copy 自 Web；`icon` 为空桩（`button` 的 ico
+  形参在分析页恒为 `''`，不触发调用）。`today()` 恒注入固定 `'2026-11-14'`，
+  与真实时钟 / 设备时区完全隔离。
+- 期望值不只取 `periodAnalysis(d)` 返回值：还**解析 `periodAnalysisPage()` 真实
+  产出的 HTML**，抽出 13 板块标题/副标题、grade/note、flowText/painText、
+  完整度行、三联统计、warns、免责 mini、尾注、预测 7 格（日期+周几+class）、
+  周期行 diff+宽度、经期/周期 KPI、症状排行、心情 chips、爱爱行、颜色/白带
+  点阵；并把 6 张手画 SVG **逐元素**解析为 `{tag, attrs, text}`
+  （rect x/y/width/height、line、path d、circle cx/cy、text 坐标与内容）。
+- 产出**受版本控制**的测试资产：
+  `app-flutter/test/fixtures/period_c_expected.json`（`meta` 记 source / method /
+  functions / sandboxGlobals / casesSources / today）、
+  `app-flutter/test/fixtures/period_c_cases.json`（8 组新增夹具）；
+  沿用 `app-flutter/test/fixtures/period_cases.json` 的 3 组（multiCycle /
+  singleNoGap / fragmentMerge），合计 11 组。
+- Dart 侧 `test/period_c_portrait_test.dart` 读**同一份** cases + expected，
+  用递归 `_assertDeep`（Map 逐键、List 逐项、num 数值等价、字符串严格全等）
+  逐项断言全等；`test/period_c_page_test.dart` 覆盖入口活卡 / 返回按钮 /
+  系统手势 / 空态 / 13 板块落地。
+
+<details>
+<summary>一次性生成脚本 · 等价可复核全文（tool/gen_period_c_expected.js 跑完即删）</summary>
+
+```js
+'use strict';
+/* 条目 8 · 段 C 一次性脚本（跑完即删；全文抄进 docs/settings-period-plan.md 附录 C.1）。
+   Node vm 把 static/period.js 整份源码 + 求值 IIFE 拼成同一 script 实跑，
+   periodAnalysis(d) / periodAnalysisPage() / pa* 图表件 / periodData() 全是 Web 原函数，
+   只注入 recordsOf / today / state / esc / button / icon / console 七个必要全局。
+   运行（项目根 D:\Dev\love-space）：node app-flutter/tool/gen_period_c_expected.js */
+const fs = require('fs');
+const path = require('path');
+const vm = require('vm');
+
+const ROOT = path.resolve(__dirname, '../..');
+const SRC = fs.readFileSync(path.join(ROOT, 'static/period.js'), 'utf8');
+const FIX = path.join(ROOT, 'app-flutter', 'test', 'fixtures');
+const aCases = JSON.parse(fs.readFileSync(path.join(FIX, 'period_cases.json'), 'utf8'));
+const cCases = JSON.parse(fs.readFileSync(path.join(FIX, 'period_c_cases.json'), 'utf8'));
+
+/* Web app.js:18 的 esc / :221 的 button 逐字 copy（分析页要用到）；icon 在
+   button 的 ico 形参为空时不会被调用，给个空桩即可，不改动 Web 函数体。 */
+const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const icon = () => '';
+const button = (label, action, style = 'secondary', ico = '', extra = '') =>
+  `<button type="button" class="button ${style}" data-action="${action}" ${extra}>${ico ? icon(ico) : ''}${label}</button>`;
+
+const norm = v => JSON.parse(JSON.stringify(v));
+const SANDBOX_GLOBALS = ['recordsOf', 'today', 'state', 'esc', 'button', 'icon', 'console'];
+
+function sandbox(records, today) {
+  const s = {
+    console,
+    recordsOf: () => records,
+    today: () => today,
+    state: {},
+    esc, button, icon,
+  };
+  vm.createContext(s);
+  return s;
+}
+
+/* 求值 IIFE：与整份 period.js 源码拼成同一 script，故全部是 Web 原函数。 */
+const EVAL = String.raw`(()=>{
+  const norm = v => JSON.parse(JSON.stringify(v));
+  const d = periodData();
+  const a = periodAnalysis(d);
+  const html = periodAnalysisPage();
+  const ep = e => e ? {
+    start: e.start, end: e.end, length: e.length,
+    recId: e.rec ? e.rec.id : null,
+    fragIds: (e.frags || []).map(f => f.id),
+  } : null;
+  const analysis = {
+    eps: a.eps.map(ep), last: ep(a.last), prev: ep(a.prev),
+    complete: a.complete, slots: a.slots, filled: a.filled,
+    flow: norm(a.flow), pain: norm(a.pain),
+    color: norm(a.color), discharge: norm(a.discharge),
+    cycleRows: norm(a.cycleRows).map(r => ({
+      cur: r.cur === true, date: r.date,
+      gap: r.gap === undefined ? null : r.gap,
+      days: r.days === undefined ? null : r.days,
+    })),
+    cycleMax: a.cycleMax,
+    sexCount: a.sexCount, sexThisCycle: a.sexThisCycle,
+    monthly: norm(a.monthly),
+    symCount: norm(a.symCount), moodCount: norm(a.moodCount),
+    sd: a.sd, score: a.score,
+    temp: norm(a.temp), weight: norm(a.weight),
+  };
+  const data = {
+    cycle: d.cycle, length: d.length, gaps: norm(d.gaps),
+    todayN: d.todayN, nextStart: d.nextStart,
+    nextStartIso: d.nextStart != null ? dayStr(d.nextStart) : null,
+    untilNext: d.untilNext, estimated: d.estimated,
+    inWindow: d.inWindow, dayOfPeriod: d.dayOfPeriod,
+    dayRows: periodDayRows().length,
+    warns: norm(periodWarnings(d)),
+  };
+  return { analysis, data, html };
+})()`;
+
+const unesc = s => String(s ?? '')
+  .replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+  .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&');
+const strip = s => unesc(String(s ?? '').replace(/<[^>]*>/g, '')).trim();
+const pick = (s, re, i = 1) => { const m = re.exec(s); return m ? unesc(m[i]) : null; };
+const pickAll = (s, re) => [...s.matchAll(re)]
+  .map(m => m.slice(1).map(v => v === undefined ? undefined : unesc(v)));
+
+function svgElements(svg) {
+  const header = svg.slice(0, svg.indexOf('>') + 1);
+  const inner = svg.slice(svg.indexOf('>') + 1).replace(/<\/svg>\s*$/, '');
+  const parseAttrs = raw => {
+    const attrs = {};
+    for (const m of raw.matchAll(/([A-Za-z][A-Za-z0-9-]*)="([^"]*)"/g)) attrs[m[1]] = unesc(m[2]);
+    return attrs;
+  };
+  const els = [];
+  const re = /<(line|rect|path|circle|text)\b([^>]*?)(?:\/>|>([\s\S]*?)<\/\1>)/g;
+  let m;
+  while ((m = re.exec(inner))) {
+    const e = { tag: m[1], attrs: parseAttrs(m[2]) };
+    if (m[3] !== undefined) e.text = unesc(m[3]);
+    els.push(e);
+  }
+  return {
+    aria: pick(header, /aria-label="([^"]*)"/),
+    viewBox: pick(header, /viewBox="([^"]*)"/),
+    w: pick(header, /\bwidth="([^"]*)"/),
+    h: pick(header, /\bheight="([^"]*)"/),
+    els,
+  };
+}
+
+function svgs(html) {
+  return [...html.matchAll(/<svg class="pa-svg"[\s\S]*?<\/svg>/g)]
+    .map(m => svgElements(m[0]));
+}
+
+function dotRows(html) {
+  const rows = [];
+  const re = /<div class="pa-dotrow"><span class="pa-dotlabel">([\s\S]*?)<\/span><div class="pa-dots">([\s\S]*?)<\/div><\/div>/g;
+  let m;
+  while ((m = re.exec(html))) {
+    const cells = [];
+    const cre = /<i class="pa-dot( hollow)?"(?: style="background:([^"]*)")? title="([^"]*)"><\/i>/g;
+    let c;
+    while ((c = cre.exec(m[2]))) {
+      cells.push({ hollow: !!c[1], color: c[2] ? unesc(c[2]) : null, tip: unesc(c[3]) });
+    }
+    rows.push({ name: unesc(m[1]), cells });
+  }
+  return rows;
+}
+
+function sections(html) {
+  const re = /<section class="card pa-card"><div class="section-heading"><h2>([\s\S]*?)<\/h2><span class="pa-sub">([\s\S]*?)<\/span><\/div>([\s\S]*?)<\/section>|<section class="card pa-card"><div class="section-heading"><h2>([\s\S]*?)<\/h2><\/div>([\s\S]*?)<\/section>/g;
+  const out = [];
+  let m;
+  while ((m = re.exec(html))) {
+    const title = m[1] !== undefined ? unesc(m[1]) : unesc(m[4]);
+    const sub = m[1] !== undefined ? unesc(m[2]) : '';
+    const body = m[1] !== undefined ? m[3] : m[5];
+    out.push({ title, sub, body });
+  }
+  return out;
+}
+
+function pageOf(html, a, data) {
+  const isEmpty = html.includes('还没有经期记录');
+  const heading = /<div class="page-heading"><div><h1>([\s\S]*?)<\/h1><p>([\s\S]*?)<\/p><\/div><\/div>/;
+  const hm = heading.exec(html);
+  const secs = sections(html);
+  const byTitle = t => secs.find(s => s.title === t) || null;
+  const overview = pick(html, /<section class="card pa-overview">([\s\S]*?)<\/section>/) || '';
+  const predSec = byTitle('🔮 经期预测');
+  const cycleSec = byTitle('🗓 周期变化');
+  const lenSec = byTitle('💧 经期变化');
+  const flowSec = byTitle('🩸 流量变化');
+  const painSec = byTitle('⚡ 痛经情况');
+  const colorSec = byTitle('🎨 颜色变化');
+  const symSec = byTitle('💊 常出现的症状');
+  const moodSec = byTitle('😊 心情');
+  const disSec = byTitle('💧 白带变化');
+  const sexSec = byTitle('💗 爱爱');
+  const tempSec = byTitle('🌡️ 体温');
+  const weightSec = byTitle('⚖️ 体重');
+  const bodyText = s => s ? strip(s.body) : null;
+  const p = {
+    isEmpty,
+    headingTitle: hm ? unesc(hm[1]) : null,
+    headingDesc: hm ? unesc(hm[2]) : null,
+    emptyText: isEmpty ? pick(html, /<p class="meta">([\s\S]*?)<\/p>/) : null,
+    emptyButton: isEmpty ? strip(pick(html, /<button[^>]*data-action="period-back"[^>]*>([\s\S]*?)<\/button>/) || '') : null,
+    sectionTitles: secs.map(s => s.title),
+    sectionSubs: Object.fromEntries(secs.map(s => [s.title, s.sub])),
+    overview: isEmpty ? null : {
+      grade: pick(overview, /<h3>([\s\S]*?)<\/h3>/),
+      note: pick(overview, /<div class="pa-hero-copy"><h3>[\s\S]*?<\/h3><p>([\s\S]*?)<\/p>/),
+      ringDeg: pick(overview, /conic-gradient\(var\(--primary\) ([\d.]+)deg/),
+      ringLabel: pick(overview, /<span><b>([\s\S]*?)<\/b><small>规律度<\/small><\/span>/),
+      meterWidth: pick(overview, /<div class="pa-meter"><i style="width:([\d.]+)%"/),
+      completeLine: pick(overview, /<small>(完整度 [\s\S]*?)<\/small>/),
+      stats: [1, 2, 3].map(i => pick(overview,
+        new RegExp('<div><span>' + ['平均周期','平均经期','记录天数'][i-1] + '</span><strong>([\\d.]+)<em>'))),
+      warns: pickAll(overview, /<div class="pa-warns"><strong>[\s\S]*?<\/strong>([\s\S]*?)<small>[\s\S]*?<\/small><\/div>/g)
+        .flatMap(x => [...x[0].matchAll(/<p>([\s\S]*?)<\/p>/g)].map(y => unesc(y[1]))),
+      warnsNote: pick(overview, /<div class="pa-warns">[\s\S]*?<small>([\s\S]*?)<\/small><\/div>/),
+      mini: pick(overview, /<p class="pa-mini">([\s\S]*?)<\/p>/),
+    },
+    pred: predSec ? {
+      sub: predSec.sub,
+      lead: pick(predSec.body, /<p class="pa-lead">([\s\S]*?)<\/p>/),
+      leadText: strip(pick(predSec.body, /<p class="pa-lead">([\s\S]*?)<\/p>/) || ''),
+      cells: pickAll(predSec.body,
+        /<span class="pa-day([^"]*)"><b>(\d+)<\/b><small>([\s\S]*?)<\/small><\/span>/g)
+        .map(([cls, day, wd]) => ({ cls: cls.trim(), day: Number(day), wd })),
+      legend: strip(pick(predSec.body, /<p class="pa-legend">([\s\S]*?)<\/p>/) || ''),
+    } : null,
+    cycle: cycleSec ? {
+      kpi: (() => {
+        const m = /<div class="pa-kpi"><div><span>最近 1 个周期<\/span><strong>(\d+) 天 <em class="pa-tag([^"]*)">([\s\S]*?)<\/em><\/strong><\/div>[\s\S]*?<span>比平均周期<\/span><strong>([\s\S]*?)<\/strong>/.exec(cycleSec.body);
+        return m ? { gapNow: Number(unesc(m[1])), tagCls: unesc(m[2]).trim(), tag: unesc(m[3]), diffText: unesc(m[4]) } : null;
+      })(),
+      mini: strip(pick(cycleSec.body, /<p class="pa-mini">([\s\S]*?)<\/p>/) || ''),
+      rows: pickAll(cycleSec.body,
+        /<div class="pa-row"><span class="pa-date">([\s\S]*?)<\/span><span class="pa-chip">([\s\S]*?)<\/span><span class="pa-track"><i style="width:([\d.]+)%"><\/i><\/span><b>(\d+)天<\/b><\/div>|<div class="pa-row"><span class="pa-date">([\s\S]*?)<\/span><span class="pa-diff([^"]*)">([\s\S]*?)<\/span><span class="pa-track"><i style="width:([\d.]+)%"><\/i><\/span><b>(\d+)天<\/b><\/div>/g)
+        .map(x => x[0] !== undefined
+          ? { date: x[0], chip: x[1], width: Number(x[2]), days: Number(x[3]), diff: null, diffCls: '' }
+          : { date: x[4], diff: x[6], diffCls: x[5].trim(), width: Number(x[7]), days: Number(x[8]), chip: null }),
+    } : null,
+    len: lenSec ? {
+      kpi: (() => {
+        const m = /<div class="pa-kpi"><div><span>本次经期<\/span><strong>(\d+) 天 <em class="pa-tag([^"]*)">([\s\S]*?)<\/em><\/strong><\/div>[\s\S]*?<span>和上个周期<\/span><strong>([\s\S]*?)<\/strong>/.exec(lenSec.body);
+        return m ? { lastLen: Number(unesc(m[1])), tagCls: unesc(m[2]).trim(), tag: unesc(m[3]), diffText: strip(unesc(m[4])) } : null;
+      })(),
+      mini: strip(pick(lenSec.body, /<p class="pa-mini">([\s\S]*?)<\/p>/) || ''),
+    } : null,
+    flowText: flowSec ? strip(pick(flowSec.body, /<p class="pa-kpi-line">本周期流量对比近半年：<b>([\s\S]*?)<\/b><\/p>/) || '') : null,
+    painText: painSec ? strip(pick(painSec.body, /<p class="pa-kpi-line">([\s\S]*?)<\/p>/) || '') : null,
+    symRows: symSec ? pickAll(symSec.body,
+      /<div class="stat-row"><span>([\s\S]*?)<\/span><div class="stat-bar"><i style="width:([\d.]+)%"><\/i><\/div><b>(\d+) 次<\/b><\/div>/g)
+      .map(([name, width, n]) => ({ name, width: Number(width), n: Number(n) })) : [],
+    moodChips: moodSec ? pickAll(moodSec.body,
+      /<span class="pa-chip-mood"><i>([\s\S]*?)<\/i>([\s\S]*?)<b>(\d+)<\/b><\/span>/g)
+      .map(([emoji, name, n]) => ({ emoji, name, n: Number(n) })) : [],
+    moodTotal: moodSec ? pick(moodSec.body, /共 (\d+) 次心情记录/) : null,
+    sexLine: sexSec ? strip(pick(sexSec.body, /<p class="pa-kpi-line">([\s\S]*?)<\/p>/) || '') : null,
+    colorDots: colorSec ? dotRows(colorSec.body) : [],
+    disDots: disSec ? dotRows(disSec.body) : [],
+    colorLegend: colorSec ? strip(pick(colorSec.body, /<p class="pa-legend">([\s\S]*?)<\/p>/) || '') : null,
+    disLegend: disSec ? strip(pick(disSec.body, /<p class="pa-legend">([\s\S]*?)<\/p>/) || '') : null,
+    tempPresent: !!tempSec,
+    weightPresent: !!weightSec,
+    foot: pick(html, /<p class="small-note pa-foot">([\s\S]*?)<\/p>/),
+    legends: pickAll(html, /<p class="pa-legend">([\s\S]*?)<\/p>/g).map(x => strip(x[0])),
+    svgs: svgs(html),
+  };
+  return p;
+}
+
+(async () => {
+  const out = {
+    meta: {
+      source: 'static/period.js',
+      method: 'node vm: full source + eval IIFE in one script; Web original functions, not mocked',
+      sandboxGlobals: SANDBOX_GLOBALS,
+      functions: ['periodData', 'periodAnalysis', 'periodAnalysisPage', 'periodWarnings',
+        'periodDayLogs', 'periodDayRows', 'dayNum', 'dayStr', 'paMean', 'paSd', 'paRound',
+        'paMD', 'paGrouped', 'paVBars', 'paLine', 'paDotRows'],
+      casesSources: ['test/fixtures/period_cases.json (multiCycle/singleNoGap/fragmentMerge)',
+        'test/fixtures/period_c_cases.json (8 new cases)'],
+      today: cCases.meta.today,
+      note: '期望值全部由 Web 原函数实跑产出（含 periodAnalysisPage 的 HTML 逐项解析）；不许手算、不许 Dart 硬编码。Dart 读同一份 cases 夹具逐项断言全等。',
+      generatedBy: 'app-flutter/tool/gen_period_c_expected.js (one-shot, deleted after run; full text in 附录 C.1)',
+    },
+    cases: {},
+  };
+
+  const all = {};
+  for (const name of cCases.meta.reuseFromPeriodCases) {
+    const c = aCases.cases[name];
+    all[name] = { today: c.today, records: c.records };
+  }
+  for (const [name, c] of Object.entries(cCases.cases)) {
+    all[name] = { today: c.today, records: c.records };
+  }
+
+  for (const [name, c] of Object.entries(all)) {
+    const s = sandbox(c.records, c.today);
+    vm.runInContext(SRC + '\n;globalThis.__R=' + EVAL + ';', s);
+    const R = norm(s.__R);
+    out.cases[name] = {
+      analysis: R.analysis,
+      data: R.data,
+      page: pageOf(R.html, R.analysis, R.data),
+    };
+    console.log('OK', name,
+      'complete=' + R.analysis.complete,
+      'score=' + R.analysis.score,
+      'sd=' + R.analysis.sd,
+      'sections=' + out.cases[name].page.sectionTitles.length,
+      'svgs=' + out.cases[name].page.svgs.length);
+  }
+
+  fs.writeFileSync(path.join(FIX, 'period_c_expected.json'),
+    JSON.stringify(out, null, 2) + '\n', 'utf8');
+  console.log('WROTE', path.join(FIX, 'period_c_expected.json'));
+})().catch(e => { console.error(e); process.exitCode = 1; });
+```
+
+</details>
+
+### C.2 逐项比对表（左 = Web 实跑期望值，右 = Dart 统计层实测；**全等**）
+
+`flutter test test/period_c_portrait_test.dart` → **18/18 全过，0 fail**；
+`dart analyze lib test` → **No issues found!**。
+
+| 组 | complete / slots / filled | score / sd | flow / pain nth | cycleRows | symCount / moodCount | temp / weight keySeries | 板块数 | SVG 图数 |
+|---|---|---|---|---|---|---|---|---|
+| ① multiCycle（8-A 沿用） | 5 / 20 / 1 | 99 / 0.816496580927726 | 1 / 0 | 4 | 0 / 0 | 0 / 0 | 5 | 3 |
+| ② singleNoGap（沿用） | 0 / 6 / 0 | **null** / 0 | 0 / 0 | 1 | 0 / 0 | 0 / 0 | 4 | 2 |
+| ③ fragmentMerge（沿用） | 0 / 12 / 0 | **null** / 0 | 0 / 0 | 2 | 0 / 0 | 0 / 0 | 4 | 2 |
+| ④ analysisRich（新） | 95 / 20 / 19 | 99 / 0 | 5 / 5 | 4 | 5 / 17 | 12 / 12（limit=12 生效） | 12 | 6 |
+| ⑤ scoreNullTwoEps（新，gaps=1） | 56 / 9 / 5 | **null** / 0 | 2 / 2 | 2 | 4 / 5 | 5 / 5 | 12 | 6 |
+| ⑥ empty（新，无经期记录） | 0 / 0 / 0 | **null** / 0 | 0 / 0 | 0 | 1 / 2 | 2 / 2 | 0（空态） | 0 |
+| ⑦ completenessEdge（新，null/''/空数组/0 边界） | 67 / 9 / 6 | 99 / 0 | 2 / 1 | 3 | 1 / 1 | 2 / 2 | 12 | 6 |
+| ⑧ tempWeightSeries（新，sd=7） | 100 / 9 / 9 | **67** / 7 | 3 / 3 | 3 | 0 / 0 | 12 / 12 | 8 | 6 |
+| ⑨ wobble（新，sd=6） | 67 / 9 / 6 | **73** / 6 | 2 / 2 | 3 | 5 / 7 | 7 / 7 | 12 | 6 |
+| ⑩ flowPainNoHist（新，无历史同期） | 100 / 4 / 4 | **null** / 0 | 4 / 4 | 1 | 3 / 5 | 5 / 5 | 12 | 6 |
+| ⑪ noFlowPain（新，无流量/痛经记录） | 67 / 6 / 4 | **null** / 0 | 0 / 0 | 2 | 2 / 4 | 3 / 2 | 8 | 4 |
+
+**全量比对，不是抽查**：每组断言 `periodAnalysis(d)` 全结构
+（eps / last / prev 含 recId+fragIds、complete / slots / filled、flow / pain 每行
+label/cur/hist、color / discharge 的 cur/his/n、cycleRows 的 cur/date/gap/days、
+cycleMax、sexCount / sexThisCycle、monthly 的 label/v/now、symCount、
+moodCount、sd、score、temp / weight）全等；断言 `periodData` 派生值
+（cycle / length / gaps / todayN / nextStart / nextStartIso / untilNext /
+estimated / inWindow / dayOfPeriod / dayRows / warns）全等；断言
+`periodAnalysisPage()` 13 板块全部文案/数字与 6 张 SVG 逐元素逐坐标全等。
+合计 11 组 × 约 3000 个标量断言。
+
+🔴 **规律度 `:663-665` 硬门槛**：`d.gaps.length < 2` 的 6 组
+（singleNoGap / fragmentMerge / scoreNullTwoEps / flowPainNoHist / noFlowPain /
+empty）score 必为 `null`、grade「样本还太少」，**不硬编分数**；只有 gaps>=2
+才按 `min(99,max(40,round(100-min(45,max(0,(sd-1.5)*6)))))` 算。五档 grade
+实测覆盖「很规律（99）/ 比较规律（73）/ 有些波动（67）/ 样本还太少（null）」
+（「波动明显」需极端 sd，夹具未造该极端，测试注明）。`paSd` 用总体标准差、
+`Math.round` 按 `floor(x+0.5)`、`toFixed(1)` 与 Dart 舍入已实测一致
+（唯一差异 `-0.0` 在 `_f1` 归一化为 `0.0`）。
+
+**纯 Dart 单一实现**：`lib/features/period/period_analysis.dart` 只消费 8-A
+`PeriodData / dayNum / dayStr / PeriodRow / PeriodEpisode`，复用 `period_meta.dart`
+常量表与 `periodWarnings`，绝不重算 cycle / length / nextStart / phases。
+图表几何是纯数据 `PaSvg`，由 `period_charts.dart` 的 `PaChartPainter`
+（`CustomPaint`）消费，不引任何图表库（`:524` 口径）。
+
+### C.3 13 板块落地清单（`period.js:683-806` 逐项）
+
+| # | 板块（标题逐字） | 行号 | App 落地 | 数据来源 |
+|---|---|---|---|---|
+| ① | 概览（grade 五档 `:684` / note `:685-687` / 规律度 conic 环 / 完整度条 / 三联统计 / warns / 免责 mini `:701`） | `:688-702` | `_overview` + `_ScoreRing`（CustomPaint） | `AnalysisOverview`（Web 实跑对拍） |
+| ② | 🔮 经期预测（7 格日期条 `i=-3..3`、正中预测日、`paMD`、`untilNext`、`estimated`→「参考值」） | `:705-719` | `_prediction` + `_leadSpans` | `AnalysisPrediction`（7 格 day/wd/cls 全等） |
+| ③ | 🗓 周期变化（cycleRows 前 6、diff「准时/提前 N 天/推迟 N 天」、gapNow KPI `21<=gap<=35` 正常） | `:722-734` | `_cycle` + `_kpi` | `AnalysisCycle`（rows+KPI 全等） |
+| ④ | 💧 经期变化（本次/上次「多/少 N 天」+ `paVBars`） | `:737-745` | `_length` + `PaChart` | `AnalysisLength` + `lengthChart` |
+| ⑤ | 🩸 流量变化（flowText `:749-755` 与近半年比 + `paGrouped`） | `:748-757` | `_grouped` + `PaChart` | `flowText` + `flowChart` |
+| ⑥ | ⚡ 痛经情况（painText 峰值 `:760-767` + `paGrouped`） | `:759-769` | `_grouped` + `PaChart` | `painText` + `painChart` |
+| ⑦ | 🎨 颜色变化（`paDotRows` + `PERIOD_COLOR` 众数） | `:771-776` | `_dots` + `PaDotMatrix` | `colorDots` / `colorLegend` |
+| ⑧ | 💊 常出现的症状（symCount top6 stat-row） | `:778-781` | `_symRows` | `symRows` |
+| ⑨ | 😊 心情（moodCount top8 chips） | `:783-787` | `_mood` | `moodChips` / `moodTotal` |
+| ⑩ | 💧 白带变化（`paDotRows` + `PA_DIS_COLORS`） | `:789-794` | `_dots` + `PaDotMatrix` | `disDots` / `disLegend` |
+| ⑪ | 💗 爱爱（本周期/累计/近 6 月 `paVBars`） | `:796-799` | `_sex` + `PaChart` | `sexLine` + `monthlyChart` |
+| ⑫ | 🌡️ 体温（`a.temp.length>1` 才 `paLine`，`toFixed(1)+'℃'`） | `:802` | `PaChart` | `tempChart` |
+| ⑬ | ⚖️ 体重（`a.weight.length>1` 才 `paLine`，`toFixed(1)`） | `:803` | `PaChart` | `weightChart` |
+| 尾 | 「图表只反映记过的那几天。想让它更准，经期每天顺手点两下就够了。」 | `:805` | ListView 尾注 | `analysisFoot` |
+| 空态 | 页头「生理数据分析 / 把这半年的记录，摊成看得懂的变化。」+「还没有经期记录…」+「回到生理期」 | `:676-678` | `_emptyCard` | `analysisEmptyText` / `analysisBackButton` |
+
+**返回路径**：`/period/analysis` 一律 `context.push`，AppBar
+`automaticallyImplyLeading` 不关 → 返回按钮 + 系统手势都能回生理期主页；
+空态「回到生理期」按钮走 `Navigator.maybePop()`（同一返回路径）。
+**入口**：主页 `period.js:517` `analysis-entry` 卡文案「数据分析 /
+周期、流量、痛经、体温的变化」，`context.push('/period/analysis')`
+真跳转（8-B 的「无死卡」断言已按新定案反转为活卡断言）。
+
+### C.4 段 C 落地清单（随 2.2.4 / VC224 第 1 个 commit）
+
+| 文件 | 作用 |
+|---|---|
+| `lib/features/period/period_analysis.dart` | 纯 Dart 统计层：`paMean/paSd/paRound/paMD`、`periodAnalysis` `:591-670`、图表几何 `paGrouped/paVBars/paLine/paDotRows` `:532-587`、13 板块视图模型 `buildAnalysisView` `:674-807`（`toJson()` 与 Web 实跑逐键对齐） |
+| `lib/features/period/period_charts.dart` | `PaChartPainter`（CustomPaint 消费 `PaSvg` 几何）/ `PaChart` / `PaDotMatrix`，不引图表库 |
+| `lib/features/period/period_analysis_page.dart` | `/period/analysis` 独立二级页：概览 + 12 板块 + 空态 + 尾注 |
+| `lib/features/period/period_page.dart` | 补回 `:517` 数据分析入口活卡（段 8-B 曾按无死卡定案删除） |
+| `lib/main.dart` | 注册 `/period/analysis` 路由 |
+| `test/period_c_portrait_test.dart` / `test/period_c_page_test.dart` | 对拍 18/18 全过 / 页面 widget 6/6 全过 |
+| `test/fixtures/period_c_cases.json` / `period_c_expected.json` | 8 组新增夹具 / Web 实跑期望值（含 meta） |
+| `test/period_page_test.dart` / `test/period_b_test.dart` | 8-B「C 段不做」断言按新定案更新为「C 段活卡已落地」 |
+| `docs/settings-period-plan.md` | 附录 C（本附录）+ 分段表 C 行标已定案/已落地 |
+
+**门禁**：全项目 `dart analyze` / `flutter analyze`（不带 lib 参数）**0 issues**、
+`flutter test` 全量全过；后端 `app/` / `static/` / `android-app/` 零改动；
+`pubspec.yaml` 本 commit **保持 2.2.2+222 不动**（只在 D 段 commit 升 `2.2.4+224`）；
+一次性脚本用完即删、`git status --porcelain` 空。

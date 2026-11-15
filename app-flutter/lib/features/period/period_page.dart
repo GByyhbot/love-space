@@ -1,12 +1,12 @@
 /// 生理期主页（条目 8 · 段 8-B · 2.2.2/VC222）。
 ///
 /// 主页顺序逐字对齐 `periodPage :518`：
-/// `headBar → hero → warnBlock → 【数据分析入口：本段删除】 → top(整月日历) →
+/// `headBar → hero → warnBlock → entry(数据分析入口卡) → top(整月日历) →
 ///  log(当天记录) → symBlock(症状统计) → hist(历史卡)`。
-/// · **🔴 数据分析页是可选段 C，本段不做、也不预置入口（无死卡）**：
-///   Web `period.js:517` 的 `<button class="card analysis-entry" data-action=
-///   "period-analysis">数据分析</button>` 在 App 里整块去掉，主页上不存在
-///   「数据分析」按钮或卡片。
+/// · **🔴 数据分析入口（段 C 已落地，活入口非死卡）**：对齐 Web
+///   `period.js:517` 的 `<button class="card analysis-entry" data-action=
+///   "period-analysis">数据分析</button>`，文案「数据分析 / 周期、流量、痛经、
+///   体温的变化」；点击 `context.push('/period/analysis')` 进独立二级页。
 /// · **提醒不做**（D3 定案）：本页不碰通知渠道 / 提醒 UI。
 /// · **🔴 所有数字与着色只消费 8-A 引擎 [period_engine.dart] + 纯展示层
 ///   [period_meta.dart] / [period_grid.dart]**：cycle / length / nextStart /
@@ -22,6 +22,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/api/api_client.dart' as api;
 import '../../core/sse/sse_client.dart';
@@ -113,7 +114,9 @@ class _PeriodPageState extends ConsumerState<PeriodPage> {
             _heroCard(context, d, rows, today, utcNow),
             // warnBlock（踩线才提示，正常时整块不存在）
             _warnBlock(context, d),
-            // 🔴 数据分析入口：本段删除（不预置死卡）
+            // entry：数据分析入口卡（段 C 活入口，非死卡；对齐 period.js:517）
+            const SizedBox(height: 12),
+            _analysisEntry(context),
             const SizedBox(height: 12),
             // top：整月日历
             _calendarCard(context, grid, today, selected),
@@ -341,6 +344,39 @@ class _PeriodPageState extends ConsumerState<PeriodPage> {
                     style: theme.textTheme.labelSmall
                         ?.copyWith(color: cs.outline)),
               ]),
+        ),
+      ),
+    );
+  }
+
+  // ── entry：数据分析入口卡（period.js:517 逐字） ───────────────────
+  Widget _analysisEntry(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    return Card(
+      margin: EdgeInsets.zero,
+      child: InkWell(
+        key: const Key('period-analysis-entry'),
+        borderRadius: BorderRadius.circular(12),
+        onTap: () => context.push('/period/analysis'),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          child: Row(children: [
+            const Text('📊', style: TextStyle(fontSize: 24)),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('数据分析', style: theme.textTheme.titleMedium),
+                    const SizedBox(height: 2),
+                    Text('周期、流量、痛经、体温的变化',
+                        style: theme.textTheme.bodySmall
+                            ?.copyWith(color: cs.outline)),
+                  ]),
+            ),
+            Icon(Icons.chevron_right_rounded, color: cs.outline),
+          ]),
         ),
       ),
     );
