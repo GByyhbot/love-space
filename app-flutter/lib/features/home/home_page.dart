@@ -12,10 +12,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/api/api_client.dart';
+import '../../core/chat/chat_media.dart'
+    show chatBaseProvider, mediaCookieHeadersProvider;
 import '../../core/sse/sse_client.dart';
 import '../../core/together/together_data.dart' show anniversaryDue;
 import '../auth/auth_state.dart';
 import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
+import '../settings/settings_state.dart' show spaceEditRequestedProvider;
 
 /// 今日日期（本地时区，与 Web today() 一致格式 yyyy-MM-dd）
 String todayStr() {
@@ -31,14 +34,30 @@ int daysBetween(String a, String b) {
 }
 
 const dailyQuotes = [
-  '喜欢是乍见之欢，爱是久处不厌。', '日子很普通，但有你就不一样。', '今天也想和你一起，把生活过成一件件小事。',
-  '你是我所有计划里，唯一不变的那一项。', '一起吃饭，一起发呆，一起把日子过成小事。', '世界很大，我的坐标是你。',
-  '想和你把「以后」两个字，慢慢过成具体的日子。', '不必每天都惊喜，只要每天都有你。', '我们不用很厉害，只要一直在一起。',
-  '喜欢你这件事，我做得最久。', '天气预报说明天有雨，我记得带伞，也记得带你。', '你笑的时候，我觉得今天没白过。',
-  '柴米油盐里，也藏着浪漫。', '不用去很远的地方，回家就是最好的旅行。', '你在的地方，就是我想去的地方。',
-  '想和你一起变老，慢慢的那种。', '今天的月亮很好，你也在，就更好了。', '爱是记得，也是愿意。',
-  '日子一天天过去，喜欢一天天变多。', '我们把普通的日子，过成了纪念日。', '你说话的时候，我在认真听。',
-  '抱一下，今天就算圆满。', '一天很短，但装得下想念。', '明天也一起吃早饭吧。',
+  '喜欢是乍见之欢，爱是久处不厌。',
+  '日子很普通，但有你就不一样。',
+  '今天也想和你一起，把生活过成一件件小事。',
+  '你是我所有计划里，唯一不变的那一项。',
+  '一起吃饭，一起发呆，一起把日子过成小事。',
+  '世界很大，我的坐标是你。',
+  '想和你把「以后」两个字，慢慢过成具体的日子。',
+  '不必每天都惊喜，只要每天都有你。',
+  '我们不用很厉害，只要一直在一起。',
+  '喜欢你这件事，我做得最久。',
+  '天气预报说明天有雨，我记得带伞，也记得带你。',
+  '你笑的时候，我觉得今天没白过。',
+  '柴米油盐里，也藏着浪漫。',
+  '不用去很远的地方，回家就是最好的旅行。',
+  '你在的地方，就是我想去的地方。',
+  '想和你一起变老，慢慢的那种。',
+  '今天的月亮很好，你也在，就更好了。',
+  '爱是记得，也是愿意。',
+  '日子一天天过去，喜欢一天天变多。',
+  '我们把普通的日子，过成了纪念日。',
+  '你说话的时候，我在认真听。',
+  '抱一下，今天就算圆满。',
+  '一天很短，但装得下想念。',
+  '明天也一起吃早饭吧。',
 ];
 
 class HomePage extends ConsumerWidget {
@@ -61,6 +80,22 @@ class HomePage extends ConsumerWidget {
     final records = ref.watch(recordsProvider);
     final theme = Theme.of(context);
     final me = ref.watch(authProvider.notifier).me;
+    // 段 D：「空间信息」跳转入口（设置页 / hub 卡）置位后，回首页自动打开
+    // 已有的空间信息编辑弹层——只做导航，不复制该弹层 UI。
+    ref.listen(spaceEditRequestedProvider, (prev, next) {
+      if (next == true) {
+        ref.read(spaceEditRequestedProvider.notifier).state = false;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (context.mounted && ref.read(authProvider.notifier).me != null) {
+            showSpaceEditDialog(
+              context,
+              ref,
+              ref.read(authProvider.notifier).me!,
+            );
+          }
+        });
+      }
+    });
 
     if (me == null) {
       return const Center(child: CircularProgressIndicator());
@@ -69,39 +104,58 @@ class HomePage extends ConsumerWidget {
     return records.when(
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (e, _) => Center(
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          const Text('加载失败'),
-          const SizedBox(height: 8),
-          OutlinedButton(
-            onPressed: () => ref.invalidate(recordsProvider),
-            child: const Text('重试'),
-          ),
-        ]),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('加载失败'),
+            const SizedBox(height: 8),
+            OutlinedButton(
+              onPressed: () => ref.invalidate(recordsProvider),
+              child: const Text('重试'),
+            ),
+          ],
+        ),
       ),
       data: (list) => RefreshIndicator(
         onRefresh: () async => ref.invalidate(recordsProvider),
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            _Hero(me: me, list: list,
-                dashboard: ref.watch(dashboardProvider).valueOrNull,
-                onGoTab: onGoTab),
+            _Hero(
+              me: me,
+              list: list,
+              dashboard: ref.watch(dashboardProvider).valueOrNull,
+              onGoTab: onGoTab,
+            ),
             const SizedBox(height: 12),
             _TodayCard(me: me, list: list, onGoTab: onGoTab),
             const SizedBox(height: 12),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
-                color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
+                color: theme.colorScheme.surfaceContainerHighest.withValues(
+                  alpha: 0.4,
+                ),
                 borderRadius: BorderRadius.circular(14),
               ),
-              child: Row(children: [
-                Text('✦', style: TextStyle(color: theme.colorScheme.primary)),
-                const SizedBox(width: 8),
-                Expanded(child: Text(dailyQuotes[DateTime.now().day % dailyQuotes.length],
-                    style: theme.textTheme.bodyMedium)),
-                Text('今天的一句', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.outline)),
-              ]),
+              child: Row(
+                children: [
+                  Text('✦', style: TextStyle(color: theme.colorScheme.primary)),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      dailyQuotes[DateTime.now().day % dailyQuotes.length],
+                      style: theme.textTheme.bodyMedium,
+                    ),
+                  ),
+                  Text(
+                    '今天的一句',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.outline,
+                    ),
+                  ),
+                ],
+              ),
             ),
             const SizedBox(height: 16),
             Text('最近的小美好', style: theme.textTheme.titleMedium),
@@ -113,23 +167,31 @@ class HomePage extends ConsumerWidget {
     );
   }
 
-  List<Widget> _recentPosts(BuildContext context, MeData me, List<Record> list,
-      {void Function(int tab)? onGoTab}) {
+  List<Widget> _recentPosts(
+    BuildContext context,
+    MeData me,
+    List<Record> list, {
+    void Function(int tab)? onGoTab,
+  }) {
     final theme = Theme.of(context);
     final posts = list.where((r) => r.kind == 'post').toList()
       ..sort((a, b) => b.created.compareTo(a.created));
     final top = posts.take(3).toList();
     if (top.isEmpty) {
       return [
-        Card(child: InkWell(
-          borderRadius: BorderRadius.circular(12),
-          onTap: () => onGoTab?.call(1), // 空态也可点：去时光页开始记录
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Text('故事，从这一刻开始——点这里去时光页写下第一篇。',
-                style: theme.textTheme.bodyMedium),
+        Card(
+          child: InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: () => onGoTab?.call(1), // 空态也可点：去时光页开始记录
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Text(
+                '故事，从这一刻开始——点这里去时光页写下第一篇。',
+                style: theme.textTheme.bodyMedium,
+              ),
+            ),
           ),
-        )),
+        ),
       ];
     }
     return top.map((r) {
@@ -140,39 +202,88 @@ class HomePage extends ConsumerWidget {
           borderRadius: BorderRadius.circular(12),
           onTap: () => onGoTab?.call(1), // 详情与点赞评论在时光页（条目 4）
           child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Row(children: [
-              CircleAvatar(radius: 12,
-                  backgroundColor: theme.colorScheme.primaryContainer,
-                  child: Text((author?.name.isEmpty ?? true) ? '?' : author!.name.characters.first,
-                      style: TextStyle(fontSize: 11, color: theme.colorScheme.onPrimaryContainer))),
-              const SizedBox(width: 8),
-              Text(author?.name ?? '…', style: theme.textTheme.labelLarge),
-              const SizedBox(width: 8),
-              Text(r.date, style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.outline)),
-            ]),
-            if ((r.body['title'] ?? '').toString().isNotEmpty)
-              Padding(padding: const EdgeInsets.only(top: 8),
-                  child: Text(r.body['title'].toString(), style: theme.textTheme.titleSmall)),
-            if ((r.body['content'] ?? '').toString().isNotEmpty)
-              Padding(padding: const EdgeInsets.only(top: 4),
-                  child: Text(r.body['content'].toString(), style: theme.textTheme.bodyMedium)),
-            const SizedBox(height: 6),
-            Row(children: [
-              Icon(Icons.favorite_border, size: 14, color: theme.colorScheme.outline),
-              const SizedBox(width: 4),
-              Text('${r.likes.length}', style: theme.textTheme.bodySmall),
-              const SizedBox(width: 16),
-              Icon(Icons.chat_bubble_outline, size: 14, color: theme.colorScheme.outline),
-              const SizedBox(width: 4),
-              Text('${r.comments.length}', style: theme.textTheme.bodySmall),
-              const Spacer(),
-              Text('媒体 ${r.media.length} · 完整互动在时光页（条目 4）',
-                  style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.outline)),
-            ]),
-          ]),
-        ),
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 12,
+                      backgroundColor: theme.colorScheme.primaryContainer,
+                      child: Text(
+                        (author?.name.isEmpty ?? true)
+                            ? '?'
+                            : author!.name.characters.first,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: theme.colorScheme.onPrimaryContainer,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      author?.name ?? '…',
+                      style: theme.textTheme.labelLarge,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      r.date,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.outline,
+                      ),
+                    ),
+                  ],
+                ),
+                if ((r.body['title'] ?? '').toString().isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Text(
+                      r.body['title'].toString(),
+                      style: theme.textTheme.titleSmall,
+                    ),
+                  ),
+                if ((r.body['content'] ?? '').toString().isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      r.body['content'].toString(),
+                      style: theme.textTheme.bodyMedium,
+                    ),
+                  ),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    Icon(
+                      Icons.favorite_border,
+                      size: 14,
+                      color: theme.colorScheme.outline,
+                    ),
+                    const SizedBox(width: 4),
+                    Text('${r.likes.length}', style: theme.textTheme.bodySmall),
+                    const SizedBox(width: 16),
+                    Icon(
+                      Icons.chat_bubble_outline,
+                      size: 14,
+                      color: theme.colorScheme.outline,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      '${r.comments.length}',
+                      style: theme.textTheme.bodySmall,
+                    ),
+                    const Spacer(),
+                    Text(
+                      '媒体 ${r.media.length} · 完整互动在时光页（条目 4）',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.outline,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
         ),
       );
     }).toList();
@@ -181,7 +292,12 @@ class HomePage extends ConsumerWidget {
 
 /// ── Hero：两人名 / 相恋天数 / 相恋日期设置 ─────────────────────────
 class _Hero extends ConsumerWidget {
-  const _Hero({required this.me, required this.list, required this.dashboard, this.onGoTab});
+  const _Hero({
+    required this.me,
+    required this.list,
+    required this.dashboard,
+    this.onGoTab,
+  });
   final MeData me;
   final List<Record> list;
   final Dashboard? dashboard;
@@ -213,91 +329,179 @@ class _Hero extends ConsumerWidget {
             context.push('/profile');
           }
         },
-        child: Stack(children: [
-          Padding(
-            padding: const EdgeInsets.all(18),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              Text(names, textAlign: TextAlign.center, style: theme.textTheme.titleLarge),
-              const SizedBox(height: 10),
-              Row(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                Text('我们相恋  ', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.outline)),
-                Text(days == null ? '—' : '$days',
-                    style: theme.textTheme.displaySmall?.copyWith(color: theme.colorScheme.primary)),
-                Text(' 天', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.outline)),
-              ]),
-              const SizedBox(height: 8),
-              if (me.spaceSince.isEmpty)
-                Text('点这里设置相恋日期 →', textAlign: TextAlign.center,
-                    style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.primary))
-              else
-                Text('${me.spaceSince} 起 · 点卡片可编辑 · 今天也要好好相爱',
+        child: Stack(
+          children: [
+            // 段 D：主页封面（space.cover / cover_pos），保存后立刻变。
+            _HomeCover(me: me),
+            Padding(
+              padding: const EdgeInsets.all(18),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    names,
                     textAlign: TextAlign.center,
-                    style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.outline)),
-            ]),
-          ),
-          Positioned(
-            right: 8, top: 8,
-            child: Icon(Icons.edit, size: 16, color: theme.colorScheme.outline),
-          ),
-        ]),
+                    style: theme.textTheme.titleLarge,
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        '我们相恋  ',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.outline,
+                        ),
+                      ),
+                      Text(
+                        days == null ? '—' : '$days',
+                        style: theme.textTheme.displaySmall?.copyWith(
+                          color: theme.colorScheme.primary,
+                        ),
+                      ),
+                      Text(
+                        ' 天',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.outline,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  if (me.spaceSince.isEmpty)
+                    Text(
+                      '点这里设置相恋日期 →',
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.primary,
+                      ),
+                    )
+                  else
+                    Text(
+                      '${me.spaceSince} 起 · 点卡片可编辑 · 今天也要好好相爱',
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.outline,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            Positioned(
+              right: 8,
+              top: 8,
+              child: Icon(
+                Icons.edit,
+                size: 16,
+                color: theme.colorScheme.outline,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
   /// 设置相恋日期（对齐 Web spaceForm：PUT /api/space 全量覆盖，只改 name/since）
-  Future<void> _editSince(BuildContext context, WidgetRef ref) async {
-    final nameCtrl = TextEditingController(text: me.spaceName);
-    DateTime? picked = me.spaceSince.isNotEmpty ? DateTime.tryParse(me.spaceSince) : null;
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(builder: (ctx, setState) => AlertDialog(
+  Future<void> _editSince(BuildContext context, WidgetRef ref) =>
+      showSpaceEditDialog(context, ref, me);
+}
+
+/// 空间信息编辑弹层（首页封面卡 + 设置页 / hub「空间信息」跳转入口共用，
+/// 段 D 只做导航，不复制 UI）。
+Future<void> showSpaceEditDialog(
+  BuildContext context,
+  WidgetRef ref,
+  MeData me,
+) async {
+  final nameCtrl = TextEditingController(text: me.spaceName);
+  DateTime? picked = me.spaceSince.isNotEmpty
+      ? DateTime.tryParse(me.spaceSince)
+      : null;
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => StatefulBuilder(
+      builder: (ctx, setState) => AlertDialog(
         title: const Text('空间信息'),
-        content: Column(mainAxisSize: MainAxisSize.min, children: [
-          TextField(controller: nameCtrl, maxLength: 60,
-              decoration: const InputDecoration(labelText: '空间名称')),
-          const SizedBox(height: 12),
-          Row(children: [
-            Expanded(child: Text(picked == null
-                ? '还没选择相恋日期'
-                : '从 ${_fmtDate(picked!)} 开始相爱')),
-            TextButton(
-              onPressed: () async {
-                final d = await showDatePicker(
-                    context: ctx,
-                    initialDate: picked ?? DateTime.now(),
-                    firstDate: DateTime(2000),
-                    lastDate: DateTime.now());
-                if (d != null) setState(() => picked = d);
-              },
-              child: const Text('选日期'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: nameCtrl,
+              maxLength: 60,
+              decoration: const InputDecoration(labelText: '空间名称'),
             ),
-          ]),
-          const SizedBox(height: 4),
-          Text('日期决定首页「在一起第几天」从哪天算起。',
-              style: Theme.of(ctx).textTheme.bodySmall?.copyWith(color: Theme.of(ctx).colorScheme.outline)),
-        ]),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    picked == null ? '还没选择相恋日期' : '从 ${_fmtDate(picked!)} 开始相爱',
+                  ),
+                ),
+                TextButton(
+                  onPressed: () async {
+                    final d = await showDatePicker(
+                      context: ctx,
+                      initialDate: picked ?? DateTime.now(),
+                      firstDate: DateTime(2000),
+                      lastDate: DateTime.now(),
+                    );
+                    if (d != null) setState(() => picked = d);
+                  },
+                  child: const Text('选日期'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '日期决定首页「在一起第几天」从哪天算起。',
+              style: Theme.of(ctx).textTheme.bodySmall
+                  ?.copyWith(color: Theme.of(ctx).colorScheme.outline),
+            ),
+          ],
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('保存')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('保存'),
+          ),
         ],
-      )),
-    );
-    if (ok != true || picked == null) return;
-    try {
-      final dio = await ref.read(dioProvider.future);
-      final name = nameCtrl.text.trim().isEmpty ? me.spaceName : nameCtrl.text.trim();
-      final since = _fmtDate(picked!);
-      await updateSpace(dio, me.spaceRaw, name: name, since: since);
-      // me（space 原样对象）与聚合数据全部失效重拉
-      await ref.read(authProvider.notifier).reload();
-      ref.invalidate(recordsProvider);
-      ref.invalidate(dashboardProvider);
-    } catch (e) {
+      ),
+    ),
+  );
+  if (ok != true || picked == null) return;
+  try {
+    final dio = await ref.read(dioProvider.future);
+    final name = nameCtrl.text.trim().isEmpty
+        ? me.spaceName
+        : nameCtrl.text.trim();
+    final since = _fmtDate(picked!);
+    // 7-C：4xx 被 validateAppStatus 放行，updateSpace 返回服务端 detail 原文；
+    // 失败只发错误通知、不重拉、不自动重试（输入随弹层关闭本就保留在控件里）。
+    final err = await updateSpace(dio, me.spaceRaw, name: name, since: since);
+    if (err != null) {
       if (context.mounted) {
-        ref.read(chatToastProvider.notifier).show('保存失败：$e',
-            tone: ChatToastTone.error);
+        ref
+            .read(chatToastProvider.notifier)
+            .show('保存失败：$err', tone: ChatToastTone.error);
       }
+      return;
+    }
+    // me（space 原样对象）与聚合数据全部失效重拉
+    await ref.read(authProvider.notifier).reload();
+    ref.invalidate(recordsProvider);
+    ref.invalidate(dashboardProvider);
+  } catch (e) {
+    if (context.mounted) {
+      ref
+          .read(chatToastProvider.notifier)
+          .show('保存失败：${errorDetail(e)}', tone: ChatToastTone.error);
     }
   }
 }
@@ -337,43 +541,80 @@ class _TodayCard extends ConsumerWidget {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          Text('☀ 今天的心情', style: theme.textTheme.titleSmall),
-          const SizedBox(height: 8),
-          // 两人 mood 行（对齐 Web moodRows：没记可记，已记可改，对方只读展示）
-          for (final u in me.users)
-            _MoodRow(me: me, user: u, today: today,
-                record: list.where((r) => r.kind == 'mood' && r.author == u.id && r.date == today).firstOrNull),
-          const Divider(height: 24),
-          Text('📅 最近纪念日', style: theme.textTheme.titleSmall),
-          const SizedBox(height: 8),
-          // 整区可点 → 纪念日管理页（段 B 二级页；决策点①定案的直达接线）
-          InkWell(
-            borderRadius: BorderRadius.circular(10),
-            onTap: () => context.push('/together/anniversary'),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              if (ann != null)
-                Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                  Text('${ann.days}',
-                      style: theme.textTheme.headlineMedium?.copyWith(color: theme.colorScheme.primary)),
-                  const SizedBox(width: 8),
-                  Expanded(child: Padding(
-                    padding: const EdgeInsets.only(bottom: 4),
-                    child: Text('天后 · ${(ann.r.body['title'] ?? '纪念日')}\n${ann.due} · 别忘了给彼此一个拥抱 · 点此查看全部',
-                        softWrap: true,
-                        style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.outline)),
-                  )),
-                  Icon(Icons.chevron_right, color: theme.colorScheme.outline),
-                ])
-              else
-                Text('留一个日子，给仪式感 · 点此添加纪念日。',
-                    style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.outline)),
-              ]),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('☀ 今天的心情', style: theme.textTheme.titleSmall),
+            const SizedBox(height: 8),
+            // 两人 mood 行（对齐 Web moodRows：没记可记，已记可改，对方只读展示）
+            for (final u in me.users)
+              _MoodRow(
+                me: me,
+                user: u,
+                today: today,
+                record: list
+                    .where(
+                      (r) =>
+                          r.kind == 'mood' &&
+                          r.author == u.id &&
+                          r.date == today,
+                    )
+                    .firstOrNull,
+              ),
+            const Divider(height: 24),
+            Text('📅 最近纪念日', style: theme.textTheme.titleSmall),
+            const SizedBox(height: 8),
+            // 整区可点 → 纪念日管理页（段 B 二级页；决策点①定案的直达接线）
+            InkWell(
+              borderRadius: BorderRadius.circular(10),
+              onTap: () => context.push('/together/anniversary'),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (ann != null)
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            '${ann.days}',
+                            style: theme.textTheme.headlineMedium?.copyWith(
+                              color: theme.colorScheme.primary,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Padding(
+                              padding: const EdgeInsets.only(bottom: 4),
+                              child: Text(
+                                '天后 · ${(ann.r.body['title'] ?? '纪念日')}\n${ann.due} · 别忘了给彼此一个拥抱 · 点此查看全部',
+                                softWrap: true,
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: theme.colorScheme.outline,
+                                ),
+                              ),
+                            ),
+                          ),
+                          Icon(
+                            Icons.chevron_right,
+                            color: theme.colorScheme.outline,
+                          ),
+                        ],
+                      )
+                    else
+                      Text(
+                        '留一个日子，给仪式感 · 点此添加纪念日。',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.outline,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
             ),
-          ),
-        ]),
+          ],
+        ),
       ),
     );
   }
@@ -389,7 +630,12 @@ class _Ann {
 
 /// 一行心情：自己已记 → 点开改；自己没记 → 点开记一笔；对方 → 只读展示
 class _MoodRow extends ConsumerWidget {
-  const _MoodRow({required this.me, required this.user, required this.today, required this.record});
+  const _MoodRow({
+    required this.me,
+    required this.user,
+    required this.today,
+    required this.record,
+  });
   final MeData me;
   final SpaceUser user;
   final String today;
@@ -406,31 +652,49 @@ class _MoodRow extends ConsumerWidget {
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(children: [
-        CircleAvatar(radius: 14,
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 14,
             backgroundColor: theme.colorScheme.primaryContainer,
-            child: Text(user.name.isEmpty ? '?' : user.name.characters.first,
-                style: TextStyle(fontSize: 13, color: theme.colorScheme.onPrimaryContainer))),
-        const SizedBox(width: 10),
-        Text(user.name, style: theme.textTheme.labelLarge),
-        const SizedBox(width: 10),
-        Expanded(child: InkWell(
-          borderRadius: BorderRadius.circular(16),
-          onTap: (m != null && !mine)
-              ? null // 对方的心情手记回顾在「我们」页（条目 6）
-              : () => _openMoodSheet(context, ref),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: m != null
-                  ? theme.colorScheme.primaryContainer.withValues(alpha: 0.45)
-                  : theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-              borderRadius: BorderRadius.circular(16),
+            child: Text(
+              user.name.isEmpty ? '?' : user.name.characters.first,
+              style: TextStyle(
+                fontSize: 13,
+                color: theme.colorScheme.onPrimaryContainer,
+              ),
             ),
-            child: Text(bubble, style: theme.textTheme.bodyMedium),
           ),
-        )),
-      ]),
+          const SizedBox(width: 10),
+          Text(user.name, style: theme.textTheme.labelLarge),
+          const SizedBox(width: 10),
+          Expanded(
+            child: InkWell(
+              borderRadius: BorderRadius.circular(16),
+              onTap: (m != null && !mine)
+                  ? null // 对方的心情手记回顾在「我们」页（条目 6）
+                  : () => _openMoodSheet(context, ref),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: m != null
+                      ? theme.colorScheme.primaryContainer.withValues(
+                          alpha: 0.45,
+                        )
+                      : theme.colorScheme.surfaceContainerHighest.withValues(
+                          alpha: 0.5,
+                        ),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Text(bubble, style: theme.textTheme.bodyMedium),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -438,51 +702,140 @@ class _MoodRow extends ConsumerWidget {
   Future<void> _openMoodSheet(BuildContext context, WidgetRef ref) async {
     const emojis = ['☀️', '😊', '🥰', '😮‍💨', '😢', '😤', '😴', '🎉'];
     String emoji = record?.body['emoji']?.toString() ?? '☀️';
-    final contentCtrl = TextEditingController(text: record?.body['content']?.toString() ?? '');
+    final contentCtrl = TextEditingController(
+      text: record?.body['content']?.toString() ?? '',
+    );
     final saved = await showModalBottomSheet<bool>(
       context: context,
-      builder: (ctx) => StatefulBuilder(builder: (ctx, setState) => Padding(
-        padding: EdgeInsets.only(
-            left: 20, right: 20, top: 20,
-            bottom: MediaQuery.of(ctx).viewInsets.bottom + 20),
-        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          Text('今天的心情', style: Theme.of(ctx).textTheme.titleMedium),
-          const SizedBox(height: 12),
-          Wrap(spacing: 8, children: emojis.map((e) => ChoiceChip(
-              label: Text(e, style: const TextStyle(fontSize: 20)),
-              selected: emoji == e,
-              onSelected: (_) => setState(() => emoji = e))).toList()),
-          const SizedBox(height: 12),
-          TextField(controller: contentCtrl, maxLength: 60,
-              decoration: const InputDecoration(labelText: '一句话（可留空）', counterText: '')),
-          const SizedBox(height: 12),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text(record == null ? '记一笔' : '更新'),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setState) => Padding(
+          padding: EdgeInsets.only(
+            left: 20,
+            right: 20,
+            top: 20,
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
           ),
-        ]),
-      )),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text('今天的心情', style: Theme.of(ctx).textTheme.titleMedium),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                children: emojis
+                    .map(
+                      (e) => ChoiceChip(
+                        label: Text(e, style: const TextStyle(fontSize: 20)),
+                        selected: emoji == e,
+                        onSelected: (_) => setState(() => emoji = e),
+                      ),
+                    )
+                    .toList(),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: contentCtrl,
+                maxLength: 60,
+                decoration: const InputDecoration(
+                  labelText: '一句话（可留空）',
+                  counterText: '',
+                ),
+              ),
+              const SizedBox(height: 12),
+              FilledButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: Text(record == null ? '记一笔' : '更新'),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
     if (saved != true) return;
     try {
       final dio = await ref.read(dioProvider.future);
-      final body = {'date': today, 'emoji': emoji, 'content': contentCtrl.text.trim(), 'media': []};
+      final body = {
+        'date': today,
+        'emoji': emoji,
+        'content': contentCtrl.text.trim(),
+        'media': [],
+      };
       if (record == null) {
-        await dio.post('/api/records', data: {
-          'kind': 'mood', 'body': body, 'client_id': newClientId(),
-        });
+        await dio.post(
+          '/api/records',
+          data: {'kind': 'mood', 'body': body, 'client_id': newClientId()},
+        );
       } else {
-        await dio.put('/api/records/${record!.id}', data: {
-          'kind': 'mood', 'body': body, 'client_id': record!.clientId,
-        });
+        await dio.put(
+          '/api/records/${record!.id}',
+          data: {'kind': 'mood', 'body': body, 'client_id': record!.clientId},
+        );
       }
       ref.invalidate(recordsProvider);
       ref.invalidate(dashboardProvider);
     } catch (e) {
       if (context.mounted) {
-        ref.read(chatToastProvider.notifier).show('保存失败：$e',
-            tone: ChatToastTone.error);
+        ref
+            .read(chatToastProvider.notifier)
+            .show('保存失败：$e', tone: ChatToastTone.error);
       }
     }
+  }
+}
+
+/// 段 D 主页封面：`space.cover` 媒体 id + `cover_pos` 构图（默认 x/y=50,z=1）。
+/// 只消费 `/api/me` 的 space，媒体 URL 走 `chatBaseProvider`，Cookie 头走
+/// `mediaCookieHeadersProvider`；换封面后 `auth.reload()` 让本卡重建。
+class _HomeCover extends ConsumerWidget {
+  const _HomeCover({required this.me});
+
+  final MeData me;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final cs = Theme.of(context).colorScheme;
+    final cover = (me.spaceRaw['cover'] ?? '').toString();
+    if (cover.isEmpty) return const SizedBox.shrink();
+    final base = ref.watch(chatBaseProvider).valueOrNull;
+    if (base == null) return const SizedBox.shrink();
+    final headers = ref.watch(mediaCookieHeadersProvider).valueOrNull;
+    final pos = me.spaceRaw['cover_pos'];
+    final x = pos is Map
+        ? (num.tryParse((pos['x'] ?? 50).toString()) ?? 50)
+        : 50;
+    final y = pos is Map
+        ? (num.tryParse((pos['y'] ?? 50).toString()) ?? 50)
+        : 50;
+    final z = pos is Map ? (num.tryParse((pos['z'] ?? 1).toString()) ?? 1) : 1;
+    return Positioned.fill(
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: Stack(
+          children: [
+            Transform.scale(
+              scale: z.toDouble().clamp(1.0, 3.0),
+              child: Image.network(
+                '$base/media/$cover?preview=true',
+                key: Key('home-cover-$cover'),
+                headers: headers,
+                fit: BoxFit.cover,
+                alignment: Alignment(
+                  (x.toDouble() / 50 - 1).clamp(-1.0, 1.0),
+                  (y.toDouble() / 50 - 1).clamp(-1.0, 1.0),
+                ),
+                width: double.infinity,
+                height: double.infinity,
+                errorBuilder: (_, _, _) => const SizedBox.shrink(),
+              ),
+            ),
+            // 压一层半透明底色，保证封面上的文字始终可读。
+            Positioned.fill(
+              child: ColoredBox(color: cs.surface.withValues(alpha: 0.45)),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

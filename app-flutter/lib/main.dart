@@ -8,6 +8,8 @@ import 'package:go_router/go_router.dart';
 import 'core/album/album_data.dart' show PhotoItem;
 import 'core/together/together_data.dart' show TogetherRecord;
 import 'features/account/profile_page.dart';
+import 'features/settings/settings_page.dart';
+import 'features/settings/settings_state.dart';
 import 'features/album/album_viewer_page.dart';
 import 'features/auth/auth_state.dart';
 import 'features/auth/login_page.dart';
@@ -56,14 +58,18 @@ final routerProvider = Provider<GoRouter>((ref) {
       // 聊天（悄悄话）：二级页，Shell AppBar 私聊图标 push 进入（对齐 Web 顶栏入口）
       GoRoute(path: '/messages', builder: (_, _) => const MessagesPage()),
       GoRoute(path: '/profile', builder: (_, _) => const ProfilePage()),
+      // 条目 8 段 D：设置缺口独立二级页（context.push；AppBar 自动返回 +
+      // 系统手势可回）。账号资料页 profile_page.dart 完全不动。
+      GoRoute(path: '/settings', builder: (_, _) => const SettingsPage()),
       // 条目 8 段 8-A（D1）：生理期独立二级页。hub 🌸 宽卡与聊天 ⊕ 面板
       // 两入口都 context.push('/period')；AppBar 自动返回 + 系统手势可回上一页。
       GoRoute(path: '/period', builder: (_, _) => const PeriodPage()),
       // 条目 8 段 C：生理数据分析独立二级页。主页 analysis-entry 卡
       // context.push('/period/analysis')；AppBar 自动返回 + 系统手势可回主页。
       GoRoute(
-          path: '/period/analysis',
-          builder: (_, _) => const PeriodAnalysisPage()),
+        path: '/period/analysis',
+        builder: (_, _) => const PeriodAnalysisPage(),
+      ),
       // 条目 7 段 7-A / 7-B / 7-C：个人角落五个二级页（一律 context.push，
       // 主页在栈；AppBar 自动返回按钮 + 系统手势都能回上一页）
       GoRoute(
@@ -107,19 +113,26 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/together/note', builder: (_, _) => const NotePage()),
       GoRoute(path: '/together/wish', builder: (_, _) => const WishPage()),
       GoRoute(
-          path: '/together/anniversary',
-          builder: (_, _) => const AnniversaryPage()),
-      GoRoute(path: '/together/calendar', builder: (_, _) => const CalendarPage()),
-      GoRoute(path: '/together/question', builder: (_, _) => const QuestionPage()),
+        path: '/together/anniversary',
+        builder: (_, _) => const AnniversaryPage(),
+      ),
+      GoRoute(
+        path: '/together/calendar',
+        builder: (_, _) => const CalendarPage(),
+      ),
+      GoRoute(
+        path: '/together/question',
+        builder: (_, _) => const QuestionPage(),
+      ),
       GoRoute(path: '/together/habit', builder: (_, _) => const HabitPage()),
       GoRoute(path: '/together/quest', builder: (_, _) => const QuestPage()),
       GoRoute(path: '/together/ledger', builder: (_, _) => const LedgerPage()),
       GoRoute(path: '/together/music', builder: (_, _) => const MusicPage()),
       GoRoute(
-          path: '/together/dashboard',
-          builder: (_, _) => const DashboardPage()),
-      GoRoute(
-          path: '/together/weekly', builder: (_, _) => const WeeklyPage()),
+        path: '/together/dashboard',
+        builder: (_, _) => const DashboardPage(),
+      ),
+      GoRoute(path: '/together/weekly', builder: (_, _) => const WeeklyPage()),
       // 相册查看器（条目 5 · 段 B 甲档）：Hero 共享元素转场 + 跨相册翻页 +
       // InteractiveViewer 缩放 + 下拉跟手关闭 + 计数/caption/预加载 + 下载顶部通知。
       // 二级页一律 context.push：保留主页在路由栈，返回按钮/系统手势回网格。
@@ -127,7 +140,8 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/album/viewer',
         builder: (_, state) {
           final extra = (state.extra as Map?) ?? const {};
-          final photos = (extra['photos'] as List?)?.cast<PhotoItem>() ??
+          final photos =
+              (extra['photos'] as List?)?.cast<PhotoItem>() ??
               const <PhotoItem>[];
           final index = (extra['index'] as int?) ?? 0;
           final albumId = (extra['albumId'] as String?) ?? '';
@@ -148,38 +162,82 @@ class LoveApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final router = ref.watch(routerProvider);
+    // 🔴 段 D：ThemeData 真的吃到 space.theme / custom_color。
+    // spaceAppearanceProvider / appearancePrefsProvider 任一变化都会让
+    // MaterialApp 立刻重建（Riverpod 驱动），主题色 + 夜间模式正确叠加。
+    final appearance = ref.watch(spaceAppearanceProvider);
+    final lightSeed = themeSeedColor(
+      appearance.effectiveTheme,
+      appearance.effectiveCustomColor,
+    );
+    final darkSeed = themeSeedColor(
+      appearance.effectiveTheme,
+      appearance.effectiveCustomColor,
+      dark: true,
+    );
+    final themeMode = ref.watch(appThemeModeProvider);
+    final fontScale = ref.watch(appFontScaleProvider);
+    final motion = appearance.effectiveMotion;
+
+    ThemeData buildTheme(Color seed, Brightness brightness) => ThemeData(
+      useMaterial3: true,
+      colorScheme: ColorScheme.fromSeed(
+        seedColor: seed,
+        brightness: brightness,
+      ),
+      // 动效开关（space.motion）：关掉时页面转场/水波纹都退化。
+      splashFactory: motion ? null : NoSplash.splashFactory,
+      pageTransitionsTheme: motion
+          ? const PageTransitionsTheme()
+          : const PageTransitionsTheme(
+              builders: <TargetPlatform, PageTransitionsBuilder>{
+                TargetPlatform.android: _NoMotionTransitionsBuilder(),
+                TargetPlatform.iOS: _NoMotionTransitionsBuilder(),
+              },
+            ),
+    );
+
     return MaterialApp.router(
       title: '恋爱空间',
-      theme: ThemeData(
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF953753)),
-      ),
-      darkTheme: ThemeData(
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF953753),
-          brightness: Brightness.dark,
-        ),
-      ),
-      themeMode: ThemeMode.system,
+      theme: buildTheme(lightSeed, Brightness.light),
+      darkTheme: buildTheme(darkSeed, Brightness.dark),
+      themeMode: themeMode,
       routerConfig: router,
-      // 全局唯一顶部通知宿主：builder 包在 Navigator 之上，覆盖所有页面、
-      // 二级页、BottomSheet、Dialog（含全屏查看器）——结果类提示统一走
-      // ChatToastHost，App 内不再有底部 SnackBar。IgnorePointer 不拦手势；
-      // SafeArea 避开状态栏，通知始终在顶部不被任何栏/弹层遮挡。
-      builder: (context, child) => Stack(children: [
-        child ?? const SizedBox.shrink(),
-        const Positioned(
-          top: 0,
-          left: 0,
-          right: 0,
-          child: IgnorePointer(
-            child: SafeArea(child: ChatToastHost()),
-          ),
-        ),
-      ]),
+      // `applyFontScale() :124-127` 等价：--fs-scale 乘数（1 / 1.08 / 1.16）。
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context)
+            .copyWith(textScaler: TextScaler.linear(fontScale)),
+        child: Builder(builder: (ctx) => _buildShell(ctx, child)),
+      ),
     );
   }
+
+  /// 全局唯一顶部通知宿主（见原 builder 注释）。
+  static Widget _buildShell(BuildContext context, Widget? child) => Stack(
+    children: [
+      child ?? const SizedBox.shrink(),
+      const Positioned(
+        top: 0,
+        left: 0,
+        right: 0,
+        child: IgnorePointer(child: SafeArea(child: ChatToastHost())),
+      ),
+    ],
+  );
+}
+
+/// `motion=false` 时无转场动画（对齐 Web `motion` 关掉轻柔动效）。
+class _NoMotionTransitionsBuilder extends PageTransitionsBuilder {
+  const _NoMotionTransitionsBuilder();
+
+  @override
+  Widget buildTransitions<T>(
+    PageRoute<T> route,
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) => child;
 }
 
 class _SplashPage extends StatelessWidget {
@@ -187,8 +245,6 @@ class _SplashPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Scaffold(
-      body: Center(child: CircularProgressIndicator()),
-    );
+    return const Scaffold(body: Center(child: CircularProgressIndicator()));
   }
 }

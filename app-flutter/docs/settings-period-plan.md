@@ -23,7 +23,7 @@
 
 ## 一、边界与既有定案（主人已定，不再复议）
 
-- 🔴 **条目 7 已全部关闭**（主人 2026-11-14）；条目 8 **段 8-A 已随 2.2.1/VC221 落地**（对拍见附录 A）、**段 8-B 已随 2.2.2/VC222 落地**（网格逐日对拍见附录 B）；C/D/E 段停等主人逐段放行。
+- 🔴 **条目 7 已全部关闭**（主人 2026-11-14）；条目 8 **段 8-A 已随 2.2.1/VC221 落地**（对拍见附录 A）、**段 8-B 已随 2.2.2/VC222 落地**（网格逐日对拍见附录 B）；**段 C / 段 D 已随 2.2.4/VC224 两个 commit 落地**（C 对拍见附录 C、D 落地清单见附录 D）；E 段停等主人逐段放行。
 - 🔴 **设置区块 8 卡全归条目 8**；**生理期入口卡随条目 8 上，条目 6 hub 不放**
   —— `together-plan.md:51`、决策点⑥ `:66`、`:85-86`。
 - 🔴 Web「我们」页底部「设置」区块 **8 卡**：空间信息 / 主题与外观 / 主页背景 /
@@ -401,7 +401,9 @@ AAD 绑定 kind+record_id），换错/丢失密钥 → period 记录不可解。
 > `flutter test` 全绿；二级页一律 `context.push`；返回路径按钮 + 手势必验；后端零改动。
 > ✅ **8-A 已定案并随 2.2.1 (VC221) 落地**（一 commit、门禁全绿、对拍见附录 A）；
 > ✅ **8-B 已定案并随 2.2.2 (VC222) 落地**（整月网格 245 格逐日对拍全等，见附录 B）；
-> C/D/E 段仍待主人逐段放行，本段不预做、不留半成品入口。
+> ✅ **段 C / 段 D 已定案并随 2.2.4 (VC224) 两 commit 落地**（C 先 D 后、中间不出包，
+> 只对最终 HEAD 出 1 个包；C 对拍见附录 C、D 落地清单见附录 D）；
+> E 段仍待主人逐段放行，不预做、不留半成品入口。
 
 | 段 | 版本 | 内容 | 主要端点 / 依赖 | 依赖决策点 |
 |---|---|---|---|---|
@@ -1404,3 +1406,136 @@ empty）score 必为 `null`、grade「样本还太少」，**不硬编分数**�
 `flutter test` 全量全过；后端 `app/` / `static/` / `android-app/` 零改动；
 `pubspec.yaml` 本 commit **保持 2.2.2+222 不动**（只在 D 段 commit 升 `2.2.4+224`）；
 一次性脚本用完即删、`git status --porcelain` 空。
+
+---
+
+## 附录 D · 段 D（设置缺口）落地清单（2.2.4 / VC224 第 2 个 commit）
+
+> 范围严格限于本章**缺口项**：`/settings` 独立二级页、hub 底部 7 张设置卡、
+> 主题与外观、主页背景、链路检测与手动切线路、检查更新与复制下载链接。
+> **已有能力一律只做跳转入口、不复制 UI**；`profile_page.dart` 完全不动。
+> 二级页一律 `context.push`，AppBar `automaticallyImplyLeading` 不关 →
+> 返回按钮 + 系统返回手势都能回上一页。
+
+### D.1 独立 `/settings` 二级页 + hub 7 卡
+
+- `main.dart` 注册 `GoRoute(path: '/settings', builder: (_, _) => const SettingsPage())`；
+  所有入口 `context.push('/settings')`，带 `?section=theme|cover` 时滚到对应卡片。
+- `lib/features/settings/settings_page.dart`：只放 4 组缺口卡（主题与外观 / 主页背景 /
+  链路检测与线路切换 / 关于·检查更新）；「空间信息 / 聊天背景 / 聊天气泡 / 邀请」只在
+  `_navCard` 做跳转（`spaceEditRequestedProvider` 置位后 `context.go('/home')` 由首页
+  弹层消费、聊天两项 `push('/messages')`、邀请 `push('/profile')`）。
+- `lib/features/together/together_page.dart` 底部 `settings-section-heading`「⚙️ 设置」
+  + **7 张卡**（`app.js:1229`）：空间信息 / 主题与外观 / 主页背景 / 聊天背景 /
+  聊天气泡 / 邀请另一半入住 / 全部设置。**「提醒设置」卡不加**（随后续通知章），
+  7 张逐张点通、无死卡（widget 测试逐张 `tap` 后断言目标页 marker）。
+- hub 由 `ListView` 改 `SingleChildScrollView + Column` 一次构建全部卡片：
+  加长后的固定短列表在长距离惯性滑动时会把中段工具卡移出树（惰性回收），
+  一次构建消除了闪烁与锚点丢失，也不改变任何产品行为。
+
+### D.2 主题与外观（`themeForm :1870-1942`）
+
+- 7 套 `rose/peach/lemon/mint/sky/lavender/cocoa` + `custom`，与后端
+  `SPACE_THEMES main.py:815` 同名单；custom 需 `#RRGGBB`（`:827-830`）。
+- **`theme` / `custom_color` / `motion` 是空间级**：经 `themeSpaceChanges()` 生成改动字段，
+  由 `saveSpaceChanges()` 全量 `PUT /api/space`（双端同步，SSE other → reload → 重新播种）。
+- **`dark` / `font` 只写本机**：`SharedPreferences`（Web `localStorage` 的
+  `DARK_KEY :98` / `FONT_KEY :99` 等价），`darkPrefKey` / `fontPrefKey` 重启保留、
+  绝不进 PUT body；字号 `--fs-scale`（`style.css:202-203`）映射 `TextScaler.linear`。
+- 🔴 **`ThemeData` 真生效**：`main.dart` 的 `LoveApp` 用 `ref.watch(spaceAppearanceProvider)`
+  + `ref.watch(appearancePrefsProvider)` 驱动 `MaterialApp` 重建，
+  `ColorScheme.fromSeed(seedColor: themeSeedColor(...))` 生成 light/dark 两套，
+  `theme: lightTheme` / `darkTheme: darkTheme` / `themeMode: ThemeMode.of(dark)`
+  正确叠加；`motion=false` 时 `NoSplash` + `_NoMotionTransitionsBuilder`。
+- 就地预览（`_previewTheme` / `preview`）+ 取消还原（`_cancelTheme` / `cancel`），
+  说明文案逐字 `:1903`「夜间模式与字号只记在这台设备上…选中的配色会立刻套用，取消即还原。」
+
+### D.3 主页背景 + 🔴 防抹除（`homeBgForm :1943-1956`）
+
+- `ImagePicker` 选图 → `POST /api/media`（`api.uploadMedia :46-52`）取 id →
+  `coverSpaceChanges(cover: id)`（含 `cover_pos` 默认 `{x:50,y:50,z:1}`）→ 全量 PUT。
+- 保存后首页 `_HomeCover` 用 `Image.network('$base/media/$cover?preview=true')`
+  显示新封面，`alignment` 吃 `cover_pos`。
+- 🔴 **防抹除合并方式（主人特别强调）**：`main.py:849` 是 `data = body.model_dump()`；
+  服务端**只对** `chat_bg*` / `chat_bubble*` / `chat_bg_users` / `cover_pos` 做 `None`
+  回退（`:876-901`），**`name` / `since` / `cover` / `theme` / `custom_color` /
+  `motion` / `timezone` 不回退**。因此客户端 `mergeSpace(spaceRaw, changes)` 是唯一
+  入口：先拿 `/api/me` 返回的**完整 space**（或 `me.spaceRaw`）作底，
+  `{...spaceRaw, ...changes}` 只盖改动字段后**全量 PUT**；绝不发 `{theme:...}` /
+  `{cover:...}` 部分体。页面不直接 `dio.put('/api/space')`。
+- 验收断言（`test/settings_d_test.dart`）：换主题 / 换背景两种 PUT 都逐字段比对
+  `spaceFieldDiff(before, body, changedKeys) == {}`——聊天背景、气泡、空间名、
+  相恋日期、timezone 纹丝不动；不带 `knownSpace` 时先 `GET /api/me` 取完整底。
+
+### D.4 写方法错误通道（7-C）
+
+- `validateAppStatus :274` 放行 4xx，所有写方法必须显式判：
+  `putFullSpace()` 调 `api.writeResponseError(r)` 取服务端 `detail` **原文**；
+  `saveSpaceChanges()` 失败返回 `(null, err)`，**不发成功通知 / 不 pop / 输入保留 /
+  不自动重试**（`store.putBodies.length == 1` 断言）。
+- 顺带把已有「空间信息」弹层的 `api.updateSpace()` 也接入同通道（原先 4xx 会被
+  当成成功并重拉）；失败只发错误 toast，不 reload、不重试。
+
+### D.5 链路检测与手动切线路（`linkCheckPage / runLinkProbe / useLinkRoute / loadRoutes`）
+
+- `GET /api/routes`（`main.py:423-429`）拉线路；**空列表兜底**
+  `AppConfig.effectiveRoutes`（`routesFromResponse`，本地实测为空不崩）。
+- 逐条 `GET /api/status?_p=<ts>` **真实计时**（`Stopwatch`），纯 ASCII UA
+  `LoveSpaceApp/2.2.4 (link-probe; ASCII)`（`:1363`），3s 硬超时、不可达 `-1`，
+  最快线路 `fastestRoute()` 标注；`/api/status` 加时间戳避缓存。
+- 点「切换」→ `api.storeLastRoute(base)`（`:190-193`，key `last_route`）+ 
+  `ref.invalidate(api.baseProvider)` 让 Dio 重建；**冷启动** `baseProvider :354-368`
+  快路径 `await readLastRoute()` 优先验活（源码断言顺序），杀进程重开仍走手动那条；
+  会话跨线由 `seedSessionToAllRoutes` / `ensureSessionCookie` 兜底。
+
+### D.6 检查更新 + 复制下载链接
+
+- `GET /api/status`（`main.py:401-413`）取 `apk_version` / `apk_url` /
+  `apk_mirror` / `apk_notes` / `apk_has_local` 等（`ApkStatus.fromJson`）。
+- 本机 `PackageInfo`（`profile_page.dart:59-71` 同款读法）比对，
+  `newerVer(a,b)`（`app.js:2843` 语义化版本逐段）**有新版才提示**「可更新到 vX」。
+- 下载链接 `apkMirror || '/apk/download'`（`:2569` `copy-apk-link`），
+  相对路径拼当前 base，复制走 `Clipboard.setData`。
+
+### D.7 段 D 落地文件清单（2.2.4 / VC224 第 2 个 commit）
+
+| 文件 | 作用 |
+|---|---|
+| `lib/features/settings/settings_state.dart` | 主题目录 / 本机偏好（`SharedPreferences`）/ 空间全量 `mergeSpace` / `saveSpaceChanges` / 线路探测 / `ApkStatus` / `newerVer` / `apkDownloadLink`；`spaceAppearanceProvider` / `appearancePrefsProvider` 驱动 MaterialApp 重建 |
+| `lib/features/settings/settings_page.dart` | `/settings` 独立二级页：4 组缺口卡 + 已有能力跳转入口 |
+| `lib/features/together/together_page.dart` | hub 底部「⚙️ 设置」+ 7 张卡；固定短列表改一次构建 |
+| `lib/features/home/home_page.dart` | `_HomeCover`（space.cover / cover_pos）、`showSpaceEditDialog` 抽顶层供设置页跳转消费；写通道接 7-C |
+| `lib/features/auth/auth_state.dart` | `/api/me` 解析后 `spaceAppearanceProvider.seed(space)` 播种主题 |
+| `lib/core/api/api_client.dart` | `updateSpace` 接入 `writeResponseError` 4xx 显式判 |
+| `lib/main.dart` | 注册 `/settings` 路由；`LoveApp` 用 `ColorScheme.fromSeed` 生成 light/dark ThemeData |
+| `pubspec.yaml` / `pubspec.lock` | 升 `version: 2.2.4+224`；新增 `shared_preferences:^2.3.0`（+7 依赖） |
+| `test/settings_d_test.dart` | 防抹除逐字段比对 / 主题预览与本机持久化 / ThemeData 真生效 / 链路空列表与真实延迟 / 4xx detail 原文 / 7 卡无死卡 / 两段返回路径；18 组 |
+| `docs/settings-period-plan.md` | 分段表 C/D 行标已落地 + 本附录 D；`flutter-plan-v2.md` 未改 |
+
+### D.8 门禁与交付证据（两轮实测）
+
+- 跑前 `unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY all_proxy
+  NO_PROXY no_proxy`（本机代理会劫持 flutter_tester 本地 WebSocket）。
+- **commit 1（C 段）**：`flutter analyze`（不带 lib 参数）0 issues；
+  `flutter test` **555/555** 全过；`pubspec.yaml` 保持 `2.2.2+222`。
+- **commit 2（D 段）**：`dart analyze` / `flutter analyze` 0 issues；
+  `flutter test` **572/572** 全过；后端 `app/` / `static/` / `android-app/` 零改动。
+- **只对最终 HEAD 出一个包**：`output/lovespace-flutter-v2.2.4+224-20261115.apk`，
+  aapt `versionCode='2224' versionName='2.2.4'`（旧 2.2.2 包 `+222` → aapt `2222`，
+  即 Flutter 对 arm64 split 自动 `+2000`；升 `+224` 后即 `2224`）。
+  sha1 ≠ 旧 2.2.2 包 `51ae4eb3e3badedd0b407f14dba9b22753df0b3a`，
+  并核 `lib/arm64-v8a/libapp.so` 确实换过。
+- 一次性脚本 / 诊断代码用完即删；`git status --porcelain` 空；
+  **停等真机验收、不自宣完成、不开后续段（E）**。
+
+### D.9 已知偏差（如实留痕，不掩盖）
+
+1. **「提醒设置」卡不加**：随后续通知章（E 段）再落地，无死卡纪律，本段不预放空卡。
+2. **链路延迟为本地真实往返耗时**：测试用 `Dio + directAdapter` 逐条计时，
+   真机数值随网络波动，不以固定毫秒数断言。
+3. **已有能力只做跳转**：账号资料页 `profile_page.dart` 完全不动；空间信息 /
+   聊天背景 / 气泡 / 邀请均复用既有 UI，设置页不复制。
+4. **hub 改一次构建**：由 `ListView` 换 `SingleChildScrollView + Column`
+   （固定短列表，无性能顾虑），不改变视觉与交互。
+5. **本机偏好用 `shared_preferences`**：等价 Web `localStorage`，只影响本机、
+   不进 `PUT /api/space`；双端同步的只有 `theme/custom_color/motion`。

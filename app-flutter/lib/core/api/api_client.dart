@@ -159,13 +159,18 @@ String newClientId() => 'fl-${DateTime.now().microsecondsSinceEpoch}';
 
 /// PUT /api/space：全量覆盖语义——以 me.space 原样为基础，只改 name/since
 /// （Web spaceForm 同款约束：name 必填，其余键原样带回，谁也不碰谁）。
-Future<void> updateSpace(Dio dio, Map<String, dynamic> spaceRaw,
+///
+/// 7-C 错误通道：`validateAppStatus` 会放行 4xx，必须显式判定，否则 4xx 会被
+/// 当成成功。返回 null = 真成功；否则返回服务端 `detail` **原文**，由调用方
+/// 展示且不得发成功通知 / 不重拉 / 不自动重试。
+Future<String?> updateSpace(Dio dio, Map<String, dynamic> spaceRaw,
     {required String name, required String since}) async {
-  await dio.put('/api/space', data: {
+  final r = await dio.put('/api/space', data: {
     ...spaceRaw,
     'name': name,
     'since': since,
   });
+  return writeResponseError(r);
 }
 
 /// 会话 token 的加密落盘（secure_storage）：CookieJar 的 per-host 文件在真机上
