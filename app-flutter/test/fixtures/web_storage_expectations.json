@@ -1,0 +1,225 @@
+{
+  "_meta": {
+    "source": "static/app.js backupsPage() (line 1500) — fmt / pct / (b.size/1024/1024).toFixed(2) 三条表达式经正则从源码提取后，在 Node vm 中实跑得到期望值；非 Dart 结果照抄。",
+    "extraction": {
+      "fmtExpr": "b=>b>=1073741824?(b/1073741824).toFixed(2)+' GB':(b/1048576).toFixed(1)+' MB'",
+      "pctExpr": "s.disk_total?Math.round((1-s.disk_free/s.disk_total)*100):0",
+      "sizeExpr": "b.size/1024/1024"
+    },
+    "node": "v22.22.2",
+    "note": "backups_c_test.dart 读取本文件，对 formatStorageSize / storageUsedPercent / formatBackupSize 逐项对拍。"
+  },
+  "fmt": [
+    {
+      "input": 0,
+      "expected": "0.0 MB"
+    },
+    {
+      "input": 1,
+      "expected": "0.0 MB"
+    },
+    {
+      "input": 1024,
+      "expected": "0.0 MB"
+    },
+    {
+      "input": 524288,
+      "expected": "0.5 MB"
+    },
+    {
+      "input": 1048575,
+      "expected": "1.0 MB"
+    },
+    {
+      "input": 1048576,
+      "expected": "1.0 MB"
+    },
+    {
+      "input": 1572864,
+      "expected": "1.5 MB"
+    },
+    {
+      "input": 10485760,
+      "expected": "10.0 MB"
+    },
+    {
+      "input": 1073741823,
+      "expected": "1024.0 MB"
+    },
+    {
+      "input": 1073741824,
+      "expected": "1.00 GB"
+    },
+    {
+      "input": 1073741825,
+      "expected": "1.00 GB"
+    },
+    {
+      "input": 1610612736,
+      "expected": "1.50 GB"
+    },
+    {
+      "input": 2684354560,
+      "expected": "2.50 GB"
+    },
+    {
+      "input": 5368709120,
+      "expected": "5.00 GB"
+    },
+    {
+      "input": 123456789,
+      "expected": "117.7 MB"
+    },
+    {
+      "input": 123456789.5,
+      "expected": "117.7 MB"
+    },
+    {
+      "input": 1048576.5,
+      "expected": "1.0 MB"
+    },
+    {
+      "input": 1073741824.5,
+      "expected": "1.00 GB"
+    },
+    {
+      "input": 999999999.9,
+      "expected": "953.7 MB"
+    },
+    {
+      "input": 0.5,
+      "expected": "0.0 MB"
+    },
+    {
+      "input": 1048575.9,
+      "expected": "1.0 MB"
+    },
+    {
+      "input": 1099511627776,
+      "expected": "1024.00 GB"
+    },
+    {
+      "input": 1125899906842624,
+      "expected": "1048576.00 GB"
+    }
+  ],
+  "pct": [
+    {
+      "disk_free": 0,
+      "disk_total": 0,
+      "expected": 0
+    },
+    {
+      "disk_free": 0,
+      "disk_total": 1000,
+      "expected": 100
+    },
+    {
+      "disk_free": 1000,
+      "disk_total": 1000,
+      "expected": 0
+    },
+    {
+      "disk_free": 250,
+      "disk_total": 1000,
+      "expected": 75
+    },
+    {
+      "disk_free": 333,
+      "disk_total": 1000,
+      "expected": 67
+    },
+    {
+      "disk_free": 1,
+      "disk_total": 3,
+      "expected": 67
+    },
+    {
+      "disk_free": 2,
+      "disk_total": 3,
+      "expected": 33
+    },
+    {
+      "disk_free": 500,
+      "disk_total": 1000,
+      "expected": 50
+    },
+    {
+      "disk_free": 1500,
+      "disk_total": 2000,
+      "expected": 25
+    },
+    {
+      "disk_free": 999,
+      "disk_total": 1000,
+      "expected": 0
+    },
+    {
+      "disk_free": 1,
+      "disk_total": 1000,
+      "expected": 100
+    },
+    {
+      "disk_free": 1,
+      "disk_total": 6,
+      "expected": 83
+    },
+    {
+      "disk_free": 5,
+      "disk_total": 6,
+      "expected": 17
+    },
+    {
+      "disk_free": 1073741824,
+      "disk_total": 2147483648,
+      "expected": 50
+    },
+    {
+      "disk_free": 2000000000,
+      "disk_total": 3000000000,
+      "expected": 33
+    }
+  ],
+  "size": [
+    {
+      "input": 0,
+      "expected": "0.00 MB"
+    },
+    {
+      "input": 1024,
+      "expected": "0.00 MB"
+    },
+    {
+      "input": 1048576,
+      "expected": "1.00 MB"
+    },
+    {
+      "input": 10485760,
+      "expected": "10.00 MB"
+    },
+    {
+      "input": 1073741824,
+      "expected": "1024.00 MB"
+    },
+    {
+      "input": 1234567,
+      "expected": "1.18 MB"
+    },
+    {
+      "input": 999999,
+      "expected": "0.95 MB"
+    },
+    {
+      "input": 1048575,
+      "expected": "1.00 MB"
+    },
+    {
+      "input": 2097152,
+      "expected": "2.00 MB"
+    },
+    {
+      "input": 1572864,
+      "expected": "1.50 MB"
+    }
+  ]
+}

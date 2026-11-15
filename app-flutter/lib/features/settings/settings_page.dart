@@ -33,6 +33,7 @@ import '../../core/chat/chat_media.dart'
 import '../../core/config.dart';
 import '../auth/auth_state.dart';
 import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
+import 'backups_api.dart';
 import 'export_api.dart';
 import 'settings_state.dart';
 
@@ -911,10 +912,11 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     });
   }
 
-  // ── 数据导出三件（Web settingsPage 数据管理卡 app.js:1481-1482 · 段 B）──
-  // · 三个下载入口逐字对齐 Web：/api/export · /api/export/markdown ·
-  //   /api/export/ics（W8–W10）；Web 的 admin「完整备份与存储占用」按钮与
-  //   存储摘要条属段 C，本段不加。
+  // ── 数据管理（Web settingsPage 数据管理卡 app.js:1481-1482）──────────
+  // · 段 B：三个下载入口逐字对齐 Web：/api/export · /api/export/markdown ·
+  //   /api/export/ics（W8–W10）。
+  // · 段 C：第 4 行仅 admin 条件入口「完整备份与存储占用」→ /backups；
+  //   非 admin 不显示、不留死入口。存储摘要条本段不做。
   // · 承接按 D3 定案：downloadExport 落 downloads/ + 顶部通知报文件名；
   //   不做分享/打开文件通道、不做进度条、不做加密。
   // · 4xx 原文透传（429「尝试过于频繁…」/ 404「还没有可导出的纪念日或
@@ -967,6 +969,17 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             exportIcsLabel,
             Icons.event_outlined,
           ),
+          // 段 C（2.2.7）：仅 admin 的第 4 行入口，非 admin 不显示、
+          // 不留死入口。与段 B 三行导出 / _exportBusy 行为互不干扰。
+          if (ref.read(authProvider.notifier).me?.user.admin == true)
+            ListTile(
+              key: const Key('settings-backups-entry'),
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(Icons.storage_rounded, size: 22),
+              title: const Text(backupsEntryLabel),
+              trailing: Icon(Icons.chevron_right, size: 20, color: cs.outline),
+              onTap: () => context.push('/backups'),
+            ),
           if (busy)
             Padding(
               padding: const EdgeInsets.only(bottom: 6),

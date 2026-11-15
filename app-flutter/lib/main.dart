@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import 'core/album/album_data.dart' show PhotoItem;
 import 'core/together/together_data.dart' show TogetherRecord;
 import 'features/account/profile_page.dart';
+import 'features/settings/backups_page.dart';
 import 'features/settings/settings_page.dart';
 import 'features/settings/settings_state.dart';
 import 'features/album/album_viewer_page.dart';
@@ -51,6 +52,13 @@ final routerProvider = Provider<GoRouter>((ref) {
       final onTransient = onLogin || location == '/splash';
       if (phase == AuthPhase.checking) return onLogin ? null : '/splash';
       if (phase == AuthPhase.out) return onLogin ? null : '/login';
+      // 段 C（2.2.7）：非 admin 直达 /backups → 回 /settings。
+      // 选「直达也进不去」：不发任何 /api/storage 请求、不崩。保留既有
+      // splash/authed 分支逻辑不动（splash 死锁教训），门控只在 authed 后判。
+      if (location == '/backups' &&
+          ref.read(authProvider.notifier).me?.user.admin != true) {
+        return '/settings';
+      }
       return onTransient ? '/home' : null;
     },
     routes: [
@@ -68,6 +76,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       // 系统返回手势都能回上一页（widget 用例两条独立路径）。
       GoRoute(path: '/channels', builder: (_, _) => const ChannelsPage()),
       GoRoute(path: '/notices', builder: (_, _) => const NoticesPage()),
+      // 「数据管理与通知渠道」章 段 C（2.2.7）：完整备份与存储占用
+      // （仅 admin；非 admin 直达由上方 redirect 挡回 /settings）。
+      // 一律 context.push 语义，AppBar 自动返回 + 系统手势可回。
+      GoRoute(path: '/backups', builder: (_, _) => const BackupsPage()),
       // 条目 8 段 8-A（D1）：生理期独立二级页。hub 🌸 宽卡与聊天 ⊕ 面板
       // 两入口都 context.push('/period')；AppBar 自动返回 + 系统手势可回上一页。
       GoRoute(path: '/period', builder: (_, _) => const PeriodPage()),

@@ -217,13 +217,43 @@ class SavedExport {
   final String filename;
 }
 
-/// 导出下载统一入口：
-/// ① `GET bytes`（逐请求 `receiveTimeout: 10min` 覆盖基座 20s）；
-/// ② 🔴 **显式判 4xx**（`validateAppStatus` 放行 4xx）：非 2xx 不落盘，
-///    bytes 错误体解码后取服务端 `detail` **原文**（429/404 同样），不改写；
-/// ③ 2xx：文件名 = `Content-Disposition` 解析（filename* 优先）→ 回退名，
+/// 段 B / 段 C **共用**的 bytes 落盘范式（禁止另写一套）：
+/// ① 🔴 **显式判 4xx**（`validateAppStatus` 放行 4xx）：非 2xx 不落盘，
+///    bytes 错误体解码后取服务端 `detail` **原文**（429/404/403 同样），不改写；
+/// ② 2xx：文件名 = `Content-Disposition` 解析（filename* 优先）→ 回退名，
 ///    落 `downloads/`（不存在则创建）；
-/// ④ 网络层 / 5xx DioException → `errorDetail(e)` 原文。
+/// ③ 落盘异常抛给调用方（`downloadExport` / 备份下载）的 try/catch，
+///    统一走 `errorDetail(e)` 原文，绝不假成功。
+///
+/// [fallbackName] 由调用方给：段 B 走 `exportFallbackName`，段 C 走列表项
+/// 服务端下发的 `name`（`FileResponse(filename=name)`）。[downloadsDir]
+/// 可注入（测试用临时目录）；null 时取 `defaultDownloadsDir()`。
+///
+/// 返回 `(saved, error)`：error 非 null 时 saved 必为 null。
+Future<(SavedExport?, String?)> saveBytesResponse(
+  Response<List<int>> response, {
+  required String fallbackName,
+  Directory? downloadsDir,
+}) async {
+  final status = response.statusCode ?? 0;
+  if (status < 200 || status >= 300) {
+    // 🔴 4xx 被基座当作「成功 Response」放行，必须显式判；bytes 错误体
+    // 解码后取 detail 原文（不落盘、不假成功）
+    return (null, bytesResponseDetail(response.data) ?? api.genericErrorText);
+  }
+  final header = response.headers.value('content-disposition');
+  final filename =
+      sanitizeFilename(parseContentDispositionFilename(header)) ?? fallbackName;
+  final dir = downloadsDir ?? await defaultDownloadsDir();
+  if (!await dir.exists()) await dir.create(recursive: true);
+  final path = '${dir.path}${Platform.pathSeparator}$filename';
+  await File(path).writeAsBytes(response.data ?? const <int>[]);
+  return (SavedExport(path: path, filename: filename), null);
+}
+
+/// 导出下载统一入口：`GET bytes`（逐请求 `receiveTimeout: 10min` 覆盖基座
+/// 20s）→ [saveBytesResponse] 显式判 4xx / 文件名解析 / 落 `downloads/`。
+/// 网络层 / 5xx DioException → `errorDetail(e)` 原文。
 ///
 /// [downloadsDir] 可注入（测试用临时目录）；null 时取
 /// `getApplicationDocumentsDirectory()/downloads/`。[now] 注入当前时间
@@ -246,21 +276,11 @@ Future<(SavedExport?, String?)> downloadExport(
         receiveTimeout: exportReceiveTimeout,
       ),
     );
-    final status = r.statusCode ?? 0;
-    if (status < 200 || status >= 300) {
-      // 🔴 4xx 被基座当作「成功 Response」放行，必须显式判；bytes 错误体
-      // 解码后取 detail 原文（不落盘、不假成功）
-      return (null, bytesResponseDetail(r.data) ?? api.genericErrorText);
-    }
-    final header = r.headers.value('content-disposition');
-    final filename =
-        sanitizeFilename(parseContentDispositionFilename(header)) ??
-        exportFallbackName(kind, (now ?? DateTime.now)());
-    final dir = downloadsDir ?? await defaultDownloadsDir();
-    if (!await dir.exists()) await dir.create(recursive: true);
-    final path = '${dir.path}${Platform.pathSeparator}$filename';
-    await File(path).writeAsBytes(r.data ?? const <int>[]);
-    return (SavedExport(path: path, filename: filename), null);
+    return await saveBytesResponse(
+      r,
+      fallbackName: exportFallbackName(kind, (now ?? DateTime.now)()),
+      downloadsDir: downloadsDir,
+    );
   } catch (e) {
     // 网络层 / 5xx DioException（`validateAppStatus` 放行之外才抛）与落盘
     // 异常：detail 原文，绝不崩出调用方
