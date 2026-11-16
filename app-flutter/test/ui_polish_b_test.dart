@@ -235,6 +235,17 @@ void _expectRecentCardOk(WidgetTester tester) {
   expect(find.textContaining('超长昵称测试'), findsWidgets);
 }
 
+/// 2.3.1 首页 1:1 还原后新增页头/hero 光晕/stats 三格/today 双格，内容变高：
+/// 320×700 等窄屏下动态卡在折叠线下方（ListView 惰性构建），先滚到它再断言。
+Future<void> _revealRecentCard(WidgetTester tester) async {
+  for (var i = 0;
+      i < 8 && find.text(_postRecord().date).evaluate().isEmpty;
+      i++) {
+    await tester.drag(find.byType(ListView), const Offset(0, -300));
+    await tester.pump(const Duration(milliseconds: 100));
+  }
+}
+
 Future<void> _pumpHomeAt(
     WidgetTester tester, ProviderContainer c, Size size) async {
   tester.view.physicalSize = size;
@@ -249,6 +260,7 @@ void main() {
     final c = _homeContainer(_dioWith(<Map<String, dynamic>>[]));
     await _pumpHomeAt(tester, c, const Size(393, 852));
     await _settle(tester);
+    await _revealRecentCard(tester);
     _expectRecentCardOk(tester);
   });
 
@@ -257,6 +269,7 @@ void main() {
     final c = _homeContainer(_dioWith(<Map<String, dynamic>>[]));
     await _pumpHomeAt(tester, c, const Size(320, 700));
     await _settle(tester);
+    await _revealRecentCard(tester);
     _expectRecentCardOk(tester);
   });
 
@@ -492,8 +505,16 @@ void main() {
       'post_card.dart',
     ]));
 
-    // ⑨ 动效性能纪律：全 lib 仍零 BackdropFilter（blur 禁区）
-    expect(all.contains('BackdropFilter'), isFalse);
+    // ⑨ 动效性能纪律：BackdropFilter（blur）只允许 chrome 静态区——2.3.1
+    //    视觉对齐 Web 试点段给 Dock 玻璃底开了唯一豁口（web_chrome.dart，
+    //    web-visual-plan.md 盘点表 1.6），其余全 lib 仍零 blur。
+    final blurFiles = src.entries
+        .where((e) => e.value.contains('BackdropFilter'))
+        .map((e) => e.key.split(RegExp(r'[\\/]')).last)
+        .toList();
+    expect(blurFiles, isNotEmpty, reason: 'Dock 玻璃底（试点唯一豁口）在位');
+    expect(blurFiles, everyElement('web_chrome.dart'),
+        reason: 'BackdropFilter 只允许 web_chrome.dart（Dock 静态区）');
 
     // ⑩ token 收敛只改取值来源：三个必改语义色源码已无写死色（剥注释后）
     final timelineCode = codeOnly(

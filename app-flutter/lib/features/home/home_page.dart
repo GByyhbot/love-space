@@ -1,11 +1,16 @@
-/// 首页（阶段 2 · 条目 2，对齐 Web homePage）：主视觉 hero（两人名/相恋天数/相恋日期
-/// 设置）、今天的心情（两人 mood 行，自己的可记可改）、最近纪念日倒计时、最新动态
-/// （post 前 3）、每日一句（本地轮换）。
-/// 数据：GET /api/records?kind=<排除 chat>&limit=1000（与 Web 聚合一致）+ /api/dashboard；
-/// SSE other 事件 → invalidate 重拉（增量重拉在聊天专章细化）。
-/// 本页不含：心愿/歌单/共同打卡（归条目 6「我们」）、封面与天数卡片（媒体能力，阶段 4）、
-/// on-this-day / 小年报（归属待主人定，小结对照清单已注明）。
+/// 首页（阶段 2 · 条目 2，对齐 Web homePage）：页头（我们的每一天）、hero 渐变卡
+/// （两人名/相恋天数/封面/相恋日期设置）、stats 三格（天数/照片/心愿）、today
+/// 双格（心情 + 纪念日倒计时）、每日一句、最近动态（post 前 3）。
+///
+/// 2.3.1（视觉对齐 Web 试点段）：一页 1:1 还原（web-visual-plan.md 2.2 差异表
+/// 逐行落地）。🔴 红线：数据来源/请求时机/Provider 零变化——仍是
+/// recordsProvider（kind 排除 chat）+ dashboardProvider + authProvider，
+/// SSE other → invalidate 重拉不变；只换呈现层。数值出处逐条标注
+/// `static/style.css:行号` / `static/app.js:行号`（盘点表口径）。
+/// S1（Expanded+ellipsis 长昵称）/S2（mood 行 Flexible）修复保留不回退。
 library;
+
+import 'dart:ui' as ui show Gradient;
 
 import 'package:dio/dio.dart' show Response;
 import 'package:flutter/material.dart';
@@ -22,6 +27,7 @@ import '../../core/ui/progress.dart';
 import '../auth/auth_state.dart';
 import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
 import '../settings/settings_state.dart' show spaceEditRequestedProvider;
+import '../shell/web_chrome.dart';
 import '../../core/theme/tokens.dart';
 
 /// 今日日期（本地时区，与 Web today() 一致格式 yyyy-MM-dd）
@@ -117,45 +123,27 @@ class HomePage extends ConsumerWidget {
       data: (list) => RefreshIndicator(
         onRefresh: () async => ref.invalidate(recordsProvider),
         child: ListView(
-          padding: const EdgeInsets.all(16),
+          // Web `.main` 手机档 padding 18px 18px 104px（style.css:1391/:2750；
+          // 底部 104 为 Dock 让位，ChromeMetrics.contentBottom）
+          padding: const EdgeInsets.fromLTRB(
+              18, 18, 18, ChromeMetrics.contentBottom),
           children: [
+            // 页头：h1 + 副题（文案逐字 app.js:725；布局 style.css:342-343）
+            _PageHeading(theme: theme),
+            const SizedBox(height: ChromeMetrics.headingMargin),
             _Hero(
               me: me,
               list: list,
               dashboard: ref.watch(dashboardProvider).valueOrNull,
               onGoTab: onGoTab,
             ),
-            const SizedBox(height: 12),
-            _TodayCard(me: me, list: list, onGoTab: onGoTab),
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.surfaceContainerHighest.withValues(
-                  alpha: 0.4,
-                ),
-                borderRadius: BorderRadius.circular(AppRadius.lg),
-              ),
-              child: Row(
-                children: [
-                  Text('✦', style: TextStyle(color: theme.colorScheme.primary)),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      dailyQuotes[DateTime.now().day % dailyQuotes.length],
-                      style: theme.textTheme.bodyMedium,
-                    ),
-                  ),
-                  Text(
-                    '今天的一句',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.outline,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12), // hero margin-bottom 12（:1407）
+            _StatsGrid(me: me, list: list, dashboard: ref.watch(dashboardProvider).valueOrNull),
+            const SizedBox(height: 14), // stats-grid margin-bottom 14（:1415）
+            _TodayCells(me: me, list: list),
+            const SizedBox(height: 14), // today-card margin-bottom 14（:1414）
+            _DailyQuote(theme: theme),
+            const SizedBox(height: 18), // daily-quote margin-bottom 18（:1906）
             Text('最近的小美好', style: theme.textTheme.titleMedium),
             const SizedBox(height: Spacing.gap),
             ..._recentPosts(context, me, list, onGoTab: onGoTab),
@@ -177,130 +165,250 @@ class HomePage extends ConsumerWidget {
     final top = posts.take(3).toList();
     if (top.isEmpty) {
       return [
-        Card(
-          child: InkWell(
-            borderRadius: BorderRadius.circular(AppRadius.card),
-            onTap: () => onGoTab?.call(1), // 空态也可点：去时光页开始记录
-            child: Padding(
-              padding: const EdgeInsets.all(Spacing.cardPad),
-              child: Text(
-                '故事，从这一刻开始——点这里去时光页写下第一篇。',
-                style: theme.textTheme.bodyMedium,
-              ),
-            ),
+        _recentCard(
+          context,
+          tinted: false,
+          onTap: () => onGoTab?.call(1), // 空态也可点：去时光页开始记录
+          child: Text(
+            '故事，从这一刻开始——点这里去时光页写下第一篇。',
+            style: theme.textTheme.bodyMedium,
           ),
         ),
       ];
     }
     return top.map((r) {
       final author = me.byId(r.author);
-      return Card(
-        margin: const EdgeInsets.only(bottom: 8),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(AppRadius.card),
-          onTap: () => onGoTab?.call(1), // 详情与点赞评论在时光页（条目 4）
-          child: Padding(
-            padding: const EdgeInsets.all(Spacing.cardPad),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+      return _recentCard(
+        context,
+        kind: r.kind,
+        onTap: () => onGoTab?.call(1), // 详情与点赞评论在时光页（条目 4）
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
               children: [
-                Row(
-                  children: [
-                    CircleAvatar(
-                      radius: 12,
-                      backgroundColor: theme.colorScheme.primaryContainer,
-                      child: Text(
-                        (author?.name.isEmpty ?? true)
-                            ? '?'
-                            : author!.name.characters.first,
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          color: theme.colorScheme.onPrimaryContainer,
-                        ),
-                      ),
+                CircleAvatar(
+                  radius: 12,
+                  backgroundColor: theme.colorScheme.primaryContainer,
+                  child: Text(
+                    (author?.name.isEmpty ?? true)
+                        ? '?'
+                        : author!.name.characters.first,
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: theme.colorScheme.onPrimaryContainer,
                     ),
-                    const SizedBox(width: 8),
-                    // S1（必改）：昵称无 flex 时长昵称把日期挤出右边界
-                    // → RenderFlex overflow。Expanded + ellipsis 截断，
-                    // 日期恒在右侧可见；卡片信息结构不变。
-                    Expanded(
-                      child: Text(
-                        author?.name ?? '…',
-                        style: theme.textTheme.labelLarge,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      r.date,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.outline,
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
-                if ((r.body['title'] ?? '').toString().isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8),
-                    child: Text(
-                      r.body['title'].toString(),
-                      style: theme.textTheme.titleSmall,
-                    ),
+                const SizedBox(width: 8),
+                // S1（必改）：昵称无 flex 时长昵称把日期挤出右边界
+                // → RenderFlex overflow。Expanded + ellipsis 截断，
+                // 日期恒在右侧可见；卡片信息结构不变。
+                Expanded(
+                  child: Text(
+                    author?.name ?? '…',
+                    style: theme.textTheme.labelLarge,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                if ((r.body['content'] ?? '').toString().isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Text(
-                      r.body['content'].toString(),
-                      style: theme.textTheme.bodyMedium,
-                    ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  r.date,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.outline,
                   ),
-                const SizedBox(height: Spacing.gap),
-                Row(
-                  children: [
-                    Icon(
-                      Icons.favorite_border,
-                      size: 14,
-                      color: theme.colorScheme.outline,
-                    ),
-                    const SizedBox(width: 4),
-                    Text('${r.likes.length}', style: theme.textTheme.bodySmall),
-                    const SizedBox(width: 16),
-                    Icon(
-                      Icons.chat_bubble_outline,
-                      size: 14,
-                      color: theme.colorScheme.outline,
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      '${r.comments.length}',
-                      style: theme.textTheme.bodySmall,
-                    ),
-                    const Spacer(),
-                    // 长提示语在窄屏会挤出 Row（320 宽 +8.2px 实测）：
-                    // Flexible + ellipsis 截断，计数恒可见。
-                    Flexible(
-                      child: Text(
-                        '媒体 ${r.media.length} · 完整互动在时光页（条目 4）',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.outline,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
                 ),
               ],
             ),
-          ),
+            if ((r.body['title'] ?? '').toString().isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  r.body['title'].toString(),
+                  style: theme.textTheme.titleSmall,
+                ),
+              ),
+            if ((r.body['content'] ?? '').toString().isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(
+                  r.body['content'].toString(),
+                  style: theme.textTheme.bodyMedium,
+                ),
+              ),
+            const SizedBox(height: Spacing.gap),
+            Row(
+              children: [
+                Icon(
+                  Icons.favorite_border,
+                  size: 14,
+                  color: theme.colorScheme.outline,
+                ),
+                const SizedBox(width: 4),
+                Text('${r.likes.length}', style: theme.textTheme.bodySmall),
+                const SizedBox(width: 16),
+                Icon(
+                  Icons.chat_bubble_outline,
+                  size: 14,
+                  color: theme.colorScheme.outline,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  '${r.comments.length}',
+                  style: theme.textTheme.bodySmall,
+                ),
+                const Spacer(),
+                // 长提示语在窄屏会挤出 Row（320 宽 +8.2px 实测）：
+                // Flexible + ellipsis 截断，计数恒可见。
+                Flexible(
+                  child: Text(
+                    '媒体 ${r.media.length} · 完整互动在时光页（条目 4）',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.outline,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
       );
     }).toList();
   }
+
+  /// 最近动态卡容器：`.card` 手机档 radius 17 / padding 15（style.css:1421）+
+  /// kind-* 低饱和渐变 tint（165deg tint→surface 72%，style.css:1944-1956）+
+  /// 顶部 1px 内高光 hairline（style.css:1937/:2017）。[kind] 为空 = 无 tint
+  /// 素卡（空态提示）。
+  Widget _recentCard(
+    BuildContext context, {
+    required VoidCallback onTap,
+    required Widget child,
+    String? kind,
+    bool tinted = true,
+  }) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final brightness = theme.brightness;
+    final radius = BorderRadius.circular(17);
+    return Container(
+      key: kind == null ? null : const Key('home-recent-card'),
+      margin: const EdgeInsets.only(bottom: 13), // .card margin-bottom 13（:298）
+      decoration: BoxDecoration(
+        borderRadius: radius,
+        border: Border.all(color: cs.outlineVariant),
+        gradient: tinted && kind != null
+            ? LinearGradient(
+                // 165deg 方向近似（sin165°≈0.26）：tint 起点在左上、surface 72% 收
+                begin: const Alignment(-0.13, -0.97),
+                end: const Alignment(0.13, 0.97),
+                colors: [_kindTint(kind, cs, brightness), cs.surface],
+                stops: const [0, 0.72],
+              )
+            : null,
+        color: tinted && kind == null ? cs.surface : null,
+      ),
+      child: ClipRRect(
+        borderRadius: radius,
+        child: Stack(
+          children: [
+            // 顶部内高光（--hairline，style.css:1937 浅 .72 / :2017 夜 .05）
+            Positioned(
+              left: 0,
+              right: 0,
+              top: 0,
+              height: 1,
+              child: ColoredBox(
+                color: WebSemanticColors.cardHairline(brightness),
+              ),
+            ),
+            Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: onTap,
+                borderRadius: radius,
+                child: Padding(
+                  padding: const EdgeInsets.all(15), // 手机档 padding 15（:1421）
+                  child: child,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
-/// ── Hero：两人名 / 相恋天数 / 相恋日期设置 ─────────────────────────
+/// kind-* 低饱和 tint（首色 α 值出处 style.css:1930-1956；rgb 通道随主题/明暗，
+/// App 端等价映射为 colorScheme/语义色 withValues α）：
+/// mood=tint-rose(primary .055)；post/diary/note/surprise/question/period 等默认
+/// primary .04；anniversary=amber .06；wish/personal_wish/music=fertile .06；
+/// quest/habit=amber .055；ledger=green .06；album=info .05（App 暂只出现前族）。
+Color _kindTint(String kind, ColorScheme cs, Brightness brightness) {
+  switch (kind) {
+    case 'mood':
+      return cs.primary.withValues(alpha: 0.055); // tint-rose（:1930）
+    case 'anniversary':
+      return WebSemanticColors.amber(brightness).withValues(alpha: 0.06);
+    case 'wish':
+    case 'personal_wish':
+    case 'music':
+      return WebSemanticColors.fertile(brightness).withValues(alpha: 0.06);
+    case 'quest':
+    case 'habit':
+      return WebSemanticColors.amber(brightness).withValues(alpha: 0.055);
+    case 'ledger':
+      return WebSemanticColors.green(brightness).withValues(alpha: 0.06);
+    default: // post/diary/draft/surprise/question/note/period（:1955-1956）
+      return cs.primary.withValues(alpha: 0.04);
+  }
+}
+
+/// 页头：「我们的每一天」+ 副题「一半是生活，一半是你。」
+/// 文案逐字 app.js:725；布局 style.css:342-343（h1 26px/600、副题 13px muted、
+/// 间距 5px）。字阶映射：h1 26 → headlineSmall（24，任务定案「26→headlineSmall
+/// 或体感一致档」，App 手机档 Web 实为 22/:1401，取字阶中档并注明）；副题 13 →
+/// bodySmall（12）；muted → outline（全 App 辅助文字基线）。
+class _PageHeading extends StatelessWidget {
+  const _PageHeading({required this.theme});
+
+  final ThemeData theme;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '我们的每一天',
+          style: theme.textTheme.headlineSmall?.copyWith(
+            fontWeight: FontWeight.w600,
+            letterSpacing: -0.3, // h1 letter-spacing -.3px（style.css:212）
+            color: theme.colorScheme.onSurface,
+          ),
+        ),
+        const SizedBox(height: ChromeMetrics.headingSubGap), // 副题 mt 5（:343）
+        Text(
+          '一半是生活，一半是你。',
+          style: theme.textTheme.bodySmall
+              ?.copyWith(color: theme.colorScheme.outline),
+        ),
+      ],
+    );
+  }
+}
+
+/// ── Hero：渐变卡（两人名 / 相恋天数 / 封面 / 相恋日期设置）────────────
+///
+/// Web：radius 20、min-height 230（手机）、padding 18px 16px（手机）、
+/// 底层三段 120° 渐变 + 双 radial 光晕（style.css:448/:1959-1964）、有封面时
+/// `--hero-shade` 双向遮罩（:2258-2260）+ 文字转白（:2246-2250）。
+/// 字号取手机档断点（style.css:2265-2266/@media≤720 :2289）：名字 serif 22/600
+/// （任务简报 26 为桌面档）、天数 serif 42/500（桌面 52）——盘点表 2.2 双档口径，
+/// App 视口属手机档；serif 字族走 webSerifStyle（不引新字体包）。
 class _Hero extends ConsumerWidget {
   const _Hero({
     required this.me,
@@ -316,98 +424,143 @@ class _Hero extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final cs = theme.colorScheme;
     final partner = me.users.where((u) => u.id != me.user.id).toList();
     final paired = partner.isNotEmpty;
     // 未绑定时名字区点击 → 账号资料页的邀请卡片（App 无 Web 链接入口，功能等价）
-    final names = paired
-        ? '${me.user.name} ♥ ${partner.first.name}'
-        : '等你，把另一半邀请进来';
     // 与 Web 一致：since 起算「第几天」= daysBetween+1；dashboard.days_together 服务端口径
     final days = me.spaceSince.isNotEmpty
         ? daysBetween(me.spaceSince, todayStr()) + 1
         : (dashboard?.daysTogether);
+    final hasCover = (me.spaceRaw['cover'] ?? '').toString().isNotEmpty;
+    // 有封面：文字转白（style.css:2246-2250）；无封面：ink（--ink 映射 onSurface）
+    final namesColor = hasCover ? Colors.white : cs.onSurface;
+    final daysColor = hasCover ? Colors.white : cs.onSurface;
+    final metaColor = hasCover
+        ? Colors.white.withValues(alpha: 0.94) // hero-foot 白 .94（:2277）
+        : cs.outline;
 
-    return Card(
-      child: InkWell(
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        // 已绑定：整卡可点 → 相恋日期/空间信息设置层（含编辑角标 affordance）；
-        // 未绑定：点卡 → 账号资料页的邀请卡片（App 无 Web 链接入口，功能等价）
-        onTap: () {
-          if (partner.isNotEmpty) {
-            _editSince(context, ref);
-          } else {
-            context.push('/profile');
-          }
-        },
-        child: Stack(
-          children: [
-            // 段 D：主页封面（space.cover / cover_pos），保存后立刻变。
-            _HomeCover(me: me),
-            Padding(
-              padding: const EdgeInsets.all(18),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text(
-                    names,
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.titleLarge,
+    return Container(
+      key: const Key('home-hero'),
+      constraints: const BoxConstraints(minHeight: 230), // 手机 min-height（:1406）
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20), // --radius（style.css:448）
+        border: Border.all(color: cs.outlineVariant), // 1px --line（:449）
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(20),
+            // 已绑定：整卡可点 → 相恋日期/空间信息设置层（含编辑角标 affordance）；
+            // 未绑定：点卡 → 账号资料页的邀请卡片（App 无 Web 链接入口，功能等价）
+            onTap: () {
+              if (partner.isNotEmpty) {
+                _editSince(context, ref);
+              } else {
+                context.push('/profile');
+              }
+            },
+            child: Stack(
+              children: [
+                // 三段 120° 渐变 + 双 radial 光晕（CustomPaint，详见 painter 注释）
+                Positioned.fill(
+                  child: CustomPaint(
+                    painter: _HeroGradientPainter(theme.brightness, cs),
                   ),
-                  const SizedBox(height: 10),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.end,
+                ),
+                // 段 D：主页封面（space.cover / cover_pos），保存后立刻变。
+                if (hasCover) _HomeCover(me: me),
+                Padding(
+                  // 手机档 hero padding 18px 16px（style.css:1405）
+                  padding: const EdgeInsets.fromLTRB(16, 18, 16, 18),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        '我们相恋  ',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.outline,
+                      Text.rich(
+                        TextSpan(
+                          children: <InlineSpan>[
+                            TextSpan(text: paired ? me.user.name : '等你，把另一半邀请进来'),
+                            if (paired)
+                              TextSpan(
+                                // heart-symbol（style.css:2283-2285）：主色、
+                                // fs-body、有封面转白 .72
+                                text: ' ♥ ',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w400,
+                                  color: hasCover
+                                      ? Colors.white.withValues(alpha: 0.72)
+                                      : cs.primary,
+                                ),
+                              ),
+                            if (paired) TextSpan(text: partner.first.name),
+                          ],
+                        ),
+                        // hero-names-text：serif、手机档 fs-h2 22、w600、ls .5（:2264-2266）
+                        style: theme.textTheme.titleLarge?.copyWith(
+                          fontFamily: webSerifFamily,
+                          fontFamilyFallback: webSerifFallback,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.5,
+                          height: 1.3,
+                          color: namesColor,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 8), // hero-main gap 8（:2288）
+                      Text.rich(
+                        TextSpan(
+                          children: <InlineSpan>[
+                            TextSpan(
+                              // hero-days strong：serif 42（手机档 :2289）/500
+                              text: days == null ? '—' : '$days',
+                              style: webSerifStyle(42, color: daysColor, height: 1.15),
+                            ),
+                            TextSpan(
+                              // em「天」：fs-body、常规字族（:2272-2274）
+                              text: ' 天',
+                              style: TextStyle(fontSize: 14, color: daysColor),
+                            ),
+                          ],
                         ),
                       ),
-                      Text(
-                        days == null ? '—' : '$days',
-                        style: theme.textTheme.displaySmall?.copyWith(
-                          color: theme.colorScheme.primary,
+                      const SizedBox(height: 4),
+                      if (me.spaceSince.isEmpty)
+                        Text(
+                          '点这里设置相恋日期 →',
+                          style: theme.textTheme.bodySmall
+                              ?.copyWith(color: cs.primary),
+                        )
+                      else
+                        Text(
+                          '${me.spaceSince} 起 · 点卡片可编辑 · 今天也要好好相爱',
+                          style: theme.textTheme.bodySmall
+                              ?.copyWith(color: metaColor),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                      ),
-                      Text(
-                        ' 天',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.outline,
-                        ),
-                      ),
                     ],
                   ),
-                  const SizedBox(height: Spacing.gap),
-                  if (me.spaceSince.isEmpty)
-                    Text(
-                      '点这里设置相恋日期 →',
-                      textAlign: TextAlign.center,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.primary,
-                      ),
-                    )
-                  else
-                    Text(
-                      '${me.spaceSince} 起 · 点卡片可编辑 · 今天也要好好相爱',
-                      textAlign: TextAlign.center,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.outline,
-                      ),
-                    ),
-                ],
-              ),
+                ),
+                Positioned(
+                  right: 8,
+                  top: 8,
+                  child: Icon(
+                    Icons.edit,
+                    size: 16,
+                    color: hasCover
+                        ? Colors.white.withValues(alpha: 0.8)
+                        : cs.outline,
+                  ),
+                ),
+              ],
             ),
-            Positioned(
-              right: 8,
-              top: 8,
-              child: Icon(
-                Icons.edit,
-                size: 16,
-                color: theme.colorScheme.outline,
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -416,6 +569,73 @@ class _Hero extends ConsumerWidget {
   /// 设置相恋日期（对齐 Web spaceForm：PUT /api/space 全量覆盖，只改 name/since）
   Future<void> _editSince(BuildContext context, WidgetRef ref) =>
       showSpaceEditDialog(context, ref, me);
+}
+
+/// hero 渐变底 painter（三层，绘制顺序 = CSS 层序：linear 最底、右下光晕、
+/// 左上白光晕最顶——style.css:1959-1964）：
+/// ① 底层 linear-gradient(120deg, soft 0%, surface 55%, green-soft 100%)（:448）：
+///    soft → primaryContainer（--soft 最近语义档）、surface、green-soft
+///    （Web 语义色跟明暗两换，style.css:39/:1512）。120° 方向 ≈ 对齐
+///    (-0.43,-0.25)→(0.43,0.25)。
+/// ② 右下 primary 光晕：radial 95% 85% at 100% 105%、primary α.10 → 透明 60%
+///    （:1961-1962；Flutter 无椭圆 radial，用圆半径 0.95×W 近似）。
+/// ③ 左上白光晕：radial 130% 100% at 0 0、白 .55 → 透明 52%（:1960；同上近似）。
+class _HeroGradientPainter extends CustomPainter {
+  const _HeroGradientPainter(this.brightness, this.cs);
+
+  final Brightness brightness;
+  final ColorScheme cs;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+    void paintShader(Shader shader) =>
+        canvas.drawRect(rect, Paint()..shader = shader);
+
+    // ① 底层三段 120° 渐变
+    paintShader(
+      LinearGradient(
+        begin: const Alignment(-0.43, -0.25),
+        end: const Alignment(0.43, 0.25),
+        colors: <Color>[
+          cs.primaryContainer,
+          cs.surface,
+          WebSemanticColors.greenSoft(brightness),
+        ],
+        stops: const <double>[0, 0.55, 1],
+      ).createShader(rect),
+    );
+
+    // ② 右下 primary 光晕（α .10 → 透明 60%）
+    paintShader(
+      ui.Gradient.radial(
+        Offset(size.width, size.height * 1.05),
+        size.width * 0.95,
+        <Color>[
+          cs.primary.withValues(alpha: 0.10),
+          cs.primary.withValues(alpha: 0),
+        ],
+        <double>[0, 0.6],
+      ),
+    );
+
+    // ③ 左上白光晕（白 .55 → 透明 52%）
+    paintShader(
+      ui.Gradient.radial(
+        Offset.zero,
+        size.width * 1.3,
+        <Color>[
+          Colors.white.withValues(alpha: 0.55),
+          Colors.white.withValues(alpha: 0),
+        ],
+        <double>[0, 0.52],
+      ),
+    );
+  }
+
+  @override
+  bool shouldRepaint(_HeroGradientPainter oldDelegate) =>
+      oldDelegate.brightness != brightness || oldDelegate.cs != cs;
 }
 
 /// 空间信息编辑弹层（首页封面卡 + 设置页 / hub「空间信息」跳转入口共用，
@@ -519,12 +739,17 @@ Future<void> showSpaceEditDialog(
 String _fmtDate(DateTime d) =>
     '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
-/// ── 今天的心情（两人 mood 行）+ 最近纪念日倒计时 ────────────────────
-class _TodayCard extends ConsumerWidget {
-  const _TodayCard({required this.me, required this.list, this.onGoTab});
+/// ── today 双格：今天的心情 + 最近纪念日倒计时 ─────────────────────
+///
+/// Web 手机档 today-card 两列双格（style.css:494/:1414）：today-cell radius 16
+/// （:496）、手机 padding 11px 13px（:1417）、1px --line 描边、surface 底；
+/// 倒计时 strong serif 26/500 primary-dark（:505）。原单卡分区拆为双格，
+/// 数据与交互零变化（mood 记/改走原 _MoodRow；纪念日格直达管理页）。
+class _TodayCells extends StatelessWidget {
+  const _TodayCells({required this.me, required this.list});
+
   final MeData me;
   final List<Record> list;
-  final void Function(int tab)? onGoTab;
 
   /// 最近纪念日（🔴 段 B 起委托 together_data.anniversaryDue 唯一实现——
   /// 首页/hub 展示卡/纪念日管理页三处数字必须永远一致，不再各写一套；
@@ -543,88 +768,138 @@ class _TodayCard extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final cs = theme.colorScheme;
     final ann = nextAnniversary();
     final today = todayStr();
 
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(Spacing.cardPad),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text('☀ 今天的心情', style: theme.textTheme.titleSmall),
-            const SizedBox(height: Spacing.gap),
-            // 两人 mood 行（对齐 Web moodRows：没记可记，已记可改，对方只读展示）
-            for (final u in me.users)
-              _MoodRow(
-                me: me,
-                user: u,
-                today: today,
-                record: list
-                    .where(
-                      (r) =>
-                          r.kind == 'mood' &&
-                          r.author == u.id &&
-                          r.date == today,
-                    )
-                    .firstOrNull,
-              ),
-            const Divider(height: 24),
-            Text('📅 最近纪念日', style: theme.textTheme.titleSmall),
-            const SizedBox(height: Spacing.gap),
-            // 整区可点 → 纪念日管理页（段 B 二级页；决策点①定案的直达接线）
-            InkWell(
-              borderRadius: BorderRadius.circular(AppRadius.sm),
-              onTap: () => context.push('/together/anniversary'),
+    TextStyle headerStyle() => theme.textTheme.bodySmall!.copyWith(
+          fontWeight: FontWeight.w500,
+          letterSpacing: 0.5, // .tiny letter-spacing .5（:497）
+          color: cs.primary, // .tiny primary-dark → primary 映射
+        );
+
+    // IntrinsicHeight + stretch：双格等高（对齐 Web grid 拉伸语义），
+    // ListView 无界高度下 IntrinsicHeight 给 Row 提供有界约束。
+    return IntrinsicHeight(
+      child: Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // 格 ①：今天的心情（两人 mood 行，自己的可记可改，对方只读）
+        Expanded(
+          child: Container(
+            decoration: BoxDecoration(
+              color: cs.surface,
+              borderRadius: BorderRadius.circular(16), // :496
+              border: Border.all(color: cs.outlineVariant),
+            ),
+            // Material 透明层：原单卡结构由 Card 提供 ink 介质，拆格后自补
+            child: Material(
+              color: Colors.transparent,
               child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4),
+                padding: const EdgeInsets.all(13), // 手机档 11px 13px（:1417）
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    if (ann != null)
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Text(
-                            '${ann.days}',
-                            style: theme.textTheme.headlineMedium?.copyWith(
-                              color: theme.colorScheme.primary,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Padding(
-                              padding: const EdgeInsets.only(bottom: 4),
-                              child: Text(
-                                '天后 · ${(ann.r.body['title'] ?? '纪念日')}\n${ann.due} · 别忘了给彼此一个拥抱 · 点此查看全部',
-                                softWrap: true,
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  color: theme.colorScheme.outline,
-                                ),
-                              ),
-                            ),
-                          ),
-                          Icon(
-                            Icons.chevron_right,
-                            color: theme.colorScheme.outline,
-                          ),
-                        ],
-                      )
-                    else
-                      Text(
-                        '留一个日子，给仪式感 · 点此添加纪念日。',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.outline,
-                        ),
+                    Text('今天的心情', style: headerStyle()),
+                    const SizedBox(height: 8), // .tiny margin-bottom 8（:498）
+                    for (final u in me.users)
+                      _MoodRow(
+                        me: me,
+                        user: u,
+                        today: today,
+                        record: list
+                            .where(
+                              (r) =>
+                                  r.kind == 'mood' &&
+                                  r.author == u.id &&
+                                  r.date == today,
+                            )
+                            .firstOrNull,
                       ),
                   ],
                 ),
               ),
             ),
-          ],
+          ),
         ),
+        const SizedBox(width: 10), // today-card gap 10（:1414）
+        // 格 ②：最近纪念日倒计时（整格可点 → 纪念日管理页，段 B 直达接线）
+        Expanded(
+          child: Container(
+            decoration: BoxDecoration(
+              color: cs.surface,
+              borderRadius: BorderRadius.circular(16), // :496
+              border: Border.all(color: cs.outlineVariant),
+            ),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(16),
+                onTap: () => context.push('/together/anniversary'),
+                child: Padding(
+                  padding: const EdgeInsets.all(13),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text('最近纪念日', style: headerStyle()),
+                          ),
+                          Icon(Icons.chevron_right,
+                              size: 14, color: cs.outline), // tiny-go（:508）
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      if (ann != null) ...[
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            // countdown-mini strong：serif 26/500（:505），
+                            // primary-dark → primary 映射（深浅随主题）
+                            Text('${ann.days}',
+                                style: webSerifStyle(26, color: cs.primary)),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Padding(
+                                padding: const EdgeInsets.only(bottom: 4),
+                                child: Text(
+                                  '天后 · ${(ann.r.body['title'] ?? '纪念日')}',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: theme.textTheme.bodySmall
+                                      ?.copyWith(color: cs.outline),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '${ann.due} · 别忘了给彼此一个拥抱',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodySmall
+                              ?.copyWith(color: cs.outline),
+                        ),
+                      ] else
+                        Text(
+                          '留一个日子，给仪式感 · 点此添加纪念日。',
+                          style: theme.textTheme.bodySmall
+                              ?.copyWith(color: cs.outline),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
       ),
     );
   }
@@ -813,9 +1088,145 @@ class _MoodRow extends ConsumerWidget {
   }
 }
 
+/// ── stats-grid 三格：相恋天数 / 照片 / 心愿 ─────────────────────────
+///
+/// Web（style.css:474-482，手机档 :1415）：白卡 radius 14（手机档）、padding
+/// 13px 12px、gap 9、图标底 38×38 radius 12 三色（soft/green-soft/amber-soft）+
+/// serif 22（fs-h2 手机档）/500 数字。数据走既有来源零新请求：天数 =
+/// 与 hero 同口径（spaceSince daysBetween+1，否则 dashboard.days_together）、
+/// 照片 = dashboard.photos、心愿 = 既有 records 列表 kind=='wish' 计数。
+class _StatsGrid extends StatelessWidget {
+  const _StatsGrid({required this.me, required this.list, this.dashboard});
+
+  final MeData me;
+  final List<Record> list;
+  final Dashboard? dashboard;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final brightness = theme.brightness;
+    final days = me.spaceSince.isNotEmpty
+        ? daysBetween(me.spaceSince, todayStr()) + 1
+        : (dashboard?.daysTogether ?? 0);
+    final photos = dashboard?.photos ?? 0;
+    final wishes = list.where((r) => r.kind == 'wish').length;
+
+    Widget cell(int index, IconData icon, Color iconBg, Color iconColor,
+        String value, String label) {
+      return Expanded(
+        child: Container(
+          key: Key('home-stat-$index'),
+          padding: const EdgeInsets.symmetric(
+              horizontal: 12, vertical: 13), // 手机档（:1415）
+          decoration: BoxDecoration(
+            color: cs.surface,
+            borderRadius: BorderRadius.circular(14), // 手机档（:1415）
+            border: Border.all(color: cs.outlineVariant),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 38, // stat-icon 38×38 radius 12（:1415）
+                height: 38,
+                decoration: BoxDecoration(
+                  color: iconBg,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, size: 20, color: iconColor),
+              ),
+              const SizedBox(width: 10), // .stat gap 10（:1415）
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // FittedBox 兜底：serif 22 数字在 320 宽三格挤压下缩放不溢出
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        value,
+                        // stat strong serif 22（fs-h2 手机档）/500（:479/:1415）
+                        style: webSerifStyle(22, color: cs.onSurface),
+                      ),
+                    ),
+                    Text(
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall
+                          ?.copyWith(color: cs.outline),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Row(
+      children: [
+        cell(0, Icons.favorite_rounded, cs.primaryContainer, cs.primary,
+            '$days', '相恋天数'), // icon1 soft/primary（:480）
+        const SizedBox(width: 9), // stats-grid gap 9（:1415）
+        cell(1, Icons.photo_library_rounded, WebSemanticColors.greenSoft(brightness),
+            WebSemanticColors.green(brightness), '$photos', '照片'), // icon2（:481）
+        const SizedBox(width: 9),
+        cell(2, Icons.star_rounded, WebSemanticColors.amberSoft(brightness),
+            WebSemanticColors.amber(brightness), '$wishes', '心愿'), // icon3（:482）
+      ],
+    );
+  }
+}
+
+/// 每日一句 soft 胶囊（style.css:1906-1909）：radius 12、padding 14px 18px、
+/// --soft 底（→ primaryContainer 映射）、正文 fs-lg（→ bodyMedium 14）、
+/// 右侧 small fs-xs muted（→ labelSmall 11 / outline）。
+class _DailyQuote extends StatelessWidget {
+  const _DailyQuote({required this.theme});
+
+  final ThemeData theme;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = theme.colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+      decoration: BoxDecoration(
+        color: cs.primaryContainer,
+        borderRadius: BorderRadius.circular(12), // --radius-s（:1906）
+      ),
+      child: Row(
+        children: [
+          Text('✦', style: TextStyle(color: cs.primary)), // 图标 primary（:1907）
+          const SizedBox(width: 10), // gap 10（:1906）
+          Expanded(
+            child: Text(
+              dailyQuotes[DateTime.now().day % dailyQuotes.length],
+              style: theme.textTheme.bodyMedium
+                  ?.copyWith(color: cs.onPrimaryContainer),
+            ),
+          ),
+          Text(
+            '今天的一句',
+            style: theme.textTheme.labelSmall
+                ?.copyWith(color: cs.outline), // small muted（:1909）
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 /// 段 D 主页封面：`space.cover` 媒体 id + `cover_pos` 构图（默认 x/y=50,z=1）。
 /// 只消费 `/api/me` 的 space，媒体 URL 走 `chatBaseProvider`，Cookie 头走
 /// `mediaCookieHeadersProvider`；换封面后 `auth.reload()` 让本卡重建。
+/// 2.3.1：遮罩改 `--hero-shade` 双向渐变（style.css:2258-2260）——90deg 横向
+/// 压暗（.74→.4@58%→.1）+ 0deg 自下而上（.52→透明@52%），色值固定深棕
+/// （rgba(37,28,34,·)，跟主题无关）；替换原 surface α0.45 单色。
 class _HomeCover extends ConsumerWidget {
   const _HomeCover({required this.me});
 
@@ -823,7 +1234,6 @@ class _HomeCover extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final cs = Theme.of(context).colorScheme;
     final cover = (me.spaceRaw['cover'] ?? '').toString();
     if (cover.isEmpty) return const SizedBox.shrink();
     final base = ref.watch(chatBaseProvider).valueOrNull;
@@ -838,32 +1248,58 @@ class _HomeCover extends ConsumerWidget {
         : 50;
     final z = pos is Map ? (num.tryParse((pos['z'] ?? 1).toString()) ?? 1) : 1;
     return Positioned.fill(
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        child: Stack(
-          children: [
-            Transform.scale(
-              scale: z.toDouble().clamp(1.0, 3.0),
-              child: Image.network(
-                '$base/media/$cover?preview=true',
-                key: Key('home-cover-$cover'),
-                headers: headers,
-                fit: BoxFit.cover,
-                alignment: Alignment(
-                  (x.toDouble() / 50 - 1).clamp(-1.0, 1.0),
-                  (y.toDouble() / 50 - 1).clamp(-1.0, 1.0),
+      child: Stack(
+        children: [
+          Transform.scale(
+            scale: z.toDouble().clamp(1.0, 3.0),
+            child: Image.network(
+              '$base/media/$cover?preview=true',
+              key: Key('home-cover-$cover'),
+              headers: headers,
+              fit: BoxFit.cover,
+              alignment: Alignment(
+                (x.toDouble() / 50 - 1).clamp(-1.0, 1.0),
+                (y.toDouble() / 50 - 1).clamp(-1.0, 1.0),
+              ),
+              width: double.infinity,
+              height: double.infinity,
+              errorBuilder: (_, _, _) => const SizedBox.shrink(),
+            ),
+          ),
+          // --hero-shade 第 1 层：90deg（style.css:2259）
+          Positioned.fill(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                  colors: <Color>[
+                    const Color.fromRGBO(37, 28, 34, 0.74),
+                    const Color.fromRGBO(37, 28, 34, 0.40),
+                    const Color.fromRGBO(37, 28, 34, 0.10),
+                  ],
+                  stops: const <double>[0, 0.58, 1],
                 ),
-                width: double.infinity,
-                height: double.infinity,
-                errorBuilder: (_, _, _) => const SizedBox.shrink(),
               ),
             ),
-            // 压一层半透明底色，保证封面上的文字始终可读。
-            Positioned.fill(
-              child: ColoredBox(color: cs.surface.withValues(alpha: 0.45)),
+          ),
+          // --hero-shade 第 2 层：0deg 自下而上（style.css:2259）
+          Positioned.fill(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.bottomCenter,
+                  end: Alignment.topCenter,
+                  colors: <Color>[
+                    const Color.fromRGBO(37, 28, 34, 0.52),
+                    const Color.fromRGBO(37, 28, 34, 0),
+                  ],
+                  stops: const <double>[0, 0.52],
+                ),
+              ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

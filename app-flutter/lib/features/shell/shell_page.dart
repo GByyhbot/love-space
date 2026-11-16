@@ -1,5 +1,12 @@
-/// 主框架（脚手架阶段 1）：底部导航四 Tab + 中央发布占位 + 首页最小内容。
+/// 主框架（脚手架阶段 1）：底部导航五 Tab + 中央发布 + 首页等五页 IndexedStack。
 /// SSE 已在认证后启动；首页显示连接状态与 /api/me 摘要，作为端到端打通的证明。
+///
+/// 2.3.1（视觉对齐 Web 试点段）：chrome 浮层重构（方案 A，web-visual-plan.md
+/// 3.2① 定稿）——`bottomNavigationBar` 置 null，底栏改悬浮 Dock（距边 10、
+/// radius 24、玻璃底 blur18 saturate1.25，见 web_chrome.dart，出处逐条标注）；
+/// 顶栏三动作改 42×42 圆钮 + surface 外圈角标（style.css:278-287）。🔴 红线：
+/// 五 tab 结构 / IndexedStack / 手势 / 路由 / provider 零变化，「角落」仍是
+/// 第 5 tab；Dock 常驻 ShellPage Stack，push 覆盖自然遮住（盘点 3.2③）。
 library;
 
 import 'package:flutter/material.dart';
@@ -16,7 +23,7 @@ import '../personal/personal_page.dart';
 import '../timeline/composer_sheet.dart';
 import '../timeline/timeline_page.dart';
 import '../together/together_page.dart';
-import '../../core/theme/tokens.dart';
+import 'web_chrome.dart';
 
 class ShellPage extends ConsumerStatefulWidget {
   const ShellPage({super.key});
@@ -63,130 +70,73 @@ class _ShellPageState extends ConsumerState<ShellPage> {
       const PersonalPage(),
     ];
     return Scaffold(
+      // 顶栏半透明 80%（Web 原生端 color-mix(--bg 80%)，style.css:2108；
+      // AppBar 与 body 上下布局、其后无可模糊内容，不引入 blur——毛玻璃
+      // 只 Dock 一个静态区）。
       appBar: AppBar(
+        backgroundColor: ChromeColors.of(theme).topbarBg,
+        surfaceTintColor: Colors.transparent,
+        scrolledUnderElevation: 0,
         title: Text(const ['首页', '时光', '相册', '我们', '个人角落'][_tab]),
         actions: [
           // 「数据管理与通知渠道」章 段 A：通知中心铃铛（对齐 Web 顶栏
           // 「通知」图标 `app.js:325`）。角标用 me.unread（系统未读总数，
           // main.py:723），>99 显示 99+；与下方私聊的 chat_unread 严格
           // 区分。context.push('/notices')，返回按钮 / 系统手势可回。
-          IconButton(
+          WebTopIconButton(
             key: const Key('shell-notices'),
             tooltip: '通知',
             onPressed: () => context.push('/notices'),
-            icon: Badge(
-              isLabelVisible: systemUnread > 0,
-              label: Text(unreadBadgeLabel(systemUnread)),
-              child: const Icon(Icons.notifications_none_rounded),
-            ),
+            icon: Icons.notifications_none_rounded,
+            badge: systemUnread > 0
+                ? WebBadge(unreadBadgeLabel(systemUnread))
+                : null,
           ),
+          // 钮组间距 9（Web 手机档 topbar-right gap，style.css:1399）
+          const SizedBox(width: ChromeMetrics.topBtnGap),
           // 私聊入口（对齐 Web 顶栏「私聊」图标，带未读角标；>99 显示 99+）。
           // 🔴 阶段 2 通则：二级页一律 push 打开（保留主页在路由栈），
           // 返回按钮与系统手势都能回上一页。
-          IconButton(
+          WebTopIconButton(
             tooltip: '私聊',
             onPressed: () => context.push('/messages'),
-            icon: Badge(
-              isLabelVisible: unread > 0,
-              label: Text(unread > 99 ? '99+' : '$unread'),
-              child: const Icon(Icons.chat_bubble_outline_rounded),
-            ),
+            icon: Icons.chat_bubble_outline_rounded,
+            badge: unread > 0 ? WebBadge(unread > 99 ? '99+' : '$unread') : null,
           ),
+          const SizedBox(width: ChromeMetrics.topBtnGap),
           // 头像入口 → 账号资料页（对齐 Web 账号菜单：资料/邀请/退出都在那里）。
           // 🔴 阶段 2 通则：二级页一律 push 打开（保留主页在路由栈），
           // 系统返回手势/返回键回上一页；只有主页根部按返回才退出 App。
-          IconButton(
-            tooltip: '账号资料',
+          WebAvatarButton(
             onPressed: () => context.push('/profile'),
-            icon: CircleAvatar(
-              radius: 14,
-              backgroundColor: theme.colorScheme.primaryContainer,
-              child: Text((me?.user.name.isEmpty ?? true)
-                      ? '?' : me!.user.name.characters.first,
-                  style: theme.textTheme.bodySmall
-                      ?.copyWith(color: theme.colorScheme.onPrimaryContainer)),
-            ),
+            initial: (me?.user.name.isEmpty ?? true)
+                ? '?'
+                : me!.user.name.characters.first,
           ),
+          const SizedBox(width: 4),
         ],
       ),
-      body: IndexedStack(index: _tab, children: pages),
-      floatingActionButton: FloatingActionButton(
-        tooltip: '记录此刻',
-        onPressed: () => showComposerSheet(context),
-        child: const Icon(Icons.favorite),
-      ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
-      bottomNavigationBar: BottomAppBar(
-        shape: const CircularNotchedRectangle(),
-        notchMargin: 6,
-        // 🔴 P1-2：M3 BottomAppBar 默认左右各 16 padding（bottom_app_bar.dart
-        // :221-222），五个 tab 在 W<411 时会 RenderFlex overflow（QA 实测
-        // 320→44px / 360→24 / 393→7.5 / 400→4.0）。清零后可用宽 = W，
-        // 每侧 Expanded=(W−52)/2，右侧 3×44=132 ≤ (320−52)/2=134，六档全过。
-        padding: EdgeInsets.zero,
-        child: SizedBox(
-          height: 52,
-          // 五个 tab 分列中央 52px FAB 缺口两侧：两侧 Expanded 等宽 →
-          // 缺口恒在屏幕正中，不挤压 notch；单项宽 44 让右侧 3 项在 W=320
-          // 也放得下（3×44=132 ≤ (320−52)/2=134）。
-          child: Row(children: [
-            Expanded(
-              child: Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                _navItem(0, Icons.home_rounded, '首页'),
-                _navItem(1, Icons.history_rounded, '时光'),
-              ]),
+      body: Stack(
+          children: [
+            Positioned.fill(child: IndexedStack(index: _tab, children: pages)),
+            // 悬浮 Dock（方案 A 浮层，web-visual-plan.md 3.2①）：距左右下各
+            // 10px + 底部安全区透传（Web inset:auto 10px calc(10px+safe)，
+            // style.css:2738）；bottomNavigationBar 已置 null，Scaffold body
+            // 保留 MediaQuery 底部安全区，Dock 自己消费。
+            Positioned(
+              left: ChromeMetrics.dockInset,
+              right: ChromeMetrics.dockInset,
+              bottom:
+                  ChromeMetrics.dockInset + MediaQuery.of(context).padding.bottom,
+              child: WebDock(
+                key: const Key('shell-dock'),
+                currentIndex: _tab,
+                onTab: (tab) => setState(() => _tab = tab),
+                onCompose: () => showComposerSheet(context),
+              ),
             ),
-            const SizedBox(width: 52),
-            Expanded(
-              child: Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                _navItem(2, Icons.photo_library_rounded, '相册'),
-                _navItem(3, Icons.favorite_rounded, '我们'),
-                _navItem(4, Icons.lock_outline_rounded, '角落'),
-              ]),
-            ),
-          ]),
+          ],
         ),
-      ),
-    );
-  }
-  /// 单个导航项（[index] 0..4；onGoTab 由首页快捷入口传入，含 4=角落）
-  Widget _navItem(int index, IconData icon, String label) => _NavItem(
-        icon: icon,
-        label: label,
-        index: index,
-        current: _tab,
-        onTap: () => setState(() => _tab = index),
-      );
-}
-
-class _NavItem extends StatelessWidget {
-  const _NavItem({required this.icon, required this.label, required this.index, required this.current, required this.onTap});
-  final IconData icon;
-  final String label;
-  final int index;
-  final int current;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final active = index == current;
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(AppRadius.lg),
-      child: SizedBox(
-        width: 44,
-        height: 52,
-        child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-          Icon(icon, size: 22, color: active ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.outline),
-          const SizedBox(height: 2),
-          Text(label,
-              style: Theme.of(context).textTheme.labelSmall?.copyWith(
-            color: active ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.outline,
-          )),
-        ]),
-      ),
     );
   }
 }
