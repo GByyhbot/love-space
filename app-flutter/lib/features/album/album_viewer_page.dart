@@ -363,8 +363,11 @@ class _AlbumViewerPageState extends ConsumerState<AlbumViewerPage> {
                   icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
                   onPressed: () => Navigator.of(context).pop(_index),
                 ),
+                // 段 C 字阶收编：页码 15px → bodyLarge（±1px 收敛固有）；
+                // Colors.white 为图上覆盖层白名单口径，不动。
                 Text('${_index + 1} / ${widget.photos.length}',
-                    style: const TextStyle(color: Colors.white, fontSize: 15)),
+                    style: Theme.of(context).textTheme.bodyLarge
+                        ?.copyWith(color: Colors.white)),
                 const Spacer(),
                 if (widget.albumId.isNotEmpty)
                   IconButton(

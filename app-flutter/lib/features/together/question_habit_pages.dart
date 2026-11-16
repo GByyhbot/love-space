@@ -66,7 +66,7 @@ class _QuestionPageState extends ConsumerState<QuestionPage> {
                   const SizedBox(height: 12),
                   Text('给我们，多一点小小的仪式感',
                       style: theme.textTheme.titleMedium),
-                  const SizedBox(height: Spacing.gapTight),
+                  const SizedBox(height: Spacing.gap),
                   Text('每天再多了解彼此一点。',
                       textAlign: TextAlign.center,
                       style: theme.textTheme.bodySmall
@@ -88,7 +88,7 @@ class _QuestionPageState extends ConsumerState<QuestionPage> {
                             child: Text((r.body['content'] ?? '').toString(),
                                 style: theme.textTheme.bodySmall),
                           ),
-                        const SizedBox(height: Spacing.gapTight),
+                        const SizedBox(height: Spacing.gap),
                         Text(
                           r.answerCount == 2
                               ? '两个人的答案都到齐啦'
@@ -357,7 +357,7 @@ class _HabitPageState extends ConsumerState<HabitPage> {
                   const SizedBox(height: 12),
                   Text('给我们，多一点小小的仪式感',
                       style: theme.textTheme.titleMedium),
-                  const SizedBox(height: Spacing.gapTight),
+                  const SizedBox(height: Spacing.gap),
                   Text('立一个一起坚持的小目标。',
                       textAlign: TextAlign.center,
                       style: theme.textTheme.bodySmall
@@ -379,7 +379,7 @@ class _HabitPageState extends ConsumerState<HabitPage> {
                             child: Text((r.body['content'] ?? '').toString(),
                                 style: theme.textTheme.bodySmall),
                           ),
-                        const SizedBox(height: Spacing.gapTight),
+                        const SizedBox(height: Spacing.gap),
                         // 对齐 Web recordCard habit meta（app.js:857）：
                         // 总次数 + 今天 X/2 人完成（按 author 去重）
                         Text(

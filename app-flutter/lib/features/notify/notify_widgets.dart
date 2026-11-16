@@ -118,7 +118,7 @@ class NotifyEmptyCard extends StatelessWidget {
         child: Column(
           children: <Widget>[
             Text(title, style: theme.textTheme.titleSmall),
-            const SizedBox(height: Spacing.gapTight),
+            const SizedBox(height: Spacing.gap),
             Text(
               detail,
               textAlign: TextAlign.center,

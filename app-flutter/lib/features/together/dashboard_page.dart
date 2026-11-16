@@ -12,6 +12,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api/api_client.dart' as api;
 import '../../core/together/together_data.dart';
 import '../../core/theme/tokens.dart';
+import '../../core/ui/error_view.dart';
+import '../../core/ui/progress.dart';
 
 class DashboardPage extends ConsumerStatefulWidget {
   const DashboardPage({super.key});
@@ -68,9 +70,8 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                     ?.copyWith(color: cs.outline)),
             const SizedBox(height: 12),
             if (_loading && d == null)
-              const Padding(
-                  padding: EdgeInsets.all(32),
-                  child: Center(child: CircularProgressIndicator()))
+              // G16 收编：统一 spinner 包装（原 Padding(32) 散形态）
+              const AppProgress()
             else if (d != null) ...[
               _statGrid(theme, [
                 ('在一起', d.daysTogether == null ? '—' : '${d.daysTogether}', '天'),
@@ -84,7 +85,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                   _meta(theme, '还没有记录，写下第一条就会出现在这里。')
                 else
                   _monthBars(theme, d.months),
-                const SizedBox(height: Spacing.gapTight),
+                const SizedBox(height: Spacing.gap),
                 Text('每个月写下的记录条数',
                     style: theme.textTheme.labelSmall
                         ?.copyWith(color: cs.outline)),
@@ -98,7 +99,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                       ' / ${d.wishesTotal} 个共同愿望'),
                   const SizedBox(height: Spacing.gap),
                   _bar(theme, d.wishesDone / d.wishesTotal, tall: true),
-                  const SizedBox(height: Spacing.gapTight),
+                  const SizedBox(height: Spacing.gap),
                   // Web：wp = wn ? Math.round(wd/wn*100) : 0
                   Text(
                       '完成度 ${(d.wishesDone / d.wishesTotal * 100).round()}%',
@@ -137,9 +138,11 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
             ],
             if (_error != null) ...[
               const SizedBox(height: 10),
-              Text(_error!,
-                  style: theme.textTheme.bodySmall
-                      ?.copyWith(color: cs.error)),
+              // 首拉失败 → 可重试错误态；已出数据后的局部刷新失败维持行内文本
+              if (d == null)
+                AppErrorView(detail: _error!, onRetry: _load)
+              else
+                AppErrorText(_error!, textAlign: TextAlign.center),
             ],
           ],
         ),

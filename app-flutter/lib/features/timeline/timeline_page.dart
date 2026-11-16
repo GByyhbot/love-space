@@ -12,6 +12,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/timeline/timeline_data.dart';
 import '../../core/sse/sse_client.dart';
+import '../../core/ui/error_view.dart';
 import '../auth/auth_state.dart';
 import 'composer_sheet.dart';
 import 'post_card.dart';
@@ -238,26 +239,31 @@ class _TimelinePageState extends ConsumerState<TimelinePage> {
   Widget _buildList(BuildContext context, MeData me, TimelineState chat) {
     if (chat.skeleton) return _skeletonList(context);
     if (chat.posts.isEmpty) {
-      // 空态两套（文案逐字对齐 Web timelinePage empty(...)）
+      // 空态两套（文案逐字对齐 Web timelinePage empty(...)）；
+      // 首拉失败 → 统一可重试错误态（G14 收编：原页内 Text 散形态）。
       final filtered = chat.filter.isActive;
       final theme = Theme.of(context);
+      if (chat.error != null) {
+        return Center(
+          child: AppErrorView(
+            detail: chat.error!,
+            onRetry: () => ref
+                .read(timelineControllerProvider.notifier)
+                .load(reset: true),
+          ),
+        );
+      }
       return Center(
         child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
           Icon(Icons.auto_stories_rounded, size: 44, color: theme.colorScheme.outline),
           const SizedBox(height: 12),
           Text(filtered ? '没有符合条件的记录' : '这一页，留给新的故事',
               style: theme.textTheme.titleMedium),
-          const SizedBox(height: Spacing.gapTight),
+          const SizedBox(height: Spacing.gap),
           Text(
               filtered ? '换个条件，或清除筛选再试试。' : '可以发照片、文字、视频，或者留下一段声音。',
               style: theme.textTheme.bodySmall
                   ?.copyWith(color: theme.colorScheme.outline)),
-          if (chat.error != null) ...[
-            const SizedBox(height: 10),
-            Text(chat.error!,
-                style: theme.textTheme.bodySmall
-                    ?.copyWith(color: theme.colorScheme.error)),
-          ],
         ]),
       );
     }
@@ -337,9 +343,9 @@ class _TimelinePageState extends ConsumerState<TimelinePage> {
             line(120, 15),
             const SizedBox(height: Spacing.gap),
             line(double.infinity, 14),
-            const SizedBox(height: Spacing.gapTight),
+            const SizedBox(height: Spacing.gap),
             line(double.infinity, 14),
-            const SizedBox(height: Spacing.gapTight),
+            const SizedBox(height: Spacing.gap),
             line(200, 14),
             const SizedBox(height: 10),
             AspectRatio(aspectRatio: 16 / 10,

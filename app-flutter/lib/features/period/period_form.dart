@@ -250,7 +250,7 @@ class _PeriodFormDialogState extends ConsumerState<PeriodFormDialog> {
                   const SizedBox(height: 12),
                   Text('身体的感受（可多选）',
                       style: theme.textTheme.bodySmall),
-                  const SizedBox(height: Spacing.gapTight),
+                  const SizedBox(height: Spacing.gap),
                   Wrap(
                     spacing: 6,
                     runSpacing: 4,

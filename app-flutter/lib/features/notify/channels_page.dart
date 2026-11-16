@@ -262,7 +262,7 @@ class _ChannelsPageState extends ConsumerState<ChannelsPage> {
                 ),
               ],
             ),
-            const SizedBox(height: Spacing.gapTight),
+            const SizedBox(height: Spacing.gap),
             Text(
               // config 不回传：只说明「服务端已保存配置」，绝不展示明文凭据。
               '${channelLabel(c.kind)} · ${c.enabled ? '已启用' : '已停用'} · 服务端已保存配置',
@@ -278,7 +278,7 @@ class _ChannelsPageState extends ConsumerState<ChannelsPage> {
               '${quietLabel(c.quietStart, c.quietEnd)} · 最短间隔 ${c.interval} 秒',
               style: theme.textTheme.bodySmall?.copyWith(color: cs.outline),
             ),
-            const SizedBox(height: Spacing.gapTight),
+            const SizedBox(height: Spacing.gap),
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: <Widget>[
@@ -519,7 +519,7 @@ class _ChannelFormState extends State<_ChannelForm> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
           Text('添加一个通知渠道', style: theme.textTheme.titleMedium),
-          const SizedBox(height: Spacing.gapTight),
+          const SizedBox(height: Spacing.gap),
           Text(
             '渠道配置由服务端加密保存，不支持修改；需要调整请删除后重新添加。',
             style: theme.textTheme.bodySmall,

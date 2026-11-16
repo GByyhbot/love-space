@@ -191,7 +191,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                     Text(_error!, textAlign: TextAlign.center,
                         style: TextStyle(color: theme.colorScheme.error)),
                   ],
-                  const SizedBox(height: Spacing.gapTight),
+                  const SizedBox(height: Spacing.gap),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [

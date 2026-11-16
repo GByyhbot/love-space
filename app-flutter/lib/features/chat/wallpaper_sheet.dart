@@ -217,7 +217,7 @@ class _WallpaperSheetState extends ConsumerState<_WallpaperSheet> {
                 style: theme.textTheme.bodySmall
                     ?.copyWith(color: theme.colorScheme.outline)),
           ]),
-          const SizedBox(height: Spacing.gapTight),
+          const SizedBox(height: Spacing.gap),
           Text('你们各看各的背景，互不打扰；但谁都能替对方换一张——上面选「TA 的手机」就行。',
               style: theme.textTheme.bodySmall
                   ?.copyWith(color: theme.colorScheme.outline)),

@@ -369,11 +369,11 @@ void main() {
   // ── token 常量存在性 + 关键页面引用 ──────────────────────────────────────
 
   test('token 常量存在且取值正确', () {
-    // 间距（G1/G2 + half-step 半档并存，归并决策待裁定）
+    // 间距（G1/G2 + 段 C 2.3.0 half-step 归并：gap 72 vs gapTight 58 →
+    // 归并到 gap(8)，gapTight 常量已删除，无残留引用）
     expect(Spacing.cardPad, 16);
     expect(Spacing.pageBottom, 88);
     expect(Spacing.gap, 8);
-    expect(Spacing.gapTight, 6);
     // 圆角（G3：四档收敛 10/12/16，14 归档进 lg）
     expect(AppRadius.sm, 10);
     expect(AppRadius.card, 12);

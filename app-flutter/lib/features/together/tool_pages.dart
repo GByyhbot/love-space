@@ -14,6 +14,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/together/together_data.dart';
+import '../../core/ui/empty_view.dart';
+import '../../core/ui/error_view.dart';
+import '../../core/ui/progress.dart';
 import '../auth/auth_state.dart';
 import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
 import 'together_controller.dart';
@@ -41,6 +44,7 @@ class ToolScaffold extends ConsumerWidget {
     required this.fabTooltip,
     required this.onFab,
     this.error,
+    this.loading = false,
   });
   final String title;
   final String subtitle;
@@ -51,6 +55,9 @@ class ToolScaffold extends ConsumerWidget {
   final String fabTooltip;
   final VoidCallback onFab;
   final String? error;
+
+  /// 首拉 loading（防闪空态，段 C 2.3.0）：controller.loading 原样透传。
+  final bool loading;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -72,27 +79,28 @@ class ToolScaffold extends ConsumerWidget {
                 style: theme.textTheme.bodySmall
                     ?.copyWith(color: theme.colorScheme.outline)),
             const SizedBox(height: Spacing.gap),
-            if (isEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 48),
-                child: Column(children: [
-                  Icon(Icons.favorite_border_rounded,
-                      size: 44, color: theme.colorScheme.outline),
-                  const SizedBox(height: 12),
-                  Text(emptyTitle, style: theme.textTheme.titleMedium),
-                  const SizedBox(height: Spacing.gapTight),
-                  Text(emptyHint,
-                      textAlign: TextAlign.center,
-                      style: theme.textTheme.bodySmall
-                          ?.copyWith(color: theme.colorScheme.outline)),
-                ]),
+            // 三态优先级：loading → error（可重试）→ empty → data。
+            // 已出数据后的局部刷新失败维持行内错误文本（AppErrorText）。
+            if (loading && isEmpty)
+              const AppProgress()
+            else if (isEmpty && error != null)
+              Center(
+                child: AppErrorView(
+                  detail: error!,
+                  onRetry: () =>
+                      ref.read(togetherControllerProvider.notifier).load(),
+                ),
+              )
+            else if (isEmpty)
+              AppEmptyView(
+                icon: Icons.favorite_border_rounded,
+                title: emptyTitle,
+                hint: emptyHint,
               )
             else ...tiles,
-            if (error != null) ...[
+            if (error != null && !isEmpty) ...[
               const SizedBox(height: 10),
-              Text(error!,
-                  style: theme.textTheme.bodySmall
-                      ?.copyWith(color: theme.colorScheme.error)),
+              AppErrorText(error!),
             ],
           ],
         ),
@@ -145,7 +153,7 @@ class ToolTile extends ConsumerWidget {
                 },
               ),
           ]),
-          const SizedBox(height: Spacing.gapTight),
+          const SizedBox(height: Spacing.gap),
           child,
         ]),
       ),
@@ -215,6 +223,7 @@ class _MoodPageState extends ConsumerState<MoodPage> {
       emptyHint: '记下今天的心情，晴天雨天都是回忆。',
       fabTooltip: '记心情',
       error: st.error,
+      loading: st.loading,
       onFab: () => _showMoodForm(context, ref, null),
       tiles: [
         for (final r in moods)
@@ -361,6 +370,7 @@ class _NotePageState extends ConsumerState<NotePage> {
       emptyHint: '写一句话给 TA，慢慢读，慢慢懂。',
       fabTooltip: '写留言',
       error: st.error,
+      loading: st.loading,
       onFab: () => _showNoteForm(context, ref, null),
       tiles: [
         for (final r in notes)
@@ -455,6 +465,7 @@ class _WishPageState extends ConsumerState<WishPage> {
       emptyHint: '想去的地方，想做的事情，都记在这里。',
       fabTooltip: '许个心愿',
       error: st.error,
+      loading: st.loading,
       onFab: () => _showWishForm(context, ref, null),
       tiles: [
         for (final r in wishes)

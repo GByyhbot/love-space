@@ -324,7 +324,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               ),
             ],
           ),
-          const SizedBox(height: Spacing.gapTight),
+          const SizedBox(height: Spacing.gap),
           SwitchListTile(
             key: const Key('settings-motion'),
             contentPadding: EdgeInsets.zero,
@@ -555,7 +555,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   ?.copyWith(color: cs.error),
             ),
           ],
-          const SizedBox(height: Spacing.gapTight),
+          const SizedBox(height: Spacing.gap),
           Text(
             '换好照片保存后会直接更新首页封面；想再换，回这里重选就行。',
             style: Theme.of(context).textTheme.bodySmall
@@ -826,7 +826,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   ],
                 ),
               ),
-          const SizedBox(height: Spacing.gapTight),
+          const SizedBox(height: Spacing.gap),
           Text(
             '检测在手机本地直接发起，数值是访问 /api/status 的往返耗时。'
             '在这里切换后，下次打开 App 会直接走这条线路。',

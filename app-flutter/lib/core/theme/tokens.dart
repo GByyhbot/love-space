@@ -1,4 +1,5 @@
-/// 设计令牌（「UI/布局优化」章段 B 2.2.9/VC229）：间距 + 圆角单一来源。
+/// 设计令牌（「UI/布局优化」章段 B 2.2.9/VC229；段 C 2.3.0 half-step 归并）：
+/// 间距 + 圆角单一来源。
 /// 收敛纪律：只改取值来源不改行为、不改 widget 树形态；
 /// 旧值分布 → 新令牌对照表见 docs/ui-polish-plan.md 段 B 落地备注。
 library;
@@ -14,13 +15,11 @@ abstract final class Spacing {
   /// 规则见 docs/ui-polish-plan.md 段 B 落地备注。
   static const double pageBottom = 88;
 
-  /// 标准纵向间隙：`SizedBox(height: 8)` 主流档（×72）。
+  /// 标准纵向间隙（段 C 2.3.0 half-step 归并定档）：`SizedBox(height: 8)`
+  /// 主流档（×72）vs `height: 6` 半档（×58）→ 归并到引用多的 [gap]（8），
+  /// gapTight 常量已删除、全局替换为 gap；计数依据见 docs/ui-polish-plan.md
+  /// 段 C 落地备注。
   static const double gap = 8;
-
-  /// 紧凑纵向间隙：`SizedBox(height: 6)` 半档（×58）。
-  /// 是否归并进 [gap] 待主人裁定（half-step 定档，见段 B 小结「待裁定」）；
-  /// 裁定归并时删除本常量并全局替换引用即可。
-  static const double gapTight = 6;
 }
 
 /// 圆角令牌：收敛 10/12/14/16 四档混用（G3）→ 10/12/16 三档。

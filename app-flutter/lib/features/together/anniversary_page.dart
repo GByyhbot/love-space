@@ -74,7 +74,7 @@ class _AnniversaryPageState extends ConsumerState<AnniversaryPage> {
                   const SizedBox(height: 12),
                   Text('给我们，多一点小小的仪式感',
                       style: theme.textTheme.titleMedium),
-                  const SizedBox(height: Spacing.gapTight),
+                  const SizedBox(height: Spacing.gap),
                   Text('把值得记住的日子放进来，到点就会提醒。',
                       textAlign: TextAlign.center,
                       style: theme.textTheme.bodySmall
@@ -130,7 +130,7 @@ class _AnniversaryPageState extends ConsumerState<AnniversaryPage> {
                 },
               ),
           ]),
-          const SizedBox(height: Spacing.gapTight),
+          const SizedBox(height: Spacing.gap),
           Text((r.body['title'] ?? '').toString(),
               style: theme.textTheme.titleMedium),
           if ((r.body['content'] ?? '').toString().isNotEmpty) ...[
@@ -138,7 +138,7 @@ class _AnniversaryPageState extends ConsumerState<AnniversaryPage> {
             Text((r.body['content'] ?? '').toString(),
                 style: theme.textTheme.bodySmall),
           ],
-          const SizedBox(height: Spacing.gapTight),
+          const SizedBox(height: Spacing.gap),
           Row(children: [
             Expanded(
               child: Text(

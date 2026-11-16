@@ -470,10 +470,13 @@ class _RecordBubbleState extends ConsumerState<_RecordBubble> {
                               color: const Color(0xFF2E9E52),
                               borderRadius: BorderRadius.circular(1.5))),
                       const SizedBox(width: 10),
-                      const Text('语音识别暂未开放',
-                          style: TextStyle(
-                              color: Color(0xFF1E4620),
-                              fontSize: 15,
+                      // 段 C 字阶收编：15px 语义文本 → bodyLarge（16，±1px
+                      // 收敛固有）；w600 既有档保留；色板为语音面板微信语义
+                      // 色白名单（G13），不动。
+                      Text('语音识别暂未开放',
+                          style: Theme.of(context).textTheme.bodyLarge
+                              ?.copyWith(
+                              color: const Color(0xFF1E4620),
                               fontWeight: FontWeight.w600)),
                     ]),
                   ),
@@ -490,10 +493,12 @@ class _RecordBubbleState extends ConsumerState<_RecordBubble> {
               : Center(
                   child: !cancel && secsLeft <= 10
                       ? Text('还可以说 $secsLeft 秒',
-                          style: const TextStyle(
-                              color: Color(0xFF1E4620),
-                              fontSize: 15,
-                              fontWeight: FontWeight.w800))
+                          // 段 C 字阶收编 15px → bodyLarge；G5：w800 全库孤值
+                          // 归档既有高亮档 w700（同文件「松手 编辑文字」即 w700）
+                          style: Theme.of(context).textTheme.bodyLarge
+                              ?.copyWith(
+                              color: const Color(0xFF1E4620),
+                              fontWeight: FontWeight.w700))
                       : _RealWave(
                           color: _waveColor,
                           bars: cancel ? 12 : 24,
@@ -718,10 +723,10 @@ class _FanPanel extends StatelessWidget {
           bottom: 42,
           child: Center(
             child: Text(send ? '松开 发送' : '语音',
-                style: TextStyle(
+                // 段 C 字阶收编 15px → bodyLarge；G5：w800 全库孤值归档 w700
+                style: theme.textTheme.bodyLarge?.copyWith(
                     color: send ? Colors.black : Colors.white70,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w800)),
+                    fontWeight: FontWeight.w700)),
           ),
         ),
       ]),
@@ -790,9 +795,11 @@ class _FanTile extends StatelessWidget {
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           textAlign: TextAlign.center,
-          style: TextStyle(
-              color: active ? const Color(0xFF222222) : const Color(0xFFDDDDDD),
-              fontSize: 15,
+          // 段 C 字阶收编：胶囊 15px 语义文本 → bodyLarge；w600 既有档保留
+          style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+              color: active
+                  ? const Color(0xFF222222)
+                  : const Color(0xFFDDDDDD),
               fontWeight: FontWeight.w600)),
     );
   }

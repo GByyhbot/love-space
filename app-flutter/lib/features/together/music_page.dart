@@ -27,6 +27,9 @@ import '../../core/chat/chat_media.dart'
         uploadChatMedia,
         validateUploadFile;
 import '../../core/together/together_data.dart';
+import '../../core/ui/empty_view.dart';
+import '../../core/ui/error_view.dart';
+import '../../core/ui/progress.dart';
 import '../auth/auth_state.dart';
 import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
 import 'together_controller.dart';
@@ -241,19 +244,23 @@ class _MusicPageState extends ConsumerState<MusicPage> {
             Text('把属于我们的歌，放在一起。试听片段约 30 秒（Apple 搜索接口），只试听不上传。',
                 style: theme.textTheme.bodySmall?.copyWith(color: cs.outline)),
             const SizedBox(height: Spacing.gap),
-            if (songs.isEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 48),
-                child: Column(children: [
-                  Icon(Icons.music_note_rounded, size: 44, color: cs.outline),
-                  const SizedBox(height: 12),
-                  Text('还没有歌', style: theme.textTheme.titleMedium),
-                  const SizedBox(height: Spacing.gapTight),
-                  Text('去放一首属于你们的第一首。',
-                      textAlign: TextAlign.center,
-                      style: theme.textTheme.bodySmall
-                          ?.copyWith(color: cs.outline)),
-                ]),
+            // 三态优先级（段 C）：首拉 loading 防闪空态 → 空态且加载失败 →
+            // 可重试错误态 → 空态 → 列表。
+            if (st.loading && songs.isEmpty)
+              const AppProgress()
+            else if (songs.isEmpty && st.error != null)
+              Center(
+                child: AppErrorView(
+                  detail: st.error!,
+                  onRetry: () =>
+                      ref.read(togetherControllerProvider.notifier).load(),
+                ),
+              )
+            else if (songs.isEmpty)
+              AppEmptyView(
+                icon: Icons.music_note_rounded,
+                title: '还没有歌',
+                hint: '去放一首属于你们的第一首。',
               )
             else
               for (final r in songs)
@@ -262,11 +269,10 @@ class _MusicPageState extends ConsumerState<MusicPage> {
                   onEdit: () => _showEditMeta(context, ref, r),
                   child: _songBody(context, r, base, me),
                 ),
-            if (st.error != null) ...[
+            if (st.error != null && songs.isNotEmpty) ...[
               const SizedBox(height: 10),
-              Text(st.error!,
-                  style: theme.textTheme.bodySmall
-                      ?.copyWith(color: theme.colorScheme.error)),
+              // 已出列表后的局部刷新失败维持行内错误文本
+              AppErrorText(st.error!),
             ],
           ],
         ),
@@ -712,7 +718,7 @@ class _PreviewBar extends StatelessWidget {
                     style: theme.textTheme.labelSmall
                         ?.copyWith(color: cs.outline)),
               ]),
-              const SizedBox(height: Spacing.gapTight),
+              const SizedBox(height: Spacing.gap),
               ClipRRect(
                 borderRadius: BorderRadius.circular(4),
                 child: LinearProgressIndicator(value: ratio, minHeight: 5),

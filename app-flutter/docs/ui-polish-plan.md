@@ -1,4 +1,4 @@
-# 「UI/布局优化」章迁移清单（2026-11-15 **定案** · 段 A 已实现（待 QA）2.2.8/VC228 · **段 B 已实现（待 QA）2.2.9/VC229**）
+# 「UI/布局优化」章迁移清单（2026-11-15 **定案** · 段 A 已实现（待 QA）2.2.8/VC228 · 段 B 已实现（待 QA）2.2.9/VC229 · **段 C 已实现（待 QA）2.3.0/VC230**）
 
 > 出处与口径：本章由**四路并行只读调研**（A 视觉一致性逐页 / B 设计 token 抽取+深色字号 / C 布局问题证据化 / D 交互对账+遗留复核）+ 主理人抽查汇编；抽查实读 3 处关键条目（`home_page.dart:225-235`、`period_page.dart:301/:336`、`bubble_skin_sheet.dart:113-134`）全部属实。**结论逐条附 `文件:行号`，拿不准一律写「未核实」，不许推测**。
 > 状态：**2026-11-15 主人已拍板 D1–D7（第四节「决策点定案」），本清单由调研稿转定案**；段 A（错误通道欠账清偿）随 2.2.8/VC228 执行中，B/C/D 段按第五节「分段建议与版本位」固定版本位逐段放行。
@@ -98,6 +98,17 @@
 > - **动效对照**（≤160→fast/161-280→base/281-320→slow）：`120`×3+`150`×3 → `Motion.fast`；`180`×1+`220`×2+`240`×2+`250`×3+`260`×3 → `Motion.base`；`300`×1+`320`×3 → `Motion.slow`（共 23 处归档）。白名单 12 处：timeline:63 搜索防抖 480、post_card:376 错峰延迟入参、chat_toast:96 toast 计时 2200 / :168 退出收尾 320 / :543 计时 ticker 60、chat_compose:333 振幅采样 80（禁区）、song_picker:234 首帧延迟 480、sse:138 重连退避、keyboard_metrics:56 键盘电梯 200（定案#2 唯一例外）、messages:925 闪烁循环 1400 / :1058 三点循环 1100 / media_bubble:243 声浪循环 800（repeat 循环不套三档）。
 > - **写死色残留（白名单）**：`Color(0x`×45（chat_toast 微信语义色板 ×10、经期页沉浸 phase 色板/日历 ×15、messages/皮肤气泡 ×7、wallpaper ×5、chat_chrome ×2、其余散点）；`Colors.white/white70/white60/white54/white24`×60（图上/ scrim/语音面板覆盖层）；`Colors.transparent`×11；`black45/38`×4（图上角标底/阴影 blur 色）；`period_page:285 Colors.grey`（phase 色板未知段 fallback，沉浸式有意设计）；`composer_sheet:758 Colors.grey`（建议级，段 C）。`black87/black54` 已清零（仅存注释）。
 > - **门禁**：`flutter analyze`+`dart analyze` 0 issues；全量 `flutter test` 通过（见段 B 小结，known flaky 2 项除外）；新测试 `test/ui_polish_b_test.dart` ×10（S1 两形态 / G10·G11 深浅 / G19 深浅 / token 常量 / 引用纪律 / 关键页面护栏 / 基线十条）。
+
+> **段 C 落地备注（2.3.0/VC230，待 QA 验证）**：三态统一（G14/G15/G16 + D4 选 b）+ half-step 归并 + G5 + 段 B 残留 fontSize 收编 + quest 写失败丢草稿修复。纪律：只改呈现层，不改数据流/请求时机、不新增 provider、不重构 build 骨架；段 A 错误通道与段 B 令牌纪律零回归；键盘/输入区禁区不碰；D9 占位不动。**改动明细**：
+> - **统一组件（新增 `lib/core/ui/`）**：`progress.dart` AppProgress（G16 三种 spinner 包装收编为单一形态：Center + 纵向留白 48）；`empty_view.dart` AppEmptyView（三段式基线：图标 44+outline / titleMedium 主句 / bodySmall+outline 副句，页内空态留白统一 48）；`error_view.dart` AppErrorView（图标+detail 原文+重试按钮，重试走调用方既有回调=ref.invalidate / 控制器既有 load，不自造数据）+ AppErrorText（行内错误口径 bodySmall+error，收编裸 TextStyle）。
+> - **三态优先级落法**：loading（首拉）→ error（列表为空时 AppErrorView 可重试）→ empty → data；**已出数据后的局部刷新失败维持行内 AppErrorText**（呈现位不动）。
+> - **逐页销账**：✅改——home（裸 Center×2→AppProgress；「加载失败+重试」Column→AppErrorView，detail=errorDetail 原文）、dashboard（Padding(32)→AppProgress；首拉失败→AppErrorView(retry _load)，局部失败→AppErrorText）、notices（Padding(28)→AppProgress；段 A NotifyErrorBanner 双呈现通道**不动**）、timeline（页内 Text 错误→AppErrorView(retry load(reset:true))；骨架屏/空态/页脚维持现状）、profile（裸 TextStyle→AppErrorText，写失败 toast 通道不动）、mood/note/wish（ToolScaffold 加 loading 门 + 空态/错误态收编）、quest/ledger/music（loading 门 + 空态收编 AppEmptyView + 空态且失败→AppErrorView(retry load)；ledger 24/quest 32 留白归档 48）、personal 五 tab（IndexedStack 各 tab 补 loading 门（diary/draft/surprise=loading、trash=trashLoading、wish=wishLoading）+ 空态且失败→AppErrorView(retry 对应 load)；空态三段式基线维持）。⚪原本合规未动——timeline/album 空态与骨架屏（D4 定案）、messages 空态、tool_pages/personal 原空态三段式形状（仅组件化相邻页）。⚪局部失败已有呈现不动——notices 页内 banner、album 空态 error 槽。
+> - **half-step 归并**：`Spacing.gap`(8)×72 vs `Spacing.gapTight`(6)×58（grep 引用数）→ 归并到引用多的 **gap(8)**；全局替换 24 文件 + 删除 gapTight 常量；复核 lib/test 0 残留（仅文档与 b_test 注释提及）。
+> - **G5**：chat_toast w800×2（:496/:724 行号随注释偏移）归档既有高亮档 **w700**（依据：w700 为同文件既有先例「松手 编辑文字」:709，w800 全库孤值无存在必要；w600×9/w700×4 既有分布不变）。
+> - **fontSize 收编 7 处**：chat_toast 15px 语义文本×4（:476/:495/:723/:795 原行号）→ bodyLarge（16，±1px 收敛固有；色板走 G13 白名单不动）；album_viewer 页码 15px → bodyLarge+white（图上白名单）；period_analysis 图表日标签 15px → bodyLarge+bold、心情 chip emoji 14px → bodyMedium（14 等值零视觉差）。**白名单 29 处（QA 复核校正后总数）**：头像缩放 `size*0.38`×3（profile:536/messages:1140/post_card:431，段 B 已列参数化）；图表微标签 `isValue?10:9`×1（period_charts:207，段 B 已列）；emoji/装饰符号档 ×25（D2「emoji 档 14-30 保留」定案覆盖：period_page:374/:415/:424/:651/:710、period_sheets:404/:413/:540/:657、settings:599/:680/:691/:699/:707/:1056、together:284/:333/:384、weekly:338、tool_pages:235/:281、dashboard:290、home:746、messages:302 ♡、chat_compose:989——chat_compose 属键盘/输入区禁区）。收完 grep 复核：语义文本写死 fontSize 清零，残留仅白名单。
+> - **quest 写失败丢草稿修复**：`quest_page.dart` 自定义输入「加入清单」原 `_customCtrl.clear()` 在 err 判定前执行——写失败后输入已清。改齐全 App 纪律：只有 err==null 才清空；失败时输入保留、行不关、错误 detail 原文走 toast error tone（可原地重试）。精选 chip 分支无输入可丢，无需改。单测见 `test/ui_polish_c_test.dart`。
+> - **文档对齐**：`chat-final-checklist.md`（未跟踪）E7b 加注「验收值已换代：五处唯一 chatChromeAlpha=0.72（chat_chrome.dart:18，换代 3f1f03e→7f4c3ca），原记 α0.85/α0.9 为史实存档」。
+> - **门禁**：`flutter analyze`+`dart analyze` 0 issues；全量 `flutter test` 通过（known flaky 2 项除外）；新测试 `test/ui_polish_c_test.dart`（三态组件断言 / 9 页 loading 行为 / quest 失败保草稿 / 深浅两档颜色来源 / half-step 无残留引用）。
 
 ---
 

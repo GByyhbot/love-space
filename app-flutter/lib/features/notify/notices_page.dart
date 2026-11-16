@@ -23,12 +23,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_client.dart' as api;
+import '../../core/theme/tokens.dart';
+import '../../core/ui/progress.dart';
 import '../auth/auth_state.dart';
 import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
 import 'notify_api.dart';
 import 'notify_models.dart';
 import 'notify_widgets.dart';
-import '../../core/theme/tokens.dart';
 
 class NoticesPage extends ConsumerStatefulWidget {
   const NoticesPage({super.key});
@@ -249,10 +250,8 @@ class _NoticesPageState extends ConsumerState<NoticesPage> {
             if (_actionError != null) NotifyErrorBanner(text: _actionError!),
             if (_busy) const LinearProgressIndicator(),
             if (_loading && visible.isEmpty)
-              const Padding(
-                padding: EdgeInsets.all(28),
-                child: Center(child: CircularProgressIndicator()),
-              )
+              // G16 收编：统一 spinner 包装（原 Padding(28) 散形态）
+              const AppProgress()
             else if (visible.isEmpty)
               const NotifyEmptyCard(
                 title: '还没有新的提醒',

@@ -515,7 +515,7 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
           Icon(Icons.favorite_border_rounded, size: 44, color: theme.colorScheme.outline),
           const SizedBox(height: 12),
           Text('今天，有什么想对 TA 说？', style: theme.textTheme.titleMedium),
-          const SizedBox(height: Spacing.gapTight),
+          const SizedBox(height: Spacing.gap),
           Text('说说日常，也说说想念。',
               style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.outline)),
         ]),

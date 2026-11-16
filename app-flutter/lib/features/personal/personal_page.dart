@@ -18,6 +18,8 @@ import 'package:go_router/go_router.dart';
 import '../../core/api/api_client.dart' as api;
 import '../../core/chat/chat_repository.dart' show newChatClientId;
 import '../../core/together/together_data.dart';
+import '../../core/ui/error_view.dart';
+import '../../core/ui/progress.dart';
 import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
 import '../timeline/composer_sheet.dart';
 import 'personal_controller.dart';
@@ -159,6 +161,9 @@ class _TabFrame extends ConsumerWidget {
     this.emptyHint = '慢慢写，不着急。',
     required this.items,
     required this.tileBuilder,
+    this.loading = false,
+    this.error,
+    this.onRetry,
   });
   final String hint;
   final String? subtitle;
@@ -169,6 +174,13 @@ class _TabFrame extends ConsumerWidget {
   final String emptyHint;
   final List<TogetherRecord> items;
   final Widget Function(TogetherRecord record) tileBuilder;
+
+  /// 首拉 loading（段 C 2.3.0 防闪空态）：controller 各路 loading 原样透传。
+  final bool loading;
+
+  /// 加载失败 detail 原文（非空且列表为空时呈现可重试错误态）。
+  final String? error;
+  final VoidCallback? onRetry;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -186,7 +198,7 @@ class _TabFrame extends ConsumerWidget {
             Text(subtitle!,
                 style: theme.textTheme.bodySmall
                     ?.copyWith(color: theme.colorScheme.outline)),
-            const SizedBox(height: Spacing.gapTight),
+            const SizedBox(height: Spacing.gap),
           ],
           Text(hint,
               style: theme.textTheme.bodySmall
@@ -202,7 +214,18 @@ class _TabFrame extends ConsumerWidget {
             ),
           ],
           const SizedBox(height: Spacing.gap),
-          if (items.isEmpty)
+          // 三态优先级（段 C）：首拉 loading 防闪空态 → 空态且加载失败 →
+          // 可重试错误态 → 空态 → 列表。
+          if (loading && items.isEmpty)
+            const AppProgress()
+          else if (error != null && items.isEmpty)
+            Center(
+              child: AppErrorView(
+                detail: error!,
+                onRetry: onRetry ?? () {},
+              ),
+            )
+          else if (items.isEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 48),
               child: Column(children: [
@@ -210,7 +233,7 @@ class _TabFrame extends ConsumerWidget {
                     size: 44, color: theme.colorScheme.outline),
                 const SizedBox(height: 12),
                 Text(emptyTitle, style: theme.textTheme.titleMedium),
-                const SizedBox(height: Spacing.gapTight),
+                const SizedBox(height: Spacing.gap),
                 Text(emptyHint,
                     style: theme.textTheme.bodySmall
                         ?.copyWith(color: theme.colorScheme.outline)),
@@ -282,7 +305,7 @@ class _DiaryTab extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    ref.watch(personalControllerProvider); // 列表变更时重建本 tab
+    final st = ref.watch(personalControllerProvider); // 列表变更时重建本 tab
     final diaries = ref.read(personalControllerProvider.notifier).diaries();
     return _TabFrame(
       hint: personalTabs[0].hint,
@@ -291,6 +314,9 @@ class _DiaryTab extends ConsumerWidget {
       emptyTitle: '给自己，留一点心里话',
       items: diaries,
       tileBuilder: (r) => _DiaryTile(record: r),
+      loading: st.loading,
+      error: st.error,
+      onRetry: () => ref.read(personalControllerProvider.notifier).load(),
     );
   }
 }
@@ -438,7 +464,7 @@ class _DraftTab extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    ref.watch(personalControllerProvider); // 列表变更时重建本 tab
+    final st = ref.watch(personalControllerProvider); // 列表变更时重建本 tab
     final drafts = ref.read(personalControllerProvider.notifier).drafts();
     return _TabFrame(
       hint: personalTabs[1].hint, // 两 tab 顶部 hint 同句（app.js:1489）
@@ -453,6 +479,9 @@ class _DraftTab extends ConsumerWidget {
       emptyTitle: '还没写完的故事，在这里等你',
       items: drafts,
       tileBuilder: (r) => _DraftTile(record: r),
+      loading: st.loading,
+      error: st.error,
+      onRetry: () => ref.read(personalControllerProvider.notifier).load(),
     );
   }
 }
@@ -682,7 +711,7 @@ class _SurpriseTab extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    ref.watch(personalControllerProvider); // 列表变更时重建本 tab
+    final st = ref.watch(personalControllerProvider); // 列表变更时重建本 tab
     final items = ref.read(personalControllerProvider.notifier).surprises();
     return _TabFrame(
       hint: personalTabs[2].hint, // app.js:1489 惊喜口径，逐字
@@ -691,6 +720,9 @@ class _SurpriseTab extends ConsumerWidget {
       emptyTitle: '提前准备一份温柔的惊喜',
       items: items,
       tileBuilder: (r) => _SurpriseTile(record: r),
+      loading: st.loading,
+      error: st.error,
+      onRetry: () => ref.read(personalControllerProvider.notifier).load(),
     );
   }
 }
@@ -739,7 +771,7 @@ class _SurpriseTile extends ConsumerWidget {
               maxLines: 3,
               overflow: TextOverflow.ellipsis,
               style: theme.textTheme.bodyMedium),
-          const SizedBox(height: Spacing.gapTight),
+          const SizedBox(height: Spacing.gap),
           Row(children: [
             Icon(Icons.schedule_rounded, size: 14, color: cs.outline),
             const SizedBox(width: 4),
@@ -920,7 +952,7 @@ class _TrashTabState extends ConsumerState<_TrashTab> {
 
   @override
   Widget build(BuildContext context) {
-    ref.watch(personalControllerProvider);
+    final st = ref.watch(personalControllerProvider);
     final items = ref.read(personalControllerProvider).trash;
     return _TabFrame(
       hint: personalTabs[3].hint, // app.js:1488 逐字
@@ -929,6 +961,9 @@ class _TrashTabState extends ConsumerState<_TrashTab> {
       emptyHint: '你的回忆都在好好保存。',
       items: items,
       tileBuilder: (r) => _TrashTile(record: r),
+      loading: st.loading || st.trashLoading,
+      error: st.error,
+      onRetry: () => ref.read(personalControllerProvider.notifier).loadTrash(),
     );
   }
 }
@@ -985,7 +1020,7 @@ class _WishTab extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    ref.watch(personalControllerProvider); // 列表变更时重建本 tab
+    final st = ref.watch(personalControllerProvider); // 列表变更时重建本 tab
     final items = ref.read(personalControllerProvider.notifier).wishes();
     return _TabFrame(
       subtitle: personalWishSubtitle,
@@ -997,6 +1032,9 @@ class _WishTab extends ConsumerWidget {
       emptyEntryLabel: '许下第一份心愿',
       items: items,
       tileBuilder: (r) => _WishTile(record: r),
+      loading: st.loading || st.wishLoading,
+      error: st.error,
+      onRetry: () => ref.read(personalControllerProvider.notifier).loadWishes(),
     );
   }
 }
@@ -1053,7 +1091,7 @@ class _WishTile extends ConsumerWidget {
                     size: 20, color: cs.error),
               ),
           ]),
-          const SizedBox(height: Spacing.gapTight),
+          const SizedBox(height: Spacing.gap),
           Text(title, style: theme.textTheme.titleSmall),
           const SizedBox(height: 4),
           if (open)

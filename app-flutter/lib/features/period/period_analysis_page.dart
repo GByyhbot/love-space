@@ -308,9 +308,9 @@ class _PeriodAnalysisPageState extends ConsumerState<PeriodAnalysisPage> {
                 borderRadius: BorderRadius.circular(9),
               ),
               child: Column(children: [
+                // 段 C 字阶收编：图表日标签 15px → bodyLarge（bold 语义保留）
                 Text('${c.day}',
-                    style: TextStyle(
-                      fontSize: 15,
+                    style: theme.textTheme.bodyLarge?.copyWith(
                       fontWeight: FontWeight.bold,
                       color: c.cls == 'on'
                           ? cs.onPrimary
@@ -450,7 +450,7 @@ class _PeriodAnalysisPageState extends ConsumerState<PeriodAnalysisPage> {
         Expanded(
             child: _kpi(context, '和上个周期', l.kpi.diffText, null, true)),
       ]),
-      const SizedBox(height: Spacing.gapTight),
+      const SizedBox(height: Spacing.gap),
       Text(l.mini,
           style: theme.textTheme.labelSmall?.copyWith(color: cs.outline)),
       const SizedBox(height: Spacing.gap),
@@ -478,7 +478,7 @@ class _PeriodAnalysisPageState extends ConsumerState<PeriodAnalysisPage> {
   Widget _dots(BuildContext context, List<PaDotRow> rows, String? legend) =>
       Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         PaDotMatrix(rows: rows),
-        const SizedBox(height: Spacing.gapTight),
+        const SizedBox(height: Spacing.gap),
         _dotLegend(context, rows, legend),
       ]);
 
@@ -570,7 +570,10 @@ class _PeriodAnalysisPageState extends ConsumerState<PeriodAnalysisPage> {
       Wrap(spacing: 8, runSpacing: 6, children: [
         for (final c in chips)
           Chip(
-            avatar: Text(c.emoji, style: const TextStyle(fontSize: 14)),
+            // 段 C 字阶收编：emoji avatar 14px → bodyMedium（14 等值，零视觉差；
+            // D2 emoji 档纪律下按等值字阶归位）
+            avatar: Text(c.emoji,
+                style: Theme.of(context).textTheme.bodyMedium),
             label: Text('${c.name}  ${c.n}',
                 style: Theme.of(context).textTheme.labelSmall),
             visualDensity: VisualDensity.compact,
@@ -578,7 +581,7 @@ class _PeriodAnalysisPageState extends ConsumerState<PeriodAnalysisPage> {
           ),
       ]),
       if (total != null) ...[
-        const SizedBox(height: Spacing.gapTight),
+        const SizedBox(height: Spacing.gap),
         Text('共 $total 次心情记录',
             style: Theme.of(context)
                 .textTheme
@@ -594,7 +597,7 @@ class _PeriodAnalysisPageState extends ConsumerState<PeriodAnalysisPage> {
     final cs = theme.colorScheme;
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Text(view.sexLine ?? '', style: theme.textTheme.bodySmall),
-      const SizedBox(height: Spacing.gapTight),
+      const SizedBox(height: Spacing.gap),
       Text('近 6 个月',
           style: theme.textTheme.labelSmall?.copyWith(color: cs.outline)),
       const SizedBox(height: Spacing.gap),

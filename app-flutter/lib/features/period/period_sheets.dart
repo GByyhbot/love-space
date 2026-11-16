@@ -453,11 +453,11 @@ class _PeriodLogSheetState extends ConsumerState<PeriodLogSheet> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text('身体症状', style: theme.textTheme.labelLarge),
-          const SizedBox(height: Spacing.gapTight),
+          const SizedBox(height: Spacing.gap),
           _symptomGrid(periodBodySymptoms, isOn, toggle, theme, cs),
           const SizedBox(height: 10),
           Text('阴道分泌物', style: theme.textTheme.labelLarge),
-          const SizedBox(height: Spacing.gapTight),
+          const SizedBox(height: Spacing.gap),
           _symptomGrid(periodSecretion, isOn, toggle, theme, cs),
           const SizedBox(height: 12),
           Row(mainAxisAlignment: MainAxisAlignment.end, children: [
@@ -627,7 +627,7 @@ class _PeriodLogSheetState extends ConsumerState<PeriodLogSheet> {
           ),
           const SizedBox(height: 10),
           Text('爱爱', style: theme.textTheme.labelLarge),
-          const SizedBox(height: Spacing.gapTight),
+          const SizedBox(height: Spacing.gap),
           _optionGrid(
             <_Option>[
               for (var i = 0; i < periodSex.length; i++)
@@ -651,7 +651,7 @@ class _PeriodLogSheetState extends ConsumerState<PeriodLogSheet> {
           ),
           const SizedBox(height: 10),
           Text('时间', style: theme.textTheme.labelLarge),
-          const SizedBox(height: Spacing.gapTight),
+          const SizedBox(height: Spacing.gap),
           Row(mainAxisAlignment: MainAxisAlignment.center, children: [
             _timeWheel(_hours, _hourCtrl, true, theme),
             const Text(':', style: TextStyle(fontSize: 22)),
@@ -757,7 +757,7 @@ class _PeriodLogSheetState extends ConsumerState<PeriodLogSheet> {
               border: OutlineInputBorder(),
             ),
           ),
-          const SizedBox(height: Spacing.gapTight),
+          const SizedBox(height: Spacing.gap),
           Text('日记只存在这一天里，历史卡上不会重复显示。',
               style: theme.textTheme.bodySmall?.copyWith(color: cs.outline)),
           const SizedBox(height: 10),

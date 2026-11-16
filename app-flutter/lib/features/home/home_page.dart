@@ -17,6 +17,8 @@ import '../../core/chat/chat_media.dart'
     show chatBaseProvider, mediaCookieHeadersProvider;
 import '../../core/sse/sse_client.dart';
 import '../../core/together/together_data.dart' show anniversaryDue;
+import '../../core/ui/error_view.dart';
+import '../../core/ui/progress.dart';
 import '../auth/auth_state.dart';
 import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
 import '../settings/settings_state.dart' show spaceEditRequestedProvider;
@@ -100,22 +102,16 @@ class HomePage extends ConsumerWidget {
     });
 
     if (me == null) {
-      return const Center(child: CircularProgressIndicator());
+      return const AppProgress();
     }
 
     return records.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
+      loading: () => const AppProgress(),
       error: (e, _) => Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('加载失败'),
-            const SizedBox(height: Spacing.gap),
-            OutlinedButton(
-              onPressed: () => ref.invalidate(recordsProvider),
-              child: const Text('重试'),
-            ),
-          ],
+        child: AppErrorView(
+          // detail 原文口径（errorDetail），不自造文案
+          detail: errorDetail(e),
+          onRetry: () => ref.invalidate(recordsProvider),
         ),
       ),
       data: (list) => RefreshIndicator(
@@ -259,7 +255,7 @@ class HomePage extends ConsumerWidget {
                       style: theme.textTheme.bodyMedium,
                     ),
                   ),
-                const SizedBox(height: Spacing.gapTight),
+                const SizedBox(height: Spacing.gap),
                 Row(
                   children: [
                     Icon(

@@ -332,7 +332,7 @@ class _PeriodPageState extends ConsumerState<PeriodPage> {
                 Text(warnBlockTitle,
                     style: theme.textTheme.titleSmall
                         ?.copyWith(color: cs.error)),
-                const SizedBox(height: Spacing.gapTight),
+                const SizedBox(height: Spacing.gap),
                 for (final w in warns)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 4),
@@ -425,7 +425,7 @@ class _PeriodPageState extends ConsumerState<PeriodPage> {
               onPressed: () => _shiftMonth(1, selected),
             ),
           ]),
-          const SizedBox(height: Spacing.gapTight),
+          const SizedBox(height: Spacing.gap),
           // 星期行
           Row(children: [
             for (var i = 0; i < 7; i++)
@@ -437,7 +437,7 @@ class _PeriodPageState extends ConsumerState<PeriodPage> {
                 ),
               ),
           ]),
-          const SizedBox(height: Spacing.gapTight),
+          const SizedBox(height: Spacing.gap),
           // 整月网格（lead 个空格 + 逐日格子）。
           // 🔴 不用嵌套 GridView(shrinkWrap)：外层已是 ListView（viewport），
           // 嵌套 shrinkWrap viewport 会让首帧布局反复震荡；按周切 Row 最稳。
@@ -645,7 +645,7 @@ class _PeriodPageState extends ConsumerState<PeriodPage> {
                 child: const Text('改经期长度'),
               ),
           ]),
-          const SizedBox(height: Spacing.gapTight),
+          const SizedBox(height: Spacing.gap),
           // 经期四动作（走了 / 又来了 / 来了）—— 全程无 end 键。
           Row(children: [
             const Text('🩸', style: TextStyle(fontSize: 18)),

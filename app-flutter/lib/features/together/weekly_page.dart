@@ -229,7 +229,7 @@ class _WeeklyPageState extends ConsumerState<WeeklyPage> {
                     ?.copyWith(color: cs.outline)),
           ]),
           if (title.isNotEmpty) ...[
-            const SizedBox(height: Spacing.gapTight),
+            const SizedBox(height: Spacing.gap),
             Text(title, style: theme.textTheme.titleSmall),
           ],
           if (content.isNotEmpty) ...[

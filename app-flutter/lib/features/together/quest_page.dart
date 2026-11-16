@@ -9,6 +9,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/together/together_data.dart';
+import '../../core/ui/empty_view.dart';
+import '../../core/ui/error_view.dart';
+import '../../core/ui/progress.dart';
 import '../auth/auth_state.dart';
 import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
 import 'together_controller.dart';
@@ -88,7 +91,7 @@ class _QuestPageState extends ConsumerState<QuestPage> {
                           child: LinearProgressIndicator(
                               value: pct / 100, minHeight: 10),
                         ),
-                        const SizedBox(height: Spacing.gapTight),
+                        const SizedBox(height: Spacing.gap),
                         Text(
                           '$pct% · ${pct >= 100 ? '全部做完了，可以写新的清单了' : pct >= 50 ? '已经过半，继续' : '慢慢来，一件一件做'}',
                           style: theme.textTheme.labelSmall
@@ -99,20 +102,23 @@ class _QuestPageState extends ConsumerState<QuestPage> {
               ),
               const SizedBox(height: 10),
             ],
-            if (items.isEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 32),
-                child: Column(children: [
-                  Icon(Icons.auto_awesome_rounded,
-                      size: 44, color: cs.outline),
-                  const SizedBox(height: 12),
-                  Text('清单还空着', style: theme.textTheme.titleMedium),
-                  const SizedBox(height: Spacing.gapTight),
-                  Text('从下面挑几件，或者写下你们自己的。',
-                      textAlign: TextAlign.center,
-                      style: theme.textTheme.bodySmall
-                          ?.copyWith(color: cs.outline)),
-                ]),
+            // 三态优先级（段 C）：首拉 loading 防闪空态 → 空态且加载失败 →
+            // 可重试错误态 → 空态 → 列表。
+            if (st.loading && items.isEmpty)
+              const AppProgress()
+            else if (items.isEmpty && st.error != null)
+              Center(
+                child: AppErrorView(
+                  detail: st.error!,
+                  onRetry: () =>
+                      ref.read(togetherControllerProvider.notifier).load(),
+                ),
+              )
+            else if (items.isEmpty)
+              AppEmptyView(
+                icon: Icons.auto_awesome_rounded,
+                title: '清单还空着',
+                hint: '从下面挑几件，或者写下你们自己的。',
               )
             else
               for (final r in items) _buildTile(context, ref, r, me),
@@ -143,7 +149,11 @@ class _QuestPageState extends ConsumerState<QuestPage> {
                         final err = await ctrl.add('quest',
                             {'title': title, 'category': '日常', 'done': false});
                         if (!context.mounted) return;
-                        _customCtrl.clear();
+                        // 🔴 写失败丢草稿修复（段 C 2.3.0）：原 _customCtrl.clear()
+                        // 在 err 判定前执行——写失败后输入已被清空。按全 App
+                        // 纪律改齐：只有成功才清空；失败时输入保留、弹层（行）
+                        // 不关、错误 detail 原文走 toast error tone，可原地重试。
+                        if (err == null) _customCtrl.clear();
                         ref.read(chatToastProvider.notifier).show(
                             err == null ? '已加入清单' : '添加失败：$err',
                             tone: err == null
@@ -194,11 +204,10 @@ class _QuestPageState extends ConsumerState<QuestPage> {
                       ]),
                 ),
               ),
-            if (st.error != null) ...[
+            if (st.error != null && items.isNotEmpty) ...[
               const SizedBox(height: 10),
-              Text(st.error!,
-                  style: theme.textTheme.bodySmall
-                      ?.copyWith(color: theme.colorScheme.error)),
+              // 已出列表后的局部刷新失败维持行内错误文本
+              AppErrorText(st.error!),
             ],
           ],
         ),

@@ -11,6 +11,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/together/together_data.dart';
+import '../../core/ui/empty_view.dart';
+import '../../core/ui/error_view.dart';
+import '../../core/ui/progress.dart';
 import '../auth/auth_state.dart';
 import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
 import 'together_controller.dart';
@@ -130,7 +133,7 @@ class _LedgerPageState extends ConsumerState<LedgerPage> {
                               ]),
                         ),
                       ]),
-                      const SizedBox(height: Spacing.gapTight),
+                      const SizedBox(height: Spacing.gap),
                       Text('这个月 ${sum.monthCount} 笔${sum.monthCount == 0 ? '，还没记过' : ''}',
                           style: theme.textTheme.labelSmall
                               ?.copyWith(color: cs.outline)),
@@ -149,7 +152,7 @@ class _LedgerPageState extends ConsumerState<LedgerPage> {
                       // 近六个月趋势（空月占位）
                       const SizedBox(height: 10),
                       Text('最近六个月', style: theme.textTheme.titleSmall),
-                      const SizedBox(height: Spacing.gapTight),
+                      const SizedBox(height: Spacing.gap),
                       Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
                         for (final (key, v) in sum.trend)
                           Expanded(
@@ -192,28 +195,31 @@ class _LedgerPageState extends ConsumerState<LedgerPage> {
               ),
             ),
             const SizedBox(height: 10),
-            if (items.isEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 24),
-                child: Column(children: [
-                  Icon(Icons.savings_rounded, size: 44, color: cs.outline),
-                  const SizedBox(height: 12),
-                  Text('账本还是空的', style: theme.textTheme.titleMedium),
-                  const SizedBox(height: Spacing.gapTight),
-                  Text('一起吃的那顿饭、一起买的那张票，都值得记下来。',
-                      textAlign: TextAlign.center,
-                      style: theme.textTheme.bodySmall
-                          ?.copyWith(color: cs.outline)),
-                ]),
+            // 三态优先级（段 C）：首拉 loading 防闪空态 → 空态且加载失败 →
+            // 可重试错误态 → 空态 → 列表。
+            if (st.loading && items.isEmpty)
+              const AppProgress()
+            else if (items.isEmpty && st.error != null)
+              Center(
+                child: AppErrorView(
+                  detail: st.error!,
+                  onRetry: () =>
+                      ref.read(togetherControllerProvider.notifier).load(),
+                ),
+              )
+            else if (items.isEmpty)
+              AppEmptyView(
+                icon: Icons.savings_rounded,
+                title: '账本还是空的',
+                hint: '一起吃的那顿饭、一起买的那张票，都值得记下来。',
               )
             else
               // 列表按 body.date 倒序（对齐 Web ledgerPage）
               for (final r in _sortByDateDesc(items)) _buildTile(context, ref, r, me),
-            if (st.error != null) ...[
+            if (st.error != null && items.isNotEmpty) ...[
               const SizedBox(height: 10),
-              Text(st.error!,
-                  style: theme.textTheme.bodySmall
-                      ?.copyWith(color: theme.colorScheme.error)),
+              // 已出列表后的局部刷新失败维持行内错误文本
+              AppErrorText(st.error!),
             ],
           ],
         ),

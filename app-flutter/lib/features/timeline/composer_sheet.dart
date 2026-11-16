@@ -746,7 +746,7 @@ class _ComposerSheetState extends ConsumerState<ComposerSheet> {
               padding: const EdgeInsets.only(top: 8, bottom: 4),
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text('相册分类', style: theme.textTheme.bodyMedium),
-                const SizedBox(height: Spacing.gapTight),
+                const SizedBox(height: Spacing.gap),
                 Wrap(spacing: 6, runSpacing: 6, children: [
                   _albumChip(theme, '暂不分类', _album == null, () => _selectAlbum(null)),
                   for (final a in _albums)
