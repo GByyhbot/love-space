@@ -1,6 +1,7 @@
-# 「视觉对齐 Web」章 · 试点段（web-visual-plan.md）
+# 「视觉对齐 Web」章 · 试点段 / 推广段一（web-visual-plan.md）
 
-> 状态：**试点段已确认执行（方案 A 浮层重构定稿）**——2026-11-16 主人放行「壳层 chrome + 首页 1:1 还原」试点，版本 2.3.1/VC231；本盘点稿随实现转定案，逐项落定见文末「七、试点落地备注（2.3.1）」。
+> 状态：**推广段一已实现（待 QA）**——2026-11-16 基于基线 `aee0ba5`（试点 2.3.1/VC231 已验收通过）落地推广段一（版本 2.3.2/VC232），范围：首页收尾（摘除 stats-grid + 修心情胶囊）+ 时光/相册/我们三页形态对齐 + 备案缺陷② composer 日期 Row 溢出；逐项落定见文末「八、推广段一落地备注（2.3.2）」。
+> 状态（历史）：**试点段已确认执行（方案 A 浮层重构定稿）**——2026-11-16 主人放行「壳层 chrome + 首页 1:1 还原」试点，版本 2.3.1/VC231；本盘点稿随实现转定案，逐项落定见文末「七、试点落地备注（2.3.1）」。
 > 背景：主人裁定 App 观感不如 Web（2026-11-15），段 D 质感项暂停（`ui-polish-plan.md` 头部定案），新开「视觉对齐 Web」线；试点（壳层 chrome + 首页 1:1 还原）已确认执行。
 > 体例：沿用 `app-flutter/docs/ui-polish-plan.md`（数值表 + 差异表 + 方案风险 + 未核实清单）。
 > 纪律：一切数值从 `static/` 的 CSS/JS 源码实读抽取，每条给 `文件:行号`；App 现状实读 `app-flutter/lib/` 给 `文件:行号`；可复用结论注明「沿用段 B/C 盘点」。未核实单列第六节，不许推测。
@@ -339,3 +340,68 @@ App 视口属 Web 手机档断点（≤640/≤720），实现按**盘点表手�
 
 - 新增 `test/web_visual_d_test.dart`（10 例）：chrome 色表深浅两档逐值断言、Dock 结构（+ 钮 46×46、五 tab、距边 10、玻璃仅 Dock 一处）、顶栏三钮 42/42/44 + 角标 + push 去向、首页页头逐字 / hero radius 20 / stats 三格 / 动态卡 radius 17 / 320 宽零溢出；
 - 改口径：`personal_a_fix_test.dart` P1-2（见 7.2）、`ui_polish_b_test.dart` ⑨（BackdropFilter 豁口仅 `web_chrome.dart`）+ S1 两例加滚动露出步骤（首页内容变高，320×700 下动态卡在折叠线下）。
+
+---
+
+## 八、推广段一落地备注（2.3.2/VC232，随推广段一交付）
+
+> 基线 `aee0ba5`（试点 2.3.1/VC231 已验收）。纪律：功能/数据流/路由/手势零变化；毛玻璃不新增（全 lib `BackdropFilter` 仍仅 `web_chrome.dart` 1 处）；段 A 错误通道 / 段 B 令牌 / 段 C 三态 / 试点 chrome+首页成果零回退（stats-grid 摘除与心情格修复为任务明确例外）；键盘/输入区禁区不碰；后端 `app/`/`static/`/`android-app/`/`.github/` 零改动；`tokens.dart` 既有常量语义不变（`web_chrome.dart` 仅新增 `WebSemanticColors.info` 一色）。
+
+### 8.1 关键数值 → 出处对照（实现侧，≥15 条）
+
+| 数值 / 形态 | App 落点 | 出处 |
+|---|---|---|
+| 摘除 stats-grid 三格（真 Web 手机端无此区） | `home_page.dart` 删 `_StatsGrid` 整块 + 调用 | `index.html`/`app.js` 全库无 `stats-grid` 引用（盘点偏差） |
+| 心情 chip 单行 pill + 昵称分行 | `_MoodRow`（`maxLines:1`/`softWrap:false`/radius 999） | `style.css:132`（--radius-pill 999）+ 对照图 `22_compare_light` 左侧 |
+| PostCard radius 17 | `post_card.dart` `cardRadius` | `style.css:1421`（.card 手机档） |
+| PostCard 165° tint→surface 72% | `post_card.dart` LinearGradient stops [0,.72] | `style.css:1944-1956` |
+| PostCard 顶部 hairline .72 / 夜 .05 | `WebSemanticColors.cardHairline` | `style.css:1937`/`:2017` |
+| 六色 kind tint（rose/amber/violet/green/blue/peach） | `_postKindTint` | `style.css:1930-1936` |
+| 媒体格圆角 12 | `MediaImageView` 可选 `borderRadius`，时光传 12 | `style.css:602-604`/`:1434` |
+| 筛选控件高 46 | `timeline_page.dart` TextField SizedBox(46) + 日期钮 46 | `style.css:2743`/`:1422` |
+| tabs/chips 选中态 soft 底 + primary 描边 + primary-dark 字 600 | `_chip` / SegmentedButton | `style.css:337` |
+| 相册照片块圆角 12 | `_Thumb`/`_VideoThumb`/封面/骨架 | `style.css:1434`（手机档 12） |
+| 相册分组头 3px primary 竖线 + primary-dark 标题 | `_timeList` 分组头 Row | `style.css:626` |
+| 相册页头主按钮 pill 999 | `_heading` InkWell radius 999 | `style.css:132`/`:293` |
+| 我们页工具/设置 2 列宫格 radius 20 白卡 | `_twoColumnGrid` + `_toolCard`/`_settingsCard` | `style.css:1078-1083`（tools-grid/ tool-card） |
+| emoji fs-xl 24 / h3 fs-body / p fs-sm muted | 宫格卡 24 / titleSmall / bodySmall·outline | `style.css:110`/`:1081-1083` |
+| 生理期 wide 卡 120° 渐变底 soft→surface 64% | `_PeriodEntryCard` LinearGradient stops [0,.64] | `style.css:1085` |
+| 纪念日大数字 serif 24 | `_AnniversaryCard` `webSerifStyle(24)` | `style.css:479` 系（盘点表 2.5） |
+| ink/info 语义色（浅 #3F6A8E / 夜 #8FB6D4） | `WebSemanticColors.info` | `style.css:44`/`:1508` |
+
+### 8.2 我们页宫格文案实读对照表（`static/app.js:1229` / `toolsList :1219` 逐条）
+
+> 逐条实读 Web，不自造。App 侧保留既有 11 工具 + 8 设置 + 生理期 wide + 纪念日展示卡（无增减）；Web 独有而 App 无对应入口的「情侣摆拍参考（figure）」「纪念日/个人心愿 toolsList 项」**不新增**（红线：无卡片增减）。宫格卡仅取 Web 的「emoji + 标题 + 诗意副题」呈现语言，App 文案沿用各自实读原文。
+
+| App 卡（宫格） | emoji | 副题 | Web 对应（`app.js:1229` / `toolsList`） |
+|---|---|---|---|
+| 生理期（wide） | 🌸 | 记下周期，把照顾提前一点 | `tool-card-wide` 首位硬编码逐字同文 |
+| 共同年历 | 🗓️ | 重要的日子，一眼看清 | toolsList calendar 逐字同文 |
+| 心情手记 | 🌤 | 晴天雨天，都想陪着你 | toolsList mood 逐字同文 |
+| 悄悄留言 | 💌 | 有些喜欢，值得慢慢读 | toolsList note 逐字同文 |
+| 共同愿望 | ✨ | 把一起想做的事，一件件实现 | toolsList wish 逐字同文 |
+| 情侣问答 | 💭 | 每天再多了解彼此一点 | toolsList question 逐字同文 |
+| 共同打卡 | 🌱 | 和你一起，成为更好的我们 | toolsList habit 逐字同文 |
+| 恋爱清单 | 💫 | 一起做完这些小事，就是我们的故事 | toolsList quest 逐字同文 |
+| 共同账本 | 💰 | 为了彼此花过的钱，也是一段回忆 | toolsList ledger 逐字同文 |
+| 共同歌单 | 🎵 | 把属于我们的歌，放在一起 | toolsList music 逐字同文 |
+| 数据看板 | 📊 | 把日子过成数据，也过成回忆 | `tool-card` dashboard（Web「我们的点滴，都在这里」为另一副题口径，App 沿用既有） |
+| 回忆周报 | 📬 | 把这一周，收进一封小小的信 | 同 dashboard（App 沿用既有副题） |
+| 空间信息 | 🏡 | 空间名称与相恋日期 | settings-tools space 逐字同文 |
+| 主题与外观 | 🎨 | 主题色、夜间模式与动效 | settings-tools theme-form 逐字同文 |
+| 主页背景 | 🖼️ | 换一张首页封面照片 | settings-tools home-bg 逐字同文 |
+| 聊天背景 | 🌄 | 聊天壁纸与文字对比度 | settings-tools chat-bg 逐字同文 |
+| 聊天气泡 | 💬 | 两千多款气泡皮肤随手挑 | settings-tools chat-bubble 逐字同文 |
+| 邀请另一半入住 | 💌 | 把你们的专属空间分享给 TA | settings-tools invite（Web 条件展示；App 既有卡全保留） |
+| 提醒设置 | 🔔 | 通知渠道与提醒偏好 | settings-tools channels 逐字同文 |
+| 全部设置 | ⚙️ | 主题、背景、链路检测与检查更新 | settings-tools settings（App 副题为本地化描述） |
+
+### 8.3 备案缺陷修复说明
+
+- **缺陷①（心情气泡碎字）**：`home_page.dart` `_MoodRow` 原「头像+昵称+Expanded 气泡」单行 Row，在 today-cell 双格窄列（手机档约半屏宽）下 `＋ 记一笔` 被压窄竖排碎字。改「头像 +（昵称行／pill 胶囊行）」分行 Column + 胶囊 `maxLines:1`/`softWrap:false`/radius 999，单行横向不换行；记心情仍走 `_openMoodSheet` 原链，S1/S2 `Flexible+ellipsis` 不回退。出处：对照图 `22_compare_light` 左侧 + `style.css:132`。
+- **缺陷②（composer 日期 Row 溢出）**：`composer_sheet.dart:672` 原单行 Row（图标+文字+日期按钮+Spacer+图/视频+音频）在 393 宽右溢出约 90px、320 更甚。改 `Wrap`：日期组 `Row(mainAxisSize.min)` 固定一行，媒体入口按钮空间不足自动换行；三个回调 `_pickDate`/`_pickImageVideo`/`_pickFromLibrary` 与发布字段/提交链全部零变化。出处：QA 备案 + 320/393/403 三档 widget 断言。
+
+### 8.4 测试交付
+
+- 新增 `test/web_visual_e1_test.dart`：stats-grid 摘除（源码护栏 + widget 断言）、心情胶囊单行护栏、PostCard radius17+tint+hairline+媒体 12、相册圆角 12+竖线+chips 态+pill 主按钮、我们页宫格 2 列 + 11 工具/8 设置 key 与去向/顺序不变 + 生理期渐变 + 纪念日 serif、composer 日期 Row 320/393/403 零溢出、深浅两档颜色来源（含 `WebSemanticColors.info`）；
+- 改口径：`web_visual_d_test.dart` 首页「stats 三格在位」断言改为「已摘除」（任务明确例外），320 宽零溢出断言描述同步；`personal_a_fix_test.dart` 六档扫宽原样保留。

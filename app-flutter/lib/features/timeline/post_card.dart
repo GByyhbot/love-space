@@ -23,6 +23,7 @@ import 'image_viewer.dart';
 import 'timeline_controller.dart';
 import '../../core/theme/motion.dart';
 import '../../core/theme/tokens.dart';
+import '../shell/web_chrome.dart' show WebSemanticColors;
 
 /// post 卡片
 class PostCard extends ConsumerWidget {
@@ -48,16 +49,38 @@ class PostCard extends ConsumerWidget {
     final voices = media.where((m) => m.mime.startsWith('audio/')).toList();
     final liked = record.likes.contains(me.user.id);
 
+    final brightness = theme.brightness;
+    // 推广段一：.card 手机档 radius 17（style.css:1421），kind tint 165°
+    // 渐变（tint→surface 72%，style.css:1944-1951）+ 顶部 hairline（:1937/:2017）。
+    final cardRadius = BorderRadius.circular(17);
     Widget card = Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      padding: const EdgeInsets.all(Spacing.cardPad),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerLowest,
-        borderRadius: BorderRadius.circular(AppRadius.lg),
+        borderRadius: cardRadius,
         border: Border.all(color: theme.colorScheme.outlineVariant),
+        gradient: LinearGradient(
+          // 165deg 近似（试点同口径：sin165°≈0.26）
+          begin: const Alignment(-0.13, -0.97),
+          end: const Alignment(0.13, 0.97),
+          colors: [
+            _postKindTint(record.kind, theme.colorScheme, brightness),
+            theme.colorScheme.surface,
+          ],
+          stops: const [0, 0.72],
+        ),
       ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min, children: [
+      child: ClipRRect(
+        borderRadius: cardRadius,
+        child: Stack(children: [
+          // 顶部内高光 --hairline（浅 rgba(255,255,255,.72) / 夜 .05）
+          Positioned(
+            left: 0, right: 0, top: 0, height: 1,
+            child: ColoredBox(color: WebSemanticColors.cardHairline(brightness)),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(Spacing.cardPad),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min, children: [
         // 头部：头像（低频缓存）+昵称+日期（b.date||created 双时间口径）
         Row(children: [
           _CardAvatar(user: author, me: me),
@@ -106,7 +129,8 @@ class PostCard extends ConsumerWidget {
                   child: MediaImageView(
                       mid: images.first.id,
                       width: w,
-                      height: timelineSingleMediaHeight(w)),
+                      height: timelineSingleMediaHeight(w),
+                      borderRadius: BorderRadius.circular(12)), // 时光媒体格 radius 12（:602/:1434）
                 );
               }
               const gap = timelineMediaGap;
@@ -119,7 +143,8 @@ class PostCard extends ConsumerWidget {
                     GestureDetector(
                       onTap: () =>
                           openImageViewer(context, images, initialIndex: i),
-                      child: MediaImageView(mid: images[i].id, size: cell),
+                      child: MediaImageView(mid: images[i].id, size: cell,
+                          borderRadius: BorderRadius.circular(12)), // 时光媒体格 radius 12（:602/:1434）
                     ),
                 ],
               );
@@ -213,8 +238,11 @@ class PostCard extends ConsumerWidget {
                 ]),
           ),
         ],
-      ]),
-    );
+            ]), // Column
+          ), // Padding
+        ]), // Stack
+      ), // ClipRRect
+    ); // Container
 
     // 骨架换内容：错开浮现（对齐 Web revealTimeline 40ms 错开、封顶 600ms）
     if (revealDelayMs > 0) {
@@ -223,6 +251,30 @@ class PostCard extends ConsumerWidget {
     return card;
   }
 
+}
+
+/// 推广段一：post kind → tint 色（style.css:1930-1936 六色 + :1951 默认），
+/// α 蒙层随主题/明暗换（同试点 home_page._kindTint 口径，补 tint-blue）。
+Color _postKindTint(String kind, ColorScheme cs, Brightness brightness) {
+  switch (kind) {
+    case 'mood':
+      return cs.primary.withValues(alpha: 0.055); // tint-rose（:1931）
+    case 'anniversary':
+      return WebSemanticColors.amber(brightness).withValues(alpha: 0.06); // :1932
+    case 'wish':
+    case 'personal_wish':
+    case 'music':
+      return WebSemanticColors.fertile(brightness).withValues(alpha: 0.06); // tint-violet :1933
+    case 'quest':
+    case 'habit':
+      return WebSemanticColors.amber(brightness).withValues(alpha: 0.055); // tint-peach :1936
+    case 'ledger':
+      return WebSemanticColors.green(brightness).withValues(alpha: 0.06); // tint-green :1934
+    case 'album':
+      return WebSemanticColors.info(brightness).withValues(alpha: 0.05); // tint-blue :1935
+    default: // post/diary/note/surprise/question/draft/period（:1951）
+      return cs.primary.withValues(alpha: 0.04);
+  }
 }
 
 /// C1 本人卡片「⋯」菜单：编辑 / 删除。

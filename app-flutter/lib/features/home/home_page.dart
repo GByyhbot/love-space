@@ -1,6 +1,7 @@
 /// 首页（阶段 2 · 条目 2，对齐 Web homePage）：页头（我们的每一天）、hero 渐变卡
-/// （两人名/相恋天数/封面/相恋日期设置）、stats 三格（天数/照片/心愿）、today
-/// 双格（心情 + 纪念日倒计时）、每日一句、最近动态（post 前 3）。
+/// （两人名/相恋天数/封面/相恋日期设置）、today 双格（心情 + 纪念日倒计时）、
+/// 每日一句、最近动态（post 前 3）。推广段一摘除试点误补的 stats 三格（真 Web
+/// 手机端无此区）——首页构成与真 Web 1:1。
 ///
 /// 2.3.1（视觉对齐 Web 试点段）：一页 1:1 还原（web-visual-plan.md 2.2 差异表
 /// 逐行落地）。🔴 红线：数据来源/请求时机/Provider 零变化——仍是
@@ -138,8 +139,9 @@ class HomePage extends ConsumerWidget {
               onGoTab: onGoTab,
             ),
             const SizedBox(height: 12), // hero margin-bottom 12（:1407）
-            _StatsGrid(me: me, list: list, dashboard: ref.watch(dashboardProvider).valueOrNull),
-            const SizedBox(height: 14), // stats-grid margin-bottom 14（:1415）
+            // 推广段一：摘除 stats-grid 三格——试点段误补回，真 Web 手机端
+            // 并无此区（index.html/app.js 全库无 stats-grid 引用，盘点偏差）。
+            // 删除后首页构成与真 Web 1:1：页头→hero→today 双格→每日一句→最近动态。
             _TodayCells(me: me, list: list),
             const SizedBox(height: 14), // today-card margin-bottom 14（:1414）
             _DailyQuote(theme: theme),
@@ -938,6 +940,7 @@ class _MoodRow extends ConsumerWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           CircleAvatar(
             radius: 14,
@@ -949,40 +952,55 @@ class _MoodRow extends ConsumerWidget {
             ),
           ),
           const SizedBox(width: 10),
-          // S2：长昵称原为非 flex 子项，会把心情气泡 Expanded 压到 0 宽
-          // （静默变形）乃至把 Row 挤出右边界。Flexible + ellipsis 截断。
-          Flexible(
-            child: Text(
-              user.name,
-              style: theme.textTheme.labelLarge,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          const SizedBox(width: 10),
+          // 推广段一（缺陷①）：Web 手机档今天的心情为「头像 + 昵称一行 /
+          // 胶囊另一行」的横向 pill（对照图 22_compare_light 左侧）；原单行
+          // Row 把胶囊 Expanded 压窄 → 393 宽「＋ 记一笔」竖排碎字。
+          // 改分行 Column + pill 胶囊，文本单行 ellipsis，绝不换行。
           Expanded(
-            child: InkWell(
-              borderRadius: BorderRadius.circular(AppRadius.lg),
-              onTap: (m != null && !mine)
-                  ? null // 对方的心情手记回顾在「我们」页（条目 6）
-                  : () => _openMoodSheet(context, ref),
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 8,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // S2：长昵称 ellipsis 不回退（段 B 约定）。
+                Text(
+                  user.name,
+                  style: theme.textTheme.labelLarge,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                decoration: BoxDecoration(
-                  color: m != null
-                      ? theme.colorScheme.primaryContainer.withValues(
-                          alpha: 0.45,
-                        )
-                      : theme.colorScheme.surfaceContainerHighest.withValues(
-                          alpha: 0.5,
-                        ),
-                  borderRadius: BorderRadius.circular(AppRadius.lg),
+                const SizedBox(height: 5),
+                InkWell(
+                  // Web 心情 chip pill（radius 999，--radius-pill style.css:132）
+                  borderRadius: BorderRadius.circular(999),
+                  onTap: (m != null && !mine)
+                      ? null // 对方的心情手记回顾在「我们」页（条目 6）
+                      : () => _openMoodSheet(context, ref),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: m != null
+                          ? theme.colorScheme.primaryContainer.withValues(
+                              alpha: 0.45,
+                            )
+                          : theme.colorScheme.surfaceContainerHighest.withValues(
+                              alpha: 0.5,
+                            ),
+                      // pill 999，单行不换行
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      bubble,
+                      style: theme.textTheme.bodyMedium,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      softWrap: false,
+                    ),
+                  ),
                 ),
-                child: Text(bubble, style: theme.textTheme.bodyMedium),
-              ),
+              ],
             ),
           ),
         ],
@@ -1085,100 +1103,6 @@ class _MoodRow extends ConsumerWidget {
             .show(errorDetail(e), tone: ChatToastTone.error);
       }
     }
-  }
-}
-
-/// ── stats-grid 三格：相恋天数 / 照片 / 心愿 ─────────────────────────
-///
-/// Web（style.css:474-482，手机档 :1415）：白卡 radius 14（手机档）、padding
-/// 13px 12px、gap 9、图标底 38×38 radius 12 三色（soft/green-soft/amber-soft）+
-/// serif 22（fs-h2 手机档）/500 数字。数据走既有来源零新请求：天数 =
-/// 与 hero 同口径（spaceSince daysBetween+1，否则 dashboard.days_together）、
-/// 照片 = dashboard.photos、心愿 = 既有 records 列表 kind=='wish' 计数。
-class _StatsGrid extends StatelessWidget {
-  const _StatsGrid({required this.me, required this.list, this.dashboard});
-
-  final MeData me;
-  final List<Record> list;
-  final Dashboard? dashboard;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final cs = theme.colorScheme;
-    final brightness = theme.brightness;
-    final days = me.spaceSince.isNotEmpty
-        ? daysBetween(me.spaceSince, todayStr()) + 1
-        : (dashboard?.daysTogether ?? 0);
-    final photos = dashboard?.photos ?? 0;
-    final wishes = list.where((r) => r.kind == 'wish').length;
-
-    Widget cell(int index, IconData icon, Color iconBg, Color iconColor,
-        String value, String label) {
-      return Expanded(
-        child: Container(
-          key: Key('home-stat-$index'),
-          padding: const EdgeInsets.symmetric(
-              horizontal: 12, vertical: 13), // 手机档（:1415）
-          decoration: BoxDecoration(
-            color: cs.surface,
-            borderRadius: BorderRadius.circular(14), // 手机档（:1415）
-            border: Border.all(color: cs.outlineVariant),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 38, // stat-icon 38×38 radius 12（:1415）
-                height: 38,
-                decoration: BoxDecoration(
-                  color: iconBg,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(icon, size: 20, color: iconColor),
-              ),
-              const SizedBox(width: 10), // .stat gap 10（:1415）
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // FittedBox 兜底：serif 22 数字在 320 宽三格挤压下缩放不溢出
-                    FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: Text(
-                        value,
-                        // stat strong serif 22（fs-h2 手机档）/500（:479/:1415）
-                        style: webSerifStyle(22, color: cs.onSurface),
-                      ),
-                    ),
-                    Text(
-                      label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodySmall
-                          ?.copyWith(color: cs.outline),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    return Row(
-      children: [
-        cell(0, Icons.favorite_rounded, cs.primaryContainer, cs.primary,
-            '$days', '相恋天数'), // icon1 soft/primary（:480）
-        const SizedBox(width: 9), // stats-grid gap 9（:1415）
-        cell(1, Icons.photo_library_rounded, WebSemanticColors.greenSoft(brightness),
-            WebSemanticColors.green(brightness), '$photos', '照片'), // icon2（:481）
-        const SizedBox(width: 9),
-        cell(2, Icons.star_rounded, WebSemanticColors.amberSoft(brightness),
-            WebSemanticColors.amber(brightness), '$wishes', '心愿'), // icon3（:482）
-      ],
-    );
   }
 }
 
