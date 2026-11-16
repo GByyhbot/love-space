@@ -15,6 +15,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/sse/sse_client.dart';
 import '../../core/together/together_data.dart';
 import '../settings/settings_state.dart' show spaceEditRequestedProvider;
+import '../shell/web_chrome.dart' show webSerifStyle;
 import 'together_controller.dart';
 import '../../core/theme/tokens.dart';
 
@@ -65,7 +66,9 @@ class _TogetherPageState extends ConsumerState<TogetherPage> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text('关于我们，还有好多好多', style: theme.textTheme.headlineSmall),
+                Text('关于我们，还有好多好多',
+                    style: theme.textTheme.headlineSmall
+                    ?.copyWith(fontWeight: FontWeight.w600, letterSpacing: -0.3)),
                 Text(
                   '把喜欢落在实处，把日子过成纪念。',
                   style: theme.textTheme.bodySmall?.copyWith(
@@ -80,83 +83,87 @@ class _TogetherPageState extends ConsumerState<TogetherPage> {
                 const SizedBox(height: 12),
                 _AnniversaryCard(ann: ann),
                 const SizedBox(height: 12),
-                _toolCard(
-                  context,
-                  emoji: '🗓️',
-                  title: '共同年历',
-                  desc: '重要的日子，一眼看清',
-                  route: '/together/calendar',
-                ),
-                _toolCard(
-                  context,
-                  emoji: '🌤',
-                  title: '心情手记',
-                  desc: '晴天雨天，都想陪着你',
-                  route: '/together/mood',
-                ),
-                _toolCard(
-                  context,
-                  emoji: '💌',
-                  title: '悄悄留言',
-                  desc: '有些喜欢，值得慢慢读',
-                  route: '/together/note',
-                ),
-                _toolCard(
-                  context,
-                  emoji: '✨',
-                  title: '共同愿望',
-                  desc: '把一起想做的事，一件件实现',
-                  route: '/together/wish',
-                ),
-                _toolCard(
-                  context,
-                  emoji: '💭',
-                  title: '情侣问答',
-                  desc: '每天再多了解彼此一点',
-                  route: '/together/question',
-                ),
-                _toolCard(
-                  context,
-                  emoji: '🌱',
-                  title: '共同打卡',
-                  desc: '和你一起，成为更好的我们',
-                  route: '/together/habit',
-                ),
-                _toolCard(
-                  context,
-                  emoji: '💫',
-                  title: '恋爱清单',
-                  desc: '一起做完这些小事，就是我们的故事',
-                  route: '/together/quest',
-                ),
-                _toolCard(
-                  context,
-                  emoji: '💰',
-                  title: '共同账本',
-                  desc: '为了彼此花过的钱，也是一段回忆',
-                  route: '/together/ledger',
-                ),
-                _toolCard(
-                  context,
-                  emoji: '🎵',
-                  title: '共同歌单',
-                  desc: '把属于我们的歌，放在一起',
-                  route: '/together/music',
-                ),
-                _toolCard(
-                  context,
-                  emoji: '📊',
-                  title: '数据看板',
-                  desc: '把日子过成数据，也过成回忆',
-                  route: '/together/dashboard',
-                ),
-                _toolCard(
-                  context,
-                  emoji: '📬',
-                  title: '回忆周报',
-                  desc: '把这一周，收进一封小小的信',
-                  route: '/together/weekly',
-                ),
+                // 2.3.4：11 张工具卡 2 列宫格（原顺序零变化：年历→心情→留言→
+                // 愿望→问答→打卡→清单→账本→歌单→看板→周报）
+                _twoColumnGrid([
+                  _toolCard(
+                    context,
+                    emoji: '🗓️',
+                    title: '共同年历',
+                    desc: '重要的日子，一眼看清',
+                    route: '/together/calendar',
+                  ),
+                  _toolCard(
+                    context,
+                    emoji: '🌤',
+                    title: '心情手记',
+                    desc: '晴天雨天，都想陪着你',
+                    route: '/together/mood',
+                  ),
+                  _toolCard(
+                    context,
+                    emoji: '💌',
+                    title: '悄悄留言',
+                    desc: '有些喜欢，值得慢慢读',
+                    route: '/together/note',
+                  ),
+                  _toolCard(
+                    context,
+                    emoji: '✨',
+                    title: '共同愿望',
+                    desc: '把一起想做的事，一件件实现',
+                    route: '/together/wish',
+                  ),
+                  _toolCard(
+                    context,
+                    emoji: '💭',
+                    title: '情侣问答',
+                    desc: '每天再多了解彼此一点',
+                    route: '/together/question',
+                  ),
+                  _toolCard(
+                    context,
+                    emoji: '🌱',
+                    title: '共同打卡',
+                    desc: '和你一起，成为更好的我们',
+                    route: '/together/habit',
+                  ),
+                  _toolCard(
+                    context,
+                    emoji: '💫',
+                    title: '恋爱清单',
+                    desc: '一起做完这些小事，就是我们的故事',
+                    route: '/together/quest',
+                  ),
+                  _toolCard(
+                    context,
+                    emoji: '💰',
+                    title: '共同账本',
+                    desc: '为了彼此花过的钱，也是一段回忆',
+                    route: '/together/ledger',
+                  ),
+                  _toolCard(
+                    context,
+                    emoji: '🎵',
+                    title: '共同歌单',
+                    desc: '把属于我们的歌，放在一起',
+                    route: '/together/music',
+                  ),
+                  _toolCard(
+                    context,
+                    emoji: '📊',
+                    title: '数据看板',
+                    desc: '把日子过成数据，也过成回忆',
+                    route: '/together/dashboard',
+                  ),
+                  _toolCard(
+                    context,
+                    emoji: '📬',
+                    title: '回忆周报',
+                    desc: '把这一周，收进一封小小的信',
+                    route: '/together/weekly',
+                  ),
+                ]),
                 // 「数据管理与通知渠道」章 段 A：hub 底部「⚙️ 设置」8 张卡
                 //（对齐 app.js:1229 settings-tools 8 卡顺序）；第 7 张
                 // 「🔔 提醒设置」在邀请另一半入住之后、全部设置之前，
@@ -164,74 +171,77 @@ class _TogetherPageState extends ConsumerState<TogetherPage> {
                 const SizedBox(height: 18),
                 _settingsHeading(theme),
                 const SizedBox(height: Spacing.gap),
-                _settingsCard(
-                  context,
-                  key: 'settings-hub-space',
-                  emoji: '🏡',
-                  title: '空间信息',
-                  desc: '空间名称与相恋日期',
-                  onTap: () {
-                    ref.read(spaceEditRequestedProvider.notifier).state = true;
-                    context.go('/home');
-                  },
-                ),
-                _settingsCard(
-                  context,
-                  key: 'settings-hub-theme',
-                  emoji: '🎨',
-                  title: '主题与外观',
-                  desc: '主题色、夜间模式与动效',
-                  onTap: () => context.push('/settings?section=theme'),
-                ),
-                _settingsCard(
-                  context,
-                  key: 'settings-hub-cover',
-                  emoji: '🖼️',
-                  title: '主页背景',
-                  desc: '换一张首页封面照片',
-                  onTap: () => context.push('/settings?section=cover'),
-                ),
-                _settingsCard(
-                  context,
-                  key: 'settings-hub-chat-bg',
-                  emoji: '🌄',
-                  title: '聊天背景',
-                  desc: '聊天壁纸与文字对比度',
-                  onTap: () => context.push('/messages'),
-                ),
-                _settingsCard(
-                  context,
-                  key: 'settings-hub-chat-bubble',
-                  emoji: '💬',
-                  title: '聊天气泡',
-                  desc: '两千多款气泡皮肤随手挑',
-                  onTap: () => context.push('/messages'),
-                ),
-                _settingsCard(
-                  context,
-                  key: 'settings-hub-invite',
-                  emoji: '💌',
-                  title: '邀请另一半入住',
-                  desc: '把你们的专属空间分享给 TA',
-                  onTap: () => context.push('/profile'),
-                ),
-                // 段 A 第 8 张卡：位置对齐 Web 8 卡（邀请之后、全部设置之前）。
-                _settingsCard(
-                  context,
-                  key: 'settings-hub-remind',
-                  emoji: '🔔',
-                  title: '提醒设置',
-                  desc: '通知渠道与提醒偏好',
-                  onTap: () => context.push('/channels'),
-                ),
-                _settingsCard(
-                  context,
-                  key: 'settings-hub-all',
-                  emoji: '⚙️',
-                  title: '全部设置',
-                  desc: '主题、背景、链路检测与检查更新',
-                  onTap: () => context.push('/settings'),
-                ),
+                // 2.3.4：8 张设置卡 2 列宫格（原顺序零变化）
+                _twoColumnGrid([
+                  _settingsCard(
+                    context,
+                    key: 'settings-hub-space',
+                    emoji: '🏡',
+                    title: '空间信息',
+                    desc: '空间名称与相恋日期',
+                    onTap: () {
+                      ref.read(spaceEditRequestedProvider.notifier).state = true;
+                      context.go('/home');
+                    },
+                  ),
+                  _settingsCard(
+                    context,
+                    key: 'settings-hub-theme',
+                    emoji: '🎨',
+                    title: '主题与外观',
+                    desc: '主题色、夜间模式与动效',
+                    onTap: () => context.push('/settings?section=theme'),
+                  ),
+                  _settingsCard(
+                    context,
+                    key: 'settings-hub-cover',
+                    emoji: '🖼️',
+                    title: '主页背景',
+                    desc: '换一张首页封面照片',
+                    onTap: () => context.push('/settings?section=cover'),
+                  ),
+                  _settingsCard(
+                    context,
+                    key: 'settings-hub-chat-bg',
+                    emoji: '🌄',
+                    title: '聊天背景',
+                    desc: '聊天壁纸与文字对比度',
+                    onTap: () => context.push('/messages'),
+                  ),
+                  _settingsCard(
+                    context,
+                    key: 'settings-hub-chat-bubble',
+                    emoji: '💬',
+                    title: '聊天气泡',
+                    desc: '两千多款气泡皮肤随手挑',
+                    onTap: () => context.push('/messages'),
+                  ),
+                  _settingsCard(
+                    context,
+                    key: 'settings-hub-invite',
+                    emoji: '💌',
+                    title: '邀请另一半入住',
+                    desc: '把你们的专属空间分享给 TA',
+                    onTap: () => context.push('/profile'),
+                  ),
+                  // 段 A 第 8 张卡：位置对齐 Web 8 卡（邀请之后、全部设置之前）。
+                  _settingsCard(
+                    context,
+                    key: 'settings-hub-remind',
+                    emoji: '🔔',
+                    title: '提醒设置',
+                    desc: '通知渠道与提醒偏好',
+                    onTap: () => context.push('/channels'),
+                  ),
+                  _settingsCard(
+                    context,
+                    key: 'settings-hub-all',
+                    emoji: '⚙️',
+                    title: '全部设置',
+                    desc: '主题、背景、链路检测与检查更新',
+                    onTap: () => context.push('/settings'),
+                  ),
+                ]),
                 if (st.error != null) ...[
                   const SizedBox(height: 12),
                   Text(
@@ -258,6 +268,77 @@ class _TogetherPageState extends ConsumerState<TogetherPage> {
     ],
   );
 
+  // ── 2.3.4（推广段一重做）：Web tools-grid 2 列宫格 ──────────────────
+  // Web 工具区/设置区为 tools-grid 2 列宫格（style.css:1078-1083：tool-card
+  // radius 20 白卡 + emoji fs-xl 24 + h3 fs-body + p fs-sm muted；≤1150 两列
+  // ——App 手机端即两列口径）。App 卡片沿用各自实读文案（web-visual-plan.md
+  // 8.2 对照表：看板/周报/全部设置沿用既有副题），11+8 张卡零增减、去向与
+  // 顺序零变化——只换呈现形态（纵向列表卡 → 2 列宫格卡）。
+
+  /// 2 列宫格排布：顺序零变化（调用处原序传入，不足补空位占行）。
+  /// IntrinsicHeight 实现两卡等高（Web grid 等高语义）；无界高度上下文
+  /// （SingleChildScrollView）下不能用 stretch Row——会强制无穷高。
+  Widget _twoColumnGrid(List<Widget> cards) => Column(
+        children: [
+          for (var i = 0; i < cards.length; i += 2)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: IntrinsicHeight(
+                child: Row(
+                  children: [
+                    Expanded(child: cards[i]),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: i + 1 < cards.length
+                          ? cards[i + 1]
+                          : const SizedBox(),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
+      );
+
+  /// Web tool-card 形态：radius 20 白卡、emoji 24 顶部、标题 + 诗意副题。
+  Widget _gridCard(
+    BuildContext context, {
+    required String emoji,
+    required String title,
+    required String desc,
+    required VoidCallback onTap,
+    Key? cardKey,
+  }) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    return InkWell(
+      key: cardKey,
+      borderRadius: BorderRadius.circular(20),
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: cs.surface,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: cs.outlineVariant),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(emoji, style: const TextStyle(fontSize: 24)), // fs-xl 24
+            const SizedBox(height: 6),
+            Text(title, style: theme.textTheme.titleSmall), // h3 fs-body
+            const SizedBox(height: 2),
+            Text(desc, maxLines: 2, overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodySmall?.copyWith(
+                    color: cs.outline)), // p fs-sm muted
+          ],
+        ),
+      ),
+    );
+  }
+
   /// hub 设置卡（**只做导航，不复制已有能力的 UI**；8 张逐张点通、无死卡）。
   Widget _settingsCard(
     BuildContext context, {
@@ -267,49 +348,19 @@ class _TogetherPageState extends ConsumerState<TogetherPage> {
     required String desc,
     required VoidCallback onTap,
   }) {
-    final theme = Theme.of(context);
-    final cs = theme.colorScheme;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Card(
-        margin: EdgeInsets.zero,
-        child: InkWell(
-          key: Key(key),
-          borderRadius: BorderRadius.circular(AppRadius.card),
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            child: Row(
-              children: [
-                Text(emoji, style: const TextStyle(fontSize: 24)),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(title, style: theme.textTheme.titleSmall),
-                      const SizedBox(height: 2),
-                      Text(
-                        desc,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: cs.outline,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Icon(Icons.chevron_right_rounded, color: cs.outline),
-              ],
-            ),
-          ),
-        ),
-      ),
+    return _gridCard(
+      context,
+      emoji: emoji,
+      title: title,
+      desc: desc,
+      onTap: onTap,
+      cardKey: Key(key),
     );
   }
 
   /// 工具入口卡（仅已落地页面；后续段随页面落地逐段增补，不预放死卡）。
   /// 生理期为顶部独立宽卡 [_PeriodEntryCard]（条目 8 段 8-A 已落地），
-  /// 不走此模板；原「不预放死卡」注释针对未落地工具页，本段页面已落地故可增补。
+  /// 不走此模板。2.3.4：形态改 Web tool-card 宫格卡（签名与调用处零变化）。
   Widget _toolCard(
     BuildContext context, {
     required String emoji,
@@ -317,42 +368,12 @@ class _TogetherPageState extends ConsumerState<TogetherPage> {
     required String desc,
     required String route,
   }) {
-    final theme = Theme.of(context);
-    final cs = theme.colorScheme;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Card(
-        margin: EdgeInsets.zero,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(AppRadius.card),
-          onTap: () => context.push(route),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            child: Row(
-              children: [
-                Text(emoji, style: const TextStyle(fontSize: 26)),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(title, style: theme.textTheme.titleMedium),
-                      const SizedBox(height: 2),
-                      Text(
-                        desc,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: cs.outline,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Icon(Icons.chevron_right_rounded, color: cs.outline),
-              ],
-            ),
-          ),
-        ),
-      ),
+    return _gridCard(
+      context,
+      emoji: emoji,
+      title: title,
+      desc: desc,
+      onTap: () => context.push(route),
     );
   }
 }
@@ -371,9 +392,22 @@ class _PeriodEntryCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    return Card(
+    // 2.3.4（推广段一重做）：对齐 Web `tool-card-wide` 120° 渐变底
+    // （linear-gradient(120deg,var(--soft),var(--surface) 64%)，style.css:1085）
+    // ——soft → primaryContainer 映射（浅档口径，与试点 chrome 同机制）。
+    final dark = theme.brightness == Brightness.dark;
+    return Container(
       margin: EdgeInsets.zero,
-      color: cs.primaryContainer,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        border: Border.all(color: cs.outlineVariant),
+        gradient: LinearGradient(
+          begin: dark ? Alignment.topLeft : Alignment.centerLeft,
+          end: dark ? Alignment.bottomRight : Alignment.centerRight,
+          colors: <Color>[cs.primaryContainer, cs.surface],
+          stops: const [0, 0.64],
+        ),
+      ),
       child: InkWell(
         borderRadius: BorderRadius.circular(AppRadius.card),
         onTap: () => context.push('/period'),
@@ -390,20 +424,20 @@ class _PeriodEntryCard extends StatelessWidget {
                     Text(
                       '生理期',
                       style: theme.textTheme.titleMedium?.copyWith(
-                        color: cs.onPrimaryContainer,
+                        color: cs.onSurface,
                       ),
                     ),
                     const SizedBox(height: 2),
                     Text(
                       '记下周期，把照顾提前一点',
                       style: theme.textTheme.bodySmall?.copyWith(
-                        color: cs.onPrimaryContainer,
+                        color: cs.outline,
                       ),
                     ),
                   ],
                 ),
               ),
-              Icon(Icons.chevron_right_rounded, color: cs.onPrimaryContainer),
+              Icon(Icons.chevron_right_rounded, color: cs.outline),
             ],
           ),
         ),
@@ -439,11 +473,12 @@ class _AnniversaryCard extends StatelessWidget {
               : Row(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
+                    // 2.3.4（推广段一重做）：大数字 serif 档（Web .stat strong
+                    // serif 24 档，style.css:479 系——webSerifStyle 走试点同族）
                     Text(
                       '${a.days}',
-                      style: theme.textTheme.headlineMedium?.copyWith(
-                        color: cs.primary,
-                      ),
+                      style: webSerifStyle(28,
+                          color: cs.primary, fontWeight: FontWeight.w600),
                     ),
                     const SizedBox(width: 8),
                     Expanded(

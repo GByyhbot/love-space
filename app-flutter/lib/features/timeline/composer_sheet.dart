@@ -668,28 +668,35 @@ class _ComposerSheetState extends ConsumerState<ComposerSheet> {
                 labelText: '这一刻想说的话', counterText: '', alignLabelWithHint: true),
           ),
           const SizedBox(height: Spacing.gap),
-          // 日期 + 媒体入口
-          Row(children: [
-            Icon(Icons.event_rounded, size: 18, color: theme.colorScheme.primary),
-            const SizedBox(width: 8),
-            Text('发生日期', style: theme.textTheme.bodyMedium),
-            const SizedBox(width: 10),
-            TextButton(
-              onPressed: _pickDate,
-              child: Text(_fmtDate(_date)),
-            ),
-            const Spacer(),
-            TextButton.icon(
-              onPressed: _pickImageVideo,
-              icon: const Icon(Icons.image_rounded, size: 18),
-              label: const Text('图/视频'),
-            ),
-            TextButton.icon(
-              onPressed: _pickFromLibrary,
-              icon: const Icon(Icons.audiotrack_rounded, size: 18),
-              label: const Text('音频'),
-            ),
-          ]),
+          // 日期 + 媒体入口。2.3.4（推广段一重做，QA 备案缺陷②）：
+          // 原单行 Row（图标+文字+日期钮+Spacer+图/视频+音频）在 393 宽右溢出
+          // 约 90px、320 更甚——改 Wrap：日期组 mainAxisSize.min 固定一行，
+          // 媒体入口空间不足自动换行；发布字段/回调链零变化。
+          Wrap(
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Row(mainAxisSize: MainAxisSize.min, children: [
+                Icon(Icons.event_rounded, size: 18, color: theme.colorScheme.primary),
+                const SizedBox(width: 8),
+                Text('发生日期', style: theme.textTheme.bodyMedium),
+                const SizedBox(width: 10),
+                TextButton(
+                  onPressed: _pickDate,
+                  child: Text(_fmtDate(_date)),
+                ),
+              ]),
+              TextButton.icon(
+                onPressed: _pickImageVideo,
+                icon: const Icon(Icons.image_rounded, size: 18),
+                label: const Text('图/视频'),
+              ),
+              TextButton.icon(
+                onPressed: _pickFromLibrary,
+                icon: const Icon(Icons.audiotrack_rounded, size: 18),
+                label: const Text('音频'),
+              ),
+            ],
+          ),
           // 录音 tile（三键：录制中=暂停/完成/取消，暂停中=继续/完成/取消）
           Padding(
             padding: const EdgeInsets.only(top: 4),

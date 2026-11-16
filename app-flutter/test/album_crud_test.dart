@@ -263,7 +263,9 @@ void main() {
       await tester.pumpAndSettle();
 
       // 打开新建相册弹层（+ 卡：用 InkWell 精确命中卡片，避开弹层标题同名文字）
-      await tester.tap(find.widgetWithText(InkWell, '新建相册'));
+      // 2.3.4：页头新增「新建相册」pill 主按钮（在前）+ 封面行卡（在后）——
+      // 本用例意图为封面行「+ 新建相册」卡，取 .last 消歧
+      await tester.tap(find.widgetWithText(InkWell, '新建相册').last);
       await tester.pumpAndSettle();
       expect(find.text('新建相册'), findsWidgets); // 卡片 + 弹层标题
       // 取消：不应触发 POST
@@ -276,7 +278,7 @@ void main() {
           reason: '取消不创建');
 
       // 再次打开，输入并确认
-      await tester.tap(find.widgetWithText(InkWell, '新建相册'));
+      await tester.tap(find.widgetWithText(InkWell, '新建相册').last); // 2.3.4 页头 pill 在前，.last=封面行卡
       await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextFormField), '测试相册');
       await tester.tap(find.text('创建'));

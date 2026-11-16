@@ -130,13 +130,42 @@ class _AlbumPageState extends ConsumerState<AlbumPage> {
 
   Widget _heading(BuildContext context) {
     final theme = Theme.of(context);
+    // 2.3.4（推广段一重做）：页头字阶与试点首页同口径（h1 26/600/ls-0.3 →
+    // headlineSmall，app.js:965 文案逐字）+ 页头主按钮 pill（--radius-pill 999，
+    // style.css:132/:293；Web 相册页头右侧主按钮 = 新建相册）。
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text('把喜欢的瞬间，装进口袋', style: theme.textTheme.headlineSmall),
-        Text('每一张照片，都是我们走过的日子。',
-            style: theme.textTheme.bodySmall
-                ?.copyWith(color: theme.colorScheme.outline)),
+      child: Row(children: [
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('把喜欢的瞬间，装进口袋',
+                style: theme.textTheme.headlineSmall
+                  ?.copyWith(fontWeight: FontWeight.w600, letterSpacing: -0.3)),
+            Text('每一张照片，都是我们走过的日子。',
+                style: theme.textTheme.bodySmall
+                    ?.copyWith(color: theme.colorScheme.outline)),
+          ]),
+        ),
+        InkWell(
+          borderRadius: BorderRadius.circular(999),
+          onTap: () => _showCreateAlbumDialog(context),
+          child: Container(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.primary,
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              const Icon(Icons.add_rounded,
+                  size: 16, color: Colors.white),
+              const SizedBox(width: 4),
+              Text('新建相册',
+                  style: theme.textTheme.labelLarge
+                      ?.copyWith(color: Colors.white)),
+            ]),
+          ),
+        ),
       ]),
     );
   }
@@ -158,9 +187,12 @@ class _AlbumPageState extends ConsumerState<AlbumPage> {
         ],
         selected: {st.view},
         showSelectedIcon: false,
+        // 2.3.4：选中态对齐 Web `.tabs button.active`（style.css:337）——
+        // soft 底 + primary 1px 描边 + primary-dark 字 + 600。
         style: ButtonStyle(
             visualDensity: VisualDensity.compact,
-            textStyle: WidgetStateProperty.all(theme.textTheme.labelMedium)),
+            textStyle: WidgetStateProperty.all(theme.textTheme.labelMedium
+                ?.copyWith(fontWeight: FontWeight.w600))),
         onSelectionChanged: (s) => ref
             .read(albumControllerProvider.notifier)
             .setView(s.first),
@@ -224,7 +256,7 @@ class _AlbumPageState extends ConsumerState<AlbumPage> {
             child: Container(
               decoration: BoxDecoration(
                 color: selected ? cs.onPrimaryContainer.withValues(alpha: 0.08) : cs.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(AppRadius.sm),
+                borderRadius: BorderRadius.circular(12) /* 2.3.4 照片块圆角 12 */,
               ),
               child: Center(
                 child: Icon(Icons.photo_library_rounded,
@@ -338,7 +370,7 @@ class _AlbumPageState extends ConsumerState<AlbumPage> {
             child: Container(
               decoration: BoxDecoration(
                 color: cs.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(AppRadius.sm),
+                borderRadius: BorderRadius.circular(12) /* 2.3.4 照片块圆角 12 */,
               ),
               child: Center(
                 child: Icon(Icons.add_rounded, size: 28, color: cs.primary),
@@ -562,10 +594,22 @@ class _AlbumPageState extends ConsumerState<AlbumPage> {
         itemBuilder: (_, gi) {
           final g = groups[gi];
           return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            // 2.3.4（推广段一重做）：分组头补 3px primary 竖线 + primary-dark
+            // 标题（style.css:626 分组头形态；primary-dark = primary 加深映射）。
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 10),
-              child: Text(g.label,
-                  style: Theme.of(context).textTheme.titleSmall),
+              child: Row(children: [
+                Container(
+                    width: 3,
+                    height: 16,
+                    color: Theme.of(context).colorScheme.primary),
+                const SizedBox(width: 8),
+                Text(g.label,
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      color: Theme.of(context).colorScheme.primary,
+                      fontWeight: FontWeight.w600,
+                    )),
+              ]),
             ),
             for (final row in chunkPhotosForGrid(g.photos))
               Padding(
@@ -632,7 +676,7 @@ class _AlbumPageState extends ConsumerState<AlbumPage> {
           crossAxisCount: 3, mainAxisSpacing: 8, crossAxisSpacing: 8),
       itemBuilder: (_, i) => Container(
         decoration: BoxDecoration(
-            color: c, borderRadius: BorderRadius.circular(AppRadius.sm)),
+            color: c, borderRadius: BorderRadius.circular(12) /* 2.3.4 照片块圆角 12 */),
       ),
     );
   }
@@ -691,7 +735,7 @@ class _Thumb extends ConsumerWidget {
               });
         },
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(AppRadius.sm),
+          borderRadius: BorderRadius.circular(12) /* 2.3.4 照片块圆角 12 */,
           child: CachedNetworkImage(
             imageUrl: mediaUrl(base, item.id),
             httpHeaders: headers,
@@ -740,7 +784,7 @@ class _VideoThumb extends ConsumerWidget {
           : () => Navigator.of(context).push(MaterialPageRoute<void>(
               builder: (_) => VideoPlayerPage(mid: item.id))),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(AppRadius.sm),
+        borderRadius: BorderRadius.circular(12) /* 2.3.4 照片块圆角 12 */,
         child: Stack(fit: StackFit.expand, children: [
           CachedNetworkImage(
             imageUrl: mediaUrl(base, item.id, preview: false, poster: true),

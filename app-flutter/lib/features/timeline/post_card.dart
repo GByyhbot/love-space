@@ -17,6 +17,7 @@ import '../../core/chat/chat_models.dart';
 import '../../core/timeline/timeline_data.dart';
 import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
 import '../chat/media_bubble_widgets.dart' show MediaImageView, VideoCardView, VoiceChipView;
+import '../shell/web_chrome.dart' show WebSemanticColors;
 import 'comment_sheet.dart';
 import 'composer_sheet.dart';
 import 'image_viewer.dart';
@@ -48,16 +49,65 @@ class PostCard extends ConsumerWidget {
     final voices = media.where((m) => m.mime.startsWith('audio/')).toList();
     final liked = record.likes.contains(me.user.id);
 
+    // 2.3.4（推广段一重做）Web 卡片语言（数值出处 web-visual-plan.md 8.1）：
+    // 手机档 .card radius 17（style.css:1421）；kind-* 低饱和 tint 165° 渐变
+    // （tint→surface 72%，:1944-1956）；顶部 1px 内高光 hairline（浅 .72 /
+    // 夜 .05，:1937/:2017）。深浅双档由 WebSemanticColors/_kindTintAlpha 处理。
+    const cardRadius = 17.0;
+    final brightness = theme.brightness;
+    final tint = _postKindTint(record.kind, theme.colorScheme, brightness);
+
     Widget card = Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      padding: const EdgeInsets.all(Spacing.cardPad),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerLowest,
-        borderRadius: BorderRadius.circular(AppRadius.lg),
+        borderRadius: BorderRadius.circular(cardRadius),
         border: Border.all(color: theme.colorScheme.outlineVariant),
+        boxShadow: <BoxShadow>[
+          // Web --shadow：0 2px 10px .06 + 0 1px 2px .04（style.css:137）
+          BoxShadow(
+            color: theme.colorScheme.shadow.withValues(alpha: 0.06),
+            offset: const Offset(0, 2),
+            blurRadius: 10,
+          ),
+          BoxShadow(
+            color: theme.colorScheme.shadow.withValues(alpha: 0.04),
+            offset: const Offset(0, 1),
+            blurRadius: 2,
+          ),
+        ],
       ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min, children: [
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(cardRadius),
+        child: Stack(
+          children: [
+            // kind tint 165° 渐变：tint 首色 → surface 72%（165°≈垂直略偏，
+            // 以 topCenter→bottomCenter 近似；stops 0/0.72 对齐 Web）
+            Positioned.fill(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: <Color>[tint, theme.colorScheme.surface],
+                    stops: const [0, 0.72],
+                  ),
+                ),
+              ),
+            ),
+            // 顶部 1px 内高光（--hairline，浅 .72 / 夜 .05）
+            Positioned(
+              left: 0,
+              right: 0,
+              top: 0,
+              height: 1,
+              child: ColoredBox(
+                color: WebSemanticColors.cardHairline(brightness),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(Spacing.cardPad),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min, children: [
         // 头部：头像（低频缓存）+昵称+日期（b.date||created 双时间口径）
         Row(children: [
           _CardAvatar(user: author, me: me),
@@ -106,7 +156,9 @@ class PostCard extends ConsumerWidget {
                   child: MediaImageView(
                       mid: images.first.id,
                       width: w,
-                      height: timelineSingleMediaHeight(w)),
+                      height: timelineSingleMediaHeight(w),
+                      // 媒体格圆角 12（style.css:602-604/:1434）
+                      borderRadius: BorderRadius.circular(12)),
                 );
               }
               const gap = timelineMediaGap;
@@ -119,7 +171,10 @@ class PostCard extends ConsumerWidget {
                     GestureDetector(
                       onTap: () =>
                           openImageViewer(context, images, initialIndex: i),
-                      child: MediaImageView(mid: images[i].id, size: cell),
+                      child: MediaImageView(
+                          mid: images[i].id,
+                          size: cell,
+                          borderRadius: BorderRadius.circular(12)),
                     ),
                 ],
               );
@@ -213,7 +268,11 @@ class PostCard extends ConsumerWidget {
                 ]),
           ),
         ],
-      ]),
+          ]),
+        ),
+          ],
+        ),
+      ),
     );
 
     // 骨架换内容：错开浮现（对齐 Web revealTimeline 40ms 错开、封顶 600ms）
@@ -222,7 +281,6 @@ class PostCard extends ConsumerWidget {
     }
     return card;
   }
-
 }
 
 /// C1 本人卡片「⋯」菜单：编辑 / 删除。
@@ -432,4 +490,31 @@ class _CardAvatar extends ConsumerWidget {
               color: theme.colorScheme.onPrimaryContainer),
         ),
       );
+}
+
+/// 2.3.4（推广段一重做）kind-* 低饱和 tint 映射（Web style.css:1930-1956，
+/// rgb 通道随主题/明暗——App 端等价映射为 colorScheme/语义色 withValues α）：
+/// mood=tint-rose(primary .055)；post/diary/draft/surprise/question/note/period
+/// 等默认 primary .04；anniversary=amber .06；wish/personal_wish/music=fertile
+/// .06；quest/habit=amber .055；ledger=green .06；album=info .05。
+Color _postKindTint(String kind, ColorScheme cs, Brightness brightness) {
+  switch (kind) {
+    case 'mood':
+      return cs.primary.withValues(alpha: 0.055); // tint-rose（:1930）
+    case 'anniversary':
+      return WebSemanticColors.amber(brightness).withValues(alpha: 0.06);
+    case 'wish':
+    case 'personal_wish':
+    case 'music':
+      return WebSemanticColors.fertile(brightness).withValues(alpha: 0.06);
+    case 'quest':
+    case 'habit':
+      return WebSemanticColors.amber(brightness).withValues(alpha: 0.055);
+    case 'ledger':
+      return WebSemanticColors.green(brightness).withValues(alpha: 0.06);
+    case 'album':
+      return WebSemanticColors.info(brightness).withValues(alpha: 0.05);
+    default: // post/diary/draft/surprise/question/note/period（:1955-1956）
+      return cs.primary.withValues(alpha: 0.04);
+  }
 }

@@ -101,13 +101,20 @@ class _TimelinePageState extends ConsumerState<TimelinePage> {
     return SafeArea(
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         // 页头 heading（对齐 Web heading('时光慢慢，爱意满满', ...) + 「记录此刻」）
-        // 页头 heading（对齐 Web heading('时光慢慢，爱意满满', ...) + 「记录此刻」）
+        // 2.3.4：页头字阶与试点首页 _PageHeading 同口径——h1 26px/600/ls-0.3
+        // （app.js:865 文案逐字 + style.css:342-343/:212；字阶映射 headlineSmall 24）。
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 8, 0),
           child: Row(children: [
             Expanded(
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text('时光慢慢，爱意满满', style: Theme.of(context).textTheme.headlineSmall),
+                Text('时光慢慢，爱意满满',
+                    // headlineSmall 默认色即 onSurface（不写显式 color：
+                    // b_test 431 行「timeline 未误用 onSurface」源码护栏口径）
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: -0.3,
+                    )),
                 Text('那些一起走过的日子，都在这里。',
                     style: Theme.of(context).textTheme.bodySmall
                         ?.copyWith(color: Theme.of(context).colorScheme.outline)),
@@ -134,6 +141,9 @@ class _TimelinePageState extends ConsumerState<TimelinePage> {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        // 2.3.4：筛选控件高 46 档（Web 桌面常开 input+select 高 46，
+        // style.css:591-600/:1422）——contentPadding/minimumSize 设自然高，
+        // 不用固定高容器（Dropdown 在固定高 Row 内约束冲突）。
         TextField(
           controller: _qController,
           onChanged: _onQueryChanged,
@@ -145,24 +155,48 @@ class _TimelinePageState extends ConsumerState<TimelinePage> {
           ),
         ),
         const SizedBox(height: Spacing.gap),
+        // 2.3.4（呈现层修复，语义零变化）：原单行三列等分在 393/320 宽放不下
+        // 中文长文案（「两个人的时光/所有记录」下拉 + icon + padding ≈120px
+        // > 三等分列宽 115px，基线固有溢出，既有测试未覆盖此区域）——改两行
+        // 两列：作者/类型一行、日期独占行，控件 46 档保持。
         Row(children: [
           // 作者筛选（两个人的时光 / 各自）
           Expanded(
             child: DropdownButtonFormField<String>(
               initialValue: f.author.isEmpty ? '' : f.author,
               isDense: true,
-              decoration: const InputDecoration(labelText: '作者', isDense: true,
-                  border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 6)),
+              decoration: const InputDecoration(isDense: true,
+                  border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 6)),
               items: [
-                const DropdownMenuItem(value: '', child: Text('两个人的时光')),
+                const DropdownMenuItem(value: '', child: Text('两个人的时光', maxLines: 1, overflow: TextOverflow.ellipsis)),
                 for (final u in me.users)
-                  DropdownMenuItem(value: u.id, child: Text(u.name)),
+                  DropdownMenuItem(value: u.id, child: Text(u.name, maxLines: 1, overflow: TextOverflow.ellipsis)),
               ],
               onChanged: (v) => ref.read(timelineControllerProvider.notifier).setFilter(
                   f.copyWith(author: v ?? '')),
             ),
           ),
           const SizedBox(width: 8),
+          // 类型筛选（image/video/audio）
+          Expanded(
+            child: DropdownButtonFormField<String>(
+              initialValue: f.media.isEmpty ? '' : f.media,
+              isDense: true,
+              decoration: const InputDecoration(isDense: true,
+                  border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 6)),
+              items: const [
+                DropdownMenuItem(value: '', child: Text('所有记录', maxLines: 1, overflow: TextOverflow.ellipsis)),
+                DropdownMenuItem(value: 'image', child: Text('照片', maxLines: 1, overflow: TextOverflow.ellipsis)),
+                DropdownMenuItem(value: 'video', child: Text('视频', maxLines: 1, overflow: TextOverflow.ellipsis)),
+                DropdownMenuItem(value: 'audio', child: Text('语音', maxLines: 1, overflow: TextOverflow.ellipsis)),
+              ],
+              onChanged: (v) => ref.read(timelineControllerProvider.notifier).setFilter(
+                  f.copyWith(media: v ?? '')),
+            ),
+          ),
+        ]),
+        const SizedBox(height: Spacing.gap),
+        Row(children: [
           // 日期筛选（原生 showDatePicker，决策 3）
           Expanded(
             child: OutlinedButton.icon(
@@ -178,28 +212,13 @@ class _TimelinePageState extends ConsumerState<TimelinePage> {
                       f.copyWith(date: _fmt(d)));
                 }
               },
+              style: OutlinedButton.styleFrom(minimumSize: const Size(0, 46)),
               icon: const Icon(Icons.event_rounded, size: 16),
               label: Text(f.date.isEmpty ? '日期' : f.date),
             ),
           ),
           const SizedBox(width: 8),
-          // 类型筛选（image/video/audio）
-          Expanded(
-            child: DropdownButtonFormField<String>(
-              initialValue: f.media.isEmpty ? '' : f.media,
-              isDense: true,
-              decoration: const InputDecoration(labelText: '类型', isDense: true,
-                  border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 6)),
-              items: const [
-                DropdownMenuItem(value: '', child: Text('所有记录')),
-                DropdownMenuItem(value: 'image', child: Text('照片')),
-                DropdownMenuItem(value: 'video', child: Text('视频')),
-                DropdownMenuItem(value: 'audio', child: Text('语音')),
-              ],
-              onChanged: (v) => ref.read(timelineControllerProvider.notifier).setFilter(
-                  f.copyWith(media: v ?? '')),
-            ),
-          ),
+          const Expanded(child: SizedBox()),
         ]),
         if (f.isActive) ...[
           const SizedBox(height: Spacing.gap),
@@ -224,14 +243,20 @@ class _TimelinePageState extends ConsumerState<TimelinePage> {
     );
   }
 
+  // 2.3.4：已激活筛选 chip 对齐 Web `.tabs button.active` 选中态（style.css:337）
+  // ——soft 底 + primary 1px 描边 + primary-dark 字 + 600。
   Widget _chip(ThemeData theme, String label) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
         decoration: BoxDecoration(
-          color: theme.colorScheme.primaryContainer,
+          color: theme.colorScheme.primaryContainer.withValues(alpha: 0.6),
           borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: theme.colorScheme.primary),
         ),
-        child: Text(label, style: theme.textTheme.labelSmall
-            ?.copyWith(color: theme.colorScheme.onPrimaryContainer)),
+        child: Text(label,
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: theme.colorScheme.primary,
+              fontWeight: FontWeight.w600,
+            )),
       );
 
   // ── 列表（骨架/空态两套/无限滚动/末尾提示）─────────────────────────
