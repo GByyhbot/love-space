@@ -117,12 +117,6 @@ abstract final class WebSemanticColors {
       ? const Color(0xFF7B63A0)
       : const Color(0xFFB49BD6);
 
-  /// --info（style.css:44 浅 #3F6A8E / :1508 夜 rgb 143,182,212=#8FB6D4）。
-  /// 推广段一补：kind-album 的 tint-blue（--tint-blue rgba(info,.05)，:1935）。
-  static Color info(Brightness b) => b == Brightness.light
-      ? const Color(0xFF3F6A8E)
-      : const Color(0xFF8FB6D4);
-
   /// 卡片顶部内高光（--hairline：浅 rgba(255,255,255,.72)，夜 .05）。
   /// 出处 style.css:1937/:2017。
   static Color cardHairline(Brightness b) => b == Brightness.light

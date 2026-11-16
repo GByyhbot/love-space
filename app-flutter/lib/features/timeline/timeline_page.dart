@@ -134,19 +134,14 @@ class _TimelinePageState extends ConsumerState<TimelinePage> {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        // 推广段一：筛选控件形态/高度档 46（style.css:2743 nav min-height 46、
-        // :1422 compose-cta min-height 46）。只改尺寸，搜索防抖/筛选链不动。
-        SizedBox(
-          height: 46,
-          child: TextField(
-            controller: _qController,
-            onChanged: _onQueryChanged,
-            decoration: const InputDecoration(
-              hintText: '搜索我们的故事…',
-              prefixIcon: Icon(Icons.search_rounded),
-              isDense: true,
-              border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(AppRadius.card))),
-            ),
+        TextField(
+          controller: _qController,
+          onChanged: _onQueryChanged,
+          decoration: const InputDecoration(
+            hintText: '搜索我们的故事…',
+            prefixIcon: Icon(Icons.search_rounded),
+            isDense: true,
+            border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(AppRadius.card))),
           ),
         ),
         const SizedBox(height: Spacing.gap),
@@ -185,8 +180,6 @@ class _TimelinePageState extends ConsumerState<TimelinePage> {
               },
               icon: const Icon(Icons.event_rounded, size: 16),
               label: Text(f.date.isEmpty ? '日期' : f.date),
-              style: OutlinedButton.styleFrom(
-                  minimumSize: const Size.fromHeight(46)), // 筛选控件 46 档（:2743）
             ),
           ),
           const SizedBox(width: 8),
@@ -231,23 +224,15 @@ class _TimelinePageState extends ConsumerState<TimelinePage> {
     );
   }
 
-  /// 激活筛选 chip：Web `.tabs button.active` 口径（style.css:337）——
-  /// soft 底 + primary 1px 描边 + primary-dark（App→primary 映射，同试点）
-  /// 字 600、无阴影。只改呈现，筛选值/清除链不动。
-  Widget _chip(ThemeData theme, String label) {
-    final cs = theme.colorScheme;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: cs.primaryContainer, // --soft 映射（试点口径）
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: cs.primary), // primary 1px 描边
-      ),
-      child: Text(label, style: theme.textTheme.labelSmall?.copyWith(
-          color: cs.primary, // primary-dark → primary 映射（试点 :781/:864）
-          fontWeight: FontWeight.w600)),
-    );
-  }
+  Widget _chip(ThemeData theme, String label) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.primaryContainer,
+          borderRadius: BorderRadius.circular(999),
+        ),
+        child: Text(label, style: theme.textTheme.labelSmall
+            ?.copyWith(color: theme.colorScheme.onPrimaryContainer)),
+      );
 
   // ── 列表（骨架/空态两套/无限滚动/末尾提示）─────────────────────────
 

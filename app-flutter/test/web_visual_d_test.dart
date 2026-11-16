@@ -355,7 +355,7 @@ void main() {
       return (w.decoration! as BoxDecoration).borderRadius! as BorderRadius;
     }
 
-    testWidgets('页头文案逐字 + hero radius 20 + stats 三格已摘除 + 动态卡 radius 17',
+    testWidgets('页头文案逐字 + hero radius 20 + stats 三格 + 动态卡 radius 17',
         (tester) async {
       await pumpHome(tester, const Size(393, 1200));
       // 页头逐字（app.js:725）
@@ -363,12 +363,13 @@ void main() {
       expect(find.text('一半是生活，一半是你。'), findsOneWidget);
       // hero radius 20（style.css:448）
       expect(radiusOf(tester, const Key('home-hero')).topLeft.x, 20);
-      // 推广段一：stats 三格整块摘除（真 Web 手机端无此区，盘点偏差）
+      // stats 三格（style.css:474-482）
       for (var i = 0; i < 3; i++) {
-        expect(find.byKey(Key('home-stat-$i')), findsNothing);
+        expect(find.byKey(Key('home-stat-$i')), findsOneWidget);
       }
-      expect(find.text('相恋天数'), findsNothing);
-      expect(find.text('心愿'), findsNothing);
+      expect(find.text('相恋天数'), findsOneWidget);
+      expect(find.text('照片'), findsOneWidget);
+      expect(find.text('心愿'), findsOneWidget);
       // 动态卡 radius 17（Web 手机档 .card，style.css:1421）
       expect(find.byKey(const Key('home-recent-card')), findsOneWidget);
       expect(radiusOf(tester, const Key('home-recent-card')).topLeft.x, 17);
@@ -380,7 +381,7 @@ void main() {
     testWidgets('320×700 窄屏零 RenderFlex overflow', (tester) async {
       await pumpHome(tester, const Size(320, 700));
       expect(tester.takeException(), isNull,
-          reason: 'hero / 心情胶囊 / 动态卡在 320 宽不得溢出');
+          reason: 'stats 三格 / hero / 动态卡在 320 宽不得溢出');
     });
   });
 }

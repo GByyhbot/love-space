@@ -61,7 +61,6 @@ class MediaImageView extends ConsumerWidget {
     this.size = 180,
     this.width,
     this.height,
-    this.borderRadius,
   });
   final String mid;
   final double size;
@@ -71,25 +70,17 @@ class MediaImageView extends ConsumerWidget {
   final double? width;
   final double? height;
 
-  /// 推广段一：时光页媒体格圆角 12（style.css:602-604/:1434）；不传沿用
-  /// AppRadius.sm（聊天侧零变化）。
-  final BorderRadius? borderRadius;
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final w = width ?? size;
     final h = height ?? size;
-    final radius = borderRadius ?? BorderRadius.circular(AppRadius.sm);
     final base = ref.watch(chatBaseProvider).valueOrNull;
     if (base == null) {
-      final placeholder = MediaPlaceholder(size: w, height: h);
-      return borderRadius == null
-          ? placeholder
-          : ClipRRect(borderRadius: radius, child: placeholder);
+      return MediaPlaceholder(size: w, height: h);
     }
     final headers = ref.watch(mediaCookieHeadersProvider).valueOrNull;
     return ClipRRect(
-      borderRadius: radius,
+      borderRadius: BorderRadius.circular(AppRadius.sm),
       child: CachedNetworkImage(
         imageUrl: mediaUrl(base, mid),
         httpHeaders: headers,

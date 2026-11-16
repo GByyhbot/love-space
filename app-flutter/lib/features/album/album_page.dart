@@ -112,7 +112,7 @@ class _AlbumPageState extends ConsumerState<AlbumPage> {
             child: const Icon(Icons.add_a_photo_rounded),
           ),
           body: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            _heading(context, st.selectedAlbum),
+            _heading(context),
             _viewTabs(context, st),
             if (st.view == AlbumView.byAlbum) _albumCoverRow(context, st),
             Expanded(child: _body(context, st)),
@@ -128,47 +128,15 @@ class _AlbumPageState extends ConsumerState<AlbumPage> {
     showComposerSheet(context, initialAlbum: selectedAlbum);
   }
 
-  Widget _heading(BuildContext context, String selectedAlbum) {
+  Widget _heading(BuildContext context) {
     final theme = Theme.of(context);
-    final cs = theme.colorScheme;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
-      child: Row(children: [
-        Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('把喜欢的瞬间，装进口袋', style: theme.textTheme.headlineSmall),
-            Text('每一张照片，都是我们走过的日子。',
-                style: theme.textTheme.bodySmall?.copyWith(color: cs.outline)),
-          ]),
-        ),
-        const SizedBox(width: 8),
-        // 推广段一：Web 页头主按钮 pill（--radius-pill 999，style.css:132/:293；
-        // .button.primary 柔光 :253-254）。上传仍走原 _openUpload，功能零变化。
-        InkWell(
-          onTap: () => _openUpload(context, selectedAlbum),
-          borderRadius: BorderRadius.circular(999),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-            decoration: BoxDecoration(
-              color: cs.primary,
-              borderRadius: BorderRadius.circular(999),
-              boxShadow: [
-                BoxShadow(
-                  color: cs.primary.withValues(alpha: 0.35),
-                  blurRadius: 14,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: Row(mainAxisSize: MainAxisSize.min, children: [
-              Icon(Icons.add_a_photo_rounded, size: 18, color: cs.onPrimary),
-              const SizedBox(width: 6),
-              Text('上传照片',
-                  style: theme.textTheme.labelLarge?.copyWith(
-                      color: cs.onPrimary, fontWeight: FontWeight.w600)),
-            ]),
-          ),
-        ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text('把喜欢的瞬间，装进口袋', style: theme.textTheme.headlineSmall),
+        Text('每一张照片，都是我们走过的日子。',
+            style: theme.textTheme.bodySmall
+                ?.copyWith(color: theme.colorScheme.outline)),
       ]),
     );
   }
@@ -190,27 +158,9 @@ class _AlbumPageState extends ConsumerState<AlbumPage> {
         ],
         selected: {st.view},
         showSelectedIcon: false,
-        // 推广段一：Web `.tabs button.active` 口径（style.css:337）——
-        // soft 底 + primary 1px 描边 + primary-dark（→primary）字 600。
         style: ButtonStyle(
-          visualDensity: VisualDensity.compact,
-          textStyle: WidgetStateProperty.resolveWith((s) =>
-              theme.textTheme.labelMedium?.copyWith(
-                  fontWeight: s.contains(WidgetState.selected)
-                      ? FontWeight.w600
-                      : FontWeight.w400)),
-          backgroundColor: WidgetStateProperty.resolveWith((s) =>
-              s.contains(WidgetState.selected)
-                  ? theme.colorScheme.primaryContainer
-                  : null),
-          foregroundColor: WidgetStateProperty.resolveWith((s) =>
-              s.contains(WidgetState.selected)
-                  ? theme.colorScheme.primary
-                  : theme.colorScheme.onSurface),
-          side: WidgetStateProperty.resolveWith((s) => s.contains(WidgetState.selected)
-              ? BorderSide(color: theme.colorScheme.primary)
-              : BorderSide(color: theme.colorScheme.outlineVariant)),
-        ),
+            visualDensity: VisualDensity.compact,
+            textStyle: WidgetStateProperty.all(theme.textTheme.labelMedium)),
         onSelectionChanged: (s) => ref
             .read(albumControllerProvider.notifier)
             .setView(s.first),
@@ -331,7 +281,7 @@ class _AlbumPageState extends ConsumerState<AlbumPage> {
                 coverMid: album.cover,
                 slot: 'album_cover_${album.id}',
                 placeholder: coverPlaceholder,
-                borderRadius: 12, // 照片块圆角 12（style.css:1434；试点口径）
+                borderRadius: 10,
               ),
               Positioned(
                 top: -4,
@@ -611,20 +561,11 @@ class _AlbumPageState extends ConsumerState<AlbumPage> {
         itemCount: groups.length,
         itemBuilder: (_, gi) {
           final g = groups[gi];
-          final gTheme = Theme.of(context);
-          final gcs = gTheme.colorScheme;
           return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 10),
-              // 推广段一：Web .album-group-head 左 3px primary 竖线 +
-              // primary-dark 标题（style.css:626；App primary-dark→primary 映射）
-              child: Row(children: [
-                Container(width: 3, height: 16, color: gcs.primary),
-                const SizedBox(width: 8),
-                Text(g.label,
-                    style: gTheme.textTheme.titleSmall
-                        ?.copyWith(color: gcs.primary)),
-              ]),
+              child: Text(g.label,
+                  style: Theme.of(context).textTheme.titleSmall),
             ),
             for (final row in chunkPhotosForGrid(g.photos))
               Padding(
@@ -691,7 +632,7 @@ class _AlbumPageState extends ConsumerState<AlbumPage> {
           crossAxisCount: 3, mainAxisSpacing: 8, crossAxisSpacing: 8),
       itemBuilder: (_, i) => Container(
         decoration: BoxDecoration(
-            color: c, borderRadius: BorderRadius.circular(12)), // 照片块 12（:1434）
+            color: c, borderRadius: BorderRadius.circular(AppRadius.sm)),
       ),
     );
   }
@@ -750,7 +691,7 @@ class _Thumb extends ConsumerWidget {
               });
         },
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(12), // 照片块 12（style.css:1434）
+          borderRadius: BorderRadius.circular(AppRadius.sm),
           child: CachedNetworkImage(
             imageUrl: mediaUrl(base, item.id),
             httpHeaders: headers,
@@ -799,7 +740,7 @@ class _VideoThumb extends ConsumerWidget {
           : () => Navigator.of(context).push(MaterialPageRoute<void>(
               builder: (_) => VideoPlayerPage(mid: item.id))),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(12), // 视频瓦片 12（style.css:1434）
+        borderRadius: BorderRadius.circular(AppRadius.sm),
         child: Stack(fit: StackFit.expand, children: [
           CachedNetworkImage(
             imageUrl: mediaUrl(base, item.id, preview: false, poster: true),

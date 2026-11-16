@@ -17,7 +17,6 @@ import '../../core/together/together_data.dart';
 import '../settings/settings_state.dart' show spaceEditRequestedProvider;
 import 'together_controller.dart';
 import '../../core/theme/tokens.dart';
-import '../shell/web_chrome.dart' show webSerifStyle;
 
 class TogetherPage extends ConsumerStatefulWidget {
   const TogetherPage({super.key, required this.active});
@@ -80,11 +79,7 @@ class _TogetherPageState extends ConsumerState<TogetherPage> {
                 const _PeriodEntryCard(),
                 const SizedBox(height: 12),
                 _AnniversaryCard(ann: ann),
-                const SizedBox(height: 16),
-                // 推广段一：工具区从纵向列表卡改 2 列宫格（Web app.js:1229
-                // tools-grid / style.css:1078-1083：radius 20 白卡 + emoji +
-                // 标题 + 诗意副题）。卡片顺序、去向、数量零变化，仅呈现层重排。
-                _twoColumnGrid([
+                const SizedBox(height: 12),
                 _toolCard(
                   context,
                   emoji: '🗓️',
@@ -162,7 +157,6 @@ class _TogetherPageState extends ConsumerState<TogetherPage> {
                   desc: '把这一周，收进一封小小的信',
                   route: '/together/weekly',
                 ),
-                ]), // 工具区 2 列宫格闭合（11 张卡全保留）
                 // 「数据管理与通知渠道」章 段 A：hub 底部「⚙️ 设置」8 张卡
                 //（对齐 app.js:1229 settings-tools 8 卡顺序）；第 7 张
                 // 「🔔 提醒设置」在邀请另一半入住之后、全部设置之前，
@@ -170,8 +164,6 @@ class _TogetherPageState extends ConsumerState<TogetherPage> {
                 const SizedBox(height: 18),
                 _settingsHeading(theme),
                 const SizedBox(height: Spacing.gap),
-                // 推广段一：设置区同改 2 列宫格（8 张卡顺序/key/去向零变化）。
-                _twoColumnGrid([
                 _settingsCard(
                   context,
                   key: 'settings-hub-space',
@@ -240,7 +232,6 @@ class _TogetherPageState extends ConsumerState<TogetherPage> {
                   desc: '主题、背景、链路检测与检查更新',
                   onTap: () => context.push('/settings'),
                 ),
-                ]), // 设置区 2 列宫格闭合（8 张卡全保留）
                 if (st.error != null) ...[
                   const SizedBox(height: 12),
                   Text(
@@ -256,23 +247,6 @@ class _TogetherPageState extends ConsumerState<TogetherPage> {
         ), // RefreshIndicator
       ), // Scaffold
     ); // SafeArea
-  }
-
-  /// 推广段一：2 列宫格容器（手机档形态，Web tools-grid ≤1150 两列）。
-  /// 只负责把既有卡片按两列重排，不改任何卡片的去向/key/数量/顺序。
-  /// 用 LayoutBuilder 拿可用宽，等分两列（gap 10，Spacing.gap+2）。
-  Widget _twoColumnGrid(List<Widget> cards) {
-    const gap = 10.0;
-    return LayoutBuilder(builder: (context, c) {
-      final cell = (c.maxWidth - gap) / 2;
-      return Wrap(
-        spacing: gap,
-        runSpacing: gap,
-        children: [
-          for (final card in cards) SizedBox(width: cell, child: card),
-        ],
-      );
-    });
   }
 
   /// `app.js:1229` `settings-section-heading`「⚙️ 设置」。
@@ -295,38 +269,38 @@ class _TogetherPageState extends ConsumerState<TogetherPage> {
   }) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    // 推广段一：宫格卡（style.css:1079 .tool-card radius 20 / padding 16 /
-    // surface 白卡 / 1px line；:1081 emoji fs-xl 24 + margin-bottom 8；
-    // :1082 h3 fs-body 15 margin-bottom 3；:1083 p fs-sm 12 muted）。
-    // key/onTap/文案全部原样，只换呈现形态（Row 列表 → Column 宫格）。
-    return Card(
-      margin: EdgeInsets.zero,
-      color: cs.surface,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
-        side: BorderSide(color: cs.outlineVariant),
-      ),
-      child: InkWell(
-        key: Key(key),
-        borderRadius: BorderRadius.circular(20),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(emoji, style: const TextStyle(fontSize: 24)),
-              const SizedBox(height: 8),
-              Text(title, style: theme.textTheme.titleSmall),
-              const SizedBox(height: 3),
-              Text(
-                desc,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.bodySmall?.copyWith(color: cs.outline),
-              ),
-            ],
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Card(
+        margin: EdgeInsets.zero,
+        child: InkWell(
+          key: Key(key),
+          borderRadius: BorderRadius.circular(AppRadius.card),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            child: Row(
+              children: [
+                Text(emoji, style: const TextStyle(fontSize: 24)),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(title, style: theme.textTheme.titleSmall),
+                      const SizedBox(height: 2),
+                      Text(
+                        desc,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: cs.outline,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(Icons.chevron_right_rounded, color: cs.outline),
+              ],
+            ),
           ),
         ),
       ),
@@ -345,36 +319,37 @@ class _TogetherPageState extends ConsumerState<TogetherPage> {
   }) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    // 推广段一：宫格卡（同设置卡，style.css:1079-1083）。
-    // emoji/fs 24 + title + 诗意副题；route/onTap 原样，不预放死卡。
-    return Card(
-      margin: EdgeInsets.zero,
-      color: cs.surface,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
-        side: BorderSide(color: cs.outlineVariant),
-      ),
-      child: InkWell(
-        key: Key('tool-$route'),
-        borderRadius: BorderRadius.circular(20),
-        onTap: () => context.push(route),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(emoji, style: const TextStyle(fontSize: 24)),
-              const SizedBox(height: 8),
-              Text(title, style: theme.textTheme.titleSmall),
-              const SizedBox(height: 3),
-              Text(
-                desc,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.bodySmall?.copyWith(color: cs.outline),
-              ),
-            ],
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Card(
+        margin: EdgeInsets.zero,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(AppRadius.card),
+          onTap: () => context.push(route),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            child: Row(
+              children: [
+                Text(emoji, style: const TextStyle(fontSize: 26)),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(title, style: theme.textTheme.titleMedium),
+                      const SizedBox(height: 2),
+                      Text(
+                        desc,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: cs.outline,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(Icons.chevron_right_rounded, color: cs.outline),
+              ],
+            ),
           ),
         ),
       ),
@@ -396,30 +371,13 @@ class _PeriodEntryCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    // 推广段一：生理期 wide 卡补 120° 渐变底（Web .tool-card-wide
-    // `linear-gradient(120deg,var(--soft),var(--surface) 64%)`，style.css:1085；
-    // 手机档 tool 卡 radius 沿用 20 —— 盘点表 hero/宫格卡口径）。
-    // 深色走同一 colorScheme.primaryContainer→surface 渐变，随明暗换。
     return Card(
       margin: EdgeInsets.zero,
-      color: cs.surface,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
-        side: BorderSide(color: cs.outlineVariant),
-      ),
+      color: cs.primaryContainer,
       child: InkWell(
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(AppRadius.card),
         onTap: () => context.push('/period'),
-        child: Container(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [cs.primaryContainer, cs.surface],
-              stops: const [0, 0.64],
-            ),
-            borderRadius: BorderRadius.circular(20),
-          ),
+        child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
           child: Row(
             children: [
@@ -432,20 +390,20 @@ class _PeriodEntryCard extends StatelessWidget {
                     Text(
                       '生理期',
                       style: theme.textTheme.titleMedium?.copyWith(
-                        color: cs.onSurface,
+                        color: cs.onPrimaryContainer,
                       ),
                     ),
                     const SizedBox(height: 2),
                     Text(
                       '记下周期，把照顾提前一点',
                       style: theme.textTheme.bodySmall?.copyWith(
-                        color: cs.onSurfaceVariant,
+                        color: cs.onPrimaryContainer,
                       ),
                     ),
                   ],
                 ),
               ),
-              Icon(Icons.chevron_right_rounded, color: cs.onSurfaceVariant),
+              Icon(Icons.chevron_right_rounded, color: cs.onPrimaryContainer),
             ],
           ),
         ),
@@ -483,9 +441,9 @@ class _AnniversaryCard extends StatelessWidget {
                   children: [
                     Text(
                       '${a.days}',
-                      // 推广段一：纪念日大数字改 serif 档（盘点表 2.5：
-                      // serif 24px 档，style.css:479 系；字族 webSerifStyle）。
-                      style: webSerifStyle(24, color: cs.primary),
+                      style: theme.textTheme.headlineMedium?.copyWith(
+                        color: cs.primary,
+                      ),
                     ),
                     const SizedBox(width: 8),
                     Expanded(
