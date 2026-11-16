@@ -60,6 +60,13 @@ class ChromeColors {
   /// nav 选中胶囊底（--soft）：浅取 M3 [ColorScheme.primaryContainer]
   /// （--soft 的最近语义档），夜 `rgba(255,255,255,.14)` 显式值。
   /// 出处 style.css:2699（浅=--soft）/:2746（夜覆盖）。
+  /// 2.3.6 Dock 顶部把手色（主人效果图，语义与 dockLine 同族）：
+  /// 浅 = onSurface 系 rgba(28,22,30,.30)（dockBg 浅底上的实色线），
+  /// 夜 = rgba(255,255,255,.34)（夜玻璃上的白线）。
+  Color get dockHandle => _light
+      ? const Color(0x4D1C161E) // .30×255≈77=0x4D
+      : const Color(0x57FFFFFF); // .34×255≈87=0x57
+
   Color get navPillBg => _light
       ? scheme.primaryContainer
       : const Color(0x24FFFFFF); // .14×255≈36=0x24
@@ -158,11 +165,22 @@ abstract final class ChromeMetrics {
   static const double navLabelSize = 11;
 
   /// 中央 + 钮 46×46、图标 22、阴影 `0 4px 14px`。
-  /// 出处 style.css:2747-2749。
+  /// 出处 style.css:2747-2749。2.3.6 起钮已移除（上滑抽屉替代），尺寸档保留。
   static const double fabSize = 46;
   static const double fabIconSize = 22;
   static const double fabShadowOffsetY = 4;
   static const double fabShadowBlur = 14;
+
+  /// 2.3.6 Dock 顶部把手：38×4.5 短横线（主人效果图拍板），把手行高 14
+  /// （把手 4.5 + 上下呼吸空间）。把手与上滑手势都属 Dock 自身，
+  /// 热区严格限于 Dock 边界内（冻结事故红线：不做覆盖正文的独立浮层）。
+  static const double dockHandleWidth = 38;
+  static const double dockHandleHeight = 4.5;
+  static const double dockHandleRow = 14;
+
+  /// Dock 上滑开抽屉阈值：累计位移 ≥48px 或上滑速度 ≥500px/s。
+  static const double drawerDragDistance = 48;
+  static const double drawerDragVelocity = 500;
 
   /// 顶栏圆钮 42×42、图标 19、钮组间距 9（手机档）。出处 style.css:279/:284/:1399。
   static const double topBtnSize = 42;
@@ -175,9 +193,9 @@ abstract final class ChromeMetrics {
   /// 未读角标 min-width 17。出处 style.css:286。
   static const double badgeMinWidth = 17;
 
-  /// 滚动主体底部让位 104（Web `.main` 手机档 padding-bottom）。
-  /// 出处 style.css:2750。
-  static const double contentBottom = 104;
+  /// 滚动主体底部让位 116（2.3.6：Dock 加把手行后总高 72 = 6*2+14+46，
+  /// 原 104 按 +12 复核上调）。
+  static const double contentBottom = 116;
 
   /// 页头：副题与标题间距 5、页头与首卡间距 16。出处 style.css:343/:342。
   static const double headingSubGap = 5;
@@ -226,17 +244,19 @@ ColorFilter _saturateFilter(double amount) => ColorFilter.matrix(<double>[
 ///
 /// 🔴 tab 结构红线：仍五 tab（首页/时光/相册/我们/角落），IndexedStack 与
 /// 手势零变化；本组件只画 chrome，不持有任何页面。
-class WebDock extends StatelessWidget {
+class WebDock extends StatefulWidget {
   const WebDock({
     super.key,
     required this.currentIndex,
     required this.onTab,
-    required this.onCompose,
+    required this.onOpenDrawer,
   });
 
   final int currentIndex;
   final ValueChanged<int> onTab;
-  final VoidCallback onCompose;
+
+  /// 2.3.6：原 onCompose（+ 钮）改为开抽屉回调（把手点击 / Dock 上滑）。
+  final VoidCallback onOpenDrawer;
 
   static const List<(int, IconData, String)> _tabs = <(int, IconData, String)>[
     (0, Icons.home_rounded, '首页'),
@@ -247,31 +267,49 @@ class WebDock extends StatelessWidget {
   ];
 
   @override
+  State<WebDock> createState() => _WebDockState();
+}
+
+class _WebDockState extends State<WebDock> {
+  // 上滑累计位移（开抽屉阈值见 ChromeMetrics.drawerDragDistance）。
+  double _dragDy = 0;
+
+  void _onDragUpdate(DragUpdateDetails d) {
+    // 只累计向上的位移；向下滑回正不触发。
+    _dragDy = (_dragDy + d.delta.dy).clamp(-1000.0, 0.0);
+  }
+
+  void _onDragEnd(DragEndDetails d) {
+    final crossed = _dragDy <= -ChromeMetrics.drawerDragDistance ||
+        d.velocity.pixelsPerSecond.dy <= -ChromeMetrics.drawerDragVelocity;
+    _dragDy = 0;
+    if (crossed) widget.onOpenDrawer();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colors = ChromeColors.of(theme);
-    // 中央 + 钮屏幕居中：左右两个 Expanded 等宽（左 2 tab / 右 3 tab），
-    // 与旧 BottomAppBar「缺口恒在屏幕正中」语义一致。
-    Widget navGroup(List<(int, IconData, String)> group) => Expanded(
-          child: Row(
-            children: <Widget>[
-              for (final tab in group) Expanded(child: _navItem(context, tab, colors)),
-            ],
-          ),
-        );
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(ChromeMetrics.dockRadius),
-        boxShadow: <BoxShadow>[
-          BoxShadow(
-            color: colors.dockShadow,
-            offset: Offset(0, ChromeMetrics.dockShadowOffsetY),
-            blurRadius: ChromeMetrics.dockShadowBlur,
-          ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(ChromeMetrics.dockRadius),
+    // 2.3.6：+ 钮移除，五 tab 严格等宽（Expanded ×5）；顶部把手行 +
+    // Dock 整体上滑手势（ GestureDetector 挂 Dock 容器内——冻结事故红线：
+    // 手势热区严格限于 Dock 边界内，不做覆盖正文的独立浮层）。
+    return GestureDetector(
+      behavior: HitTestBehavior.deferToChild,
+      onVerticalDragUpdate: _onDragUpdate,
+      onVerticalDragEnd: _onDragEnd,
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(ChromeMetrics.dockRadius),
+          boxShadow: <BoxShadow>[
+            BoxShadow(
+              color: colors.dockShadow,
+              offset: Offset(0, ChromeMetrics.dockShadowOffsetY),
+              blurRadius: ChromeMetrics.dockShadowBlur,
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(ChromeMetrics.dockRadius),
           // 毛玻璃只静态区纪律：BackdropFilter 全 lib 仅此一处（试点定案）。
           child: BackdropFilter(
             filter: ImageFilter.compose(
@@ -281,19 +319,46 @@ class WebDock extends StatelessWidget {
               ),
               inner: _saturateFilter(ChromeMetrics.dockSaturation),
             ),
-          child: Container(
-            padding: const EdgeInsets.all(ChromeMetrics.dockPadding),
-            decoration: BoxDecoration(
-              color: colors.dockBg,
-              borderRadius: BorderRadius.circular(ChromeMetrics.dockRadius),
-              border: Border.all(color: colors.dockLine),
-            ),
-            child: Row(
-              children: <Widget>[
-                navGroup(_tabs.sublist(0, 2)),
-                _composeButton(context, colors),
-                navGroup(_tabs.sublist(2)),
-              ],
+            child: Container(
+              padding: const EdgeInsets.all(ChromeMetrics.dockPadding),
+              decoration: BoxDecoration(
+                color: colors.dockBg,
+                borderRadius: BorderRadius.circular(ChromeMetrics.dockRadius),
+                border: Border.all(color: colors.dockLine),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  // 把手行：38×4.5 短横线居中，点击即开抽屉（热区=整行，
+                  // 行属 Dock 容器内部，不越界）。
+                  SizedBox(
+                    key: const Key('shell-dock-handle'),
+                    height: ChromeMetrics.dockHandleRow,
+                    width: double.infinity,
+                    child: Center(
+                      child: InkWell(
+                        onTap: widget.onOpenDrawer,
+                        borderRadius: BorderRadius.circular(99),
+                        child: Container(
+                          width: ChromeMetrics.dockHandleWidth,
+                          height: ChromeMetrics.dockHandleHeight,
+                          decoration: BoxDecoration(
+                            color: colors.dockHandle,
+                            borderRadius: BorderRadius.circular(99),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Row(
+                    children: <Widget>[
+                      for (final tab in WebDock._tabs)
+                        Expanded(child: _navItem(context, tab, colors)),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -309,14 +374,14 @@ class WebDock extends StatelessWidget {
     ChromeColors colors,
   ) {
     final cs = Theme.of(context).colorScheme;
-    final active = tab.$1 == currentIndex;
+    final active = tab.$1 == widget.currentIndex;
     final fg = active ? cs.primary : cs.outline;
     return Material(
       color: Colors.transparent,
       child: InkWell(
         key: Key('shell-nav-${tab.$1}'),
         borderRadius: BorderRadius.circular(ChromeMetrics.navItemRadius),
-        onTap: () => onTab(tab.$1),
+        onTap: () => widget.onTab(tab.$1),
         child: AnimatedContainer(
           duration: Motion.base,
           curve: Curves.easeOut,
@@ -347,52 +412,6 @@ class WebDock extends StatelessWidget {
                   ),
                 ),
               ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  /// 中央 + 钮：46×46 圆形 primary 底、plus 图标 22 白、阴影 0 4px 14px .24；
-  /// 嵌 Dock 行内居中（Web 实读口径，不凸出无凹口）。行为由外层注入。
-  Widget _composeButton(BuildContext context, ChromeColors colors) {
-    final cs = Theme.of(context).colorScheme;
-    return SizedBox(
-      width: ChromeMetrics.fabSize,
-      child: Center(
-        child: Container(
-          key: const Key('shell-compose-fab'),
-          width: ChromeMetrics.fabSize,
-          height: ChromeMetrics.fabSize,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: cs.primary,
-            boxShadow: <BoxShadow>[
-              BoxShadow(
-                color: colors.fabShadow,
-                offset: Offset(0, ChromeMetrics.fabShadowOffsetY),
-                blurRadius: ChromeMetrics.fabShadowBlur,
-              ),
-            ],
-          ),
-          child: Material(
-            color: Colors.transparent,
-            shape: const CircleBorder(),
-            clipBehavior: Clip.antiAlias,
-            child: Tooltip(
-              message: '记录此刻',
-              child: InkWell(
-                onTap: onCompose,
-                customBorder: const CircleBorder(),
-                child: Center(
-                  child: Icon(
-                    Icons.add_rounded,
-                    size: ChromeMetrics.fabIconSize,
-                    color: cs.onPrimary,
-                  ),
-                ),
-              ),
             ),
           ),
         ),

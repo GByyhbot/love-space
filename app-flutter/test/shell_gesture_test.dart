@@ -1,14 +1,13 @@
-/* 2.3.4 防回归常驻断言（针对 2.3.2 回退教训）：
-   🔴 真机事故：2.3.2 (78ab1f2) 装机后首页主体 tap/滚动全部无反应（真机复现，
-   被吞范围 = IndexedStack[0] 首页；Dock / 时光页 / 顶栏 / 弹层全部正常）。
-   根因定性见交付小结（diff 复盘：78ab1f2 无手势结构变化，现象在 2.3.1 基线
-   已存在——试点段验收仅视觉图证、未做手势点测而漏检）。
+/* 2.3.4 起防回归常驻断言（针对 2.3.2 回退教训），2.3.6 适配 Dock 改版：
+   🔴 真机事故：2.3.2 装机后首页主体 tap/滚动全部无反应（根因定性见 2.3.5
+   小结：主人最终裁定元凶为「最近的小美好」动态卡区，已摘除）。
 
    本文件固化不变量：壳层浮层（WebDock + BackdropFilter）在位时——
-   ① Dock 自身手势可用（nav 切 tab、+ 钮开 composer）；
-   ② 首页主体手势可用（动态卡 tap → onGoTab 切页、ListView drag 滚动）。
+   ① Dock 自身手势可用（五 tab 切换、把手/上滑开抽屉、抽屉点项到达目标）；
+   ② 首页主体手势可用（hero tap 弹层、命中路径无浮层截获）；
+   ③ 2.3.5 形态护栏（动态卡区保持摘除、today 双格与每日一句在位）。
    本段及以后每段（视觉/UI 改动）都必须带着本文件跑；任何改动若引入
-   「覆盖主体的透明拦截层」，此处 tap/drag 断言会立即失败。 */
+   「覆盖主体的透明拦截层」或破坏 Dock 手势边界，此处断言立即失败。 */
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -17,6 +16,7 @@ import 'package:flutter/gestures.dart' show HitTestResult;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:love_space/core/api/api_client.dart' as api;
 import 'package:love_space/core/chat/chat_media.dart'
     show chatBaseProvider, mediaCookieHeadersProvider;
@@ -55,28 +55,6 @@ Map<String, Object> _me() => {
       'unread': 0,
       'chat_unread': 0,
     };
-
-/// 12 条 post：保证首页 ListView 内容超一屏，drag 滚动断言有位移空间。
-List<Object> _posts() => List<Object>.generate(12, (i) {
-      return {
-        'id': 'p$i',
-        'kind': 'post',
-        'author': 'u2',
-        'body': <String, dynamic>{
-          'date': '2026-11-14',
-          'title': '动态标题$i',
-          'content': '动态正文$i',
-          'media': <String>[],
-        },
-        'created': 1791195587.0 + i,
-        'updated': 1791195587.0 + i,
-        'published': null,
-        'client_id': 'cid-p$i',
-        'media': <Object>[],
-        'likes': <Object>[],
-        'comments': <Object>[],
-      };
-    });
 
 Future<ProviderContainer> _container(_Adapter adapter) async {
   final dio = Dio(BaseOptions(baseUrl: 'https://test.local'))
@@ -124,10 +102,54 @@ Future<void> _pumpShell(WidgetTester tester, ProviderContainer container,
   await tester.pump();
 }
 
+/// GoRouter 版 pump：抽屉六格路由映射断言需要真实路由（stub 目标页）。
+Future<void> _pumpShellRouter(
+    WidgetTester tester, ProviderContainer container) async {
+  tester.view.devicePixelRatio = 1.0;
+  tester.view.physicalSize = const Size(393, 800);
+  addTearDown(tester.view.reset);
+  final router = GoRouter(initialLocation: '/', routes: [
+    GoRoute(path: '/', builder: (_, _) => const ShellPage()),
+    GoRoute(
+        path: '/together/mood',
+        builder: (_, _) => const Scaffold(body: Text('MOOD_PAGE'))),
+    GoRoute(
+        path: '/personal/diary-form',
+        builder: (_, _) => const Scaffold(body: Text('DIARY_FORM'))),
+    GoRoute(
+        path: '/personal/surprise-form',
+        builder: (_, _) => const Scaffold(body: Text('SURPRISE_FORM'))),
+    GoRoute(
+        path: '/together/ledger',
+        builder: (_, _) => const Scaffold(body: Text('LEDGER_PAGE'))),
+  ]);
+  addTearDown(router.dispose);
+  await tester.pumpWidget(UncontrolledProviderScope(
+    container: container,
+    child: MaterialApp.router(routerConfig: router),
+  ));
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 120));
+  await tester.pump();
+}
+
+/// 打开抽屉（点把手）并等待 sheet 动画稳定。
+Future<void> _openDrawer(WidgetTester tester) async {
+  await tester.tap(find.byKey(const Key('shell-dock-handle')));
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 400));
+}
+
+/// 走完 timeline 防抖等 pending timer（480ms），避免收尾 timersPending。
+Future<void> _drainTimers(WidgetTester tester) async {
+  await tester.pump(const Duration(seconds: 2));
+}
+
 void main() {
-  // ── ① 壳层浮层自身手势 ────────────────────────────────────────────
-  group('壳层浮层自身手势（Dock nav / + 钮）', () {
-    testWidgets('nav「时光」tap → IndexedStack 切页 index=1', (tester) async {
+  // ── ① Dock 自身手势（nav / 把手 / 上滑抽屉）─────────────────────────
+  group('Dock 手势（nav 五 tab / 把手 / 上滑开抽屉）', () {
+    testWidgets('五 tab 逐个 tap 切换（IndexedStack index 跟随）',
+        (tester) async {
       final adapter = _Adapter((o, i) {
         if (o.uri.path == '/api/me') return _json(_me());
         return _json(<Object>[]);
@@ -135,28 +157,104 @@ void main() {
       final container = await _container(adapter);
       await _pumpShell(tester, container);
       expect(find.byType(BackdropFilter), findsOneWidget,
-          reason: '前置：壳层浮层（Dock 玻璃）在位——本组断言在浮层存在时生效');
-      await tester.tap(find.text('时光'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 50));
-      expect(
-          tester.widget<IndexedStack>(find.byType(IndexedStack).first).index,
-          1,
-          reason: 'Dock nav 必须可点（浮层不得吞自身手势）');
+          reason: '前置：壳层浮层（Dock 玻璃）在位');
+      for (final (i, label) in [
+        (1, '时光'),
+        (2, '相册'),
+        (3, '我们'),
+        (4, '角落'),
+        (0, '首页'),
+      ]) {
+        await tester.tap(find.text(label));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 60));
+        expect(
+            tester
+                .widget<IndexedStack>(find.byType(IndexedStack).first)
+                .index,
+            i,
+            reason: '五 tab 逐个可点切换（$label → index=$i）');
+      }
+      await _drainTimers(tester);
     });
 
-    testWidgets('中央 + 钮 tap → 发布弹层「记录此刻」', (tester) async {
+    testWidgets('点把手 → 发布抽屉出现（六格在位）', (tester) async {
       final adapter = _Adapter((o, i) {
         if (o.uri.path == '/api/me') return _json(_me());
         return _json(<Object>[]);
       });
       final container = await _container(adapter);
-      await _pumpShell(tester, container, size: const Size(800, 600));
-      await tester.tap(find.byKey(const Key('shell-compose-fab')));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
+      await _pumpShell(tester, container);
+      await _openDrawer(tester);
       expect(find.text('记录此刻'), findsOneWidget,
-          reason: '+ 钮行为链不回归（showComposerSheet）');
+          reason: '抽屉标题在位');
+      for (final label in ['发动态', '传照片', '记心情', '写日记', '留惊喜', '记一笔']) {
+        expect(find.text(label), findsOneWidget,
+            reason: '类型快捷格 3×2：$label 在位');
+      }
+      await _drainTimers(tester);
+    });
+
+    testWidgets('抽屉点「发动态」→ 关抽屉 + composer「记录此刻」到达',
+        (tester) async {
+      final adapter = _Adapter((o, i) {
+        if (o.uri.path == '/api/me') return _json(_me());
+        return _json(<Object>[]);
+      });
+      final container = await _container(adapter);
+      await _pumpShell(tester, container);
+      await _openDrawer(tester);
+      await tester.tap(find.byKey(const Key('drawer-item-post')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.text('发动态'), findsNothing,
+          reason: '抽屉先关闭');
+      expect(find.text('记录此刻'), findsOneWidget,
+          reason: 'composer 与原 + 钮流程同一代码路径到达');
+      await _drainTimers(tester);
+    });
+
+    testWidgets('Dock 上滑（快滑越阈值）→ 抽屉出现', (tester) async {
+      final adapter = _Adapter((o, i) {
+        if (o.uri.path == '/api/me') return _json(_me());
+        return _json(<Object>[]);
+      });
+      final container = await _container(adapter);
+      await _pumpShell(tester, container);
+      await tester.fling(find.byKey(const Key('shell-dock')),
+          const Offset(0, -220), 1200);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.text('记录此刻'), findsOneWidget,
+          reason: '🔴 Dock 上滑开抽屉（手势挂 Dock 容器自身，上滑越阈值触发）');
+      await _drainTimers(tester);
+    });
+
+    testWidgets('六格映射：心情/日记/惊喜/账本 → 各自既有入口页',
+        (tester) async {
+      final adapter = _Adapter((o, i) {
+        if (o.uri.path == '/api/me') return _json(_me());
+        return _json(<Object>[]);
+      });
+      final container = await _container(adapter);
+      // 现弹层唯一 kind=post（表单无 emoji/publish_at/金额字段），故四格
+      // 跳各自既有入口页——以现弹层为唯一事实（数据流/请求零变化）。
+      final cases = <(String, String)>[
+        ('drawer-item-mood', 'MOOD_PAGE'),
+        ('drawer-item-diary', 'DIARY_FORM'),
+        ('drawer-item-surprise', 'SURPRISE_FORM'),
+        ('drawer-item-ledger', 'LEDGER_PAGE'),
+      ];
+      for (final (itemKey, stub) in cases) {
+        await _pumpShellRouter(tester, container);
+        await _openDrawer(tester);
+        await tester.tap(find.byKey(Key(itemKey)));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
+        expect(find.text(stub), findsOneWidget,
+            reason: '$itemKey → $stub（既有入口页到达）');
+        await _drainTimers(tester);
+      }
     });
   });
 
@@ -175,8 +273,7 @@ void main() {
       expect(find.text('今天的心情'), findsOneWidget);
       expect(find.text('最近纪念日'), findsOneWidget);
       expect(find.text('今天的一句'), findsOneWidget);
-      // 走完 timeline 防抖等 pending timer（480ms），避免收尾 timersPending
-      await tester.pump(const Duration(seconds: 2));
+      await _drainTimers(tester);
     });
 
     testWidgets('hero 卡 tap → 弹「空间信息」编辑层', (tester) async {
@@ -184,7 +281,7 @@ void main() {
         if (o.uri.path == '/api/me') return _json(_me());
         if (o.uri.path == '/api/records') {
           final kind = o.uri.queryParameters['kind'] ?? '';
-          return _json(kind.contains(',') ? _posts().take(1).toList() : <Object>[]);
+          return _json(kind.contains(',') ? <Object>[] : <Object>[]);
         }
         return _json(<String, Object>{});
       });
@@ -197,27 +294,23 @@ void main() {
       await tester.pump(const Duration(milliseconds: 300));
       expect(find.text('空间信息'), findsOneWidget,
           reason: '🔴 首页主体 tap 必须生效（浮层不得吞主体手势）');
+      await _drainTimers(tester);
     });
 
     testWidgets('主体区命中路径不被浮层截获（BackdropFilter 不得出现）', (tester) async {
       final adapter = _Adapter((o, i) {
         if (o.uri.path == '/api/me') return _json(_me());
-        if (o.uri.path == '/api/records') {
-          final kind = o.uri.queryParameters['kind'] ?? '';
-          return _json(kind.contains(',') ? _posts().take(1).toList() : <Object>[]);
-        }
+        if (o.uri.path == '/api/records') return _json(<Object>[]);
         return _json(<String, Object>{});
       });
       final container = await _container(adapter);
       await _pumpShell(tester, container);
       // 机制映射：真机「首页主体点不动滑不动」的直接机制 = 透明浮层覆盖主体，
-      // 其命中路径必经浮层的 RenderBackdropFilter。对主体区（hero 下方
-      // ListView 区 y=400）做底层命中测试：若浮层覆盖主体，BackdropFilter
-      // 会出现在命中路径里 → 立即失败。tap 生效由 hero 用例独立断言。
-      // 走完 timeline 防抖等 pending timer（480ms），避免收尾 timersPending
-      await tester.pump(const Duration(seconds: 2));
+      // 其命中路径必经浮层的 RenderBackdropFilter。对主体区做底层命中测试。
+      await _drainTimers(tester);
       final result = HitTestResult();
-      tester.binding.renderViews.first.hitTest(result, position: const Offset(196, 400));
+      tester.binding.renderViews.first.hitTest(
+          result, position: const Offset(196, 400));
       final names = result.path
           .map((e) => e.target.runtimeType.toString())
           .toList(growable: false);

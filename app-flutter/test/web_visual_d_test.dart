@@ -204,16 +204,21 @@ void main() {
           UncontrolledProviderScope(container: container, child: const MaterialApp(home: ShellPage())));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
-      // 行为红线：+ 钮与试点前同一调用链（shell_page.dart onCompose →
-      // showComposerSheet，弹层标题「记录此刻」，composer_sheet.dart:635）
-      await tester.tap(find.byKey(const Key('shell-compose-fab')));
+      // 行为红线（2.3.6 Dock 改版）：把手 → 抽屉 → 发动态 → composer 弹层，
+      // 与原 + 钮同一 composer 调用链（showComposerSheet）。
+      await tester.tap(find.byKey(const Key('shell-dock-handle')));
       await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.text('发动态'), findsOneWidget,
+          reason: '发布抽屉出现（六格 3×2）');
+      await tester.tap(find.byKey(const Key('drawer-item-post')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
       expect(find.text('记录此刻'), findsOneWidget,
-          reason: '+ 钮点击必须打开发布弹层（showComposerSheet）');
+          reason: '抽屉点「发动态」必须到达 composer 弹层（同一调用链）');
     });
 
-    testWidgets('真实 ShellPage：Dock 浮层在位、+ 钮 46×46、五 tab 可切', (tester) async {
+    testWidgets('真实 ShellPage：Dock 浮层在位、把手在位、五 tab 可切', (tester) async {
       final adapter = _Adapter((o, i) {
         if (o.uri.path == '/api/me') return _json(_me());
         return _json(<Object>[]);
@@ -238,12 +243,9 @@ void main() {
       expect(positioned.left, 10);
       expect(positioned.right, 10);
       expect(positioned.bottom, 10);
-      // + 钮 46×46 圆形、plus 图标（style.css:2747-2749）
-      expect(find.byKey(const Key('shell-compose-fab')), findsOneWidget);
-      final fabSize = tester.getSize(find.byKey(const Key('shell-compose-fab')));
-      expect(fabSize.width, 46);
-      expect(fabSize.height, 46);
-      expect(find.byIcon(Icons.add_rounded), findsOneWidget);
+      // 2.3.6：+ 钮已移除、顶部把手在位（38×4.5，属 Dock 组件自身）
+      expect(find.byKey(const Key('shell-compose-fab')), findsNothing);
+      expect(find.byKey(const Key('shell-dock-handle')), findsOneWidget);
       // 五 tab 仍在（红线：不许 4 tab），IndexedStack 五页
       for (final label in ['首页', '时光', '相册', '我们', '角落']) {
         expect(find.text(label), findsWidgets, reason: '$label 入口存在');

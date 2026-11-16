@@ -40,6 +40,10 @@ Future<void> showComposerSheet(
   String? initialContent,
   List<String>? initialMediaIds,
   String? initialAlbum,
+
+  /// 2.3.6（发布抽屉「传照片」）：打开弹层后自动触发图/视频选择一次——
+  /// 即现弹层「图/视频」入口的既有行为，仅省一次手点；null/false 零变化。
+  bool autoPickMedia = false,
 }) {
   return showModalBottomSheet<void>(
     context: context,
@@ -52,6 +56,7 @@ Future<void> showComposerSheet(
       initialContent: initialContent,
       initialMediaIds: initialMediaIds,
       initialAlbum: initialAlbum,
+      autoPickMedia: autoPickMedia,
     ),
   );
 }
@@ -79,8 +84,12 @@ class ComposerSheet extends ConsumerStatefulWidget {
     this.initialContent,
     this.initialMediaIds,
     this.initialAlbum,
+    this.autoPickMedia = false,
   });
   final Record? editRecord;
+
+  /// 2.3.6（发布抽屉「传照片」）：首帧后自动触发一次图/视频选择。
+  final bool autoPickMedia;
 
   /// 编辑态强制 PUT kind（草稿箱继续编辑 = 'draft'）
   final String? editKind;
@@ -155,6 +164,13 @@ class _ComposerSheetState extends ConsumerState<ComposerSheet> {
     // 监听字段变化，自动暂存（编辑态不写暂存，避免污染草稿文件）
     _title.addListener(_onFieldChanged);
     _content.addListener(_onFieldChanged);
+    // 2.3.6（发布抽屉「传照片」）：首帧稳定后自动触发一次图/视频选择——
+    // 即「图/视频」入口的既有行为，仅省一次手点。
+    if (widget.autoPickMedia) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _pickImageVideo();
+      });
+    }
   }
 
   /// C2 编辑预填：从服务器拉到的原始 body 逐键回填（保留未知字段作为提交底），

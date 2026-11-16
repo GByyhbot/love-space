@@ -293,13 +293,12 @@ void main() {
       final stack = tester.widget<IndexedStack>(find.byType(IndexedStack).first);
       expect(stack.index, 4);
       expect(stack.children.length, 5);
-      // 2.3.1 chrome 浮层重构（方案 A）：BottomAppBar/centerDocked 已移除，
-      // 底栏为悬浮 Dock（距边 10、radius 24、玻璃 blur18）+ 中央 46×46 + 钮，
-      // 五 tab 仍在、+ 钮屏幕居中（左右 Expanded 等宽）。
+      // 2.3.6 Dock 改版（主人拍板）：+ 钮移除、五 tab 严格等宽、顶部把手；
+      // 底栏仍为悬浮 Dock（距边 10、radius 24、玻璃 blur18）。
       expect(find.byType(BottomAppBar), findsNothing,
           reason: 'bottomNavigationBar 已置 null，不再有贴边底栏');
       expect(find.byType(FloatingActionButton), findsNothing,
-          reason: '旧 M3 FAB 已移除，中央 + 钮并入 Dock');
+          reason: '旧 M3 FAB 已移除');
       expect(find.byKey(const Key('shell-dock')), findsOneWidget);
       final positioned = tester
           .widgetList<Positioned>(find.ancestor(
@@ -308,10 +307,20 @@ void main() {
           .first;
       expect(positioned.left, 10, reason: 'Dock 距左 10px（style.css:2738）');
       expect(positioned.right, 10, reason: 'Dock 距右 10px（style.css:2738）');
-      expect(find.byKey(const Key('shell-compose-fab')), findsOneWidget);
-      final fabSize = tester.getSize(find.byKey(const Key('shell-compose-fab')));
-      expect(fabSize.width, 46, reason: '+ 钮 46×46（style.css:2747）');
-      expect(fabSize.height, 46);
+      // 🔴 冻结事故红线：+ 钮已移除且不得回归；把手属 Dock 自身（38×4.5）
+      expect(find.byKey(const Key('shell-compose-fab')), findsNothing,
+          reason: '+ 钮已移除（上滑抽屉替代，2.3.6）');
+      expect(find.byKey(const Key('shell-dock-handle')), findsOneWidget,
+          reason: 'Dock 顶部把手在位（38×4.5，属 Dock 组件自身）');
+      // 五 tab 严格等宽：五个 Expanded nav 项宽度一致
+      final navWidths = <double>[];
+      for (var i = 0; i < 5; i++) {
+        navWidths.add(tester
+            .getSize(find.byKey(Key('shell-nav-$i')))
+            .width);
+      }
+      expect(navWidths.toSet().length, 1,
+          reason: '五 tab 严格等宽（Expanded ×5）');
       // 扫宽后的六档也要求 Dock 玻璃静态区存在（BackdropFilter 仅 Dock 一处）
       expect(find.byType(BackdropFilter), findsOneWidget);
     });

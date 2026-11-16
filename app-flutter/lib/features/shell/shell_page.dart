@@ -21,6 +21,7 @@ import '../home/home_page.dart';
 import '../notify/system_unread_provider.dart';
 import '../personal/personal_page.dart';
 import '../timeline/composer_sheet.dart';
+import 'composer_drawer.dart';
 import '../timeline/timeline_page.dart';
 import '../together/together_page.dart';
 import 'web_chrome.dart';
@@ -132,7 +133,26 @@ class _ShellPageState extends ConsumerState<ShellPage> {
                 key: const Key('shell-dock'),
                 currentIndex: _tab,
                 onTab: (tab) => setState(() => _tab = tab),
-                onCompose: () => showComposerSheet(context),
+                onOpenDrawer: () => showComposerDrawerSheet(context,
+                    onPick: (action) {
+                  switch (action) {
+                    // 发动态/传照片：composer 弹层原链（同一代码路径，
+                    // 传照片 = composer 打开即自动触发图/视频选择）。
+                    case ComposerDrawerAction.post:
+                      showComposerSheet(context);
+                    case ComposerDrawerAction.photo:
+                      showComposerSheet(context, autoPickMedia: true);
+                    // 其余四项：各自既有入口页（数据流/请求零变化）。
+                    case ComposerDrawerAction.mood:
+                      context.push('/together/mood');
+                    case ComposerDrawerAction.diary:
+                      context.push('/personal/diary-form');
+                    case ComposerDrawerAction.surprise:
+                      context.push('/personal/surprise-form');
+                    case ComposerDrawerAction.ledger:
+                      context.push('/together/ledger');
+                  }
+                }),
               ),
             ),
           ],
