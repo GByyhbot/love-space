@@ -368,12 +368,11 @@ void main() {
       for (var i = 0; i < 3; i++) {
         expect(find.byKey(Key('home-stat-$i')), findsNothing);
       }
-      // 动态卡 radius 17（Web 手机档 .card，style.css:1421）
-      expect(find.byKey(const Key('home-recent-card')), findsOneWidget);
-      expect(radiusOf(tester, const Key('home-recent-card')).topLeft.x, 17);
-      // 每日一句与「最近的小美好」仍在
+      // 2.3.5（主人裁定）：「最近的小美好」动态卡区保持摘除（吞首页手势）
+      expect(find.byKey(const Key('home-recent-card')), findsNothing);
+      expect(find.text('最近的小美好'), findsNothing);
+      // 每日一句仍在
       expect(find.text('今天的一句'), findsOneWidget);
-      expect(find.text('最近的小美好'), findsOneWidget);
     });
 
     testWidgets('320×700 窄屏零 RenderFlex overflow', (tester) async {

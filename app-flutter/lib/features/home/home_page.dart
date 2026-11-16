@@ -111,6 +111,11 @@ class HomePage extends ConsumerWidget {
       return const AppProgress();
     }
 
+    // 2.3.5（紧急 BugFix，主人真机点测拍板）：摘除「最近的小美好」动态卡区。
+    // 🔴 主人最终裁定：问题出在动态卡（最近的小美好），心情与纪念日双格保留。
+    // 首页构成：页头 → hero → today 双格 → 每日一句。
+    // 真机二分实验链：C1 空页可点 → C3 hero 可点 → C4 纪念日格可点 →
+    // C5 起含动态卡后 tap/drag 失效 → C8 摘动态卡 drag 恢复 → 本形态。
     return records.when(
       loading: () => const AppProgress(),
       error: (e, _) => Center(
@@ -146,15 +151,16 @@ class HomePage extends ConsumerWidget {
             const SizedBox(height: 14), // today-card margin-bottom 14（:1414）
             _DailyQuote(theme: theme),
             const SizedBox(height: 18), // daily-quote margin-bottom 18（:1906）
-            Text('最近的小美好', style: theme.textTheme.titleMedium),
-            const SizedBox(height: Spacing.gap),
-            ..._recentPosts(context, me, list, onGoTab: onGoTab),
+            // 2.3.5：「最近的小美好」动态卡区摘除（主人裁定吞首页手势）——
+            // 完整动态与互动仍在时光页；_recentPosts 保留待复用。
+            // ListView 尾部留白保持 104（Dock 让位）.
           ],
         ),
       ),
     );
   }
 
+  // ignore: unused_element
   List<Widget> _recentPosts(
     BuildContext context,
     MeData me,

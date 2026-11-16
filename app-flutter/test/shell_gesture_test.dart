@@ -162,6 +162,23 @@ void main() {
 
   // ── ② 首页主体手势（本防回归核心）────────────────────────────────
   group('首页主体手势（浮层在位时不得被吞）', () {
+    testWidgets('2.3.5 形态护栏：动态卡区已摘除（主人裁定吞手势）', (tester) async {
+      final adapter = _Adapter((o, i) {
+        if (o.uri.path == '/api/me') return _json(_me());
+        return _json(<Object>[]); // 空列表（records 解析须为 List，否则进错误态）
+      });
+      final container = await _container(adapter);
+      await _pumpShell(tester, container);
+      expect(find.byKey(const Key('home-recent-card')), findsNothing,
+          reason: '🔴 「最近的小美好」动态卡区保持摘除（主人 2.3.5 裁定）');
+      // today 双格与每日一句仍在位
+      expect(find.text('今天的心情'), findsOneWidget);
+      expect(find.text('最近纪念日'), findsOneWidget);
+      expect(find.text('今天的一句'), findsOneWidget);
+      // 走完 timeline 防抖等 pending timer（480ms），避免收尾 timersPending
+      await tester.pump(const Duration(seconds: 2));
+    });
+
     testWidgets('hero 卡 tap → 弹「空间信息」编辑层', (tester) async {
       final adapter = _Adapter((o, i) {
         if (o.uri.path == '/api/me') return _json(_me());

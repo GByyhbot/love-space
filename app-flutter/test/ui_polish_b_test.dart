@@ -112,6 +112,7 @@ final _periodRecords = <Map<String, dynamic>>[
   _periodRec('ep2', 2, 5),
 ];
 
+  // ignore: unused_element
 api.Record _postRecord() => api.Record(
       id: 'p1',
       kind: 'post',
@@ -210,6 +211,7 @@ Future<void> _settle(WidgetTester tester) async {
 
 // ── S1：首页「最近的小美好」长昵称 overflow ───────────────────────────────
 
+  // ignore: unused_element
 ProviderContainer _homeContainer(Dio dio) {
   final c = ProviderContainer(overrides: <Override>[
     api.dioProvider.overrideWith((ref) async => dio),
@@ -226,6 +228,7 @@ ProviderContainer _homeContainer(Dio dio) {
   return c;
 }
 
+  // ignore: unused_element
 void _expectRecentCardOk(WidgetTester tester) {
   // 零 RenderFlex overflow（长昵称被 Expanded+ellipsis 截断，不挤出日期）
   expect(tester.takeException(), isNull);
@@ -237,6 +240,7 @@ void _expectRecentCardOk(WidgetTester tester) {
 
 /// 2.3.1 首页 1:1 还原后新增页头/hero 光晕/stats 三格/today 双格，内容变高：
 /// 320×700 等窄屏下动态卡在折叠线下方（ListView 惰性构建），先滚到它再断言。
+  // ignore: unused_element
 Future<void> _revealRecentCard(WidgetTester tester) async {
   for (var i = 0;
       i < 8 && find.text(_postRecord().date).evaluate().isEmpty;
@@ -246,6 +250,7 @@ Future<void> _revealRecentCard(WidgetTester tester) async {
   }
 }
 
+  // ignore: unused_element
 Future<void> _pumpHomeAt(
     WidgetTester tester, ProviderContainer c, Size size) async {
   tester.view.physicalSize = size;
@@ -255,22 +260,17 @@ Future<void> _pumpHomeAt(
 }
 
 void main() {
-  testWidgets('S1 长昵称：默认 393×852 宽零 overflow、日期可见',
-      (WidgetTester tester) async {
-    final c = _homeContainer(_dioWith(<Map<String, dynamic>>[]));
-    await _pumpHomeAt(tester, c, const Size(393, 852));
-    await _settle(tester);
-    await _revealRecentCard(tester);
-    _expectRecentCardOk(tester);
-  });
-
-  testWidgets('S1 长昵称：320×700 窄屏形态零 overflow、日期可见',
-      (WidgetTester tester) async {
-    final c = _homeContainer(_dioWith(<Map<String, dynamic>>[]));
-    await _pumpHomeAt(tester, c, const Size(320, 700));
-    await _settle(tester);
-    await _revealRecentCard(tester);
-    _expectRecentCardOk(tester);
+  // 2.3.5：「最近的小美好」动态卡区摘除（主人裁定吞首页手势），S1 widget
+  // 场景随卡下线；S1/S2 修复代码保留（下方 helper 同保留），改为源码级护栏
+  // 防回退（未来恢复动态卡时重建 widget 断言）。
+  test('S1/S2 修复护栏：_recentCard Expanded+ellipsis 与心情行 Flexible 不回退', () {
+    final src = File('lib/features/home/home_page.dart').readAsStringSync();
+    expect(
+        RegExp(r'Expanded\s*\(\s*child: Text\([\s\S]{0,220}TextOverflow\.ellipsis')
+            .hasMatch(src),
+        isTrue,
+        reason: 'S1 修复（段 B）代码必须保留，未来恢复动态卡不回退');
+    expect(src.contains('Flexible('), isTrue, reason: 'S2 心情行 Flexible 修复不回退');
   });
 
   // ── G10 / G11：经期页写死色 → colorScheme 语义色（深浅两亮度）──────────
