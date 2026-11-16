@@ -20,6 +20,7 @@ import 'period_analysis.dart';
 import 'period_charts.dart';
 import 'period_controller.dart';
 import 'period_engine.dart';
+import '../../core/theme/tokens.dart';
 
 /// 生理数据分析二级页。
 class PeriodAnalysisPage extends ConsumerStatefulWidget {
@@ -66,7 +67,7 @@ class _PeriodAnalysisPageState extends ConsumerState<PeriodAnalysisPage> {
       body: RefreshIndicator(
         onRefresh: () => ref.read(periodControllerProvider.notifier).load(),
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, Spacing.pageBottom),
           children: [
             // `:676-677` page-heading
             Text(analysisHeadingDesc,
@@ -78,7 +79,7 @@ class _PeriodAnalysisPageState extends ConsumerState<PeriodAnalysisPage> {
             else ...[
               _overview(context, view.overview!),
               for (final s in view.sections) _section(context, s, view),
-              const SizedBox(height: 8),
+              const SizedBox(height: Spacing.gap),
               Text(analysisFoot,
                   style: theme.textTheme.bodySmall
                       ?.copyWith(color: cs.outline)),
@@ -99,7 +100,7 @@ class _PeriodAnalysisPageState extends ConsumerState<PeriodAnalysisPage> {
   Widget _emptyCard(BuildContext context, ColorScheme cs) => Card(
         margin: EdgeInsets.zero,
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(Spacing.cardPad),
           child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -125,7 +126,7 @@ class _PeriodAnalysisPageState extends ConsumerState<PeriodAnalysisPage> {
     return Card(
       margin: EdgeInsets.zero,
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(Spacing.cardPad),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
             _ScoreRing(degrees: deg, label: o.ringLabel),
@@ -139,7 +140,7 @@ class _PeriodAnalysisPageState extends ConsumerState<PeriodAnalysisPage> {
                     Text(o.note,
                         style: theme.textTheme.bodySmall
                             ?.copyWith(color: cs.outline)),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: Spacing.gap),
                     ClipRRect(
                       borderRadius: BorderRadius.circular(4),
                       child: LinearProgressIndicator(
@@ -168,7 +169,7 @@ class _PeriodAnalysisPageState extends ConsumerState<PeriodAnalysisPage> {
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
                 color: cs.errorContainer.withValues(alpha: 0.35),
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(AppRadius.sm),
               ),
               child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -262,7 +263,7 @@ class _PeriodAnalysisPageState extends ConsumerState<PeriodAnalysisPage> {
     return Card(
       margin: const EdgeInsets.only(top: 12),
       child: Padding(
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.all(Spacing.cardPad),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [
             Expanded(
@@ -319,8 +320,7 @@ class _PeriodAnalysisPageState extends ConsumerState<PeriodAnalysisPage> {
                     )),
                 const SizedBox(height: 2),
                 Text(c.wd,
-                    style: TextStyle(
-                      fontSize: 10,
+                    style: theme.textTheme.labelSmall?.copyWith(
                       color: c.cls == 'on'
                           ? cs.onPrimary
                           : c.cls == 'soft'
@@ -331,7 +331,7 @@ class _PeriodAnalysisPageState extends ConsumerState<PeriodAnalysisPage> {
             ),
           ),
       ]),
-      const SizedBox(height: 8),
+      const SizedBox(height: Spacing.gap),
       _legendChips(context, const ['预测开始日', '可能的开始日']),
     ]);
   }
@@ -372,7 +372,7 @@ class _PeriodAnalysisPageState extends ConsumerState<PeriodAnalysisPage> {
         ),
       Text(c.mini,
           style: theme.textTheme.labelSmall?.copyWith(color: cs.outline)),
-      const SizedBox(height: 8),
+      const SizedBox(height: Spacing.gap),
       for (final r in c.rows)
         Padding(
           padding: const EdgeInsets.only(bottom: 6),
@@ -429,9 +429,9 @@ class _PeriodAnalysisPageState extends ConsumerState<PeriodAnalysisPage> {
               borderRadius: BorderRadius.circular(8),
             ),
             child: Text(tag,
-                style: TextStyle(
-                    fontSize: 10,
-                    color: normal ? cs.onTertiaryContainer : cs.onErrorContainer)),
+                style: theme.textTheme.labelSmall?.copyWith(
+                    color:
+                        normal ? cs.onTertiaryContainer : cs.onErrorContainer)),
           ),
         ],
       ]),
@@ -450,10 +450,10 @@ class _PeriodAnalysisPageState extends ConsumerState<PeriodAnalysisPage> {
         Expanded(
             child: _kpi(context, '和上个周期', l.kpi.diffText, null, true)),
       ]),
-      const SizedBox(height: 6),
+      const SizedBox(height: Spacing.gapTight),
       Text(l.mini,
           style: theme.textTheme.labelSmall?.copyWith(color: cs.outline)),
-      const SizedBox(height: 8),
+      const SizedBox(height: Spacing.gap),
       PaChart(svg: chart),
     ]);
   }
@@ -469,7 +469,7 @@ class _PeriodAnalysisPageState extends ConsumerState<PeriodAnalysisPage> {
       ], style: theme.textTheme.bodySmall)),
       const SizedBox(height: 10),
       PaChart(svg: svg),
-      const SizedBox(height: 8),
+      const SizedBox(height: Spacing.gap),
       _legendChips(context, const ['本周期', '近半年', '未记录']),
     ]);
   }
@@ -478,7 +478,7 @@ class _PeriodAnalysisPageState extends ConsumerState<PeriodAnalysisPage> {
   Widget _dots(BuildContext context, List<PaDotRow> rows, String? legend) =>
       Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         PaDotMatrix(rows: rows),
-        const SizedBox(height: 6),
+        const SizedBox(height: Spacing.gapTight),
         _dotLegend(context, rows, legend),
       ]);
 
@@ -503,7 +503,11 @@ class _PeriodAnalysisPageState extends ConsumerState<PeriodAnalysisPage> {
               decoration: BoxDecoration(
                   color: _dotColor(e.key, cs), shape: BoxShape.circle)),
           const SizedBox(width: 4),
-          Text(e.value, style: TextStyle(fontSize: 10, color: cs.outline)),
+          Text(e.value,
+              style: Theme.of(context)
+                  .textTheme
+                  .labelSmall
+                  ?.copyWith(color: cs.outline)),
         ]),
       Row(mainAxisSize: MainAxisSize.min, children: [
         Container(
@@ -514,7 +518,11 @@ class _PeriodAnalysisPageState extends ConsumerState<PeriodAnalysisPage> {
               border: Border.all(color: cs.outlineVariant)),
         ),
         const SizedBox(width: 4),
-        Text('未记录', style: TextStyle(fontSize: 10, color: cs.outline)),
+        Text('未记录',
+            style: Theme.of(context)
+                .textTheme
+                .labelSmall
+                ?.copyWith(color: cs.outline)),
       ]),
     ]);
   }
@@ -564,15 +572,18 @@ class _PeriodAnalysisPageState extends ConsumerState<PeriodAnalysisPage> {
           Chip(
             avatar: Text(c.emoji, style: const TextStyle(fontSize: 14)),
             label: Text('${c.name}  ${c.n}',
-                style: const TextStyle(fontSize: 11)),
+                style: Theme.of(context).textTheme.labelSmall),
             visualDensity: VisualDensity.compact,
             backgroundColor: cs.surfaceContainerHighest,
           ),
       ]),
       if (total != null) ...[
-        const SizedBox(height: 6),
+        const SizedBox(height: Spacing.gapTight),
         Text('共 $total 次心情记录',
-            style: TextStyle(fontSize: 11, color: cs.outline)),
+            style: Theme.of(context)
+                .textTheme
+                .labelSmall
+                ?.copyWith(color: cs.outline)),
       ],
     ]);
   }
@@ -583,10 +594,10 @@ class _PeriodAnalysisPageState extends ConsumerState<PeriodAnalysisPage> {
     final cs = theme.colorScheme;
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Text(view.sexLine ?? '', style: theme.textTheme.bodySmall),
-      const SizedBox(height: 6),
+      const SizedBox(height: Spacing.gapTight),
       Text('近 6 个月',
           style: theme.textTheme.labelSmall?.copyWith(color: cs.outline)),
-      const SizedBox(height: 8),
+      const SizedBox(height: Spacing.gap),
       PaChart(svg: view.monthlyChart!),
     ]);
   }
@@ -607,7 +618,11 @@ class _PeriodAnalysisPageState extends ConsumerState<PeriodAnalysisPage> {
             ),
           ),
           const SizedBox(width: 4),
-          Text(labels[i], style: TextStyle(fontSize: 10, color: cs.outline)),
+          Text(labels[i],
+              style: Theme.of(context)
+                  .textTheme
+                  .labelSmall
+                  ?.copyWith(color: cs.outline)),
         ]),
     ]);
   }

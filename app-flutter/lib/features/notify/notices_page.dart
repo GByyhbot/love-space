@@ -28,6 +28,7 @@ import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
 import 'notify_api.dart';
 import 'notify_models.dart';
 import 'notify_widgets.dart';
+import '../../core/theme/tokens.dart';
 
 class NoticesPage extends ConsumerStatefulWidget {
   const NoticesPage({super.key});
@@ -182,7 +183,7 @@ class _NoticesPageState extends ConsumerState<NoticesPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
             Text(n.title),
-            const SizedBox(height: 8),
+            const SizedBox(height: Spacing.gap),
             Text(
               '${eventLabel(n.event)} · ${noticeTimeLabel(n.created)}',
               style: Theme.of(ctx).textTheme.bodySmall,
@@ -225,7 +226,7 @@ class _NoticesPageState extends ConsumerState<NoticesPage> {
         onRefresh: _load,
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, Spacing.pageBottom),
           children: <Widget>[
             const NotifyInfoCard(
               title: '每一份回应，都值得被看见',

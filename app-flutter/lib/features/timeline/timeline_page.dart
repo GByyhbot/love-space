@@ -16,6 +16,7 @@ import '../auth/auth_state.dart';
 import 'composer_sheet.dart';
 import 'post_card.dart';
 import 'timeline_controller.dart';
+import '../../core/theme/tokens.dart';
 
 class TimelinePage extends ConsumerStatefulWidget {
   const TimelinePage({super.key, required this.active});
@@ -139,10 +140,10 @@ class _TimelinePageState extends ConsumerState<TimelinePage> {
             hintText: '搜索我们的故事…',
             prefixIcon: Icon(Icons.search_rounded),
             isDense: true,
-            border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(12))),
+            border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(AppRadius.card))),
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: Spacing.gap),
         Row(children: [
           // 作者筛选（两个人的时光 / 各自）
           Expanded(
@@ -200,7 +201,7 @@ class _TimelinePageState extends ConsumerState<TimelinePage> {
           ),
         ]),
         if (f.isActive) ...[
-          const SizedBox(height: 8),
+          const SizedBox(height: Spacing.gap),
           Wrap(spacing: 6, runSpacing: 6, crossAxisAlignment: WrapCrossAlignment.center, children: [
             if (f.q.isNotEmpty) _chip(theme, '“${f.q}”'),
             if (f.author.isNotEmpty)
@@ -246,7 +247,7 @@ class _TimelinePageState extends ConsumerState<TimelinePage> {
           const SizedBox(height: 12),
           Text(filtered ? '没有符合条件的记录' : '这一页，留给新的故事',
               style: theme.textTheme.titleMedium),
-          const SizedBox(height: 6),
+          const SizedBox(height: Spacing.gapTight),
           Text(
               filtered ? '换个条件，或清除筛选再试试。' : '可以发照片、文字、视频，或者留下一段声音。',
               style: theme.textTheme.bodySmall
@@ -265,7 +266,13 @@ class _TimelinePageState extends ConsumerState<TimelinePage> {
       child: ListView.builder(
         controller: _scroll,
         physics: const AlwaysScrollableScrollPhysics(),
-        itemCount: chat.posts.length + (chat.hasMore ? 1 : 0) + (chat.loading && !chat.hasMore ? 1 : 0),
+        // 🔴 G19 附带修复（原逻辑缺陷）：原 itemCount 只在 hasMore 或
+        // loading&&!hasMore 时留尾槽，而「没有更多了」页脚要求
+        // !hasMore && posts.isNotEmpty —— 恰好不占任何槽位 → 页脚在
+        // 正常到底态永远不可达（真机从不出现）。补齐槽位还原页脚意图：
+        // hasMore → 加载更多 spinner；!hasMore 且有内容 → 页脚。
+        itemCount: chat.posts.length +
+            ((chat.hasMore || chat.posts.isNotEmpty) ? 1 : 0),
         itemBuilder: (context, i) {
           if (i < chat.posts.length) {
             return PostCard(
@@ -278,10 +285,13 @@ class _TimelinePageState extends ConsumerState<TimelinePage> {
             );
           }
           if (!chat.hasMore && chat.posts.isNotEmpty) {
-            return const Padding(
-              padding: EdgeInsets.all(16),
+            // G19（必改）：原 Colors.grey 未走主题、夜间不可控；
+            // outline 与 2.1 基线「辅助文字 = outline」同源。
+            final cs = Theme.of(context).colorScheme;
+            return Padding(
+              padding: const EdgeInsets.all(16),
               child: Center(child: Text('没有更多了',
-                  style: TextStyle(color: Colors.grey))),
+                  style: TextStyle(color: cs.outline))),
             );
           }
           return const Padding(
@@ -306,10 +316,10 @@ class _TimelinePageState extends ConsumerState<TimelinePage> {
         );
     Widget card() => Container(
           margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-          padding: const EdgeInsets.all(14),
+          padding: const EdgeInsets.all(Spacing.cardPad),
           decoration: BoxDecoration(
             color: theme.colorScheme.surfaceContainerLowest,
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(AppRadius.lg),
             border: Border.all(color: theme.colorScheme.outlineVariant),
           ),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -325,17 +335,17 @@ class _TimelinePageState extends ConsumerState<TimelinePage> {
             ]),
             const SizedBox(height: 12),
             line(120, 15),
-            const SizedBox(height: 8),
+            const SizedBox(height: Spacing.gap),
             line(double.infinity, 14),
-            const SizedBox(height: 6),
+            const SizedBox(height: Spacing.gapTight),
             line(double.infinity, 14),
-            const SizedBox(height: 6),
+            const SizedBox(height: Spacing.gapTight),
             line(200, 14),
             const SizedBox(height: 10),
             AspectRatio(aspectRatio: 16 / 10,
                 child: Container(
                     decoration: BoxDecoration(
-                        color: lineColor, borderRadius: BorderRadius.circular(10)))),
+                        color: lineColor, borderRadius: BorderRadius.circular(AppRadius.sm)))),
           ]),
         );
     return ListView(

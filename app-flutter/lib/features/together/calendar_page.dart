@@ -12,6 +12,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api/api_client.dart' as api;
 import '../../core/together/together_data.dart';
 import '../auth/auth_state.dart';
+import '../../core/theme/tokens.dart';
 
 class CalendarPage extends ConsumerStatefulWidget {
   const CalendarPage({super.key});
@@ -105,7 +106,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
       body: RefreshIndicator(
         onRefresh: _load,
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, Spacing.pageBottom),
           children: [
             // 月份导航
             Row(children: [
@@ -151,7 +152,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
                     _buildCell(theme, cs, row, col, firstWeekday, daysInMonth,
                         todayDay, dotKinds, me),
                 ]),
-              const SizedBox(height: 8),
+              const SizedBox(height: Spacing.gap),
               // 图例
               Wrap(spacing: 12, children: [
                 for (final (k, label) in dotKinds)
@@ -289,7 +290,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
       return Card(
         margin: EdgeInsets.zero,
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(Spacing.cardPad),
           child: Row(children: [
             Icon(Icons.calendar_month_rounded, color: cs.outline),
             const SizedBox(width: 10),
@@ -322,7 +323,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
     return Card(
       margin: EdgeInsets.zero,
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(Spacing.cardPad),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [
             Text('$m 月 ${int.parse(selected)} 日',
@@ -332,7 +333,7 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
                 style: theme.textTheme.labelSmall
                     ?.copyWith(color: cs.outline)),
           ]),
-          const SizedBox(height: 8),
+          const SizedBox(height: Spacing.gap),
           if (rows.isEmpty)
             Text('这一天还空着，留一段空白也挺好。',
                 style: theme.textTheme.bodySmall?.copyWith(color: cs.outline))

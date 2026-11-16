@@ -17,13 +17,14 @@ import '../../core/chat/chat_state.dart';
 import '../../core/chat/chat_wallpaper.dart';
 import '../auth/auth_state.dart';
 import 'chat_toast.dart' show ChatToastTone, chatToastProvider;
+import '../../core/theme/tokens.dart';
 
 Future<void> showWallpaperSheet(BuildContext context) {
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
     shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.lg))),
     builder: (_) => const _WallpaperSheet(),
   );
 }
@@ -96,7 +97,7 @@ class _WallpaperSheetState extends ConsumerState<_WallpaperSheet> {
       final picked = await showModalBottomSheet<String>(
         context: context,
         shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.lg))),
         builder: (ctx) => SizedBox(
           height: MediaQuery.of(ctx).size.height * 0.5,
           child: GridView.builder(
@@ -216,7 +217,7 @@ class _WallpaperSheetState extends ConsumerState<_WallpaperSheet> {
                 style: theme.textTheme.bodySmall
                     ?.copyWith(color: theme.colorScheme.outline)),
           ]),
-          const SizedBox(height: 6),
+          const SizedBox(height: Spacing.gapTight),
           Text('你们各看各的背景，互不打扰；但谁都能替对方换一张——上面选「TA 的手机」就行。',
               style: theme.textTheme.bodySmall
                   ?.copyWith(color: theme.colorScheme.outline)),
@@ -257,7 +258,7 @@ class _Swatch extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return InkWell(
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(AppRadius.sm),
       onTap: onTap,
       child: Container(
         width: 86,
@@ -266,7 +267,7 @@ class _Swatch extends StatelessWidget {
           border: Border.all(
               color: selected ? theme.colorScheme.primary : theme.colorScheme.outlineVariant,
               width: selected ? 2 : 1),
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(AppRadius.sm),
         ),
         child: Column(children: [
           Container(

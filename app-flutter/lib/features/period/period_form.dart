@@ -21,6 +21,7 @@ import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
 import 'period_actions.dart';
 import 'period_controller.dart';
 import 'period_meta.dart';
+import '../../core/theme/tokens.dart';
 
 /// 经期区间表单（新建 / 编辑）。
 class PeriodFormDialog extends ConsumerStatefulWidget {
@@ -249,14 +250,14 @@ class _PeriodFormDialogState extends ConsumerState<PeriodFormDialog> {
                   const SizedBox(height: 12),
                   Text('身体的感受（可多选）',
                       style: theme.textTheme.bodySmall),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: Spacing.gapTight),
                   Wrap(
                     spacing: 6,
                     runSpacing: 4,
                     children: [
                       for (final s in periodSymptoms)
                         FilterChip(
-                          label: Text(s, style: const TextStyle(fontSize: 12)),
+                          label: Text(s, style: theme.textTheme.bodySmall),
                           selected: _symptoms.contains(s),
                           onSelected: (_) => setState(() {
                             if (_symptoms.contains(s)) {
@@ -278,12 +279,12 @@ class _PeriodFormDialogState extends ConsumerState<PeriodFormDialog> {
                     decoration: const InputDecoration(
                         labelText: '想说的话（可选）', counterText: ''),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: Spacing.gap),
                   Text(periodFormNote,
                       style: theme.textTheme.bodySmall
                           ?.copyWith(color: cs.outline)),
                   if (_inlineError != null) ...[
-                    const SizedBox(height: 8),
+                    const SizedBox(height: Spacing.gap),
                     Text(_inlineError!,
                         style: theme.textTheme.bodySmall
                             ?.copyWith(color: cs.error)),

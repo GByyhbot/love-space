@@ -20,6 +20,7 @@ import '../../core/together/together_data.dart' show anniversaryDue;
 import '../auth/auth_state.dart';
 import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
 import '../settings/settings_state.dart' show spaceEditRequestedProvider;
+import '../../core/theme/tokens.dart';
 
 /// 今日日期（本地时区，与 Web today() 一致格式 yyyy-MM-dd）
 String todayStr() {
@@ -109,7 +110,7 @@ class HomePage extends ConsumerWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             const Text('加载失败'),
-            const SizedBox(height: 8),
+            const SizedBox(height: Spacing.gap),
             OutlinedButton(
               onPressed: () => ref.invalidate(recordsProvider),
               child: const Text('重试'),
@@ -137,7 +138,7 @@ class HomePage extends ConsumerWidget {
                 color: theme.colorScheme.surfaceContainerHighest.withValues(
                   alpha: 0.4,
                 ),
-                borderRadius: BorderRadius.circular(14),
+                borderRadius: BorderRadius.circular(AppRadius.lg),
               ),
               child: Row(
                 children: [
@@ -160,7 +161,7 @@ class HomePage extends ConsumerWidget {
             ),
             const SizedBox(height: 16),
             Text('最近的小美好', style: theme.textTheme.titleMedium),
-            const SizedBox(height: 8),
+            const SizedBox(height: Spacing.gap),
             ..._recentPosts(context, me, list, onGoTab: onGoTab),
           ],
         ),
@@ -182,10 +183,10 @@ class HomePage extends ConsumerWidget {
       return [
         Card(
           child: InkWell(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(AppRadius.card),
             onTap: () => onGoTab?.call(1), // 空态也可点：去时光页开始记录
             child: Padding(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(Spacing.cardPad),
               child: Text(
                 '故事，从这一刻开始——点这里去时光页写下第一篇。',
                 style: theme.textTheme.bodyMedium,
@@ -200,10 +201,10 @@ class HomePage extends ConsumerWidget {
       return Card(
         margin: const EdgeInsets.only(bottom: 8),
         child: InkWell(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(AppRadius.card),
           onTap: () => onGoTab?.call(1), // 详情与点赞评论在时光页（条目 4）
           child: Padding(
-            padding: const EdgeInsets.all(14),
+            padding: const EdgeInsets.all(Spacing.cardPad),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -216,16 +217,22 @@ class HomePage extends ConsumerWidget {
                         (author?.name.isEmpty ?? true)
                             ? '?'
                             : author!.name.characters.first,
-                        style: TextStyle(
-                          fontSize: 11,
+                        style: theme.textTheme.labelSmall?.copyWith(
                           color: theme.colorScheme.onPrimaryContainer,
                         ),
                       ),
                     ),
                     const SizedBox(width: 8),
-                    Text(
-                      author?.name ?? '…',
-                      style: theme.textTheme.labelLarge,
+                    // S1（必改）：昵称无 flex 时长昵称把日期挤出右边界
+                    // → RenderFlex overflow。Expanded + ellipsis 截断，
+                    // 日期恒在右侧可见；卡片信息结构不变。
+                    Expanded(
+                      child: Text(
+                        author?.name ?? '…',
+                        style: theme.textTheme.labelLarge,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                     const SizedBox(width: 8),
                     Text(
@@ -252,7 +259,7 @@ class HomePage extends ConsumerWidget {
                       style: theme.textTheme.bodyMedium,
                     ),
                   ),
-                const SizedBox(height: 6),
+                const SizedBox(height: Spacing.gapTight),
                 Row(
                   children: [
                     Icon(
@@ -274,10 +281,16 @@ class HomePage extends ConsumerWidget {
                       style: theme.textTheme.bodySmall,
                     ),
                     const Spacer(),
-                    Text(
-                      '媒体 ${r.media.length} · 完整互动在时光页（条目 4）',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.outline,
+                    // 长提示语在窄屏会挤出 Row（320 宽 +8.2px 实测）：
+                    // Flexible + ellipsis 截断，计数恒可见。
+                    Flexible(
+                      child: Text(
+                        '媒体 ${r.media.length} · 完整互动在时光页（条目 4）',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.outline,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ],
@@ -320,7 +333,7 @@ class _Hero extends ConsumerWidget {
 
     return Card(
       child: InkWell(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(AppRadius.card),
         // 已绑定：整卡可点 → 相恋日期/空间信息设置层（含编辑角标 affordance）；
         // 未绑定：点卡 → 账号资料页的邀请卡片（App 无 Web 链接入口，功能等价）
         onTap: () {
@@ -369,7 +382,7 @@ class _Hero extends ConsumerWidget {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: Spacing.gap),
                   if (me.spaceSince.isEmpty)
                     Text(
                       '点这里设置相恋日期 →',
@@ -541,12 +554,12 @@ class _TodayCard extends ConsumerWidget {
 
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(Spacing.cardPad),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text('☀ 今天的心情', style: theme.textTheme.titleSmall),
-            const SizedBox(height: 8),
+            const SizedBox(height: Spacing.gap),
             // 两人 mood 行（对齐 Web moodRows：没记可记，已记可改，对方只读展示）
             for (final u in me.users)
               _MoodRow(
@@ -564,10 +577,10 @@ class _TodayCard extends ConsumerWidget {
               ),
             const Divider(height: 24),
             Text('📅 最近纪念日', style: theme.textTheme.titleSmall),
-            const SizedBox(height: 8),
+            const SizedBox(height: Spacing.gap),
             // 整区可点 → 纪念日管理页（段 B 二级页；决策点①定案的直达接线）
             InkWell(
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(AppRadius.sm),
               onTap: () => context.push('/together/anniversary'),
               child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 4),
@@ -660,18 +673,25 @@ class _MoodRow extends ConsumerWidget {
             backgroundColor: theme.colorScheme.primaryContainer,
             child: Text(
               user.name.isEmpty ? '?' : user.name.characters.first,
-              style: TextStyle(
-                fontSize: 13,
-                color: theme.colorScheme.onPrimaryContainer,
-              ),
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(color: theme.colorScheme.onPrimaryContainer),
             ),
           ),
           const SizedBox(width: 10),
-          Text(user.name, style: theme.textTheme.labelLarge),
+          // S2：长昵称原为非 flex 子项，会把心情气泡 Expanded 压到 0 宽
+          // （静默变形）乃至把 Row 挤出右边界。Flexible + ellipsis 截断。
+          Flexible(
+            child: Text(
+              user.name,
+              style: theme.textTheme.labelLarge,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
           const SizedBox(width: 10),
           Expanded(
             child: InkWell(
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(AppRadius.lg),
               onTap: (m != null && !mine)
                   ? null // 对方的心情手记回顾在「我们」页（条目 6）
                   : () => _openMoodSheet(context, ref),
@@ -688,7 +708,7 @@ class _MoodRow extends ConsumerWidget {
                       : theme.colorScheme.surfaceContainerHighest.withValues(
                           alpha: 0.5,
                         ),
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(AppRadius.lg),
                 ),
                 child: Text(bubble, style: theme.textTheme.bodyMedium),
               ),
@@ -823,7 +843,7 @@ class _HomeCover extends ConsumerWidget {
     final z = pos is Map ? (num.tryParse((pos['z'] ?? 1).toString()) ?? 1) : 1;
     return Positioned.fill(
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(AppRadius.card),
         child: Stack(
           children: [
             Transform.scale(

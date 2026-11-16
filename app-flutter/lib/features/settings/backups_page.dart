@@ -24,6 +24,7 @@ import '../../core/api/api_client.dart' as api;
 import '../../core/timeline/timeline_data.dart' show timelineDateLabel;
 import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
 import 'backups_api.dart';
+import '../../core/theme/tokens.dart';
 
 class BackupsPage extends ConsumerStatefulWidget {
   const BackupsPage({super.key});
@@ -190,7 +191,7 @@ class _BackupsPageState extends ConsumerState<BackupsPage> {
     };
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(Spacing.cardPad),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[

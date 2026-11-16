@@ -15,6 +15,7 @@ import '../auth/auth_state.dart';
 import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
 import 'together_controller.dart';
 import 'tool_pages.dart' show ToolTile;
+import '../../core/theme/tokens.dart';
 
 class LedgerPage extends ConsumerStatefulWidget {
   const LedgerPage({super.key});
@@ -75,11 +76,11 @@ class _LedgerPageState extends ConsumerState<LedgerPage> {
       body: RefreshIndicator(
         onRefresh: () => ref.read(togetherControllerProvider.notifier).load(),
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 88),
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, Spacing.pageBottom),
           children: [
             Text('一起花的钱，也是共同生活的一部分。',
                 style: theme.textTheme.bodySmall?.copyWith(color: cs.outline)),
-            const SizedBox(height: 8),
+            const SizedBox(height: Spacing.gap),
             // 月份切换（下月封顶）
             Row(children: [
               IconButton(
@@ -103,7 +104,7 @@ class _LedgerPageState extends ConsumerState<LedgerPage> {
             Card(
               margin: EdgeInsets.zero,
               child: Padding(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(Spacing.cardPad),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(children: [
@@ -129,7 +130,7 @@ class _LedgerPageState extends ConsumerState<LedgerPage> {
                               ]),
                         ),
                       ]),
-                      const SizedBox(height: 6),
+                      const SizedBox(height: Spacing.gapTight),
                       Text('这个月 ${sum.monthCount} 笔${sum.monthCount == 0 ? '，还没记过' : ''}',
                           style: theme.textTheme.labelSmall
                               ?.copyWith(color: cs.outline)),
@@ -148,7 +149,7 @@ class _LedgerPageState extends ConsumerState<LedgerPage> {
                       // 近六个月趋势（空月占位）
                       const SizedBox(height: 10),
                       Text('最近六个月', style: theme.textTheme.titleSmall),
-                      const SizedBox(height: 6),
+                      const SizedBox(height: Spacing.gapTight),
                       Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
                         for (final (key, v) in sum.trend)
                           Expanded(
@@ -198,7 +199,7 @@ class _LedgerPageState extends ConsumerState<LedgerPage> {
                   Icon(Icons.savings_rounded, size: 44, color: cs.outline),
                   const SizedBox(height: 12),
                   Text('账本还是空的', style: theme.textTheme.titleMedium),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: Spacing.gapTight),
                   Text('一起吃的那顿饭、一起买的那张票，都值得记下来。',
                       textAlign: TextAlign.center,
                       style: theme.textTheme.bodySmall

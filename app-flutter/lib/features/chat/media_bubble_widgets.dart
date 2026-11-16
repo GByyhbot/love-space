@@ -25,6 +25,7 @@ import 'chat_toast.dart' show ChatToastTone, chatToastProvider;
 import '../../core/chat/map_launcher.dart';
 import 'video_player_page.dart';
 import 'voice_playback.dart';
+import '../../core/theme/tokens.dart';
 
 /// 统一的媒体中性占位（加载中 / 失败 / 数据未就绪）
 class MediaPlaceholder extends StatelessWidget {
@@ -42,7 +43,7 @@ class MediaPlaceholder extends StatelessWidget {
       height: height ?? size,
       decoration: BoxDecoration(
         color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(AppRadius.sm),
       ),
       alignment: Alignment.center,
       child: Text(label,
@@ -79,7 +80,7 @@ class MediaImageView extends ConsumerWidget {
     }
     final headers = ref.watch(mediaCookieHeadersProvider).valueOrNull;
     return ClipRRect(
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(AppRadius.sm),
       child: CachedNetworkImage(
         imageUrl: mediaUrl(base, mid),
         httpHeaders: headers,
@@ -106,12 +107,12 @@ class VideoCardView extends ConsumerWidget {
     if (base == null) return MediaPlaceholder(label: '[视频]', size: size);
     final headers = ref.watch(mediaCookieHeadersProvider).valueOrNull;
     return InkWell(
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(AppRadius.sm),
       onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
           builder: (_) => VideoPlayerPage(mid: mid))),
       child: Stack(children: [
         ClipRRect(
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(AppRadius.sm),
           child: CachedNetworkImage(
             imageUrl: mediaUrl(base, mid, preview: false, poster: true),
             httpHeaders: headers,
@@ -316,7 +317,7 @@ class StickerView extends ConsumerWidget {
         ? ref.watch(mediaCookieHeadersProvider).valueOrNull
         : null; // 公开静态无需 Cookie
     return ClipRRect(
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(AppRadius.sm),
       child: CachedNetworkImage(
         imageUrl: url,
         httpHeaders: headers,
@@ -384,7 +385,7 @@ class _StickerVideoState extends ConsumerState<StickerVideoView> {
       return const MediaPlaceholder(label: '[贴纸]', size: 140);
     }
     return ClipRRect(
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(AppRadius.sm),
       child: SizedBox(
         width: 140,
         height: 140,
@@ -479,7 +480,7 @@ class _SongCardViewState extends ConsumerState<SongCardView> {
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: theme.colorScheme.surface.withValues(alpha: 0.75),
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(AppRadius.sm),
         border: Border.all(color: theme.colorScheme.outlineVariant),
       ),
       child: Row(children: [

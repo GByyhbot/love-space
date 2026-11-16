@@ -17,6 +17,7 @@ import '../../core/together/together_data.dart';
 import '../auth/auth_state.dart';
 import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
 import 'together_controller.dart';
+import '../../core/theme/tokens.dart';
 
 String _createdLabel(double created) {
   if (created <= 0) return '';
@@ -65,12 +66,12 @@ class ToolScaffold extends ConsumerWidget {
       body: RefreshIndicator(
         onRefresh: () => ref.read(togetherControllerProvider.notifier).load(),
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 88),
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, Spacing.pageBottom),
           children: [
             Text(subtitle,
                 style: theme.textTheme.bodySmall
                     ?.copyWith(color: theme.colorScheme.outline)),
-            const SizedBox(height: 8),
+            const SizedBox(height: Spacing.gap),
             if (isEmpty)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 48),
@@ -79,7 +80,7 @@ class ToolScaffold extends ConsumerWidget {
                       size: 44, color: theme.colorScheme.outline),
                   const SizedBox(height: 12),
                   Text(emptyTitle, style: theme.textTheme.titleMedium),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: Spacing.gapTight),
                   Text(emptyHint,
                       textAlign: TextAlign.center,
                       style: theme.textTheme.bodySmall
@@ -144,7 +145,7 @@ class ToolTile extends ConsumerWidget {
                 },
               ),
           ]),
-          const SizedBox(height: 6),
+          const SizedBox(height: Spacing.gapTight),
           child,
         ]),
       ),

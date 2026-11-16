@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'core/album/album_data.dart' show PhotoItem;
+import 'core/theme/tokens.dart';
 import 'core/together/together_data.dart' show TogetherRecord;
 import 'features/account/profile_page.dart';
 import 'features/settings/backups_page.dart';
@@ -203,6 +204,12 @@ class LoveApp extends ConsumerWidget {
       colorScheme: ColorScheme.fromSeed(
         seedColor: seed,
         brightness: brightness,
+      ),
+      // 圆角 token 化（段 B G3）：Card 落 12 事实标准（2.1 基线），单源主题。
+      cardTheme: CardThemeData(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.card),
+        ),
       ),
       // 动效开关（space.motion）：关掉时页面转场/水波纹都退化。
       splashFactory: motion ? null : NoSplash.splashFactory,

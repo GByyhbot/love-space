@@ -25,6 +25,7 @@ import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
 import 'period_actions.dart';
 import 'period_controller.dart';
 import 'period_meta.dart';
+import '../../core/theme/tokens.dart';
 
 /// 打开某天的某个字段弹层。
 Future<void> showPeriodLogSheet(
@@ -272,7 +273,7 @@ class _PeriodLogSheetState extends ConsumerState<PeriodLogSheet> {
               const SizedBox(height: 12),
               _buildBody(theme, cs),
               if (_inlineError != null) ...[
-                const SizedBox(height: 8),
+                const SizedBox(height: Spacing.gap),
                 Text(_inlineError!,
                     style: theme.textTheme.bodySmall
                         ?.copyWith(color: cs.error)),
@@ -319,7 +320,7 @@ class _PeriodLogSheetState extends ConsumerState<PeriodLogSheet> {
           const SizedBox(height: 10),
           Text('选一下就直接保存；再点一次同一项就是清除。',
               style: theme.textTheme.bodySmall?.copyWith(color: cs.outline)),
-          const SizedBox(height: 8),
+          const SizedBox(height: Spacing.gap),
           TextButton(
               onPressed: _saving ? null : () => Navigator.of(context).pop(),
               child: const Text('取消')),
@@ -350,13 +351,13 @@ class _PeriodLogSheetState extends ConsumerState<PeriodLogSheet> {
         return Material(
           key: Key('ps-opt-${o.value}'),
           color: on ? cs.primaryContainer : cs.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(AppRadius.card),
           child: InkWell(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(AppRadius.card),
             onTap: _saving ? null : () => onTap(o),
             child: Container(
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(AppRadius.card),
                 border: Border.all(
                     color: on ? cs.primary : cs.outlineVariant,
                     width: on ? 2 : 1),
@@ -452,11 +453,11 @@ class _PeriodLogSheetState extends ConsumerState<PeriodLogSheet> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text('身体症状', style: theme.textTheme.labelLarge),
-          const SizedBox(height: 6),
+          const SizedBox(height: Spacing.gapTight),
           _symptomGrid(periodBodySymptoms, isOn, toggle, theme, cs),
           const SizedBox(height: 10),
           Text('阴道分泌物', style: theme.textTheme.labelLarge),
-          const SizedBox(height: 6),
+          const SizedBox(height: Spacing.gapTight),
           _symptomGrid(periodSecretion, isOn, toggle, theme, cs),
           const SizedBox(height: 12),
           Row(mainAxisAlignment: MainAxisAlignment.end, children: [
@@ -491,8 +492,8 @@ class _PeriodLogSheetState extends ConsumerState<PeriodLogSheet> {
         children: [
           for (final pair in src)
             FilterChip(
-              avatar: Text(pair[1], style: const TextStyle(fontSize: 13)),
-              label: Text(pair[0], style: const TextStyle(fontSize: 12)),
+              avatar: Text(pair[1], style: theme.textTheme.bodySmall),
+              label: Text(pair[0], style: theme.textTheme.bodySmall),
               selected: isOn(pair[0]),
               onSelected: _saving ? null : (_) => toggle(pair[0]),
             ),
@@ -626,7 +627,7 @@ class _PeriodLogSheetState extends ConsumerState<PeriodLogSheet> {
           ),
           const SizedBox(height: 10),
           Text('爱爱', style: theme.textTheme.labelLarge),
-          const SizedBox(height: 6),
+          const SizedBox(height: Spacing.gapTight),
           _optionGrid(
             <_Option>[
               for (var i = 0; i < periodSex.length; i++)
@@ -650,7 +651,7 @@ class _PeriodLogSheetState extends ConsumerState<PeriodLogSheet> {
           ),
           const SizedBox(height: 10),
           Text('时间', style: theme.textTheme.labelLarge),
-          const SizedBox(height: 6),
+          const SizedBox(height: Spacing.gapTight),
           Row(mainAxisAlignment: MainAxisAlignment.center, children: [
             _timeWheel(_hours, _hourCtrl, true, theme),
             const Text(':', style: TextStyle(fontSize: 22)),
@@ -756,7 +757,7 @@ class _PeriodLogSheetState extends ConsumerState<PeriodLogSheet> {
               border: OutlineInputBorder(),
             ),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: Spacing.gapTight),
           Text('日记只存在这一天里，历史卡上不会重复显示。',
               style: theme.textTheme.bodySmall?.copyWith(color: cs.outline)),
           const SizedBox(height: 10),

@@ -16,6 +16,7 @@ import '../auth/auth_state.dart';
 import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
 import 'together_controller.dart';
 import 'tool_pages.dart' show ToolTile;
+import '../../core/theme/tokens.dart';
 
 // ── 情侣问答 ──────────────────────────────────────────────────────
 class QuestionPage extends ConsumerStatefulWidget {
@@ -50,12 +51,12 @@ class _QuestionPageState extends ConsumerState<QuestionPage> {
       body: RefreshIndicator(
         onRefresh: () => ref.read(togetherControllerProvider.notifier).load(),
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 88),
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, Spacing.pageBottom),
           children: [
             Text('可以写下自己的问题，也可以从内置题目里挑一个。双方回答后才揭晓彼此的答案。',
                 style: theme.textTheme.bodySmall
                     ?.copyWith(color: theme.colorScheme.outline)),
-            const SizedBox(height: 8),
+            const SizedBox(height: Spacing.gap),
             if (questions.isEmpty)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 48),
@@ -65,7 +66,7 @@ class _QuestionPageState extends ConsumerState<QuestionPage> {
                   const SizedBox(height: 12),
                   Text('给我们，多一点小小的仪式感',
                       style: theme.textTheme.titleMedium),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: Spacing.gapTight),
                   Text('每天再多了解彼此一点。',
                       textAlign: TextAlign.center,
                       style: theme.textTheme.bodySmall
@@ -87,7 +88,7 @@ class _QuestionPageState extends ConsumerState<QuestionPage> {
                             child: Text((r.body['content'] ?? '').toString(),
                                 style: theme.textTheme.bodySmall),
                           ),
-                        const SizedBox(height: 6),
+                        const SizedBox(height: Spacing.gapTight),
                         Text(
                           r.answerCount == 2
                               ? '两个人的答案都到齐啦'
@@ -341,12 +342,12 @@ class _HabitPageState extends ConsumerState<HabitPage> {
       body: RefreshIndicator(
         onRefresh: () => ref.read(togetherControllerProvider.notifier).load(),
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 88),
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, Spacing.pageBottom),
           children: [
             Text('和你一起，成为更好的我们。',
                 style: theme.textTheme.bodySmall
                     ?.copyWith(color: theme.colorScheme.outline)),
-            const SizedBox(height: 8),
+            const SizedBox(height: Spacing.gap),
             if (habits.isEmpty)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 48),
@@ -356,7 +357,7 @@ class _HabitPageState extends ConsumerState<HabitPage> {
                   const SizedBox(height: 12),
                   Text('给我们，多一点小小的仪式感',
                       style: theme.textTheme.titleMedium),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: Spacing.gapTight),
                   Text('立一个一起坚持的小目标。',
                       textAlign: TextAlign.center,
                       style: theme.textTheme.bodySmall
@@ -378,7 +379,7 @@ class _HabitPageState extends ConsumerState<HabitPage> {
                             child: Text((r.body['content'] ?? '').toString(),
                                 style: theme.textTheme.bodySmall),
                           ),
-                        const SizedBox(height: 6),
+                        const SizedBox(height: Spacing.gapTight),
                         // 对齐 Web recordCard habit meta（app.js:857）：
                         // 总次数 + 今天 X/2 人完成（按 author 去重）
                         Text(

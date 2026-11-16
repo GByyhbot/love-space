@@ -22,6 +22,8 @@ import '../chat/video_player_page.dart';
 import 'album_controller.dart';
 import 'album_cover_tile.dart';
 import '../timeline/composer_sheet.dart';
+import '../../core/theme/motion.dart';
+import '../../core/theme/tokens.dart';
 
 /// 网格缩略图尺寸（3 列）：cell = (屏宽 - 左右 32 - 两道 8) / 3
 double albumCellSize(double screenWidth) => (screenWidth - 32 - 16) / 3;
@@ -207,13 +209,13 @@ class _AlbumPageState extends ConsumerState<AlbumPage> {
     final cs = theme.colorScheme;
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(AppRadius.card),
       child: Container(
         width: 100,
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
           color: selected ? cs.primaryContainer : cs.surfaceContainerHighest.withValues(alpha: 0.5),
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(AppRadius.card),
           border: Border.all(
               color: selected ? cs.primary : cs.outlineVariant),
         ),
@@ -222,7 +224,7 @@ class _AlbumPageState extends ConsumerState<AlbumPage> {
             child: Container(
               decoration: BoxDecoration(
                 color: selected ? cs.onPrimaryContainer.withValues(alpha: 0.08) : cs.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(AppRadius.sm),
               ),
               child: Center(
                 child: Icon(Icons.photo_library_rounded,
@@ -230,7 +232,7 @@ class _AlbumPageState extends ConsumerState<AlbumPage> {
               ),
             ),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: Spacing.gapTight),
           Text('全部照片',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -260,13 +262,13 @@ class _AlbumPageState extends ConsumerState<AlbumPage> {
     );
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(AppRadius.card),
       child: Container(
         width: 100,
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
           color: selected ? cs.primaryContainer : cs.surfaceContainerHighest.withValues(alpha: 0.5),
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(AppRadius.card),
           border: Border.all(
               color: selected ? cs.primary : cs.outlineVariant),
         ),
@@ -307,7 +309,7 @@ class _AlbumPageState extends ConsumerState<AlbumPage> {
               ),
             ]),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: Spacing.gapTight),
           Text(album.title,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -322,13 +324,13 @@ class _AlbumPageState extends ConsumerState<AlbumPage> {
     final cs = theme.colorScheme;
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(AppRadius.card),
       child: Container(
         width: 100,
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
           color: cs.surfaceContainerHighest.withValues(alpha: 0.5),
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(AppRadius.card),
           border: Border.all(color: cs.outlineVariant, style: BorderStyle.solid),
         ),
         child: Column(children: [
@@ -336,14 +338,14 @@ class _AlbumPageState extends ConsumerState<AlbumPage> {
             child: Container(
               decoration: BoxDecoration(
                 color: cs.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(AppRadius.sm),
               ),
               child: Center(
                 child: Icon(Icons.add_rounded, size: 28, color: cs.primary),
               ),
             ),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: Spacing.gapTight),
           Text('新建相册',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -607,7 +609,7 @@ class _AlbumPageState extends ConsumerState<AlbumPage> {
         const SizedBox(height: 12),
         Text(filtered ? '这个相册还没有照片' : '还没有照片，先去记录第一刻吧',
             style: theme.textTheme.titleMedium),
-        const SizedBox(height: 6),
+        const SizedBox(height: Spacing.gapTight),
         Text(filtered ? '换个相册，或看看全部照片。' : '在时光里发一张图，就会收进这里。',
             style: theme.textTheme.bodySmall
                 ?.copyWith(color: theme.colorScheme.outline)),
@@ -630,7 +632,7 @@ class _AlbumPageState extends ConsumerState<AlbumPage> {
           crossAxisCount: 3, mainAxisSpacing: 8, crossAxisSpacing: 8),
       itemBuilder: (_, i) => Container(
         decoration: BoxDecoration(
-            color: c, borderRadius: BorderRadius.circular(10)),
+            color: c, borderRadius: BorderRadius.circular(AppRadius.sm)),
       ),
     );
   }
@@ -689,14 +691,14 @@ class _Thumb extends ConsumerWidget {
               });
         },
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(AppRadius.sm),
           child: CachedNetworkImage(
             imageUrl: mediaUrl(base, item.id),
             httpHeaders: headers,
             fit: BoxFit.cover,
             width: double.infinity,
             height: double.infinity,
-            fadeInDuration: const Duration(milliseconds: 260),
+            fadeInDuration: Motion.base,
             placeholder: (_, _) => Container(
                 color: Theme.of(context).colorScheme.surfaceContainerHighest),
             errorWidget: (_, _, _) => Container(
@@ -738,7 +740,7 @@ class _VideoThumb extends ConsumerWidget {
           : () => Navigator.of(context).push(MaterialPageRoute<void>(
               builder: (_) => VideoPlayerPage(mid: item.id))),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(AppRadius.sm),
         child: Stack(fit: StackFit.expand, children: [
           CachedNetworkImage(
             imageUrl: mediaUrl(base, item.id, preview: false, poster: true),
@@ -746,7 +748,7 @@ class _VideoThumb extends ConsumerWidget {
             fit: BoxFit.cover,
             width: double.infinity,
             height: double.infinity,
-            fadeInDuration: const Duration(milliseconds: 260),
+            fadeInDuration: Motion.base,
             placeholder: (_, _) => Container(
                 color: theme.colorScheme.surfaceContainerHighest),
             errorWidget: (_, _, _) => Container(

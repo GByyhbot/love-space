@@ -6,6 +6,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import '../../core/theme/tokens.dart';
 
 /// 服务端错误文案原文的内联错误区。
 class NotifyErrorBanner extends StatelessWidget {
@@ -21,7 +22,7 @@ class NotifyErrorBanner extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         color: cs.errorContainer,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(AppRadius.sm),
       ),
       child: Row(
         children: <Widget>[
@@ -31,7 +32,10 @@ class NotifyErrorBanner extends StatelessWidget {
             child: Text(
               text,
               key: const Key('notify-inline-error'),
-              style: TextStyle(color: cs.onErrorContainer, fontSize: 13),
+              style: Theme.of(context)
+                  .textTheme
+                  .bodySmall
+                  ?.copyWith(color: cs.onErrorContainer),
             ),
           ),
         ],
@@ -60,7 +64,7 @@ class NotifyInfoCard extends StatelessWidget {
     return Card(
       margin: const EdgeInsets.only(bottom: 14),
       child: Padding(
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.all(Spacing.cardPad),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
@@ -114,7 +118,7 @@ class NotifyEmptyCard extends StatelessWidget {
         child: Column(
           children: <Widget>[
             Text(title, style: theme.textTheme.titleSmall),
-            const SizedBox(height: 6),
+            const SizedBox(height: Spacing.gapTight),
             Text(
               detail,
               textAlign: TextAlign.center,

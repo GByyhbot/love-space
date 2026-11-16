@@ -10,6 +10,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_client.dart';
 import 'auth_state.dart';
+import '../../core/theme/tokens.dart';
 
 class LoginPage extends ConsumerStatefulWidget {
   const LoginPage({super.key});
@@ -190,7 +191,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                     Text(_error!, textAlign: TextAlign.center,
                         style: TextStyle(color: theme.colorScheme.error)),
                   ],
-                  const SizedBox(height: 6),
+                  const SizedBox(height: Spacing.gapTight),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
@@ -229,7 +230,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                     },
                     child: const Text('网络不稳？重试免登录恢复'),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: Spacing.gap),
                   Text('私密记录 · 只属于彼此', textAlign: TextAlign.center,
                       style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.outline)),
                 ],

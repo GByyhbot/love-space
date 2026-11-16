@@ -21,6 +21,7 @@ import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
 import '../chat/voice_recorder.dart';
 import 'composer_store.dart';
 import 'timeline_controller.dart';
+import '../../core/theme/tokens.dart';
 
 /// 打开 composer 弹层（页头「记录此刻」/ FAB / 聊天「记入时光」/ 编辑共用）。
 /// · [editRecord] 非空 = 编辑态（C2）：预填原记录，PUT 全量 body（原始 body
@@ -44,7 +45,7 @@ Future<void> showComposerSheet(
     context: context,
     isScrollControlled: true,
     shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.lg))),
     builder: (_) => ComposerSheet(
       editRecord: editRecord,
       editKind: editKind,
@@ -321,7 +322,7 @@ class _ComposerSheetState extends ConsumerState<ComposerSheet> {
       final picked = await showModalBottomSheet<String>(
         context: context,
         shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.lg))),
         builder: (ctx) => SizedBox(
           height: MediaQuery.of(ctx).size.height * 0.5,
           child: GridView.builder(
@@ -645,7 +646,7 @@ class _ComposerSheetState extends ConsumerState<ComposerSheet> {
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 decoration: BoxDecoration(
                   color: theme.colorScheme.tertiaryContainer.withValues(alpha: 0.6),
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(AppRadius.sm),
                 ),
                 child: Text('有未上传完成的媒体，请重新选择或移除',
                     style: theme.textTheme.bodySmall),
@@ -657,7 +658,7 @@ class _ComposerSheetState extends ConsumerState<ComposerSheet> {
             decoration: const InputDecoration(
                 labelText: '标题（可选）', counterText: '', isDense: true),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: Spacing.gap),
           TextField(
             controller: _content,
             maxLines: 4,
@@ -666,7 +667,7 @@ class _ComposerSheetState extends ConsumerState<ComposerSheet> {
             decoration: const InputDecoration(
                 labelText: '这一刻想说的话', counterText: '', alignLabelWithHint: true),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: Spacing.gap),
           // 日期 + 媒体入口
           Row(children: [
             Icon(Icons.event_rounded, size: 18, color: theme.colorScheme.primary),
@@ -745,7 +746,7 @@ class _ComposerSheetState extends ConsumerState<ComposerSheet> {
               padding: const EdgeInsets.only(top: 8, bottom: 4),
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text('相册分类', style: theme.textTheme.bodyMedium),
-                const SizedBox(height: 6),
+                const SizedBox(height: Spacing.gapTight),
                 Wrap(spacing: 6, runSpacing: 6, children: [
                   _albumChip(theme, '暂不分类', _album == null, () => _selectAlbum(null)),
                   for (final a in _albums)
@@ -823,14 +824,14 @@ class _ComposerSheetState extends ConsumerState<ComposerSheet> {
 
   List<Widget> _buildMediaList(ThemeData theme) {
     return [
-      const SizedBox(height: 8),
+      const SizedBox(height: Spacing.gap),
       for (var i = 0; i < _media.length; i++)
         Container(
           margin: const EdgeInsets.only(bottom: 6),
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           decoration: BoxDecoration(
             color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(AppRadius.sm),
           ),
           child: Row(children: [
             Icon(Icons.attach_file_rounded, size: 16, color: theme.colorScheme.outline),

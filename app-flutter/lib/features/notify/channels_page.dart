@@ -28,6 +28,7 @@ import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
 import 'notify_api.dart';
 import 'notify_models.dart';
 import 'notify_widgets.dart';
+import '../../core/theme/tokens.dart';
 
 class ChannelsPage extends ConsumerStatefulWidget {
   const ChannelsPage({super.key});
@@ -203,7 +204,7 @@ class _ChannelsPageState extends ConsumerState<ChannelsPage> {
               onRefresh: _load,
               child: ListView(
                 physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, Spacing.pageBottom),
                 children: <Widget>[
                   const NotifyInfoCard(
                     title: '不错过，每一份在意',
@@ -247,7 +248,7 @@ class _ChannelsPageState extends ConsumerState<ChannelsPage> {
       key: Key('channel-card-${c.id}'),
       margin: const EdgeInsets.only(bottom: 10),
       child: Padding(
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.all(Spacing.cardPad),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
@@ -261,7 +262,7 @@ class _ChannelsPageState extends ConsumerState<ChannelsPage> {
                 ),
               ],
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: Spacing.gapTight),
             Text(
               // config 不回传：只说明「服务端已保存配置」，绝不展示明文凭据。
               '${channelLabel(c.kind)} · ${c.enabled ? '已启用' : '已停用'} · 服务端已保存配置',
@@ -277,7 +278,7 @@ class _ChannelsPageState extends ConsumerState<ChannelsPage> {
               '${quietLabel(c.quietStart, c.quietEnd)} · 最短间隔 ${c.interval} 秒',
               style: theme.textTheme.bodySmall?.copyWith(color: cs.outline),
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: Spacing.gapTight),
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: <Widget>[
@@ -329,7 +330,7 @@ class _ChannelsPageState extends ConsumerState<ChannelsPage> {
           const Card(
             margin: EdgeInsets.only(bottom: 8),
             child: Padding(
-              padding: EdgeInsets.all(16),
+              padding: EdgeInsets.all(Spacing.cardPad),
               child: Text('配置好渠道后，点击测试即可验证能否收到通知。'),
             ),
           )
@@ -513,15 +514,15 @@ class _ChannelFormState extends State<_ChannelForm> {
         channelConfigs[_kind] ?? const <ChannelConfigField>[];
     return SingleChildScrollView(
       physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 40),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, Spacing.pageBottom),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
           Text('添加一个通知渠道', style: theme.textTheme.titleMedium),
-          const SizedBox(height: 6),
-          const Text(
+          const SizedBox(height: Spacing.gapTight),
+          Text(
             '渠道配置由服务端加密保存，不支持修改；需要调整请删除后重新添加。',
-            style: TextStyle(fontSize: 12),
+            style: theme.textTheme.bodySmall,
           ),
           const SizedBox(height: 12),
           if (_inlineError != null) NotifyErrorBanner(text: _inlineError!),
@@ -566,7 +567,7 @@ class _ChannelFormState extends State<_ChannelForm> {
           ),
           const SizedBox(height: 14),
           Text('渠道配置', style: theme.textTheme.titleSmall),
-          const SizedBox(height: 8),
+          const SizedBox(height: Spacing.gap),
           for (final ChannelConfigField f in fields)
             Padding(
               padding: const EdgeInsets.only(bottom: 10),
@@ -584,12 +585,12 @@ class _ChannelFormState extends State<_ChannelForm> {
                 ),
               ),
             ),
-          const SizedBox(height: 8),
+          const SizedBox(height: Spacing.gap),
           Text('接收哪些提醒', style: theme.textTheme.titleSmall),
           const SizedBox(height: 2),
-          const Text(
+          Text(
             '勾选后由服务端保存；需要调整订阅请删除渠道后重新添加。',
-            style: TextStyle(fontSize: 12),
+            style: theme.textTheme.bodySmall,
           ),
           for (final MapEntry<String, String> e in eventNames.entries)
             CheckboxListTile(
@@ -597,7 +598,7 @@ class _ChannelFormState extends State<_ChannelForm> {
               value: _selectedEvents.contains(e.key),
               dense: true,
               controlAffinity: ListTileControlAffinity.leading,
-              title: Text(e.value, style: const TextStyle(fontSize: 13)),
+              title: Text(e.value, style: theme.textTheme.bodySmall),
               onChanged: (bool? v) {
                 setState(() {
                   if (v == true) {
@@ -608,7 +609,7 @@ class _ChannelFormState extends State<_ChannelForm> {
                 });
               },
             ),
-          const SizedBox(height: 8),
+          const SizedBox(height: Spacing.gap),
           Row(
             children: <Widget>[
               Expanded(
@@ -649,10 +650,10 @@ class _ChannelFormState extends State<_ChannelForm> {
               isDense: true,
             ),
           ),
-          const SizedBox(height: 8),
-          const Text(
+          const SizedBox(height: Spacing.gap),
+          Text(
             '开始与结束相同表示全天接收。聊天消息会合并提醒。保存后可发送测试消息。',
-            style: TextStyle(fontSize: 12),
+            style: theme.textTheme.bodySmall,
           ),
           const SizedBox(height: 16),
           Row(

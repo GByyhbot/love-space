@@ -38,6 +38,7 @@ import '../../core/chat/chat_media.dart';
 import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
 import '../timeline/image_viewer.dart' show mediaFileExtension;
 import 'album_controller.dart';
+import '../../core/theme/motion.dart';
 
 class AlbumViewerPage extends ConsumerStatefulWidget {
   const AlbumViewerPage({
@@ -206,7 +207,7 @@ class _AlbumViewerPageState extends ConsumerState<AlbumViewerPage> {
             .clamp(0, widget.photos.length - 1);
         if (target != _index) {
           _page.animateToPage(target,
-              duration: const Duration(milliseconds: 250),
+              duration: Motion.base,
               curve: Curves.easeOut);
         }
       } else if (dy > _dismissThreshold) {
@@ -408,7 +409,10 @@ class _AlbumViewerPageState extends ConsumerState<AlbumViewerPage> {
                           : '属于我们的瞬间'),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: Colors.white, fontSize: 13),
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodySmall
+                      ?.copyWith(color: Colors.white),
                 ),
               ),
             ),
@@ -457,7 +461,7 @@ class _PhotoPage extends StatelessWidget {
       fit: BoxFit.contain,
       width: double.infinity,
       height: double.infinity,
-      fadeInDuration: const Duration(milliseconds: 180),
+      fadeInDuration: Motion.base,
       placeholder: (_, _) => const Center(
           child: CircularProgressIndicator(color: Colors.white54)),
       errorWidget: (_, _, _) => const Center(

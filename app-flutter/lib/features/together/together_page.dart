@@ -16,6 +16,7 @@ import '../../core/sse/sse_client.dart';
 import '../../core/together/together_data.dart';
 import '../settings/settings_state.dart' show spaceEditRequestedProvider;
 import 'together_controller.dart';
+import '../../core/theme/tokens.dart';
 
 class TogetherPage extends ConsumerStatefulWidget {
   const TogetherPage({super.key, required this.active});
@@ -59,7 +60,7 @@ class _TogetherPageState extends ConsumerState<TogetherPage> {
           // RefreshIndicator 在内容不足一屏时仍需可滚动，故 AlwaysScrollable。
           child: SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, Spacing.pageBottom),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -162,7 +163,7 @@ class _TogetherPageState extends ConsumerState<TogetherPage> {
                 // context.push('/channels')，逐张点通无死卡。
                 const SizedBox(height: 18),
                 _settingsHeading(theme),
-                const SizedBox(height: 8),
+                const SizedBox(height: Spacing.gap),
                 _settingsCard(
                   context,
                   key: 'settings-hub-space',
@@ -274,7 +275,7 @@ class _TogetherPageState extends ConsumerState<TogetherPage> {
         margin: EdgeInsets.zero,
         child: InkWell(
           key: Key(key),
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(AppRadius.card),
           onTap: onTap,
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -323,7 +324,7 @@ class _TogetherPageState extends ConsumerState<TogetherPage> {
       child: Card(
         margin: EdgeInsets.zero,
         child: InkWell(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(AppRadius.card),
           onTap: () => context.push(route),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -374,7 +375,7 @@ class _PeriodEntryCard extends StatelessWidget {
       margin: EdgeInsets.zero,
       color: cs.primaryContainer,
       child: InkWell(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(AppRadius.card),
         onTap: () => context.push('/period'),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
@@ -426,10 +427,10 @@ class _AnniversaryCard extends StatelessWidget {
     return Card(
       margin: EdgeInsets.zero,
       child: InkWell(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(AppRadius.card),
         onTap: () => context.push('/together/anniversary'),
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(Spacing.cardPad),
           child: a == null
               ? Text(
                   '留一个日子，给仪式感 · 点此去首页添加纪念日。',

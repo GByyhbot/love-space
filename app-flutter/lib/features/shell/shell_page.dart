@@ -16,6 +16,7 @@ import '../personal/personal_page.dart';
 import '../timeline/composer_sheet.dart';
 import '../timeline/timeline_page.dart';
 import '../together/together_page.dart';
+import '../../core/theme/tokens.dart';
 
 class ShellPage extends ConsumerStatefulWidget {
   const ShellPage({super.key});
@@ -102,7 +103,8 @@ class _ShellPageState extends ConsumerState<ShellPage> {
               backgroundColor: theme.colorScheme.primaryContainer,
               child: Text((me?.user.name.isEmpty ?? true)
                       ? '?' : me!.user.name.characters.first,
-                  style: TextStyle(fontSize: 13, color: theme.colorScheme.onPrimaryContainer)),
+                  style: theme.textTheme.bodySmall
+                      ?.copyWith(color: theme.colorScheme.onPrimaryContainer)),
             ),
           ),
         ],
@@ -172,15 +174,15 @@ class _NavItem extends StatelessWidget {
     final active = index == current;
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(14),
+      borderRadius: BorderRadius.circular(AppRadius.lg),
       child: SizedBox(
         width: 44,
         height: 52,
         child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
           Icon(icon, size: 22, color: active ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.outline),
           const SizedBox(height: 2),
-          Text(label, style: TextStyle(
-            fontSize: 11,
+          Text(label,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
             color: active ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.outline,
           )),
         ]),

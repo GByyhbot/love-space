@@ -21,6 +21,7 @@ import '../../core/together/together_data.dart';
 import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
 import '../timeline/composer_sheet.dart';
 import 'personal_controller.dart';
+import '../../core/theme/tokens.dart';
 
 /// tab 数据表（可扩展：7-C 追加第 5 项 personal_wish，绝不预置死卡）。
 /// hint 逐字对齐 Web app.js:1489 / :1302：
@@ -115,7 +116,7 @@ class _PersonalPageState extends ConsumerState<PersonalPage> {
                       child: ChoiceChip(
                         label: Center(
                             child: Text(personalTabs[i].label,
-                                style: const TextStyle(fontSize: 12))),
+                                style: theme.textTheme.bodySmall)),
                         selected: _tab == i,
                         onSelected: (_) => setState(() => _tab = i),
                       ),
@@ -179,19 +180,19 @@ class _TabFrame extends ConsumerWidget {
         await ref.read(personalControllerProvider.notifier).loadWishes();
       },
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, Spacing.pageBottom),
         children: [
           if (subtitle != null) ...[
             Text(subtitle!,
                 style: theme.textTheme.bodySmall
                     ?.copyWith(color: theme.colorScheme.outline)),
-            const SizedBox(height: 6),
+            const SizedBox(height: Spacing.gapTight),
           ],
           Text(hint,
               style: theme.textTheme.bodySmall
                   ?.copyWith(color: theme.colorScheme.outline)),
           if (entryLabel != null && onEntry != null) ...[
-            const SizedBox(height: 8),
+            const SizedBox(height: Spacing.gap),
             Align(
               alignment: Alignment.centerLeft,
               child: FilledButton.tonal(
@@ -200,7 +201,7 @@ class _TabFrame extends ConsumerWidget {
               ),
             ),
           ],
-          const SizedBox(height: 8),
+          const SizedBox(height: Spacing.gap),
           if (items.isEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 48),
@@ -209,7 +210,7 @@ class _TabFrame extends ConsumerWidget {
                     size: 44, color: theme.colorScheme.outline),
                 const SizedBox(height: 12),
                 Text(emptyTitle, style: theme.textTheme.titleMedium),
-                const SizedBox(height: 6),
+                const SizedBox(height: Spacing.gapTight),
                 Text(emptyHint,
                     style: theme.textTheme.bodySmall
                         ?.copyWith(color: theme.colorScheme.outline)),
@@ -500,7 +501,7 @@ class _DraftTile extends ConsumerWidget {
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: theme.textTheme.bodyMedium),
-          const SizedBox(height: 8),
+          const SizedBox(height: Spacing.gap),
           Row(children: [
             OutlinedButton(
               onPressed: () async {
@@ -611,7 +612,7 @@ class _DraftPublishPageState extends ConsumerState<DraftPublishPage> {
           Text('发布后这份草稿会从草稿箱移除。',
               style: theme.textTheme.bodySmall
                   ?.copyWith(color: theme.colorScheme.outline)),
-          const SizedBox(height: 8),
+          const SizedBox(height: Spacing.gap),
           RadioGroup<String>(
             groupValue: _target,
             onChanged: (v) => setState(() => _target = v ?? 'post'),
@@ -631,7 +632,7 @@ class _DraftPublishPageState extends ConsumerState<DraftPublishPage> {
             ]),
           ),
           if (_target == 'surprise') ...[
-            const SizedBox(height: 8),
+            const SizedBox(height: Spacing.gap),
             ListTile(
               contentPadding: EdgeInsets.zero,
               leading: const Icon(Icons.schedule_rounded),
@@ -738,7 +739,7 @@ class _SurpriseTile extends ConsumerWidget {
               maxLines: 3,
               overflow: TextOverflow.ellipsis,
               style: theme.textTheme.bodyMedium),
-          const SizedBox(height: 6),
+          const SizedBox(height: Spacing.gapTight),
           Row(children: [
             Icon(Icons.schedule_rounded, size: 14, color: cs.outline),
             const SizedBox(width: 4),
@@ -951,7 +952,7 @@ class _TrashTile extends ConsumerWidget {
               '${_fmtStamp(record.deleted)} 删除',
               style: theme.textTheme.labelSmall
                   ?.copyWith(color: cs.outline)),
-          const SizedBox(height: 8),
+          const SizedBox(height: Spacing.gap),
           Align(
             alignment: Alignment.centerLeft,
             child: OutlinedButton.icon(
@@ -1052,7 +1053,7 @@ class _WishTile extends ConsumerWidget {
                     size: 20, color: cs.error),
               ),
           ]),
-          const SizedBox(height: 6),
+          const SizedBox(height: Spacing.gapTight),
           Text(title, style: theme.textTheme.titleSmall),
           const SizedBox(height: 4),
           if (open)
@@ -1068,7 +1069,7 @@ class _WishTile extends ConsumerWidget {
             // 不需要任何额外请求。仅「对方待解锁」出现解锁入口，避免作者
             // 误发解锁请求（服务端退化锁定态也不自发重试）。
             if (!own) ...[
-              const SizedBox(height: 8),
+              const SizedBox(height: Spacing.gap),
               Align(
                 alignment: Alignment.centerLeft,
                 child: OutlinedButton.icon(
@@ -1206,7 +1207,7 @@ class _PersonalWishFormPageState
               border: OutlineInputBorder(),
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: Spacing.gap),
           Text(
             '每条心愿都要设置不同密码。写下心愿的你可以直接回看内容；把密码告诉对方后，对方输入一次就能看到，之后不必再输。忘记密码无法找回。',
             style: theme.textTheme.bodySmall

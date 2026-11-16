@@ -31,6 +31,7 @@ import '../auth/auth_state.dart';
 import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
 import 'together_controller.dart';
 import 'tool_pages.dart' show ToolTile;
+import '../../core/theme/tokens.dart';
 
 /// 音乐上传允许的扩展名（对齐 Web musicForm：建议 mp3，≤20MB——Web 口径）
 const _musicUploadExts = ['mp3', 'm4a', 'wav', 'aac', 'ogg'];
@@ -235,11 +236,11 @@ class _MusicPageState extends ConsumerState<MusicPage> {
       body: RefreshIndicator(
         onRefresh: () => ref.read(togetherControllerProvider.notifier).load(),
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 88),
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, Spacing.pageBottom),
           children: [
             Text('把属于我们的歌，放在一起。试听片段约 30 秒（Apple 搜索接口），只试听不上传。',
                 style: theme.textTheme.bodySmall?.copyWith(color: cs.outline)),
-            const SizedBox(height: 8),
+            const SizedBox(height: Spacing.gap),
             if (songs.isEmpty)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 48),
@@ -247,7 +248,7 @@ class _MusicPageState extends ConsumerState<MusicPage> {
                   Icon(Icons.music_note_rounded, size: 44, color: cs.outline),
                   const SizedBox(height: 12),
                   Text('还没有歌', style: theme.textTheme.titleMedium),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: Spacing.gapTight),
                   Text('去放一首属于你们的第一首。',
                       textAlign: TextAlign.center,
                       style: theme.textTheme.bodySmall
@@ -495,7 +496,7 @@ class _MusicPageState extends ConsumerState<MusicPage> {
                   setDialogState(() => searching = false);
                 },
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: Spacing.gap),
               if (searching)
                 const Padding(
                     padding: EdgeInsets.all(12),
@@ -711,7 +712,7 @@ class _PreviewBar extends StatelessWidget {
                     style: theme.textTheme.labelSmall
                         ?.copyWith(color: cs.outline)),
               ]),
-              const SizedBox(height: 6),
+              const SizedBox(height: Spacing.gapTight),
               ClipRRect(
                 borderRadius: BorderRadius.circular(4),
                 child: LinearProgressIndicator(value: ratio, minHeight: 5),

@@ -13,6 +13,7 @@ import '../auth/auth_state.dart';
 import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
 import 'together_controller.dart';
 import 'tool_pages.dart' show ToolTile;
+import '../../core/theme/tokens.dart';
 
 class QuestPage extends ConsumerStatefulWidget {
   const QuestPage({super.key});
@@ -66,28 +67,28 @@ class _QuestPageState extends ConsumerState<QuestPage> {
       body: RefreshIndicator(
         onRefresh: () => ref.read(togetherControllerProvider.notifier).load(),
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 88),
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, Spacing.pageBottom),
           children: [
             Text('一件小事，也是一个故事。',
                 style: theme.textTheme.bodySmall
                     ?.copyWith(color: cs.outline)),
-            const SizedBox(height: 8),
+            const SizedBox(height: Spacing.gap),
             if (total > 0) ...[
               Card(
                 margin: EdgeInsets.zero,
                 child: Padding(
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.all(Spacing.cardPad),
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text('💫 一起完成 $done / $total',
                             style: theme.textTheme.titleMedium),
-                        const SizedBox(height: 8),
+                        const SizedBox(height: Spacing.gap),
                         ClipRRect(
                           borderRadius: BorderRadius.circular(6),
                           child: LinearProgressIndicator(
                               value: pct / 100, minHeight: 10),
                         ),
-                        const SizedBox(height: 6),
+                        const SizedBox(height: Spacing.gapTight),
                         Text(
                           '$pct% · ${pct >= 100 ? '全部做完了，可以写新的清单了' : pct >= 50 ? '已经过半，继续' : '慢慢来，一件一件做'}',
                           style: theme.textTheme.labelSmall
@@ -106,7 +107,7 @@ class _QuestPageState extends ConsumerState<QuestPage> {
                       size: 44, color: cs.outline),
                   const SizedBox(height: 12),
                   Text('清单还空着', style: theme.textTheme.titleMedium),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: Spacing.gapTight),
                   Text('从下面挑几件，或者写下你们自己的。',
                       textAlign: TextAlign.center,
                       style: theme.textTheme.bodySmall
@@ -165,7 +166,7 @@ class _QuestPageState extends ConsumerState<QuestPage> {
                       children: [
                         Text('没灵感？从精选清单里挑（剩余 ${ideas.length} 条）',
                             style: theme.textTheme.labelLarge),
-                        const SizedBox(height: 8),
+                        const SizedBox(height: Spacing.gap),
                         Wrap(
                           spacing: 6,
                           runSpacing: 6,

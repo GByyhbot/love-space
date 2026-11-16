@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../auth/auth_state.dart';
 import 'timeline_controller.dart';
+import '../../core/theme/tokens.dart';
 
 /// 打开评论 Sheet（footer 评论数点击 / 「回复」入口）
 Future<void> showCommentSheet(BuildContext context,
@@ -18,7 +19,7 @@ Future<void> showCommentSheet(BuildContext context,
     isScrollControlled: true, // 键盘避让
     isDismissible: true, // 允许下滑手势 / 点遮罩关闭
     shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.lg))),
     builder: (_) => CommentSheet(rid: rid, me: me),
   );
 }
@@ -141,7 +142,7 @@ class _CommentSheetState extends ConsumerState<CommentSheet> {
                     ]);
                   }),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: Spacing.gap),
         Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
           Expanded(
             child: TextField(

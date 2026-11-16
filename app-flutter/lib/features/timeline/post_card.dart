@@ -21,6 +21,8 @@ import 'comment_sheet.dart';
 import 'composer_sheet.dart';
 import 'image_viewer.dart';
 import 'timeline_controller.dart';
+import '../../core/theme/motion.dart';
+import '../../core/theme/tokens.dart';
 
 /// post 卡片
 class PostCard extends ConsumerWidget {
@@ -48,10 +50,10 @@ class PostCard extends ConsumerWidget {
 
     Widget card = Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(Spacing.cardPad),
       decoration: BoxDecoration(
         color: theme.colorScheme.surfaceContainerLowest,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(AppRadius.lg),
         border: Border.all(color: theme.colorScheme.outlineVariant),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start,
@@ -150,7 +152,7 @@ class PostCard extends ConsumerWidget {
             const Spacer(),
             // 点赞 toggle：状态与计数同一处，点击走控制器乐观翻转 + 失败回滚
             InkWell(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(AppRadius.card),
               onTap: () => ref
                   .read(timelineControllerProvider.notifier)
                   .toggleLike(record.id, me.user.id),
@@ -171,7 +173,7 @@ class PostCard extends ConsumerWidget {
             const SizedBox(width: 6),
             // 评论入口：原生 BottomSheet（按钮 + 下滑手势都能关）
             InkWell(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(AppRadius.card),
               onTap: () => showCommentSheet(context, rid: record.id, me: me),
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
@@ -191,13 +193,13 @@ class PostCard extends ConsumerWidget {
         ),
         // 内联评论列表（本人评论带删除入口，段二 B）
         if (record.comments.isNotEmpty) ...[
-          const SizedBox(height: 8),
+          const SizedBox(height: Spacing.gap),
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
               color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-              borderRadius: BorderRadius.circular(10),
+              borderRadius: BorderRadius.circular(AppRadius.sm),
             ),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
@@ -321,7 +323,7 @@ class _CommentRow extends ConsumerWidget {
       ),
       if (mine)
         InkWell(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(AppRadius.card),
           onTap: () => _confirmDelete(context, ref, cid),
           child: Padding(
             padding: const EdgeInsets.all(4),
@@ -381,10 +383,10 @@ class _RevealCardState extends State<_RevealCard> {
   Widget build(BuildContext context) {
     return AnimatedOpacity(
       opacity: _shown ? 1 : 0,
-      duration: const Duration(milliseconds: 240),
+      duration: Motion.base,
       child: AnimatedSlide(
         offset: _shown ? Offset.zero : const Offset(0, 0.02),
-        duration: const Duration(milliseconds: 240),
+        duration: Motion.base,
         child: widget.child,
       ),
     );

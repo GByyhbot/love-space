@@ -298,8 +298,8 @@ void main() {
       ));
       await tester.pump();
 
-      // 卡片：margin 16×2 + padding 14×2 + 1px 边框×2
-      const expected = viewport - 32 - 28 - 2;
+      // 卡片：margin 16×2 + padding cardPad 16×2（段 B G2 收敛 14→16）+ 1px 边框×2
+      const expected = viewport - 32 - 32 - 2;
       final img = tester.widget<MediaImageView>(find.byType(MediaImageView));
       expect(img.width, closeTo(expected, 1.0), reason: '单图宽 = 卡片内容宽');
       expect(img.height,
@@ -348,8 +348,8 @@ void main() {
       ));
       await tester.pump();
 
-      // 卡片：margin 16×2 + padding 14×2 + 1px 边框×2
-      const expected = viewport - 32 - 28 - 2;
+      // 卡片：margin 16×2 + padding cardPad 16×2（段 B G2 收敛 14→16）+ 1px 边框×2
+      const expected = viewport - 32 - 32 - 2;
       final cell = timelineMediaCell(expected);
       final found = find.byType(MediaImageView);
       expect(found, findsNWidgets(3));

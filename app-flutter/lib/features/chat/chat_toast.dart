@@ -10,6 +10,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/theme/motion.dart';
 
 // ── 录音手势意图（纯函数，可单测）──────────────────────────────────────
 
@@ -187,7 +188,7 @@ class ChatToastHost extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final toast = ref.watch(chatToastProvider);
     return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 220),
+      duration: Motion.base,
       switchInCurve: Curves.easeOutCubic,
       switchOutCurve: Curves.easeInCubic,
       transitionBuilder: (child, animation) => SlideTransition(
@@ -314,7 +315,7 @@ class VoiceRecordOverlay extends ConsumerWidget {
           Positioned.fill(
             child: TweenAnimationBuilder<double>(
               tween: Tween(begin: 0, end: 1),
-              duration: const Duration(milliseconds: 150),
+              duration: Motion.fast,
               curve: Curves.easeOut,
               builder: (_, t, _) =>
                   ColoredBox(color: Colors.black.withValues(alpha: 0.6 * t)),
@@ -325,7 +326,7 @@ class VoiceRecordOverlay extends ConsumerWidget {
             alignment: Alignment(alignX, alignY),
             child: TweenAnimationBuilder<double>(
               tween: Tween(begin: 0.8, end: 1),
-              duration: const Duration(milliseconds: 320),
+              duration: Motion.slow,
               curve: Curves.easeOutBack,
               builder: (_, appear, child) => Transform.scale(
                 scale: appear,
@@ -345,7 +346,7 @@ class VoiceRecordOverlay extends ConsumerWidget {
             bottom: 0,
             child: TweenAnimationBuilder<double>(
               tween: Tween(begin: 1, end: 0),
-              duration: const Duration(milliseconds: 220),
+              duration: Motion.base,
               curve: Curves.easeOutBack,
               builder: (_, t, child) => Transform.translate(
                 offset: Offset(0, t * 80),
@@ -425,13 +426,13 @@ class _RecordBubbleState extends ConsumerState<_RecordBubble> {
               : ending == RecordEnding.cancel
                   ? const Offset(-0.55, 0.45)
                   : Offset.zero),
-      duration: const Duration(milliseconds: 320),
+      duration: Motion.slow,
       curve: Curves.easeIn,
       builder: (_, off, child) => FractionalTranslation(
           translation: off,
           child: TweenAnimationBuilder<double>(
             tween: Tween(begin: 1, end: ending == null ? 1 : 0),
-            duration: const Duration(milliseconds: 320),
+            duration: Motion.slow,
             curve: Curves.easeIn,
             builder: (_, op, inner) =>
                 Opacity(opacity: op.clamp(0, 1), child: inner),
@@ -441,7 +442,7 @@ class _RecordBubbleState extends ConsumerState<_RecordBubble> {
         // 宽度随音量弹簧过渡（220ms easeOutBack，带轻回弹的隐式弹簧；
         // 时长取定版三档 120/220/320 中的 220 档）
         AnimatedContainer(
-          duration: const Duration(milliseconds: 220),
+          duration: Motion.base,
           curve: Curves.easeOutBack,
           width: width,
           height: height,
@@ -627,6 +628,7 @@ class _FanPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final capsuleW = (width - 20) / 2; // 缝 20dp，两端贴屏缘
+    final theme = Theme.of(context);
     return SizedBox(
       width: width,
       height: furnitureH,
@@ -681,14 +683,12 @@ class _FanPanel extends StatelessWidget {
             alignment: const Alignment(-0.62, 0),
             child: AnimatedOpacity(
               opacity: cancel ? 1 : 0,
-              duration: const Duration(milliseconds: 120),
+              duration: Motion.fast,
               child: Transform.rotate(
                 angle: -8 * 3.14159265 / 180,
-                child: const Text('松手 取消',
-                    style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700)),
+                child: Text('松手 取消',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                        color: Colors.white, fontWeight: FontWeight.w700)),
               ),
             ),
           ),
@@ -701,14 +701,12 @@ class _FanPanel extends StatelessWidget {
             alignment: const Alignment(0.64, 0),
             child: AnimatedOpacity(
               opacity: toText ? 1 : 0,
-              duration: const Duration(milliseconds: 120),
+              duration: Motion.fast,
               child: Transform.rotate(
                 angle: 8 * 3.14159265 / 180,
-                child: const Text('松手 编辑文字',
-                    style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700)),
+                child: Text('松手 编辑文字',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                        color: Colors.white, fontWeight: FontWeight.w700)),
               ),
             ),
           ),
@@ -778,7 +776,7 @@ class _FanTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AnimatedContainer(
-      duration: const Duration(milliseconds: 120),
+      duration: Motion.fast,
       curve: Curves.easeOut,
       alignment: Alignment.center,
       decoration: BoxDecoration(

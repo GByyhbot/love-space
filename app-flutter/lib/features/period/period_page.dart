@@ -36,6 +36,7 @@ import 'period_form.dart';
 import 'period_grid.dart';
 import 'period_meta.dart';
 import 'period_sheets.dart';
+import '../../core/theme/tokens.dart';
 
 /// 生理期页。
 class PeriodPage extends ConsumerStatefulWidget {
@@ -103,7 +104,7 @@ class _PeriodPageState extends ConsumerState<PeriodPage> {
       body: RefreshIndicator(
         onRefresh: () => ref.read(periodControllerProvider.notifier).load(),
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, Spacing.pageBottom),
           children: [
             // headBar（heading 的副标题；标题在 AppBar）
             Text(periodHeadingSub,
@@ -149,11 +150,11 @@ class _PeriodPageState extends ConsumerState<PeriodPage> {
       return Card(
         margin: EdgeInsets.zero,
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(Spacing.cardPad),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(periodEmptyTitle, style: theme.textTheme.titleMedium),
-                const SizedBox(height: 8),
+                const SizedBox(height: Spacing.gap),
                 Text(periodEmptyText,
                     style: theme.textTheme.bodySmall
                         ?.copyWith(color: cs.outline)),
@@ -173,7 +174,7 @@ class _PeriodPageState extends ConsumerState<PeriodPage> {
     return Card(
       margin: EdgeInsets.zero,
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(Spacing.cardPad),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Expanded(
@@ -191,7 +192,7 @@ class _PeriodPageState extends ConsumerState<PeriodPage> {
                         style: theme.textTheme.bodySmall
                             ?.copyWith(color: cs.outline)),
                     if (fert != null) ...[
-                      const SizedBox(height: 8),
+                      const SizedBox(height: Spacing.gap),
                       Wrap(crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
                             Text('受孕概率 ',
@@ -288,8 +289,10 @@ class _PeriodPageState extends ConsumerState<PeriodPage> {
                   alignment: Alignment.center,
                   child: FittedBox(
                     child: Text('${s.name} ${s.days}天',
-                        style: const TextStyle(
-                            fontSize: 10, color: Colors.white)),
+                        style: Theme.of(ctx)
+                            .textTheme
+                            .labelSmall
+                            ?.copyWith(color: Colors.white)),
                   ),
                 ),
               ),
@@ -298,7 +301,11 @@ class _PeriodPageState extends ConsumerState<PeriodPage> {
             left: (left - 1).clamp(0.0, width - 2),
             top: -2,
             bottom: -2,
-            child: Container(width: 2, color: Colors.black87),
+            // G10（必改）：「今天」竖线原来是 Colors.black87，深色 surface 上
+            // 不可见；onSurface 随 fromSeed 双亮度自适应（浅=近黑、深=近白）。
+            child: Container(
+                width: 2,
+                color: Theme.of(ctx).colorScheme.onSurface),
           ),
         ]),
       );
@@ -318,22 +325,24 @@ class _PeriodPageState extends ConsumerState<PeriodPage> {
         margin: EdgeInsets.zero,
         color: cs.errorContainer.withValues(alpha: 0.35),
         child: Padding(
-          padding: const EdgeInsets.all(14),
+          padding: const EdgeInsets.all(Spacing.cardPad),
           child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(warnBlockTitle,
                     style: theme.textTheme.titleSmall
                         ?.copyWith(color: cs.error)),
-                const SizedBox(height: 6),
+                const SizedBox(height: Spacing.gapTight),
                 for (final w in warns)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 4),
                     child: Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text('· ',
-                              style: TextStyle(color: Colors.black54)),
+                          // G11（必改）：项目符号原 Colors.black54 深色下
+                          // 对比不足；与相邻 bodySmall 同源 onSurface。
+                          Text('· ',
+                              style: TextStyle(color: cs.onSurface)),
                           Expanded(
                               child: Text(w,
                                   style: theme.textTheme.bodySmall)),
@@ -357,7 +366,7 @@ class _PeriodPageState extends ConsumerState<PeriodPage> {
       margin: EdgeInsets.zero,
       child: InkWell(
         key: const Key('period-analysis-entry'),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(AppRadius.card),
         onTap: () => context.push('/period/analysis'),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -416,7 +425,7 @@ class _PeriodPageState extends ConsumerState<PeriodPage> {
               onPressed: () => _shiftMonth(1, selected),
             ),
           ]),
-          const SizedBox(height: 6),
+          const SizedBox(height: Spacing.gapTight),
           // 星期行
           Row(children: [
             for (var i = 0; i < 7; i++)
@@ -428,7 +437,7 @@ class _PeriodPageState extends ConsumerState<PeriodPage> {
                 ),
               ),
           ]),
-          const SizedBox(height: 6),
+          const SizedBox(height: Spacing.gapTight),
           // 整月网格（lead 个空格 + 逐日格子）。
           // 🔴 不用嵌套 GridView(shrinkWrap)：外层已是 ListView（viewport），
           // 嵌套 shrinkWrap viewport 会让首帧布局反复震荡；按周切 Row 最稳。
@@ -436,10 +445,10 @@ class _PeriodPageState extends ConsumerState<PeriodPage> {
           const SizedBox(height: 10),
           // 图例四项（Web :294）
           Wrap(spacing: 10, runSpacing: 4, children: [
-            _legend(cs, const Color(0xFFEF3F68), '月经期'),
-            _legend(cs, const Color(0xFFF8BBD0), '预测经期'),
-            _legend(cs, const Color(0xFF9575CD), '排卵期'),
-            _legend(cs, const Color(0xFF7E57C2), '排卵日', dot: true),
+            _legend(context, cs, const Color(0xFFEF3F68), '月经期'),
+            _legend(context, cs, const Color(0xFFF8BBD0), '预测经期'),
+            _legend(context, cs, const Color(0xFF9575CD), '排卵期'),
+            _legend(context, cs, const Color(0xFF7E57C2), '排卵日', dot: true),
           ]),
         ]),
       ),
@@ -473,7 +482,7 @@ class _PeriodPageState extends ConsumerState<PeriodPage> {
         crossAxisAlignment: CrossAxisAlignment.stretch, children: rows);
   }
 
-  Widget _legend(ColorScheme cs, Color color, String label,
+  Widget _legend(BuildContext context, ColorScheme cs, Color color, String label,
       {bool dot = false}) =>
       Row(mainAxisSize: MainAxisSize.min, children: [
         Container(
@@ -488,7 +497,10 @@ class _PeriodPageState extends ConsumerState<PeriodPage> {
         ),
         const SizedBox(width: 4),
         Text(label,
-            style: TextStyle(fontSize: 11, color: cs.outline)),
+            style: Theme.of(context)
+                .textTheme
+                .labelSmall
+                ?.copyWith(color: cs.outline)),
       ]);
 
   Widget _dayCell(BuildContext context, PeriodDayCell cell) {
@@ -520,8 +532,7 @@ class _PeriodPageState extends ConsumerState<PeriodPage> {
             ),
             child: Stack(alignment: Alignment.center, children: [
               Text('${cell.day}',
-                  style: TextStyle(
-                    fontSize: 13,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     fontWeight: cell.isToday || cell.isStart
                         ? FontWeight.bold
                         : FontWeight.normal,
@@ -634,7 +645,7 @@ class _PeriodPageState extends ConsumerState<PeriodPage> {
                 child: const Text('改经期长度'),
               ),
           ]),
-          const SizedBox(height: 6),
+          const SizedBox(height: Spacing.gapTight),
           // 经期四动作（走了 / 又来了 / 来了）—— 全程无 end 键。
           Row(children: [
             const Text('🩸', style: TextStyle(fontSize: 18)),
@@ -769,10 +780,10 @@ class _PeriodPageState extends ConsumerState<PeriodPage> {
     return Card(
       margin: const EdgeInsets.only(top: 12),
       child: Padding(
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.all(Spacing.cardPad),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text('常出现的症状', style: theme.textTheme.titleSmall),
-          const SizedBox(height: 8),
+          const SizedBox(height: Spacing.gap),
           for (final s in summary.items)
             Padding(
               padding: const EdgeInsets.only(bottom: 6),
@@ -835,7 +846,7 @@ class _PeriodPageState extends ConsumerState<PeriodPage> {
                   CircleAvatar(
                       radius: 14,
                       child: Text(authorLabel,
-                          style: const TextStyle(fontSize: 11))),
+                          style: theme.textTheme.labelSmall)),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Column(
@@ -866,7 +877,7 @@ class _PeriodPageState extends ConsumerState<PeriodPage> {
                   ),
                 ]),
                 if (chips.isNotEmpty) ...[
-                  const SizedBox(height: 8),
+                  const SizedBox(height: Spacing.gap),
                   Wrap(
                     spacing: 6,
                     runSpacing: 4,
@@ -874,13 +885,13 @@ class _PeriodPageState extends ConsumerState<PeriodPage> {
                       for (final s in chips)
                         Chip(
                             label: Text(s,
-                                style: const TextStyle(fontSize: 11)),
+                                style: theme.textTheme.labelSmall),
                             visualDensity: VisualDensity.compact),
                     ],
                   ),
                 ],
                 if (words.isNotEmpty) ...[
-                  const SizedBox(height: 8),
+                  const SizedBox(height: Spacing.gap),
                   Text(words, style: theme.textTheme.bodySmall),
                 ],
               ]),

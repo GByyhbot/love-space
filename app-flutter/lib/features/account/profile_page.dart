@@ -19,6 +19,7 @@ import '../../core/chat/chat_media.dart' show chatBaseProvider;
 import '../auth/auth_state.dart';
 import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
 import '../chat/voice_diag.dart';
+import '../../core/theme/tokens.dart';
 
 class ProfilePage extends ConsumerStatefulWidget {
   const ProfilePage({super.key});
@@ -222,7 +223,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                       children: [
                         Text('App 版本（实际安装包）：$_appVersionLabel',
                             style: theme.textTheme.bodySmall),
-                        const SizedBox(height: 8),
+                        const SizedBox(height: Spacing.gap),
                         Text('当前线路 base（原样完整域名）：',
                             style: theme.textTheme.bodySmall),
                         SelectableText(
@@ -248,7 +249,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                               child: Text(records.first.summary,
                                   style: theme.textTheme.bodySmall)),
                         ]),
-                        const SizedBox(height: 8),
+                        const SizedBox(height: Spacing.gap),
                         Text('最近一次完整异常原文（含 HTTP 状态码，未截断）：',
                             style: theme.textTheme.bodySmall),
                         const SizedBox(height: 4),
@@ -256,7 +257,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                             records.first.exception,
                             style: theme.textTheme.bodySmall
                                 ?.copyWith(fontFamily: 'monospace')),
-                        const SizedBox(height: 8),
+                        const SizedBox(height: Spacing.gap),
                         Align(
                           alignment: Alignment.centerRight,
                           child: TextButton.icon(
@@ -320,11 +321,11 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                   child: Text(r.summary,
                       style: theme.textTheme.bodySmall)),
             ]),
-            const SizedBox(height: 8),
+            const SizedBox(height: Spacing.gap),
             SelectableText(r.detail,
                 style: theme.textTheme.bodySmall
                     ?.copyWith(fontFamily: 'monospace')),
-            const SizedBox(height: 8),
+            const SizedBox(height: Spacing.gap),
             Align(
               alignment: Alignment.centerRight,
               child: TextButton.icon(
@@ -360,7 +361,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
           // ── 头像 + 昵称 ──
           Card(
             child: Padding(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(Spacing.cardPad),
               child: Column(children: [
                 GestureDetector(
                   onTap: _busy ? null : _pickAvatar,
@@ -371,7 +372,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                       child: const Icon(Icons.edit, size: 14, color: Colors.white))),
                   ]),
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: Spacing.gapTight),
                 Text('点击更换头像', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.outline)),
                 const SizedBox(height: 14),
                 TextField(
@@ -386,7 +387,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
           // ── 修改密码 ──
           Card(
             child: Padding(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(Spacing.cardPad),
               child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                 Text('修改密码', style: theme.textTheme.titleSmall),
                 const SizedBox(height: 10),
@@ -411,7 +412,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                 : const Text('保存'),
           ),
           if (_error != null) ...[
-            const SizedBox(height: 8),
+            const SizedBox(height: Spacing.gap),
             Text(_error!, textAlign: TextAlign.center,
                 style: TextStyle(color: theme.colorScheme.error)),
           ],
@@ -420,10 +421,10 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
           if (!me.paired)
             Card(
               child: Padding(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(Spacing.cardPad),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                   Text('邀请你，住进我的小世界', style: theme.textTheme.titleSmall),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: Spacing.gapTight),
                   Text('生成专属邀请链接，私下发给另一半。邀请仅可使用一次，二十四小时内有效；重新生成会让旧链接失效。',
                       style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.outline)),
                   const SizedBox(height: 12),
@@ -450,7 +451,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
           else
             Card(
               child: Padding(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(Spacing.cardPad),
                 child: Column(children: [
                   Text('我们', style: theme.textTheme.titleSmall),
                   const SizedBox(height: 12),

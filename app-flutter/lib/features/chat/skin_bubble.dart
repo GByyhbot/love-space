@@ -13,6 +13,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/cache/low_freq_cache.dart';
 import '../../core/chat/chat_media.dart';
 import '../../core/chat/nine_patch_border.dart';
+import '../../core/theme/tokens.dart';
 
 /// 皮肤态字色（Web .skinned / .skinned.light 实读写死，不随主题变化）：
 /// `color:#2B2029`；浅色字 `color:#fff; text-shadow:0 1px 3px rgba(0,0,0,.32)`。
@@ -125,7 +126,7 @@ class _SkinBubbleState extends ConsumerState<SkinBubble> {
             padding: padding,
             decoration: BoxDecoration(
               color: theme.colorScheme.primaryContainer.withValues(alpha: 0.6),
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(AppRadius.lg),
             ),
             child: _styledChild(theme),
           );

@@ -15,6 +15,7 @@ import '../../core/together/together_data.dart';
 import '../auth/auth_state.dart';
 import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
 import 'together_controller.dart';
+import '../../core/theme/tokens.dart';
 
 /// annual 三态显示文案（逐字对齐 Web recordCard anniversary meta，app.js:857）
 String annualLabel(dynamic annual) =>
@@ -58,12 +59,12 @@ class _AnniversaryPageState extends ConsumerState<AnniversaryPage> {
       body: RefreshIndicator(
         onRefresh: () => ref.read(togetherControllerProvider.notifier).load(),
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 88),
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, Spacing.pageBottom),
           children: [
             Text('每个重要的日子，都认真对待。',
                 style: theme.textTheme.bodySmall
                     ?.copyWith(color: theme.colorScheme.outline)),
-            const SizedBox(height: 8),
+            const SizedBox(height: Spacing.gap),
             if (anns.isEmpty)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 48),
@@ -73,7 +74,7 @@ class _AnniversaryPageState extends ConsumerState<AnniversaryPage> {
                   const SizedBox(height: 12),
                   Text('给我们，多一点小小的仪式感',
                       style: theme.textTheme.titleMedium),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: Spacing.gapTight),
                   Text('把值得记住的日子放进来，到点就会提醒。',
                       textAlign: TextAlign.center,
                       style: theme.textTheme.bodySmall
@@ -129,7 +130,7 @@ class _AnniversaryPageState extends ConsumerState<AnniversaryPage> {
                 },
               ),
           ]),
-          const SizedBox(height: 6),
+          const SizedBox(height: Spacing.gapTight),
           Text((r.body['title'] ?? '').toString(),
               style: theme.textTheme.titleMedium),
           if ((r.body['content'] ?? '').toString().isNotEmpty) ...[
@@ -137,7 +138,7 @@ class _AnniversaryPageState extends ConsumerState<AnniversaryPage> {
             Text((r.body['content'] ?? '').toString(),
                 style: theme.textTheme.bodySmall),
           ],
-          const SizedBox(height: 6),
+          const SizedBox(height: Spacing.gapTight),
           Row(children: [
             Expanded(
               child: Text(

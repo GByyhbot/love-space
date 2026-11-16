@@ -31,6 +31,8 @@ import 'media_bubble_widgets.dart';
 import 'skin_bubble.dart';
 import 'voice_playback.dart';
 import 'wallpaper_sheet.dart';
+import '../../core/theme/motion.dart';
+import '../../core/theme/tokens.dart';
 
 class MessagesPage extends ConsumerStatefulWidget {
   const MessagesPage({super.key});
@@ -108,7 +110,7 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
       return;
     }
     Scrollable.ensureVisible(ctx,
-        duration: const Duration(milliseconds: 300), alignment: 0.5);
+        duration: Motion.slow, alignment: 0.5);
     setState(() {
       _flashId = id;
       _flashTick++;
@@ -164,7 +166,7 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
           0),
       color: menuColor,
       elevation: 6,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.lg)),
       items: [
         item('copy', Icons.copy_rounded, '复制'),
         item('reply', Icons.reply_rounded, '引用'),
@@ -384,11 +386,11 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
             offset: ref.watch(chatRecordProvider) != null
                 ? const Offset(0, 1.2)
                 : Offset.zero,
-            duration: const Duration(milliseconds: 250),
+            duration: Motion.base,
             curve: Curves.easeOutCubic,
             child: AnimatedOpacity(
               opacity: ref.watch(chatRecordProvider) != null ? 0 : 1,
-              duration: const Duration(milliseconds: 250),
+              duration: Motion.base,
               child: ChatCompose(
                 immersive: immersive,
                 dark: true,
@@ -448,7 +450,7 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
               hintText: '搜索最近的消息…',
               prefixIcon: Icon(Icons.search_rounded),
               isDense: true,
-              border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(12))),
+              border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(AppRadius.card))),
             ),
           ),
         ),
@@ -513,7 +515,7 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
           Icon(Icons.favorite_border_rounded, size: 44, color: theme.colorScheme.outline),
           const SizedBox(height: 12),
           Text('今天，有什么想对 TA 说？', style: theme.textTheme.titleMedium),
-          const SizedBox(height: 6),
+          const SizedBox(height: Spacing.gapTight),
           Text('说说日常，也说说想念。',
               style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.outline)),
         ]),
@@ -850,7 +852,7 @@ class _BubbleRow extends ConsumerWidget {
             child: content,
           )
         : AnimatedContainer(
-            duration: const Duration(milliseconds: 150),
+            duration: Motion.fast,
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
               color: mine
@@ -866,8 +868,8 @@ class _BubbleRow extends ConsumerWidget {
                     ]
                   : null,
               borderRadius: BorderRadius.only(
-                topLeft: const Radius.circular(16),
-                topRight: const Radius.circular(16),
+                topLeft: const Radius.circular(AppRadius.lg),
+                topRight: const Radius.circular(AppRadius.lg),
                 bottomLeft: Radius.circular(mine ? 16 : 4),
                 bottomRight: Radius.circular(mine ? 4 : 16),
               ),
@@ -879,7 +881,7 @@ class _BubbleRow extends ConsumerWidget {
       flashTick: flashTick,
       child: AnimatedScale(
         scale: pressed ? 1.02 : 1.0,
-        duration: const Duration(milliseconds: 150),
+        duration: Motion.fast,
         // 宽度随聊天内容自适应：Column 在 loose 约束下自身宽度 = 最大子宽，
         // 由 ConstrainedBox 夹到 Web .chat-bubble 的 44px 下限与
         // .chat-line 85%/92% 上限（短消息窄、长文本宽至上限）。
@@ -960,7 +962,7 @@ class _FlashWrapperState extends State<_FlashWrapper>
         final t = _c.isAnimating ? _a.value : 0.0;
         return DecoratedBox(
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(AppRadius.lg),
             color: t > 0
                 ? theme.colorScheme.primaryContainer.withValues(alpha: 0.9 * t)
                 : null,
@@ -991,9 +993,9 @@ class _PendingBubbleRow extends StatelessWidget {
       decoration: BoxDecoration(
         color: theme.colorScheme.primaryContainer.withValues(alpha: 0.6),
         borderRadius: const BorderRadius.only(
-          topLeft: Radius.circular(16),
-          topRight: Radius.circular(16),
-          bottomLeft: Radius.circular(16),
+          topLeft: Radius.circular(AppRadius.lg),
+          topRight: Radius.circular(AppRadius.lg),
+          bottomLeft: Radius.circular(AppRadius.lg),
           bottomRight: Radius.circular(4),
         ),
       ),

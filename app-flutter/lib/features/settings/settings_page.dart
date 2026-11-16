@@ -36,6 +36,8 @@ import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
 import 'backups_api.dart';
 import 'export_api.dart';
 import 'settings_state.dart';
+import '../../core/theme/motion.dart';
+import '../../core/theme/tokens.dart';
 
 /// `/settings` 独立二级页。
 class SettingsPage extends ConsumerStatefulWidget {
@@ -148,7 +150,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       if (key.currentContext == null) return;
       Scrollable.ensureVisible(
         key.currentContext!,
-        duration: const Duration(milliseconds: 260),
+        duration: Motion.base,
       );
     });
   }
@@ -184,7 +186,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         onRefresh: _bootstrap,
         child: ListView(
           controller: _scroll,
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 40),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, Spacing.pageBottom),
           children: [
             Text(
               '管理空间、账号和数据。',
@@ -227,7 +229,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     key: key,
     margin: const EdgeInsets.only(bottom: 12),
     child: Padding(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(Spacing.cardPad),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -250,7 +252,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text('主题配色　·　两个人共用', style: Theme.of(context).textTheme.labelSmall),
-          const SizedBox(height: 8),
+          const SizedBox(height: Spacing.gap),
           Wrap(
             spacing: 8,
             runSpacing: 8,
@@ -322,7 +324,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               ),
             ],
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: Spacing.gapTight),
           SwitchListTile(
             key: const Key('settings-motion'),
             contentPadding: EdgeInsets.zero,
@@ -339,7 +341,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 ?.copyWith(color: cs.outline),
           ),
           if (_themeError != null) ...[
-            const SizedBox(height: 8),
+            const SizedBox(height: Spacing.gap),
             Text(
               _themeError!,
               style: Theme.of(context).textTheme.bodySmall
@@ -380,7 +382,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     final seed = themeSeedColor(id, _customColor);
     return InkWell(
       key: Key('settings-theme-$id'),
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(AppRadius.sm),
       onTap: () {
         setState(() => _theme = id);
         _previewTheme();
@@ -392,7 +394,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           color: on
               ? Theme.of(context).colorScheme.primaryContainer
               : Theme.of(context).colorScheme.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(AppRadius.sm),
           border: Border.all(
             color: on
                 ? Theme.of(context).colorScheme.primary
@@ -414,7 +416,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             const SizedBox(height: 4),
             Text(
               label,
-              style: const TextStyle(fontSize: 11),
+              style: Theme.of(context).textTheme.labelSmall,
               textAlign: TextAlign.center,
             ),
           ],
@@ -512,7 +514,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text('首页封面照片', style: Theme.of(context).textTheme.labelSmall),
-          const SizedBox(height: 8),
+          const SizedBox(height: Spacing.gap),
           _coverPreview(context, cover),
           const SizedBox(height: 10),
           Row(
@@ -546,14 +548,14 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               ),
             ),
           if (_coverError != null) ...[
-            const SizedBox(height: 8),
+            const SizedBox(height: Spacing.gap),
             Text(
               _coverError!,
               style: Theme.of(context).textTheme.bodySmall
                   ?.copyWith(color: cs.error),
             ),
           ],
-          const SizedBox(height: 6),
+          const SizedBox(height: Spacing.gapTight),
           Text(
             '换好照片保存后会直接更新首页封面；想再换，回这里重选就行。',
             style: Theme.of(context).textTheme.bodySmall
@@ -583,7 +585,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       image = _coverPlaceholder(cs);
     }
     return ClipRRect(
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(AppRadius.sm),
       child: SizedBox(height: 120, width: double.infinity, child: image),
     );
   }
@@ -598,7 +600,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         const SizedBox(height: 4),
         Text(
           '选择一张照片作为我们的空间封面',
-          style: TextStyle(fontSize: 11, color: cs.outline),
+          style:
+              Theme.of(context).textTheme.labelSmall?.copyWith(color: cs.outline),
         ),
       ],
     ),
@@ -726,7 +729,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             '看看现在哪条线路最快，也可以手动切换。',
             style: Theme.of(context).textTheme.bodySmall,
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: Spacing.gap),
           FilledButton.icon(
             key: const Key('settings-link-probe'),
             onPressed: _probing ? null : _runProbe,
@@ -797,7 +800,10 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                         padding: const EdgeInsets.only(left: 6),
                         child: Text(
                           '最快',
-                          style: TextStyle(fontSize: 10, color: cs.primary),
+                          style: Theme.of(context)
+                              .textTheme
+                              .labelSmall
+                              ?.copyWith(color: cs.primary),
                         ),
                       ),
                     if (row.current)
@@ -805,7 +811,10 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                         padding: const EdgeInsets.only(left: 6),
                         child: Text(
                           '当前',
-                          style: TextStyle(fontSize: 10, color: cs.outline),
+                          style: Theme.of(context)
+                              .textTheme
+                              .labelSmall
+                              ?.copyWith(color: cs.outline),
                         ),
                       )
                     else
@@ -817,7 +826,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   ],
                 ),
               ),
-          const SizedBox(height: 6),
+          const SizedBox(height: Spacing.gapTight),
           Text(
             '检测在手机本地直接发起，数值是访问 /api/status 的往返耗时。'
             '在这里切换后，下次打开 App 会直接走这条线路。',
@@ -1102,7 +1111,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: Spacing.gap),
           Text(
             '网页功能自动更新；原生功能需下载新版 APK，可在检查更新中获取，'
             '也可复制下载链接发给对方在手机浏览器打开。',

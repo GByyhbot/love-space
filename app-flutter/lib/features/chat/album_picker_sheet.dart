@@ -12,6 +12,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/chat/chat_media.dart';
+import '../../core/theme/tokens.dart';
 
 /// 打开半屏相册选择器。
 /// [onSend] 点发送（mids 已勾选、caption 已填）；[onUpload] 点「上传」。
@@ -24,7 +25,7 @@ Future<void> showAlbumPicker(
     context: context,
     isScrollControlled: true,
     shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.lg))),
     builder: (_) => _AlbumSheet(onSend: onSend, onUpload: onUpload),
   );
 }
@@ -184,7 +185,7 @@ class _AlbumSheetState extends ConsumerState<_AlbumSheet> {
               borderRadius: const BorderRadius.only(
                   topRight: Radius.circular(6), bottomLeft: Radius.circular(6))),
           child: Text('${i + 1}',
-              style: const TextStyle(fontSize: 10, color: Colors.white)),
+              style: theme.textTheme.labelSmall?.copyWith(color: Colors.white)),
         ),
       ),
     ]);
@@ -231,7 +232,8 @@ class _AlbumSheetState extends ConsumerState<_AlbumSheet> {
                   decoration: BoxDecoration(
                       color: theme.colorScheme.primary, shape: BoxShape.circle),
                   child: Text('${at + 1}',
-                      style: const TextStyle(fontSize: 11, color: Colors.white)),
+                      style:
+                          theme.textTheme.labelSmall?.copyWith(color: Colors.white)),
                 ),
               ),
           ]),

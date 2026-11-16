@@ -1,4 +1,4 @@
-# 「UI/布局优化」章迁移清单（2026-11-15 **定案** · 段 A 已实现（待 QA 验证）2.2.8/VC228）
+# 「UI/布局优化」章迁移清单（2026-11-15 **定案** · 段 A 已实现（待 QA）2.2.8/VC228 · **段 B 已实现（待 QA）2.2.9/VC229**）
 
 > 出处与口径：本章由**四路并行只读调研**（A 视觉一致性逐页 / B 设计 token 抽取+深色字号 / C 布局问题证据化 / D 交互对账+遗留复核）+ 主理人抽查汇编；抽查实读 3 处关键条目（`home_page.dart:225-235`、`period_page.dart:301/:336`、`bubble_skin_sheet.dart:113-134`）全部属实。**结论逐条附 `文件:行号`，拿不准一律写「未核实」，不许推测**。
 > 状态：**2026-11-15 主人已拍板 D1–D7（第四节「决策点定案」），本清单由调研稿转定案**；段 A（错误通道欠账清偿）随 2.2.8/VC228 执行中，B/C/D 段按第五节「分段建议与版本位」固定版本位逐段放行。
@@ -87,6 +87,17 @@
 | ⚠️ `chat_repository.dart:61-68` `sendChatBody` | POST /api/records kind=chat | 4xx 时 fromJson 抛错走 pending 失败态（功能安全可重试）但拿不到 detail 原文 |
 
 > **段 A 落地备注（2.2.8/VC228，待 QA 验证）**：上表全部清偿——`uploadChatMedia` 接 `writeResponseError` 抛 `MediaValidationError`（message=detail 原文）+ 5 调用方逐一核查直通；`chat_media_test.dart` 夹具改与生产共用 `validateAppStatus` 形状 + 补 4xx 用例；`api_client.uploadMedia` 4xx 包回 `DioException(badResponse)`（与 5xx 同通道）；together_controller 5 写 / home mood 2 写 / bubble_skin_sheet / sendChatBody / logout 全部接显式判（sendChatBody 的 detail 原文进 pending 失败态保留可重试）；每处一条 4xx 单测见 `test/ui_polish_a_test.dart`。D9 护栏（notify_a_test）由「2dcb4a4 全文逐字比对」改为语义断言（占位仍在 + 无真跳转），原因：段 A 合法改动 chat_compose catch 分支。
+
+> **段 B 落地备注（2.2.9/VC229，待 QA 验证）**：必改 4 项（S1/G10/G11/G19）+ token 全量收敛（间距/圆角/字号/动效四类，D6 三处写死色随段）。纪律：只改取值来源，不改行为、不改 widget 树形态；2.1 基线 10 条经 `test/ui_polish_b_test.dart` 源码级逐条复核仍成立。令牌文件：`lib/core/theme/tokens.dart`（Spacing/AppRadius）+ `lib/core/theme/motion.dart`（Motion 三档）；`cardTheme`（AppRadius.card=12）落 `main.dart` ThemeData。**改动明细**：
+> - **S1** `home_page` 卡头部昵称 Expanded+ellipsis（信息结构不变）；长昵称夹具暴露同卡操作行（Spacer+长提示语，320 宽 +8.2px）与 S2 `_MoodRow`（昵称非 flex）两处预存 overflow，一并 Flexible+ellipsis 修复（S2 属段 B 计划范畴）。
+> - **G10/G11** `period_page` 黑87/黑54 → `colorScheme.onSurface`（浅=近黑/深=近白自适应）；**G19** `timeline_page` `Colors.grey` → `colorScheme.outline`（与 2.1 辅助文字口径同源）。单测深浅两亮度断言 widget 实际 Color 来自 Theme。
+> - **G19 附带修复（原逻辑缺陷，非设计变更）**：`itemCount` 原式只在 `hasMore`/`loading&&!hasMore` 时留尾槽，而页脚分支要求 `!hasMore && posts.isNotEmpty`——页脚在正常到底态**永远不可达**（真机从不出现）。一行补齐槽位还原页脚意图。
+> - **间距对照**：卡内 `all(14)`×10 + 卡内 `all(16)`×20 → `Spacing.cardPad=16`（G2，取主流值）；页面底部留白 `88`×7 / `100`×1 / `40`×2 / `32`×1 / `28`×2 / `24`×4（`fromLTRB` 底值，新增 channels:206/:516、dashboard:63 按规则入集）→ `Spacing.pageBottom=88`（G1 规则：滚动内容页统一底白 88，避让口径=底栏/悬浮操作+呼吸）；`SizedBox(height:6)`×58 → `Spacing.gapTight`、`(height:8)`×72 → `Spacing.gap`（half-step 两枚并存，**归并 6→8 待主人裁定**，裁定后删 gapTight 全局替换即可）。
+> - **圆角对照**：`circular(10)`×24 → `AppRadius.sm`；`circular(12)`×21+`Radius.circular(12)`×3 → `AppRadius.card`；`circular(14)`×3（14 归档）+`circular(16)`×6+`Radius.circular(16)`×10 → `AppRadius.lg`（G3 四档收敛为 10/12/16 三档）。残留：`chat_compose`×5（键盘/输入区禁区不碰）、`circular(1.5)`×3（细线指示器）、`circular(9)`×2（U7 未定性孤值）。
+> - **字号对照**：语义小字档 `fontSize:10`×10+`11`×11 → `labelSmall`；`12`×6+`13`×9 → `bodySmall`（共 36 处清零，±1px 视觉差为收敛固有）。残留白名单：emoji 装饰档 14-30 ×28 保留（D2 定案）；`size*0.38` 头像缩放 ×3、`isValue?10:9` 图表微标签 ×1（参数化，需自造档位，段 C 议）。
+> - **动效对照**（≤160→fast/161-280→base/281-320→slow）：`120`×3+`150`×3 → `Motion.fast`；`180`×1+`220`×2+`240`×2+`250`×3+`260`×3 → `Motion.base`；`300`×1+`320`×3 → `Motion.slow`（共 23 处归档）。白名单 12 处：timeline:63 搜索防抖 480、post_card:376 错峰延迟入参、chat_toast:96 toast 计时 2200 / :168 退出收尾 320 / :543 计时 ticker 60、chat_compose:333 振幅采样 80（禁区）、song_picker:234 首帧延迟 480、sse:138 重连退避、keyboard_metrics:56 键盘电梯 200（定案#2 唯一例外）、messages:925 闪烁循环 1400 / :1058 三点循环 1100 / media_bubble:243 声浪循环 800（repeat 循环不套三档）。
+> - **写死色残留（白名单）**：`Color(0x`×45（chat_toast 微信语义色板 ×10、经期页沉浸 phase 色板/日历 ×15、messages/皮肤气泡 ×7、wallpaper ×5、chat_chrome ×2、其余散点）；`Colors.white/white70/white60/white54/white24`×60（图上/ scrim/语音面板覆盖层）；`Colors.transparent`×11；`black45/38`×4（图上角标底/阴影 blur 色）；`period_page:285 Colors.grey`（phase 色板未知段 fallback，沉浸式有意设计）；`composer_sheet:758 Colors.grey`（建议级，段 C）。`black87/black54` 已清零（仅存注释）。
+> - **门禁**：`flutter analyze`+`dart analyze` 0 issues；全量 `flutter test` 通过（见段 B 小结，known flaky 2 项除外）；新测试 `test/ui_polish_b_test.dart` ×10（S1 两形态 / G10·G11 深浅 / G19 深浅 / token 常量 / 引用纪律 / 关键页面护栏 / 基线十条）。
 
 ---
 

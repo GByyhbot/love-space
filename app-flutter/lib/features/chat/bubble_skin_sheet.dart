@@ -18,13 +18,14 @@ import '../../core/chat/chat_state.dart';
 import '../auth/auth_state.dart';
 import 'chat_toast.dart' show ChatToastTone, chatToastProvider;
 import 'skin_bubble.dart';
+import '../../core/theme/tokens.dart';
 
 Future<void> showBubbleSkinSheet(BuildContext context) {
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
     shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.lg))),
     builder: (_) => const _BubbleSkinSheet(),
   );
 }

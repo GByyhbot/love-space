@@ -268,7 +268,10 @@ class PaDotMatrix extends StatelessWidget {
               SizedBox(
                   width: 56,
                   child: Text(row.name,
-                      style: TextStyle(fontSize: 11, color: cs.outline))),
+                      style: Theme.of(context)
+                          .textTheme
+                          .labelSmall
+                          ?.copyWith(color: cs.outline))),
               Wrap(
                 spacing: 5,
                 children: [

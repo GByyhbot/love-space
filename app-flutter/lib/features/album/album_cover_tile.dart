@@ -10,6 +10,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/cache/low_freq_cache.dart';
 import '../../core/chat/chat_media.dart';
+import '../../core/theme/motion.dart';
 
 class AlbumCoverTile extends ConsumerStatefulWidget {
   const AlbumCoverTile({
@@ -76,7 +77,7 @@ class _AlbumCoverTileState extends ConsumerState<AlbumCoverTile> {
         fit: BoxFit.cover,
         width: double.infinity,
         height: double.infinity,
-        fadeInDuration: const Duration(milliseconds: 220),
+        fadeInDuration: Motion.base,
         placeholder: (_, _) => widget.placeholder,
         errorWidget: (_, _, _) => widget.placeholder,
       ),

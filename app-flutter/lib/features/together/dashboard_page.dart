@@ -11,6 +11,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_client.dart' as api;
 import '../../core/together/together_data.dart';
+import '../../core/theme/tokens.dart';
 
 class DashboardPage extends ConsumerStatefulWidget {
   const DashboardPage({super.key});
@@ -60,7 +61,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
       body: RefreshIndicator(
         onRefresh: _load,
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, Spacing.pageBottom),
           children: [
             Text('我们的点点滴滴，都在这里。',
                 style: theme.textTheme.bodySmall
@@ -83,7 +84,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                   _meta(theme, '还没有记录，写下第一条就会出现在这里。')
                 else
                   _monthBars(theme, d.months),
-                const SizedBox(height: 6),
+                const SizedBox(height: Spacing.gapTight),
                 Text('每个月写下的记录条数',
                     style: theme.textTheme.labelSmall
                         ?.copyWith(color: cs.outline)),
@@ -95,9 +96,9 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                 else ...[
                   _metaRich(theme, '已实现 ', '${d.wishesDone}',
                       ' / ${d.wishesTotal} 个共同愿望'),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: Spacing.gap),
                   _bar(theme, d.wishesDone / d.wishesTotal, tall: true),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: Spacing.gapTight),
                   // Web：wp = wn ? Math.round(wd/wn*100) : 0
                   Text(
                       '完成度 ${(d.wishesDone / d.wishesTotal * 100).round()}%',
@@ -127,7 +128,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                   ('喜欢', '${d.likes}', '次'),
                   ('留言与评论', '${d.comments}', '条'),
                 ], two: true),
-                const SizedBox(height: 8),
+                const SizedBox(height: Spacing.gap),
                 Text(
                     '私密日记、草稿与定时惊喜只统计你自己的，另一半看不到；这里的数字只包含你能看到的内容。',
                     style: theme.textTheme.labelSmall
@@ -187,7 +188,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
     return Card(
       margin: EdgeInsets.zero,
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(Spacing.cardPad),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(title, style: theme.textTheme.titleMedium),
           const SizedBox(height: 10),
@@ -236,7 +237,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
               const SizedBox(height: 4),
               Text('${int.tryParse(m.month.substring(5, 7)) ?? ''}月',
                   style: theme.textTheme.labelSmall
-                      ?.copyWith(color: cs.outline, fontSize: 10)),
+                      ?.copyWith(color: cs.outline)),
             ]),
           ),
       ]),

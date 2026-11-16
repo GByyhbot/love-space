@@ -15,6 +15,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api/api_client.dart' as api;
 import '../../core/together/together_data.dart';
 import '../chat/chat_toast.dart';
+import '../../core/theme/tokens.dart';
 
 class WeeklyPage extends ConsumerStatefulWidget {
   const WeeklyPage({super.key});
@@ -156,7 +157,7 @@ class _WeeklyPageState extends ConsumerState<WeeklyPage> {
                   const SizedBox(height: 12),
                   if (w.highlights.isNotEmpty) ...[
                     Text('💗 本周精选', style: theme.textTheme.titleMedium),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: Spacing.gap),
                     for (final r in w.highlights) _highlightCard(theme, r),
                     const SizedBox(height: 12),
                   ],
@@ -186,10 +187,10 @@ class _WeeklyPageState extends ConsumerState<WeeklyPage> {
       margin: EdgeInsets.zero,
       color: cs.primaryContainer,
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(Spacing.cardPad),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(w.message, style: theme.textTheme.titleMedium),
-          const SizedBox(height: 8),
+          const SizedBox(height: Spacing.gap),
           Text(
               w.deltaText +
                   (w.topMood != null ? ' · 这周最常见的心情是 ${w.topMood}' : ''),
@@ -211,7 +212,7 @@ class _WeeklyPageState extends ConsumerState<WeeklyPage> {
     return Card(
       margin: EdgeInsets.only(bottom: 8),
       child: Padding(
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.all(Spacing.cardPad),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [
             Container(
@@ -228,7 +229,7 @@ class _WeeklyPageState extends ConsumerState<WeeklyPage> {
                     ?.copyWith(color: cs.outline)),
           ]),
           if (title.isNotEmpty) ...[
-            const SizedBox(height: 6),
+            const SizedBox(height: Spacing.gapTight),
             Text(title, style: theme.textTheme.titleSmall),
           ],
           if (content.isNotEmpty) ...[
@@ -284,7 +285,7 @@ class _WeeklyPageState extends ConsumerState<WeeklyPage> {
     return Card(
       margin: EdgeInsets.zero,
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(Spacing.cardPad),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(title, style: theme.textTheme.titleMedium),
           const SizedBox(height: 10),

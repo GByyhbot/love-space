@@ -21,6 +21,7 @@ import '../../core/api/api_client.dart';
 import '../../core/chat/chat_media.dart';
 import '../../core/chat/chat_state.dart';
 import 'chat_toast.dart' show ChatToastTone, chatToastProvider;
+import '../../core/theme/tokens.dart';
 
 class MusicSearchResult {
   const MusicSearchResult({
@@ -68,7 +69,7 @@ Future<void> showSongPicker(BuildContext context) {
     context: context,
     isScrollControlled: true,
     shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.lg))),
     builder: (_) => const _SongSheet(),
   );
 }
@@ -310,7 +311,7 @@ class _SongSheetState extends ConsumerState<_SongSheet> {
                 hintText: '搜歌名或歌手，例如：晚安',
                 prefixIcon: Icon(Icons.search_rounded),
                 isDense: true,
-                border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(12))),
+                border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(AppRadius.card))),
               ),
             ),
           ),
