@@ -14,7 +14,6 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/sse/sse_client.dart';
 import '../../core/together/together_data.dart';
-import '../settings/settings_state.dart' show spaceEditRequestedProvider;
 import '../shell/web_chrome.dart' show webSerifStyle;
 import 'together_controller.dart';
 import '../../core/theme/tokens.dart';
@@ -164,84 +163,10 @@ class _TogetherPageState extends ConsumerState<TogetherPage> {
                     route: '/together/weekly',
                   ),
                 ]),
-                // 「数据管理与通知渠道」章 段 A：hub 底部「⚙️ 设置」8 张卡
-                //（对齐 app.js:1229 settings-tools 8 卡顺序）；第 7 张
-                // 「🔔 提醒设置」在邀请另一半入住之后、全部设置之前，
-                // context.push('/channels')，逐张点通无死卡。
-                const SizedBox(height: 18),
-                _settingsHeading(theme),
-                const SizedBox(height: Spacing.gap),
-                // 2.3.4：8 张设置卡 2 列宫格（原顺序零变化）
-                _twoColumnGrid([
-                  _settingsCard(
-                    context,
-                    key: 'settings-hub-space',
-                    emoji: '🏡',
-                    title: '空间信息',
-                    desc: '空间名称与相恋日期',
-                    onTap: () {
-                      ref.read(spaceEditRequestedProvider.notifier).state = true;
-                      context.go('/home');
-                    },
-                  ),
-                  _settingsCard(
-                    context,
-                    key: 'settings-hub-theme',
-                    emoji: '🎨',
-                    title: '主题与外观',
-                    desc: '主题色、夜间模式与动效',
-                    onTap: () => context.push('/settings?section=theme'),
-                  ),
-                  _settingsCard(
-                    context,
-                    key: 'settings-hub-cover',
-                    emoji: '🖼️',
-                    title: '主页背景',
-                    desc: '换一张首页封面照片',
-                    onTap: () => context.push('/settings?section=cover'),
-                  ),
-                  _settingsCard(
-                    context,
-                    key: 'settings-hub-chat-bg',
-                    emoji: '🌄',
-                    title: '聊天背景',
-                    desc: '聊天壁纸与文字对比度',
-                    onTap: () => context.push('/messages'),
-                  ),
-                  _settingsCard(
-                    context,
-                    key: 'settings-hub-chat-bubble',
-                    emoji: '💬',
-                    title: '聊天气泡',
-                    desc: '两千多款气泡皮肤随手挑',
-                    onTap: () => context.push('/messages'),
-                  ),
-                  _settingsCard(
-                    context,
-                    key: 'settings-hub-invite',
-                    emoji: '💌',
-                    title: '邀请另一半入住',
-                    desc: '把你们的专属空间分享给 TA',
-                    onTap: () => context.push('/profile'),
-                  ),
-                  // 段 A 第 8 张卡：位置对齐 Web 8 卡（邀请之后、全部设置之前）。
-                  _settingsCard(
-                    context,
-                    key: 'settings-hub-remind',
-                    emoji: '🔔',
-                    title: '提醒设置',
-                    desc: '通知渠道与提醒偏好',
-                    onTap: () => context.push('/channels'),
-                  ),
-                  _settingsCard(
-                    context,
-                    key: 'settings-hub-all',
-                    emoji: '⚙️',
-                    title: '全部设置',
-                    desc: '主题、背景、链路检测与检查更新',
-                    onTap: () => context.push('/settings'),
-                  ),
-                ]),
+                // 2.4.0 设置拆分段：底部整个「⚙️ 设置」区（标题 + 8 卡宫格）
+                // 退役——设置整体离开「我们」页，入口改为五 tab 顶栏齿轮
+                // （shell_page.dart WebTopIconButton 'shell-settings'）。
+                // 设置内容本体已拆入设置主页 /settings 及六张独立页。
                 if (st.error != null) ...[
                   const SizedBox(height: 12),
                   Text(
@@ -258,15 +183,6 @@ class _TogetherPageState extends ConsumerState<TogetherPage> {
       ), // Scaffold
     ); // SafeArea
   }
-
-  /// `app.js:1229` `settings-section-heading`「⚙️ 设置」。
-  Widget _settingsHeading(ThemeData theme) => Row(
-    children: [
-      Text('⚙️', style: theme.textTheme.titleMedium),
-      const SizedBox(width: 6),
-      Text('设置', style: theme.textTheme.titleMedium),
-    ],
-  );
 
   // ── 2.3.4（推广段一重做）：Web tools-grid 2 列宫格 ──────────────────
   // Web 工具区/设置区为 tools-grid 2 列宫格（style.css:1078-1083：tool-card
@@ -336,25 +252,6 @@ class _TogetherPageState extends ConsumerState<TogetherPage> {
           ],
         ),
       ),
-    );
-  }
-
-  /// hub 设置卡（**只做导航，不复制已有能力的 UI**；8 张逐张点通、无死卡）。
-  Widget _settingsCard(
-    BuildContext context, {
-    required String key,
-    required String emoji,
-    required String title,
-    required String desc,
-    required VoidCallback onTap,
-  }) {
-    return _gridCard(
-      context,
-      emoji: emoji,
-      title: title,
-      desc: desc,
-      onTap: onTap,
-      cardKey: Key(key),
     );
   }
 

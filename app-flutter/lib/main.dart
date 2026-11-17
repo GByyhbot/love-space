@@ -10,8 +10,15 @@ import 'core/album/album_data.dart' show PhotoItem;
 import 'core/theme/tokens.dart';
 import 'core/together/together_data.dart' show TogetherRecord;
 import 'features/account/profile_page.dart';
+import 'features/settings/appearance_page.dart';
 import 'features/settings/backups_page.dart';
-import 'features/settings/settings_page.dart';
+import 'features/settings/chat_bubble_page.dart';
+import 'features/settings/chat_wallpaper_page.dart';
+import 'features/settings/cover_page.dart';
+import 'features/settings/export_page.dart';
+import 'features/settings/invite_page.dart';
+import 'features/settings/links_page.dart';
+import 'features/settings/settings_home_page.dart';
 import 'features/settings/settings_state.dart';
 import 'features/album/album_viewer_page.dart';
 import 'features/auth/auth_state.dart';
@@ -70,9 +77,25 @@ final routerProvider = Provider<GoRouter>((ref) {
       // 聊天（悄悄话）：二级页，Shell AppBar 私聊图标 push 进入（对齐 Web 顶栏入口）
       GoRoute(path: '/messages', builder: (_, _) => const MessagesPage()),
       GoRoute(path: '/profile', builder: (_, _) => const ProfilePage()),
-      // 条目 8 段 D：设置缺口独立二级页（context.push；AppBar 自动返回 +
-      // 系统手势可回）。账号资料页 profile_page.dart 完全不动。
-      GoRoute(path: '/settings', builder: (_, _) => const SettingsPage()),
+      // 2.4.0 设置拆分段：全量长设置页退役，/settings 由设置主页接管
+      // （分组索引 + 关于页脚）；六张内容独立页挂子路径，一律 push。
+      GoRoute(path: '/settings', builder: (_, _) => const SettingsHomePage()),
+      GoRoute(
+          path: '/settings/theme', builder: (_, _) => const AppearancePage()),
+      GoRoute(
+          path: '/settings/cover', builder: (_, _) => const CoverPage()),
+      GoRoute(
+          path: '/settings/links', builder: (_, _) => const LinksPage()),
+      GoRoute(
+          path: '/settings/export', builder: (_, _) => const ExportPage()),
+      GoRoute(
+          path: '/settings/invite', builder: (_, _) => const InvitePage()),
+      GoRoute(
+          path: '/settings/chat-wallpaper',
+          builder: (_, _) => const ChatWallpaperPage()),
+      GoRoute(
+          path: '/settings/chat-bubble',
+          builder: (_, _) => const ChatBubblePage()),
       // 「数据管理与通知渠道」章 段 A：通知渠道 / 通知中心二级页。
       // 一律 context.push（主页在路由栈）；AppBar 自动返回按钮 +
       // 系统返回手势都能回上一页（widget 用例两条独立路径）。

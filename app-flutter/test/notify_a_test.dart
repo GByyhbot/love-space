@@ -1150,17 +1150,21 @@ void main() {
       //    无真跳转，以上 ①② 已完整覆盖，护栏强度不弱化。
     });
 
-    test('hub 第 8 张提醒设置卡：key / 顺序 / 跳转', () {
-      final String src = File('lib/features/together/together_page.dart')
+    test('2.4.0：提醒设置入口迁设置主页（hub 8 卡退役）', () {
+      final String home = File(
+              'lib/features/settings/settings_home_page.dart')
           .readAsStringSync();
-      final int invite = src.indexOf("key: 'settings-hub-invite'");
-      final int remind = src.indexOf("key: 'settings-hub-remind'");
-      final int all = src.indexOf("key: 'settings-hub-all'");
-      expect(remind, greaterThan(invite), reason: '在邀请之后');
-      expect(remind, lessThan(all), reason: '在全部设置之前');
-      expect(src.contains("context.push('/channels')"), isTrue);
-      expect(src.contains("emoji: '🔔'"), isTrue);
-      expect(src.contains("title: '提醒设置'"), isTrue);
+      expect(home.contains("Key('settings-home-remind')"), isTrue,
+          reason: '设置主页提醒行 key 在位');
+      expect(home.contains("context.push('/channels')"), isTrue,
+          reason: '提醒行 → /channels 跳转在位');
+      expect(home.contains("emoji: '🔔'"), isTrue);
+      expect(home.contains("title: '提醒设置'"), isTrue);
+      final String together = File(
+              'lib/features/together/together_page.dart')
+          .readAsStringSync();
+      expect(together.contains('settings-hub-remind'), isFalse,
+          reason: 'hub 第 8 张提醒卡已随设置区退役');
     });
 
     test('版本位 ≥ 2.2.5+225（VC225 落定；段 B 起顺延为 2.2.6+226）', () {

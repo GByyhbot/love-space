@@ -105,6 +105,17 @@ class _ShellPageState extends ConsumerState<ShellPage> {
             badge: unread > 0 ? WebBadge(unread > 99 ? '99+' : '$unread') : null,
           ),
           const SizedBox(width: ChromeMetrics.topBtnGap),
+          // 2.4.0 设置拆分段：齿轮入口（五 tab 顶栏通用，头像左侧）。
+          // 🔴 齿轮是顶栏组件本体的一部分（WebTopIconButton 同款 42px
+          // 圆形玻璃钮），禁止任何悬浮 overlay（首页冻结教训）；
+          // push /settings（设置主页），返回回到原 tab（IndexedStack 保留）。
+          WebTopIconButton(
+            key: const Key('shell-settings'),
+            tooltip: '设置',
+            onPressed: () => context.push('/settings'),
+            icon: Icons.settings_outlined,
+          ),
+          const SizedBox(width: ChromeMetrics.topBtnGap),
           // 头像入口 → 账号资料页（对齐 Web 账号菜单：资料/邀请/退出都在那里）。
           // 🔴 阶段 2 通则：二级页一律 push 打开（保留主页在路由栈），
           // 系统返回手势/返回键回上一页；只有主页根部按返回才退出 App。

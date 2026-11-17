@@ -28,7 +28,8 @@ import 'package:love_space/core/sse/sse_client.dart'
     show SseEvent, sseEventsProvider;
 import 'package:love_space/features/chat/chat_toast.dart' show ChatToastHost;
 import 'package:love_space/features/settings/export_api.dart';
-import 'package:love_space/features/settings/settings_page.dart';
+import 'package:love_space/features/settings/export_page.dart';
+import 'package:love_space/features/settings/settings_home_page.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 // ── 夹具（模拟服务端三端点形状，4xx 走 bytes JSON 错误体）──────────────
@@ -202,7 +203,9 @@ GoRouter _settingsRouter({String hubMarker = 'page-hub'}) => GoRouter(
       path: '/hub',
       builder: (_, _) => Scaffold(body: Center(child: Text(hubMarker))),
     ),
-    GoRoute(path: '/settings', builder: (_, _) => const SettingsPage()),
+    GoRoute(path: '/settings', builder: (_, _) => const SettingsHomePage()),
+    GoRoute(
+        path: '/settings/export', builder: (_, _) => const ExportPage()),
   ],
 );
 
@@ -488,22 +491,28 @@ void main() {
 
   // ── widget：/settings 三行入口 / 文案逐字 / 防重入 / 返回路径 ────────
   group('/settings 数据导出卡（widget）', () {
-    testWidgets('三行入口文案逐字 + 卡标题 + 说明 + 既有设置项不受影响', (tester) async {
+    testWidgets('2.4.0：导出三行搬独立页——设置主页索引行 + 独立页三行逐字',
+        (tester) async {
       final store = _Store();
       final c = await _container(store);
       final router = _settingsRouter();
       await _pump(tester, _app(c, router: router));
-      router.push('/settings');
+
+      // 设置主页：索引行在位（点击 → 独立页）。
+      router.push('/settings/export');
+      await tester.pumpAndSettle();
+      expect(find.text('数据导出'), findsWidgets,
+          reason: '设置主页索引行（路由栈下层页保留可叠加）');
+      await tester.tap(find.text('数据导出').first);
       await tester.pumpAndSettle();
 
-      expect(find.text('数据导出'), findsOneWidget);
-      // 三行文案逐字对齐 Web app.js:1482
+      // 独立页：三行文案逐字对齐 Web app.js:1482 + 说明 + 三 key。
+      expect(find.text('数据导出'), findsWidgets,
+          reason: 'AppBar 与卡标题同名（原全量页形态一致）');
       expect(find.text(exportRecordsLabel), findsOneWidget);
       expect(find.text(exportMarkdownLabel), findsOneWidget);
       expect(find.text(exportIcsLabel), findsOneWidget);
-      // 说明文案（Web small-note 逐字，末句锚点）
       expect(find.text(exportCardNote), findsOneWidget);
-      // 三个入口都带独立 key
       for (final key in <String>[
         'settings-export-records',
         'settings-export-markdown',
@@ -511,21 +520,7 @@ void main() {
       ]) {
         expect(find.byKey(Key(key)), findsOneWidget, reason: '$key 入口存在');
       }
-      // 位置：连接卡之后、关于卡之前（…连接 → 数据导出 → 关于）
-      // 🔴「关于」二字在 heading 与卡标题各出现一次（findsWidgets），
-      // 位置锚点改用 about 卡内唯一文本「恋爱空间」。
-      final linkPos = tester.getTopLeft(find.text('链路检测与线路切换')).dy;
-      final exportPos = tester.getTopLeft(find.text('数据导出')).dy;
-      final aboutPos = tester.getTopLeft(find.text('恋爱空间')).dy;
-      expect(exportPos, greaterThan(linkPos));
-      expect(exportPos, lessThan(aboutPos));
-      // 既有设置项不受影响
-      expect(find.text('主题与外观'), findsOneWidget);
-      expect(find.text('主页背景'), findsOneWidget);
-      expect(find.text('链路检测与线路切换'), findsOneWidget);
-      expect(find.text('检查更新'), findsOneWidget);
-      expect(find.text('复制 App 下载链接'), findsOneWidget);
-      // 段 C 不加：无 admin 备份按钮、无存储摘要条
+      // admin 备份行不随迁（备份入口统一挂设置主页）。
       expect(find.text('完整备份与存储占用'), findsNothing);
       expect(find.textContaining('存储占用与备份'), findsNothing);
     });
@@ -538,7 +533,7 @@ void main() {
       final c = await _container(store);
       final router = _settingsRouter();
       await _pump(tester, _app(c, router: router));
-      router.push('/settings');
+      router.push('/settings/export');
       await tester.pumpAndSettle();
 
       await tester.tap(find.byKey(const Key('settings-export-records')));
@@ -571,7 +566,7 @@ void main() {
       final c = await _container(store);
       final router = _settingsRouter();
       await _pump(tester, _app(c, router: router));
-      router.push('/settings');
+      router.push('/settings/export');
       await tester.pumpAndSettle();
 
       await tester.tap(find.byKey(const Key('settings-export-records')));
@@ -610,14 +605,14 @@ void main() {
       await _pump(tester, _app(c, router: router));
       await tester.tap(find.text('page-hub'));
       await tester.pumpAndSettle();
-      router.push('/settings');
+      router.push('/settings/export');
       await tester.pumpAndSettle();
       expect(find.byType(BackButton), findsOneWidget);
-      expect(find.text('数据导出'), findsOneWidget);
+      expect(find.text('数据导出'), findsWidgets);
       await tester.tap(find.byType(BackButton));
       await tester.pumpAndSettle();
       expect(find.text('page-hub'), findsOneWidget);
-      router.push('/settings');
+      router.push('/settings/export');
       await tester.pumpAndSettle();
       await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();

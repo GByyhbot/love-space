@@ -19,7 +19,7 @@ import 'package:love_space/core/sse/sse_client.dart'
     show SseEvent, sseEventsProvider;
 import 'package:love_space/features/chat/chat_toast.dart' show ChatToastHost;
 import 'package:love_space/features/personal/personal_controller.dart';
-import 'package:love_space/features/settings/settings_page.dart';
+import 'package:love_space/features/settings/settings_home_page.dart';
 import 'package:love_space/features/settings/settings_state.dart';
 import 'package:love_space/features/together/together_page.dart';
 import 'package:love_space/main.dart' show LoveApp, routerProvider;
@@ -313,25 +313,30 @@ void main() {
           .readAsStringSync();
       expect(src.contains('model_dump()'), isTrue);
       expect(src.contains('{...spaceRaw, ...changes}'), isTrue);
-      final page = File('lib/features/settings/settings_page.dart')
+      // 2.4.0 设置拆分段：节代码搬入独立页，逐页校验同一契约——
+      // 保存链走 saveSpaceChanges/xxxSpaceChanges，绝不自己发 PUT。
+      final appearance = File('lib/features/settings/appearance_page.dart')
           .readAsStringSync();
-      expect(page.contains('saveSpaceChanges('), isTrue);
-      expect(page.contains('themeSpaceChanges('), isTrue);
-      expect(page.contains('coverSpaceChanges('), isTrue);
-      // 页面绝不自己构造部分体：改动的字段一律经 xxxSpaceChanges() 生成，
-      // 且页面不直接发 PUT /api/space（防抹除唯一入口在 settings_state.dart）。
-      // 注意：页面里的 `'theme': GlobalKey()` 是锚点 key，不是 PUT body，
-      // 故以「不直接 put / 不含 custom_color 字面量」作精确护栏。
-      expect(
-        page.contains("dio.put('/api/space'"),
-        isFalse,
-        reason: '页面不得自己发部分体 PUT',
-      );
-      expect(
-        page.contains("'custom_color':"),
-        isFalse,
-        reason: '页面不得自己构造含 custom_color 的部分体',
-      );
+      expect(appearance.contains('saveSpaceChanges('), isTrue);
+      expect(appearance.contains('themeSpaceChanges('), isTrue);
+      final cover =
+          File('lib/features/settings/cover_page.dart').readAsStringSync();
+      expect(cover.contains('saveSpaceChanges('), isTrue);
+      expect(cover.contains('coverSpaceChanges('), isTrue);
+      for (final page in [appearance, cover]) {
+        // 页面绝不自己构造部分体：改动的字段一律经 xxxSpaceChanges() 生成，
+        // 且页面不直接发 PUT /api/space（防抹除唯一入口在 settings_state.dart）。
+        expect(
+          page.contains("dio.put('/api/space'"),
+          isFalse,
+          reason: '页面不得自己发部分体 PUT',
+        );
+        expect(
+          page.contains("'custom_color':"),
+          isFalse,
+          reason: '页面不得自己构造含 custom_color 的部分体',
+        );
+      }
     });
   });
 
@@ -584,7 +589,8 @@ void main() {
       expect(mainSrc.contains('ColorScheme.fromSeed('), isTrue);
     });
 
-    testWidgets('hub 底部 8 张设置卡逐张点通、无死卡；提醒设置卡已加', (tester) async {
+    testWidgets('2.4.0：「我们」页设置区已退役——8 张设置卡零残留、工具区不受影响',
+        (tester) async {
       final store = _Store();
       final c = await _container(store);
       final router = GoRouter(
@@ -599,33 +605,13 @@ void main() {
             builder: (_, _) =>
                 const Scaffold(body: Center(child: Text('page-home'))),
           ),
-          GoRoute(
-            path: '/messages',
-            builder: (_, _) =>
-                const Scaffold(body: Center(child: Text('page-messages'))),
-          ),
-          GoRoute(
-            path: '/profile',
-            builder: (_, _) =>
-                const Scaffold(body: Center(child: Text('page-profile'))),
-          ),
-          GoRoute(
-            path: '/settings',
-            builder: (_, _) =>
-                const Scaffold(body: Center(child: Text('page-settings'))),
-          ),
-          // 段 A：第 8 张「提醒设置」卡 → /channels（占位页验证点通）。
-          GoRoute(
-            path: '/channels',
-            builder: (_, _) =>
-                const Scaffold(body: Center(child: Text('page-channels'))),
-          ),
         ],
       );
       await _pump(tester, _app(c, router: router));
 
-      expect(find.text('⚙️'), findsWidgets);
-      expect(find.text('设置'), findsOneWidget);
+      // 设置区整体离开「我们」页：标题与 8 张卡全部消失。
+      expect(find.text('⚙️'), findsNothing,
+          reason: '🔴 「⚙️ 设置」标题退役（设置入口改顶栏齿轮）');
       for (final t in <String>[
         '空间信息',
         '主题与外观',
@@ -636,52 +622,29 @@ void main() {
         '提醒设置',
         '全部设置',
       ]) {
-        expect(find.text(t), findsOneWidget, reason: '$t 卡必须存在');
+        expect(find.text(t), findsNothing, reason: '$t 设置卡已随区退役');
       }
-      expect(
-        find.byKey(const Key('settings-hub-remind')),
-        findsOneWidget,
-        reason: '段 A 第 8 张提醒设置卡（对齐 Web 8 卡顺序）',
-      );
-
-      final cases = <(String, String)>[
-        ('settings-hub-space', 'page-home'),
-        ('settings-hub-theme', 'page-settings'),
-        ('settings-hub-cover', 'page-settings'),
-        ('settings-hub-chat-bg', 'page-messages'),
-        ('settings-hub-chat-bubble', 'page-messages'),
-        ('settings-hub-invite', 'page-profile'),
-        ('settings-hub-remind', 'page-channels'),
-        ('settings-hub-all', 'page-settings'),
-      ];
-      for (final (key, marker) in cases) {
-        // 回到 hub 再点下一张（go_router 14.x 移除了 GoRouter.location，
-        // 直接无条件 go('/hub') 复位，已在 /hub 时也是幂等的）
-        router.go('/hub');
-        await tester.pumpAndSettle();
-        final finder = find.byKey(Key(key));
-        expect(finder, findsOneWidget, reason: '$key 卡存在');
-        await tester.ensureVisible(finder);
-        await tester.pumpAndSettle();
-        await tester.tap(finder);
-        await tester.pumpAndSettle();
-        expect(
-          find.text(marker),
-          findsOneWidget,
-          reason: '$key 点击后必须真跳转（不许死卡）',
-        );
+      for (final key in <String>[
+        'settings-hub-space',
+        'settings-hub-theme',
+        'settings-hub-cover',
+        'settings-hub-chat-bg',
+        'settings-hub-chat-bubble',
+        'settings-hub-invite',
+        'settings-hub-remind',
+        'settings-hub-all',
+      ]) {
+        expect(find.byKey(Key(key)), findsNothing, reason: '$key 卡不再存在');
       }
-      // 「空间信息」卡是活卡：置位 spaceEditRequestedProvider，真实首页的
-      // _Hero 监听后弹已有编辑弹层并复位；测试里的 /home 是占位页，不消费，
-      // 故标志保持 true —— 正好证明该卡点了确实有动作（不是死卡）。
-      expect(
-        c.read(spaceEditRequestedProvider),
-        isTrue,
-        reason: '空间信息卡置位了编辑意图标志（真实首页消费），非死卡',
-      );
+      // 空间信息原经由设置卡跳首页触发编辑——设置区退役后标志不得被误置位。
+      expect(c.read(spaceEditRequestedProvider), isFalse);
+      // 工具区不受瘦身影响：工具卡文案仍在位（宽卡 emoji 与标题分开渲染）。
+      expect(find.text('🌸'), findsOneWidget, reason: '生理期宽卡 emoji 在位');
+      expect(find.text('生理期'), findsOneWidget,
+          reason: '生理期宽卡标题在位（瘦身不得误伤工具区）');
     });
 
-    testWidgets('设置页返回按钮 + 系统手势可回；账号资料页完全不动', (tester) async {
+    testWidgets('设置主页：分组索引九行落点逐行正确 + 返回可回', (tester) async {
       final store = _Store();
       final c = await _container(store);
       final router = GoRouter(
@@ -692,38 +655,76 @@ void main() {
             builder: (_, _) =>
                 const Scaffold(body: Center(child: Text('page-hub'))),
           ),
-          GoRoute(path: '/settings', builder: (_, _) => const SettingsPage()),
+          GoRoute(
+              path: '/settings', builder: (_, _) => const SettingsHomePage()),
+          // 各落点占位页：验证行点击真实到达、无死行。
+          for (final (path, marker) in const <(String, String)>[
+            ('/settings/theme', 'page-theme'),
+            ('/settings/cover', 'page-cover'),
+            ('/settings/chat-wallpaper', 'page-chat-wallpaper'),
+            ('/settings/chat-bubble', 'page-chat-bubble'),
+            ('/channels', 'page-channels'),
+            ('/settings/links', 'page-links'),
+            ('/settings/export', 'page-export'),
+            ('/backups', 'page-backups'),
+            ('/settings/invite', 'page-invite'),
+            ('/home', 'page-home'),
+          ])
+            GoRoute(
+              path: path,
+              builder: (_, _) => Scaffold(
+                  body: Center(child: Text(marker, key: Key(marker))),
+              ),
+            ),
         ],
       );
       await _pump(tester, _app(c, router: router));
-      await tester.tap(find.text('page-hub')); // 触发一次交互，无副作用
+      router.push('/settings');
+      await tester.pumpAndSettle();
+      expect(find.text('管理空间、账号和数据。'), findsOneWidget,
+          reason: '设置主页页头副题（沿用原全量页逐字）');
+
+      // 九行逐行点通（「空间信息」行是弹窗意图置位，单独断言）。
+      final routes = <(Key, String)>[
+        (const Key('settings-home-theme'), 'page-theme'),
+        (const Key('settings-home-cover'), 'page-cover'),
+        (const Key('settings-home-chat-bg'), 'page-chat-wallpaper'),
+        (const Key('settings-home-chat-bubble'), 'page-chat-bubble'),
+        (const Key('settings-home-remind'), 'page-channels'),
+        (const Key('settings-home-links'), 'page-links'),
+        (const Key('settings-home-export'), 'page-export'),
+        (const Key('settings-home-backups'), 'page-backups'),
+        (const Key('settings-home-invite'), 'page-invite'),
+      ];
+      for (final (key, marker) in routes) {
+        router.go('/settings');
+        await tester.pumpAndSettle();
+        final finder = find.byKey(key);
+        expect(finder, findsOneWidget, reason: '$key 行存在');
+        await tester.ensureVisible(finder);
+        await tester.pumpAndSettle();
+        await tester.tap(finder);
+        await tester.pumpAndSettle();
+        expect(find.byKey(Key(marker)), findsOneWidget,
+            reason: '$key 点击必须真到达落点（无死行）');
+      }
+      // 空间信息行：置位弹窗意图标志（真实首页消费）。
+      router.go('/settings');
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('settings-home-space')));
+      await tester.pumpAndSettle();
+      expect(c.read(spaceEditRequestedProvider), isTrue,
+          reason: '空间信息行置位编辑意图（沿用原机制）');
+      // 返回按钮可回原页：先 go('/hub') 清掉逐行循环残留的 push 栈，
+      // 再 push('/settings')（/hub 保留在栈底 → AppBar 出自动返回钮）。
+      router.go('/hub');
       await tester.pumpAndSettle();
       router.push('/settings');
       await tester.pumpAndSettle();
-      expect(
-        find.byType(BackButton),
-        findsOneWidget,
-        reason: 'AppBar automaticallyImplyLeading 不关',
-      );
-      expect(find.text('设置'), findsWidgets);
+      expect(find.byType(BackButton), findsOneWidget);
       await tester.tap(find.byType(BackButton));
       await tester.pumpAndSettle();
       expect(find.text('page-hub'), findsOneWidget);
-      router.push('/settings');
-      await tester.pumpAndSettle();
-      await tester.binding.handlePopRoute();
-      await tester.pumpAndSettle();
-      expect(find.text('page-hub'), findsOneWidget);
-
-      // profile_page.dart 完全不动：源码级护栏
-      final profile = File('lib/features/account/profile_page.dart')
-          .readAsStringSync();
-      expect(profile.contains('class ProfilePage'), isTrue);
-      expect(profile.contains('SettingsPage'), isFalse);
-      expect(profile.contains("path: '/settings'"), isFalse);
-      final mainSrc = File('lib/main.dart').readAsStringSync();
-      expect(mainSrc.contains("path: '/settings'"), isTrue);
-      expect(mainSrc.contains('const SettingsPage()'), isTrue);
     });
   });
 }

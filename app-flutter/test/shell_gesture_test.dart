@@ -320,6 +320,58 @@ void main() {
       await _drainTimers(tester);
     });
 
+    testWidgets('2.4.0 齿轮入口：五 tab 顶栏齿轮在位，点击落设置主页，返回原 tab',
+        (tester) async {
+      final adapter = _Adapter((o, i) {
+        if (o.uri.path == '/api/me') return _json(_me());
+        return _json(<Object>[]);
+      });
+      final container = await _container(adapter);
+      tester.view.devicePixelRatio = 1.0;
+      tester.view.physicalSize = const Size(393, 800);
+      addTearDown(tester.view.reset);
+      final router = GoRouter(initialLocation: '/', routes: [
+        GoRoute(path: '/', builder: (_, _) => const ShellPage()),
+        GoRoute(
+            path: '/settings',
+            builder: (_, _) => Scaffold(
+                appBar: AppBar(title: const Text('SETTINGS_HOME')),
+                body: const Center(child: Text('settings-body')))),
+      ]);
+      addTearDown(router.dispose);
+      await tester.pumpWidget(UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp.router(routerConfig: router),
+      ));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 120));
+      await tester.pump();
+
+      // 切到第 3 个 tab（相册），制造「非首页 tab」状态。
+      await tester.tap(find.text('相册'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      int? stackIndex() =>
+          tester.widget<IndexedStack>(find.byType(IndexedStack).first).index;
+      expect(stackIndex(), 2, reason: '前置：相册 tab 已选中');
+
+      // 齿轮在位且点击落设置主页（WebTopIconButton 顶栏本体，非 overlay）。
+      final gear = find.byKey(const Key('shell-settings'));
+      expect(gear, findsOneWidget, reason: '🔴 五 tab 顶栏齿轮入口在位');
+      await tester.tap(gear);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text('SETTINGS_HOME'), findsOneWidget,
+          reason: '🔴 齿轮点击落设置主页');
+
+      // 返回回到原 tab（IndexedStack 保留）：pop 后相册 tab 仍选中。
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+      expect(find.text('SETTINGS_HOME'), findsNothing);
+      expect(stackIndex(), 2, reason: '🔴 返回后仍在切走前的 tab（相册=2）');
+      await _drainTimers(tester);
+    });
+
     testWidgets('hero 卡 tap → 弹「空间信息」编辑层', (tester) async {
       final adapter = _Adapter((o, i) {
         if (o.uri.path == '/api/me') return _json(_me());

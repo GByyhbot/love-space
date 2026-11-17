@@ -21,6 +21,7 @@ import '../../core/ui/error_view.dart';
 import '../auth/auth_state.dart';
 import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
 import '../chat/voice_diag.dart';
+import '../settings/invite_card.dart';
 import '../../core/theme/tokens.dart';
 
 class ProfilePage extends ConsumerStatefulWidget {
@@ -38,8 +39,6 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   String? _pendingAvatarId; // 本次已上传待保存的头像 id
   Uint8List? _avatarBytes;  // 头像预览字节
   bool _busy = false;
-  bool _inviting = false;
-  String? _inviteUrl;       // 生成的邀请链接
   String? _error;
 
   // 实际安装包版本（取自 PackageInfo，不写死）—— 诊断页/页脚共用
@@ -152,29 +151,6 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
       // 服务端失败：行内保留 + 顶部通知（字段级校验「昵称不能为空」只走行内，不在此分支）
       setState(() => _error = err);
       ref.read(chatToastProvider.notifier).show(err, tone: ChatToastTone.error);
-    }
-  }
-
-  Future<void> _createInvite() async {
-    setState(() { _inviting = true; _error = null; });
-    final (token, err) = await ref.read(authProvider.notifier).createInvite();
-    if (!mounted) return;
-    setState(() => _inviting = false);
-    if (err != null) {
-      setState(() => _error = err);
-      ref.read(chatToastProvider.notifier).show(err, tone: ChatToastTone.error);
-      return;
-    }
-    final base = await ref.read(baseProvider.future);
-    setState(() => _inviteUrl = '$base/?invite=${Uri.encodeComponent(token ?? '')}');
-  }
-
-  Future<void> _copyInvite() async {
-    if (_inviteUrl == null) return;
-    await Clipboard.setData(ClipboardData(text: _inviteUrl!));
-    if (mounted) {
-      ref.read(chatToastProvider.notifier).show(
-          '邀请链接已复制，私下发给 TA', tone: ChatToastTone.success);
     }
   }
 
@@ -424,39 +400,9 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
             AppErrorText(_error!, textAlign: TextAlign.center),
           ],
           const SizedBox(height: 16),
-          // ── 邀请 / 两人卡片 ──
-          if (!me.paired)
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(Spacing.cardPad),
-                child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                  Text('邀请你，住进我的小世界', style: theme.textTheme.titleSmall),
-                  const SizedBox(height: Spacing.gap),
-                  Text('生成专属邀请链接，私下发给另一半。邀请仅可使用一次，二十四小时内有效；重新生成会让旧链接失效。',
-                      style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.outline)),
-                  const SizedBox(height: 12),
-                  OutlinedButton(
-                    onPressed: _inviting ? null : _createInvite,
-                    child: _inviting
-                        ? const SizedBox(width: 16, height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2))
-                        : const Text('生成邀请链接'),
-                  ),
-                  if (_inviteUrl != null) ...[
-                    const SizedBox(height: 12),
-                    TextField(
-                      readOnly: true,
-                      controller: TextEditingController(text: _inviteUrl),
-                      decoration: const InputDecoration(labelText: '专属邀请链接'),
-                    ),
-                    const SizedBox(height: 10),
-                    FilledButton.tonal(onPressed: _copyInvite, child: const Text('复制邀请链接')),
-                  ],
-                ]),
-              ),
-            )
-          else
-            Card(
+          // ── 邀请 / 两人卡片（2.4.0：邀请卡抽为 InviteCard 共用组件，
+          // 与设置独立邀请页 /settings/invite 同一实现同一数据源） ──
+          if (!me.paired) const InviteCard() else Card(
               child: Padding(
                 padding: const EdgeInsets.all(Spacing.cardPad),
                 child: Column(children: [

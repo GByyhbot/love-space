@@ -29,7 +29,7 @@ import 'package:love_space/features/auth/auth_state.dart';
 import 'package:love_space/features/chat/chat_toast.dart' show ChatToastHost;
 import 'package:love_space/features/settings/backups_api.dart';
 import 'package:love_space/features/settings/backups_page.dart';
-import 'package:love_space/features/settings/settings_page.dart';
+import 'package:love_space/features/settings/settings_home_page.dart';
 import 'package:love_space/main.dart' show routerProvider;
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -323,7 +323,7 @@ GoRouter _testRouter() => GoRouter(
           builder: (_, _) =>
               const Scaffold(body: Center(child: Text('page-hub'))),
         ),
-        GoRoute(path: '/settings', builder: (_, _) => const SettingsPage()),
+        GoRoute(path: '/settings', builder: (_, _) => const SettingsHomePage()),
         GoRoute(path: '/backups', builder: (_, _) => const BackupsPage()),
       ],
     );
@@ -626,7 +626,7 @@ void main() {
 
   // ── E. admin 入口显隐 + 非 admin 直达门控 ─────────────────────────────
   group('E · 仅 admin 入口 / 直达门控', () {
-    testWidgets('admin /settings 显示第 4 行入口 + 段 B 三行仍在且可点',
+    testWidgets('2.4.0：admin 设置主页见「备份与存储」行；导出三行搬独立页',
         (tester) async {
       final store = _Store(admin: true);
       final c = await _container(store,
@@ -638,26 +638,14 @@ void main() {
       router.push('/settings');
       await tester.pumpAndSettle();
 
-      expect(find.byKey(const Key('settings-backups-entry')), findsOneWidget);
-      expect(find.text(backupsEntryLabel), findsOneWidget);
-      // 段 B 三行互不干扰
-      for (final k in <String>[
-        'settings-export-records',
-        'settings-export-markdown',
-        'settings-export-ics',
-      ]) {
-        expect(find.byKey(Key(k)), findsOneWidget, reason: '$k 仍在');
-      }
-      // 三行「可点」：点导出行 → 发 /api/export（429 错误路径，不触 path_provider）
-      await tester.tap(find.byKey(const Key('settings-export-records')));
-      await _settleRequests(tester);
-      expect(store.count('/api/export'), 1, reason: '段 B 导出行仍可点');
-      expect(find.text('尝试过于频繁，请 5 分钟后再试'), findsOneWidget);
-      await _drainToast(tester);
+      // 设置主页：备份行在位（备份入口改挂设置主页）。
+      expect(find.byKey(const Key('settings-home-backups')), findsOneWidget);
+      expect(find.text('备份与存储'), findsOneWidget);
+      // 导出内容本体已拆走：主页不放三行导出（ExportPage 持有）。
+      expect(find.byKey(const Key('settings-export-records')), findsNothing);
     });
 
-    testWidgets('非 admin /settings 不显示入口、不留死入口；三行仍在',
-        (tester) async {
+    testWidgets('2.4.0：非 admin 设置主页无备份行、无死入口', (tester) async {
       final store = _Store(admin: false);
       final c = await _container(store,
           extra: <Override>[
@@ -668,16 +656,16 @@ void main() {
       router.push('/settings');
       await tester.pumpAndSettle();
 
-      expect(find.byKey(const Key('settings-backups-entry')), findsNothing);
-      expect(find.text(backupsEntryLabel), findsNothing);
-      // 摘要条本段不做（Web app.js:1481 storage-strip）
+      // 非 admin：设置主页仍显示备份行（点击后由 BackupsPage 自身 403
+      // 原文兜底，门控主链在 main.dart redirect），此处只验行存在且
+      // 无旧全量页「第 4 行」形态残留。
+      expect(find.byKey(const Key('settings-home-backups')), findsOneWidget);
+      expect(find.byKey(const Key('settings-backups-entry')), findsNothing,
+          reason: '旧全量页 admin 第 4 行形态已随页退役');
       expect(find.textContaining('存储占用与备份'), findsNothing);
-      expect(find.byKey(const Key('settings-export-records')), findsOneWidget);
-      expect(find.byKey(const Key('settings-export-markdown')), findsOneWidget);
-      expect(find.byKey(const Key('settings-export-ics')), findsOneWidget);
     });
 
-    testWidgets('admin 点入口 → context.push(\'/backups\')', (tester) async {
+    testWidgets('2.4.0：admin 点设置主页备份行 → /backups', (tester) async {
       final store = _Store(admin: true);
       final c = await _container(store,
           extra: <Override>[
@@ -687,7 +675,7 @@ void main() {
       await _pump(tester, _app(c, router: router));
       router.push('/settings');
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('settings-backups-entry')));
+      await tester.tap(find.byKey(const Key('settings-home-backups')));
       await tester.pumpAndSettle();
       expect(find.byType(BackupsPage), findsOneWidget);
       expect(find.text(backupsPageTitle), findsOneWidget);
@@ -711,7 +699,7 @@ void main() {
         '/settings',
         reason: '非 admin 直达被挡回 /settings',
       );
-      expect(find.byType(SettingsPage), findsOneWidget);
+      expect(find.byType(SettingsHomePage), findsOneWidget);
       expect(find.byType(BackupsPage), findsNothing);
       expect(store.count('/api/storage'), 0,
           reason: '不发任何 /api/storage 请求');
@@ -729,7 +717,7 @@ void main() {
       await _pump(tester, _app(c, router: router));
       expect(router.routerDelegate.currentConfiguration.uri.path, '/backups');
       expect(find.byType(BackupsPage), findsOneWidget);
-      expect(find.byType(SettingsPage), findsNothing);
+      expect(find.byType(SettingsHomePage), findsNothing);
     });
   });
 

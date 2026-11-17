@@ -25,18 +25,25 @@ Future<void> showWallpaperSheet(BuildContext context) {
     isScrollControlled: true,
     shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.lg))),
-    builder: (_) => const _WallpaperSheet(),
+    builder: (_) => const WallpaperSheet(),
   );
 }
 
-class _WallpaperSheet extends ConsumerStatefulWidget {
-  const _WallpaperSheet();
+/// 聊天背景面板本体（2.4.0 设置拆分段公开化）：聊天页右上角 sheet 与
+/// 设置独立页（chat_wallpaper_page）共用**同一组件与同一数据源**——
+/// 任何一处修改，另一处即时一致（authProvider.spaceRaw 单一事实）。
+/// [embedded] = true 时作为设置页内嵌面板：不渲染关闭钮（关闭钮在
+/// sheet 模式下 Navigator.pop 会误关设置页），其余 UI 与保存链逐位一致。
+class WallpaperSheet extends ConsumerStatefulWidget {
+  const WallpaperSheet({super.key, this.embedded = false});
+
+  final bool embedded;
 
   @override
-  ConsumerState<_WallpaperSheet> createState() => _WallpaperSheetState();
+  ConsumerState<WallpaperSheet> createState() => _WallpaperSheetState();
 }
 
-class _WallpaperSheetState extends ConsumerState<_WallpaperSheet> {
+class _WallpaperSheetState extends ConsumerState<WallpaperSheet> {
   String _target = ''; // '' = 自己（initState 里填）
   String _bg = '';
   String _media = '';
@@ -165,9 +172,12 @@ class _WallpaperSheetState extends ConsumerState<_WallpaperSheet> {
             crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           Row(children: [
             Expanded(child: Text('聊天背景', style: theme.textTheme.titleMedium)),
-            IconButton(
-                onPressed: () => Navigator.of(context).pop(),
-                icon: const Icon(Icons.close_rounded)),
+            // embedded（设置独立页内嵌）不渲染关闭钮：pop 会误关设置页；
+            // sheet 模式保留（2.4.0 同一组件两处消费）。
+            if (!widget.embedded)
+              IconButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.close_rounded)),
           ]),
           const SizedBox(height: 4),
           if (partner != null)

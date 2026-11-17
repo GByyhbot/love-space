@@ -26,18 +26,26 @@ Future<void> showBubbleSkinSheet(BuildContext context) {
     isScrollControlled: true,
     shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.lg))),
-    builder: (_) => const _BubbleSkinSheet(),
+    builder: (_) => const BubbleSkinSheet(),
   );
 }
 
-class _BubbleSkinSheet extends ConsumerStatefulWidget {
-  const _BubbleSkinSheet();
+/// 气泡皮肤面板本体（2.4.0 设置拆分段公开化）：聊天页右上角 sheet 与
+/// 设置独立页（chat_bubble_page）共用**同一组件与同一数据源**（GET
+/// /api/bubbles 素材 + PUT /api/space 的 chat_bubble* 三键），任何一处
+/// 修改另一处即时一致，绝不复制第二套实现。
+/// [embedded] = true 时作为设置页内嵌面板：不渲染关闭钮、外层不固定
+/// 68% 高（由页面 Scaffold 的有界 body 撑满），其余 UI 与保存链逐位一致。
+class BubbleSkinSheet extends ConsumerStatefulWidget {
+  const BubbleSkinSheet({super.key, this.embedded = false});
+
+  final bool embedded;
 
   @override
-  ConsumerState<_BubbleSkinSheet> createState() => _BubbleSkinSheetState();
+  ConsumerState<BubbleSkinSheet> createState() => _BubbleSkinSheetState();
 }
 
-class _BubbleSkinSheetState extends ConsumerState<_BubbleSkinSheet> {
+class _BubbleSkinSheetState extends ConsumerState<BubbleSkinSheet> {
   List<BubbleGroup> _groups = const [];
   String _pack = '';
   String _pick = '';
@@ -148,28 +156,29 @@ class _BubbleSkinSheetState extends ConsumerState<_BubbleSkinSheet> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final base = ref.watch(chatBaseProvider).valueOrNull;
-    final height = MediaQuery.of(context).size.height * 0.68;
     final total = _groups.fold<int>(0, (n, g) => n + g.count);
-    return SizedBox(
-      height: height,
-      child: Column(children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 8, 4),
-          child: Row(children: [
-            Expanded(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text('聊天气泡', style: theme.textTheme.titleMedium),
-                if (_groups.isNotEmpty)
-                  Text('共 $total 张 · 这一组 ${_currentGroup?.count ?? 0} 张',
-                      style: theme.textTheme.bodySmall
-                          ?.copyWith(color: theme.colorScheme.outline)),
-              ]),
-            ),
+    // sheet 模式固定 68% 屏高；embedded（设置独立页）由 Scaffold body
+    // 有界高度撑满，不固定高（Column + Expanded 直接可用）。
+    final Widget body = Column(children: [
+      Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 8, 4),
+        child: Row(children: [
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('聊天气泡', style: theme.textTheme.titleMedium),
+              if (_groups.isNotEmpty)
+                Text('共 $total 张 · 这一组 ${_currentGroup?.count ?? 0} 张',
+                    style: theme.textTheme.bodySmall
+                        ?.copyWith(color: theme.colorScheme.outline)),
+            ]),
+          ),
+          // embedded（设置独立页内嵌）不渲染关闭钮：pop 会误关设置页。
+          if (!widget.embedded)
             IconButton(
                 onPressed: () => Navigator.of(context).pop(),
                 icon: const Icon(Icons.close_rounded)),
-          ]),
-        ),
+        ]),
+      ),
         // 组 tab（第 N 组，对齐 Web bpPackLabel）
         SizedBox(
           height: 40,
@@ -255,7 +264,13 @@ class _BubbleSkinSheetState extends ConsumerState<_BubbleSkinSheet> {
             ]),
           ]),
         ),
-      ]),
+      ]);
+    // sheet 模式包回 68% 屏高固定容器；embedded（设置独立页）直接用
+    // 有界 body 撑满（Column + Expanded 布局与 sheet 模式完全一致）。
+    if (widget.embedded) return body;
+    return SizedBox(
+      height: MediaQuery.of(context).size.height * 0.68,
+      child: body,
     );
   }
 
