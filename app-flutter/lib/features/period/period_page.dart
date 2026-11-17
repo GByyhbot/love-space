@@ -30,6 +30,7 @@ import '../../core/together/together_data.dart';
 import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
 import '../personal/personal_controller.dart';
 import 'period_actions.dart';
+import 'period_colors.dart';
 import 'period_controller.dart';
 import 'period_engine.dart';
 import 'period_form.dart';
@@ -262,11 +263,14 @@ class _PeriodPageState extends ConsumerState<PeriodPage> {
 
   Widget _phaseBar(BuildContext context, List<PhaseSegment> segs,
       double cursor, String? current) {
+    // 2.3.9：阶段色走主题变量语义表（period_colors.dart，明暗两档，
+    // style.css :57-60/:61-63/:38/:40 浅 + :1510/:1511/:1506 夜），
+    // 删除写死四色（原 0xFFEF3F68/0xFF81C784/0xFF9575CD/0xFFFFB74D）。
     final colors = <String, Color>{
-      'period': const Color(0xFFEF3F68),
-      'follicular': const Color(0xFF81C784),
-      'fertile': const Color(0xFF9575CD),
-      'luteal': const Color(0xFFFFB74D),
+      'period': periodStageColor(context),
+      'follicular': follicularStageColor(context),
+      'fertile': fertileStageColor(context),
+      'luteal': lutealStageColor(context),
     };
     return LayoutBuilder(builder: (ctx, constraints) {
       final width = constraints.maxWidth;
@@ -443,12 +447,17 @@ class _PeriodPageState extends ConsumerState<PeriodPage> {
           // 嵌套 shrinkWrap viewport 会让首帧布局反复震荡；按周切 Row 最稳。
           _calendarRows(context, grid),
           const SizedBox(height: 10),
-          // 图例四项（Web :294）
+          // 图例四项（Web period.js:294 lg-pill 四项）：色源全部走
+          // 2.3.9 主题变量语义表——预测经期用 period 色 α（方块 α.55，
+          // Web「浅粉虚线=推算」同源浅化；p-pred 底 rgba(period,.06) :1655）；
+          // 排卵日与排卵期同用 --fertile（style.css:61/:1511），消灭原
+          // 0xFF7E57C2/0xFF9575CD 两套紫并存。
           Wrap(spacing: 10, runSpacing: 4, children: [
-            _legend(context, cs, const Color(0xFFEF3F68), '月经期'),
-            _legend(context, cs, const Color(0xFFF8BBD0), '预测经期'),
-            _legend(context, cs, const Color(0xFF9575CD), '排卵期'),
-            _legend(context, cs, const Color(0xFF7E57C2), '排卵日', dot: true),
+            _legend(context, cs, periodStageColor(context), '月经期'),
+            _legend(context, cs, periodStageColor(context), '预测经期'),
+            _legend(context, cs, fertileStageColor(context), '排卵期'),
+            _legend(context, cs, fertileStageColor(context), '排卵日',
+                dot: true),
           ]),
         ]),
       ),
@@ -576,17 +585,20 @@ class _PeriodPageState extends ConsumerState<PeriodPage> {
 
   Color _cellColor(PeriodDayCell cell, ColorScheme cs) {
     if (cell.phase == null) return cs.surfaceContainerHighest;
-    if (cell.ovu) return const Color(0xFF7E57C2);
+    // 2.3.9：格子色走主题变量语义表（同 _phaseBar/_legend 出处）；
+    // 排卵日格原写死 0xFF7E57C2 与排卵期 0xFF9575CD 双紫并存，统一为
+    // --fertile 单一变量（Web 排卵日圆点即 var(--fertile)，:1643）。
+    if (cell.ovu) return fertileStageColor(context);
     final alpha = cell.predicted ? 0.45 : 0.9;
     switch (cell.phase) {
       case 'period':
-        return const Color(0xFFEF3F68).withValues(alpha: alpha);
+        return periodStageColor(context).withValues(alpha: alpha);
       case 'follicular':
-        return const Color(0xFF81C784).withValues(alpha: alpha);
+        return follicularStageColor(context).withValues(alpha: alpha);
       case 'fertile':
-        return const Color(0xFF9575CD).withValues(alpha: alpha);
+        return fertileStageColor(context).withValues(alpha: alpha);
       case 'luteal':
-        return const Color(0xFFFFB74D).withValues(alpha: alpha);
+        return lutealStageColor(context).withValues(alpha: alpha);
       default:
         return cs.surfaceContainerHighest;
     }
@@ -944,14 +956,16 @@ class _CycleRing extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
+    // 2.3.9：描边走 --period 主题变量纯色（style.css:1699 fill=var(--period)
+    // 无渐变；track=rgba(var(--period-rgb),.2) :1698），不再用 cs.primary
+    // （fromSeed 派生色，非 Web 周期色）；环内字 period-ink（:1700）。
     return SizedBox(
       width: 72,
       height: 72,
       child: CustomPaint(
         painter: _RingPainter(
-          track: cs.surfaceContainerHighest,
-          fill: cs.primary,
+          track: periodStageColor(context).withValues(alpha: 0.2),
+          fill: periodStageColor(context),
           fraction: (percent / 100).clamp(0.0, 1.0),
         ),
         child: Center(
@@ -959,7 +973,10 @@ class _CycleRing extends StatelessWidget {
               style: Theme.of(context)
                   .textTheme
                   .titleMedium
-                  ?.copyWith(fontWeight: FontWeight.bold)),
+                  ?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: periodInkColor(context),
+                  )),
         ),
       ),
     );
@@ -984,11 +1001,12 @@ class _RingPainter extends CustomPainter {
     final trackPaint = Paint()
       ..color = track
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 6;
+      // 2.3.9：线宽 9（style.css:1698-1699 stroke-width:9，原 6 为旧值）。
+      ..strokeWidth = 9;
     final fillPaint = Paint()
       ..color = fill
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 6
+      ..strokeWidth = 9
       ..strokeCap = StrokeCap.round;
     canvas.drawCircle(center, r, trackPaint);
     canvas.drawArc(
