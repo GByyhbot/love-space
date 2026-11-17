@@ -16,6 +16,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/api/api_client.dart' as api;
+import '../../core/ui/page_heading.dart';
 import '../../core/chat/chat_repository.dart' show newChatClientId;
 import '../../core/together/together_data.dart';
 import '../../core/ui/error_view.dart';
@@ -94,38 +95,70 @@ class _PersonalPageState extends ConsumerState<PersonalPage> {
     return Scaffold(
       body: SafeArea(
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
-            child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('我的小角落', style: theme.textTheme.headlineSmall),
-                  const SizedBox(height: 4),
-                  Text('有些心事留给自己，有些惊喜留给未来。',
-                      style: theme.textTheme.bodySmall
-                          ?.copyWith(color: theme.colorScheme.outline)),
-                ]),
+          // 2.4.1 第 9 项：标题行统一引用共享 PageHeading 组件。
+          const PageHeading(
+            title: '我的小角落',
+            subtitle: '有些心事留给自己，有些惊喜留给未来。',
           ),
-          // 可扩展 tab 行：只按 personalTabs 表渲染（7-A 2 项 → 7-B 4 项 → 7-C 5 项）
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-            child: Row(
-              children: [
-                for (var i = 0; i < personalTabs.length; i++)
-                  Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 2),
+          // 2.4.1 第 11 项①：五标签改横滑胶囊行——每颗按文字自然宽度
+          // （禁止等分定宽，原等分在 393 宽裁切「私密日记/定时惊喜」），
+          // 整行可横滑 + 右端渐隐提示；选中态 = 实心主色 + 深字 + 勾。
+          SizedBox(
+            height: 40,
+            child: Stack(children: [
+              ListView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                children: [
+                  for (var i = 0; i < personalTabs.length; i++)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 3),
                       child: ChoiceChip(
-                        label: Center(
-                            child: Text(personalTabs[i].label,
-                                style: theme.textTheme.bodySmall)),
+                        key: Key('personal-tab-${personalTabs[i].id}'),
+                        label: Row(mainAxisSize: MainAxisSize.min, children: [
+                          if (_tab == i)
+                            Padding(
+                              padding: const EdgeInsets.only(right: 3),
+                              child: Icon(Icons.check_rounded,
+                                  size: 14,
+                                  color: theme.colorScheme.onPrimary),
+                            ),
+                          Text(personalTabs[i].label),
+                        ]),
                         selected: _tab == i,
+                        selectedColor: theme.colorScheme.primary,
+                        labelStyle: theme.textTheme.bodySmall?.copyWith(
+                            color: _tab == i
+                                ? theme.colorScheme.onPrimary
+                                : null),
+                        showCheckmark: false,
                         onSelected: (_) => setState(() => _tab = i),
                       ),
                     ),
+                ],
+              ),
+              // 右端渐隐提示还能滑。
+              Positioned(
+                right: 0,
+                top: 0,
+                bottom: 0,
+                width: 28,
+                child: IgnorePointer(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.centerLeft,
+                        end: Alignment.centerRight,
+                        colors: [
+                          theme.colorScheme.surface.withValues(alpha: 0),
+                          theme.colorScheme.surface,
+                        ],
+                      ),
+                    ),
                   ),
-              ],
-            ),
+                ),
+              ),
+            ]),
           ),
           // IndexedStack 常驻：五 tab 各自状态（滚动位置/加载态）切换不丢
           Expanded(
@@ -207,9 +240,12 @@ class _TabFrame extends ConsumerWidget {
             const SizedBox(height: Spacing.gap),
             Align(
               alignment: Alignment.centerLeft,
-              child: FilledButton.tonal(
+              child: FilledButton.icon(
+                key: const Key('personal-entry'),
+                // 2.4.1 第 11 项③：实心主色胶囊 + 加号前缀（行为不变）。
                 onPressed: onEntry,
-                child: Text(entryLabel!),
+                icon: const Icon(Icons.add_rounded, size: 18),
+                label: Text(entryLabel!),
               ),
             ),
           ],
@@ -226,14 +262,34 @@ class _TabFrame extends ConsumerWidget {
               ),
             )
           else if (items.isEmpty)
+            // 2.4.1 第 11 项④：空状态玻璃圆徽（半透底 + 细边 + 外圈淡光晕），
+            // 标题与副文跟紧成组居中——五 tab 空态共用同一样式（图标用各自现有）。
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 48),
               child: Column(children: [
-                Icon(Icons.lock_outline_rounded,
-                    size: 44, color: theme.colorScheme.outline),
-                const SizedBox(height: 12),
+                Container(
+                  width: 72,
+                  height: 72,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: theme.colorScheme.surface.withValues(alpha: 0.55),
+                    border: Border.all(
+                        color: theme.colorScheme.outlineVariant
+                            .withValues(alpha: 0.9)),
+                    boxShadow: [
+                      BoxShadow(
+                        color: theme.colorScheme.primary.withValues(alpha: 0.10),
+                        blurRadius: 18,
+                        spreadRadius: 2,
+                      ),
+                    ],
+                  ),
+                  child: Icon(Icons.lock_outline_rounded,
+                      size: 30, color: theme.colorScheme.outline),
+                ),
+                const SizedBox(height: 14),
                 Text(emptyTitle, style: theme.textTheme.titleMedium),
-                const SizedBox(height: Spacing.gap),
+                const SizedBox(height: 4),
                 Text(emptyHint,
                     style: theme.textTheme.bodySmall
                         ?.copyWith(color: theme.colorScheme.outline)),

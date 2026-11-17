@@ -20,6 +20,8 @@ import '../../core/sse/sse_client.dart';
 import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
 import '../chat/video_player_page.dart';
 import 'album_controller.dart';
+import '../../core/ui/page_heading.dart';
+import '../settings/settings_widgets.dart' show SettingsSegmented;
 import 'album_cover_tile.dart';
 import '../timeline/composer_sheet.dart';
 import '../../core/theme/motion.dart';
@@ -129,73 +131,28 @@ class _AlbumPageState extends ConsumerState<AlbumPage> {
   }
 
   Widget _heading(BuildContext context) {
-    final theme = Theme.of(context);
-    // 2.3.4（推广段一重做）：页头字阶与试点首页同口径（h1 26/600/ls-0.3 →
-    // headlineSmall，app.js:965 文案逐字）+ 页头主按钮 pill（--radius-pill 999，
-    // style.css:132/:293；Web 相册页头右侧主按钮 = 新建相册）。
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
-      child: Row(children: [
-        Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('把喜欢的瞬间，装进口袋',
-                style: theme.textTheme.headlineSmall
-                  ?.copyWith(fontWeight: FontWeight.w600, letterSpacing: -0.3)),
-            Text('每一张照片，都是我们走过的日子。',
-                style: theme.textTheme.bodySmall
-                    ?.copyWith(color: theme.colorScheme.outline)),
-          ]),
-        ),
-        InkWell(
-          borderRadius: BorderRadius.circular(999),
-          onTap: () => _showCreateAlbumDialog(context),
-          child: Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.primary,
-              borderRadius: BorderRadius.circular(999),
-            ),
-            child: Row(mainAxisSize: MainAxisSize.min, children: [
-              const Icon(Icons.add_rounded,
-                  size: 16, color: Colors.white),
-              const SizedBox(width: 4),
-              Text('新建相册',
-                  style: theme.textTheme.labelLarge
-                      ?.copyWith(color: Colors.white)),
-            ]),
-          ),
-        ),
-      ]),
+    // 2.4.1 第 8 项①：删除标题行右侧「新建相册」按钮——新建入口转移到
+    // 横滑相册条末尾「+ 新建」卡（原 _createCard，流程不变）。
+    // 2.4.1 第 9 项：标题行统一引用共享 PageHeading 组件（393 宽一行放下）。
+    return PageHeading(
+      title: '把喜欢的瞬间，装进口袋',
+      subtitle: '每一张照片，都是我们走过的日子。',
     );
   }
 
   Widget _viewTabs(BuildContext context, AlbumState st) {
-    final theme = Theme.of(context);
+    // 2.4.1 第 8 项③：分段器整行拉满（两选项各占 50%），样式同第 2 项
+    // 分段器（SettingsSegmented 共用组件）。
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      child: SegmentedButton<AlbumView>(
+      child: SettingsSegmented<AlbumView>(
         segments: const [
-          ButtonSegment(
-              value: AlbumView.byAlbum,
-              icon: Icon(Icons.photo_library_outlined, size: 16),
-              label: Text('按相册分类')),
-          ButtonSegment(
-              value: AlbumView.byTime,
-              icon: Icon(Icons.calendar_month_outlined, size: 16),
-              label: Text('按时间')),
+          (AlbumView.byAlbum, '按相册分类'),
+          (AlbumView.byTime, '按时间'),
         ],
-        selected: {st.view},
-        showSelectedIcon: false,
-        // 2.3.4：选中态对齐 Web `.tabs button.active`（style.css:337）——
-        // soft 底 + primary 1px 描边 + primary-dark 字 + 600。
-        style: ButtonStyle(
-            visualDensity: VisualDensity.compact,
-            textStyle: WidgetStateProperty.all(theme.textTheme.labelMedium
-                ?.copyWith(fontWeight: FontWeight.w600))),
-        onSelectionChanged: (s) => ref
-            .read(albumControllerProvider.notifier)
-            .setView(s.first),
+        selected: st.view,
+        onChanged: (v) =>
+            ref.read(albumControllerProvider.notifier).setView(v),
       ),
     );
   }
@@ -243,20 +200,26 @@ class _AlbumPageState extends ConsumerState<AlbumPage> {
       onTap: onTap,
       borderRadius: BorderRadius.circular(AppRadius.card),
       child: Container(
-        width: 100,
-        padding: const EdgeInsets.all(8),
+        width: 88,
+        padding: const EdgeInsets.all(6),
         decoration: BoxDecoration(
-          color: selected ? cs.primaryContainer : cs.surfaceContainerHighest.withValues(alpha: 0.5),
-          borderRadius: BorderRadius.circular(AppRadius.card),
+          // 2.4.1 第 8 项④：选中态 = 主题色描边 + 淡紫底，禁止整卡实心紫。
+          color: selected
+              ? cs.primaryContainer.withValues(alpha: 0.35)
+              : cs.surfaceContainerHighest.withValues(alpha: 0.5),
+          borderRadius: BorderRadius.circular(14),
           border: Border.all(
-              color: selected ? cs.primary : cs.outlineVariant),
+              color: selected ? cs.primary : cs.outlineVariant,
+              width: selected ? 1.5 : 1),
         ),
         child: Column(children: [
           Expanded(
             child: Container(
               decoration: BoxDecoration(
-                color: selected ? cs.onPrimaryContainer.withValues(alpha: 0.08) : cs.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(12) /* 2.3.4 照片块圆角 12 */,
+                color: selected
+                    ? cs.primary.withValues(alpha: 0.08)
+                    : cs.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(13) /* 2.4.1 网格圆角 13 */,
               ),
               child: Center(
                 child: Icon(Icons.photo_library_rounded,
@@ -269,7 +232,7 @@ class _AlbumPageState extends ConsumerState<AlbumPage> {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: theme.textTheme.labelSmall?.copyWith(
-                  color: selected ? cs.onPrimaryContainer : cs.outline)),
+                  color: selected ? cs.primary : cs.outline)),
         ]),
       ),
     );
@@ -296,13 +259,16 @@ class _AlbumPageState extends ConsumerState<AlbumPage> {
       onTap: onTap,
       borderRadius: BorderRadius.circular(AppRadius.card),
       child: Container(
-        width: 100,
-        padding: const EdgeInsets.all(8),
+        width: 88,
+        padding: const EdgeInsets.all(6),
         decoration: BoxDecoration(
-          color: selected ? cs.primaryContainer : cs.surfaceContainerHighest.withValues(alpha: 0.5),
-          borderRadius: BorderRadius.circular(AppRadius.card),
+          color: selected
+              ? cs.primaryContainer.withValues(alpha: 0.35)
+              : cs.surfaceContainerHighest.withValues(alpha: 0.5),
+          borderRadius: BorderRadius.circular(14),
           border: Border.all(
-              color: selected ? cs.primary : cs.outlineVariant),
+              color: selected ? cs.primary : cs.outlineVariant,
+              width: selected ? 1.5 : 1),
         ),
         child: Column(children: [
           Expanded(
@@ -313,7 +279,8 @@ class _AlbumPageState extends ConsumerState<AlbumPage> {
                 coverMid: album.cover,
                 slot: 'album_cover_${album.id}',
                 placeholder: coverPlaceholder,
-                borderRadius: 10,
+                // 2.4.1 第 8 项④：封面圆角 14。
+                borderRadius: 14,
               ),
               Positioned(
                 top: -4,
@@ -342,11 +309,13 @@ class _AlbumPageState extends ConsumerState<AlbumPage> {
             ]),
           ),
           const SizedBox(height: Spacing.gap),
+          // 名称在封面下方居中（2.4.1 第 8 项④）。
           Text(album.title,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
               style: theme.textTheme.labelSmall?.copyWith(
-                  color: selected ? cs.onPrimaryContainer : cs.outline)),
+                  color: selected ? cs.primary : cs.outline)),
         ]),
       ),
     );
@@ -358,19 +327,22 @@ class _AlbumPageState extends ConsumerState<AlbumPage> {
       onTap: onTap,
       borderRadius: BorderRadius.circular(AppRadius.card),
       child: Container(
-        width: 100,
-        padding: const EdgeInsets.all(8),
+        width: 88,
+        padding: const EdgeInsets.all(6),
         decoration: BoxDecoration(
-          color: cs.surfaceContainerHighest.withValues(alpha: 0.5),
-          borderRadius: BorderRadius.circular(AppRadius.card),
-          border: Border.all(color: cs.outlineVariant, style: BorderStyle.solid),
+          color: cs.surfaceContainerHighest.withValues(alpha: 0.35),
+          borderRadius: BorderRadius.circular(14),
+          // 2.4.1 第 8 项②：虚线描边（与相册卡同尺寸同圆角）。
+          border: Border.all(
+              color: cs.outlineVariant,
+              style: BorderStyle.solid),
         ),
         child: Column(children: [
           Expanded(
             child: Container(
               decoration: BoxDecoration(
                 color: cs.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(12) /* 2.3.4 照片块圆角 12 */,
+                borderRadius: BorderRadius.circular(13) /* 2.4.1 网格圆角 13 */,
               ),
               child: Center(
                 child: Icon(Icons.add_rounded, size: 28, color: cs.primary),
@@ -381,6 +353,7 @@ class _AlbumPageState extends ConsumerState<AlbumPage> {
           Text('新建相册',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
               style: theme.textTheme.labelSmall?.copyWith(color: cs.primary)),
         ]),
       ),

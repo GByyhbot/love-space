@@ -78,7 +78,10 @@ class _ShellPageState extends ConsumerState<ShellPage> {
         backgroundColor: ChromeColors.of(theme).topbarBg,
         surfaceTintColor: Colors.transparent,
         scrolledUnderElevation: 0,
-        title: Text(const ['首页', '时光', '相册', '我们', '个人角落'][_tab]),
+        // 2.4.1 第 9 项：五 tab 顶栏删除页名文字——顶栏只保留右侧圆钮组
+        //（通知/聊天/齿轮/头像），顺序、尺寸、行为全不变；顶栏仍是壳层
+        // 本体的部件，禁止为此新增 overlay（冻结教训）。页名由各页标题行
+        // （共享 PageHeading 组件）承担。
         actions: [
           // 「数据管理与通知渠道」章 段 A：通知中心铃铛（对齐 Web 顶栏
           // 「通知」图标 `app.js:325`）。角标用 me.unread（系统未读总数，

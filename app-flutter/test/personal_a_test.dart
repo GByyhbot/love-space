@@ -507,8 +507,10 @@ void main() {
       expect(find.text('个人心愿'), findsOneWidget);
 
       // 滚到页尾元素（ListView 懒构建）
-      await tester.scrollUntilVisible(find.text('末尾标题'), 250);
-      final scroller = find.byType(Scrollable).first;
+      await tester.scrollUntilVisible(find.text('末尾标题'), 250,
+          scrollable: find.byType(Scrollable).last);
+      // 2.4.1：横滑胶囊行加入后主纵滚不再是第一个 Scrollable（last）。
+      final scroller = find.byType(Scrollable).last;
       final before =
           tester.state<ScrollableState>(scroller).position.pixels;
       expect(before, greaterThan(0));

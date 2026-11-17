@@ -464,7 +464,16 @@ class _CardAvatar extends ConsumerWidget {
     final id = user.avatar;
     if (id.isNotEmpty && ref.watch(chatBaseProvider).valueOrNull != null) {
       final base = ref.watch(chatBaseProvider).valueOrNull!;
-      return ClipOval(
+      // 2.4.1 第 7 项④：头像加约 1.5px 白色低透明细描边。
+      return Container(
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: Colors.white.withValues(alpha: 0.55),
+            width: 1.5,
+          ),
+        ),
+        child: ClipOval(
         child: CachedNetworkImage(
           imageUrl: mediaUrl(base, id),
           httpHeaders: ref.watch(mediaCookieHeadersProvider).valueOrNull,
@@ -474,6 +483,7 @@ class _CardAvatar extends ConsumerWidget {
           fit: BoxFit.cover,
           placeholder: (_, _) => _fallback(theme, size),
           errorWidget: (_, _, _) => _fallback(theme, size),
+        ),
         ),
       );
     }
@@ -500,20 +510,20 @@ class _CardAvatar extends ConsumerWidget {
 Color _postKindTint(String kind, ColorScheme cs, Brightness brightness) {
   switch (kind) {
     case 'mood':
-      return cs.primary.withValues(alpha: 0.055); // tint-rose（:1930）
+      return cs.primary.withValues(alpha: 0.038); // tint-rose（:1930，2.4.1 降一档）
     case 'anniversary':
-      return WebSemanticColors.amber(brightness).withValues(alpha: 0.06);
+      return WebSemanticColors.amber(brightness).withValues(alpha: 0.042);
     case 'wish':
     case 'personal_wish':
     case 'music':
-      return WebSemanticColors.fertile(brightness).withValues(alpha: 0.06);
+      return WebSemanticColors.fertile(brightness).withValues(alpha: 0.042);
     case 'quest':
     case 'habit':
-      return WebSemanticColors.amber(brightness).withValues(alpha: 0.055);
+      return WebSemanticColors.amber(brightness).withValues(alpha: 0.038);
     case 'ledger':
-      return WebSemanticColors.green(brightness).withValues(alpha: 0.06);
+      return WebSemanticColors.green(brightness).withValues(alpha: 0.042);
     case 'album':
-      return WebSemanticColors.info(brightness).withValues(alpha: 0.05);
+      return WebSemanticColors.info(brightness).withValues(alpha: 0.035);
     default: // post/diary/draft/surprise/question/note/period（:1955-1956）
       return cs.primary.withValues(alpha: 0.04);
   }

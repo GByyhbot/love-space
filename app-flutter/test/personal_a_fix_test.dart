@@ -289,7 +289,8 @@ void main() {
       await tester.tap(find.text('角落'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 50));
-      expect(find.text('个人角落'), findsOneWidget);
+      // 2.4.1 第 9 项：顶栏页名已删——「个人角落」文字不再出现在 AppBar。
+      expect(find.text('个人角落'), findsNothing);
       final stack = tester.widget<IndexedStack>(find.byType(IndexedStack).first);
       expect(stack.index, 4);
       expect(stack.children.length, 5);

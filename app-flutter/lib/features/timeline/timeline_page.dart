@@ -13,8 +13,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/timeline/timeline_data.dart';
 import '../../core/sse/sse_client.dart';
 import '../../core/ui/error_view.dart';
+import '../../core/ui/page_heading.dart';
+import '../../core/ui/selection_sheet.dart';
 import '../auth/auth_state.dart';
-import 'composer_sheet.dart';
 import 'post_card.dart';
 import 'timeline_controller.dart';
 import '../../core/theme/tokens.dart';
@@ -100,32 +101,12 @@ class _TimelinePageState extends ConsumerState<TimelinePage> {
 
     return SafeArea(
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        // 页头 heading（对齐 Web heading('时光慢慢，爱意满满', ...) + 「记录此刻」）
-        // 2.3.4：页头字阶与试点首页 _PageHeading 同口径——h1 26px/600/ls-0.3
-        // （app.js:865 文案逐字 + style.css:342-343/:212；字阶映射 headlineSmall 24）。
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 8, 0),
-          child: Row(children: [
-            Expanded(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text('时光慢慢，爱意满满',
-                    // headlineSmall 默认色即 onSurface（不写显式 color：
-                    // b_test 431 行「timeline 未误用 onSurface」源码护栏口径）
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: -0.3,
-                    )),
-                Text('那些一起走过的日子，都在这里。',
-                    style: Theme.of(context).textTheme.bodySmall
-                        ?.copyWith(color: Theme.of(context).colorScheme.outline)),
-              ]),
-            ),
-            FilledButton.tonalIcon(
-              onPressed: () => showComposerSheet(context),
-              icon: const Icon(Icons.edit_note_rounded, size: 18),
-              label: const Text('记录此刻'),
-            ),
-          ]),
+        // 2.4.1 第 9 项：标题行统一引用共享 PageHeading 组件（同字号/间距
+        // 共享常量）；第 7 项：删除「记录此刻」按钮（发布统一走 Dock 上滑
+        // 抽屉，功能不受影响）。
+        const PageHeading(
+          title: '时光慢慢，爱意满满',
+          subtitle: '那些一起走过的日子，都在这里。',
         ),
         _buildFilters(context, me, chat),
         Expanded(child: _buildList(context, me, chat)),
@@ -137,6 +118,7 @@ class _TimelinePageState extends ConsumerState<TimelinePage> {
 
   Widget _buildFilters(BuildContext context, MeData me, TimelineState chat) {
     final theme = Theme.of(context);
+    final cs = theme.colorScheme;
     final f = chat.filter;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
@@ -144,63 +126,96 @@ class _TimelinePageState extends ConsumerState<TimelinePage> {
         // 2.3.4：筛选控件高 46 档（Web 桌面常开 input+select 高 46，
         // style.css:591-600/:1422）——contentPadding/minimumSize 设自然高，
         // 不用固定高容器（Dropdown 在固定高 Row 内约束冲突）。
+        // 2.4.1 第 7 项③：搜索框圆角 14、边框颜色与胶囊对齐。
         TextField(
           controller: _qController,
           onChanged: _onQueryChanged,
-          decoration: const InputDecoration(
+          decoration: InputDecoration(
             hintText: '搜索我们的故事…',
-            prefixIcon: Icon(Icons.search_rounded),
+            prefixIcon: const Icon(Icons.search_rounded),
             isDense: true,
-            border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(AppRadius.card))),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+              borderSide: BorderSide(color: cs.outlineVariant),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+              borderSide: BorderSide(color: cs.outlineVariant),
+            ),
           ),
         ),
         const SizedBox(height: Spacing.gap),
-        // 2.3.4（呈现层修复，语义零变化）：原单行三列等分在 393/320 宽放不下
-        // 中文长文案（「两个人的时光/所有记录」下拉 + icon + padding ≈120px
-        // > 三等分列宽 115px，基线固有溢出，既有测试未覆盖此区域）——改两行
-        // 两列：作者/类型一行、日期独占行，控件 46 档保持。
+        // 2.4.1 第 7 项②：一行三颗等高胶囊 [范围][类型][日期]——圆角 99、
+        // 淡底、1px 边；当前生效的筛选胶囊带主题色描边。范围/类型点开底部
+        // 选择单（通则 B 共享组件），筛选逻辑与选项集合不变；日期胶囊行为
+        // 不变（系统日期选择器）。
         Row(children: [
-          // 作者筛选（两个人的时光 / 各自）
           Expanded(
-            child: DropdownButtonFormField<String>(
-              initialValue: f.author.isEmpty ? '' : f.author,
-              isDense: true,
-              decoration: const InputDecoration(isDense: true,
-                  border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 6)),
-              items: [
-                const DropdownMenuItem(value: '', child: Text('两个人的时光', maxLines: 1, overflow: TextOverflow.ellipsis)),
-                for (final u in me.users)
-                  DropdownMenuItem(value: u.id, child: Text(u.name, maxLines: 1, overflow: TextOverflow.ellipsis)),
-              ],
-              onChanged: (v) => ref.read(timelineControllerProvider.notifier).setFilter(
-                  f.copyWith(author: v ?? '')),
+            child: _filterCapsule(
+              context,
+              key: const Key('timeline-filter-author'),
+              label: f.author.isEmpty
+                  ? '范围'
+                  : (me.byId(f.author)?.name ?? '范围'),
+              active: f.author.isNotEmpty,
+              onTap: () async {
+                final picked = await showSelectionSheet<String>(
+                  context: context,
+                  title: '范围',
+                  selected: f.author.isEmpty ? '' : f.author,
+                  options: [
+                    const SelectionOption(value: '', label: '两个人的时光'),
+                    for (final u in me.users)
+                      SelectionOption(value: u.id, label: u.name),
+                  ],
+                );
+                if (picked != null) {
+                  ref.read(timelineControllerProvider.notifier).setFilter(
+                      f.copyWith(author: picked));
+                }
+              },
             ),
           ),
           const SizedBox(width: 8),
-          // 类型筛选（image/video/audio）
           Expanded(
-            child: DropdownButtonFormField<String>(
-              initialValue: f.media.isEmpty ? '' : f.media,
-              isDense: true,
-              decoration: const InputDecoration(isDense: true,
-                  border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 6)),
-              items: const [
-                DropdownMenuItem(value: '', child: Text('所有记录', maxLines: 1, overflow: TextOverflow.ellipsis)),
-                DropdownMenuItem(value: 'image', child: Text('照片', maxLines: 1, overflow: TextOverflow.ellipsis)),
-                DropdownMenuItem(value: 'video', child: Text('视频', maxLines: 1, overflow: TextOverflow.ellipsis)),
-                DropdownMenuItem(value: 'audio', child: Text('语音', maxLines: 1, overflow: TextOverflow.ellipsis)),
-              ],
-              onChanged: (v) => ref.read(timelineControllerProvider.notifier).setFilter(
-                  f.copyWith(media: v ?? '')),
+            child: _filterCapsule(
+              context,
+              key: const Key('timeline-filter-media'),
+              label: f.media.isEmpty
+                  ? '类型'
+                  : (const {
+                      'image': '照片',
+                      'video': '视频',
+                      'audio': '语音',
+                    }[f.media] ?? '类型'),
+              active: f.media.isNotEmpty,
+              onTap: () async {
+                final picked = await showSelectionSheet<String>(
+                  context: context,
+                  title: '类型',
+                  selected: f.media.isEmpty ? '' : f.media,
+                  options: const [
+                    SelectionOption(value: '', label: '所有记录'),
+                    SelectionOption(value: 'image', label: '照片'),
+                    SelectionOption(value: 'video', label: '视频'),
+                    SelectionOption(value: 'audio', label: '语音'),
+                  ],
+                );
+                if (picked != null) {
+                  ref.read(timelineControllerProvider.notifier).setFilter(
+                      f.copyWith(media: picked));
+                }
+              },
             ),
           ),
-        ]),
-        const SizedBox(height: Spacing.gap),
-        Row(children: [
-          // 日期筛选（原生 showDatePicker，决策 3）
+          const SizedBox(width: 8),
           Expanded(
-            child: OutlinedButton.icon(
-              onPressed: () async {
+            child: _filterCapsule(
+              context,
+              key: const Key('timeline-filter-date'),
+              label: f.date.isEmpty ? '日期' : f.date,
+              active: f.date.isNotEmpty,
+              onTap: () async {
                 final d = await showDatePicker(
                     context: context,
                     initialDate:
@@ -212,13 +227,8 @@ class _TimelinePageState extends ConsumerState<TimelinePage> {
                       f.copyWith(date: _fmt(d)));
                 }
               },
-              style: OutlinedButton.styleFrom(minimumSize: const Size(0, 46)),
-              icon: const Icon(Icons.event_rounded, size: 16),
-              label: Text(f.date.isEmpty ? '日期' : f.date),
             ),
           ),
-          const SizedBox(width: 8),
-          const Expanded(child: SizedBox()),
         ]),
         if (f.isActive) ...[
           const SizedBox(height: Spacing.gap),
@@ -240,6 +250,49 @@ class _TimelinePageState extends ConsumerState<TimelinePage> {
           ]),
         ],
       ]),
+    );
+  }
+
+  /// 2.4.1 第 7 项②：筛选胶囊（圆角 99、淡底、1px 边；生效筛选主题色描边）。
+  Widget _filterCapsule(
+    BuildContext context, {
+    required Key key,
+    required String label,
+    required bool active,
+    required VoidCallback onTap,
+  }) {
+    final cs = Theme.of(context).colorScheme;
+    return InkWell(
+      key: key,
+      borderRadius: BorderRadius.circular(999),
+      onTap: onTap,
+      child: Container(
+        height: 40,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: cs.surfaceContainerHighest.withValues(alpha: 0.55),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(
+            color: active ? cs.primary : cs.outlineVariant,
+            width: active ? 1.5 : 1,
+          ),
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Flexible(
+            child: Text(label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                      color: active ? cs.primary : cs.onSurfaceVariant,
+                      fontWeight: active ? FontWeight.w600 : null,
+                    )),
+          ),
+          const SizedBox(width: 4),
+          Icon(Icons.expand_more_rounded,
+              size: 16,
+              color: active ? cs.primary : cs.onSurfaceVariant),
+        ]),
+      ),
     );
   }
 

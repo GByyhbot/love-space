@@ -457,7 +457,8 @@ Future<void> _openWishTab(WidgetTester tester) async {
 
 Future<void> _tapUnlockEntry(WidgetTester tester) async {
   final btn = find.text('输入密码查看').first;
-  await tester.scrollUntilVisible(btn, 200);
+  await tester.scrollUntilVisible(btn, 200,
+          scrollable: find.byType(Scrollable).last);
   await tester.pumpAndSettle();
   await tester.tap(btn);
   await tester.pumpAndSettle();
@@ -1068,7 +1069,8 @@ void main() {
 
       final del = find.byTooltip('删除心愿');
       expect(del, findsOneWidget, reason: '仅作者卡片有删除菜单');
-      await tester.scrollUntilVisible(del, 200);
+      await tester.scrollUntilVisible(del, 200,
+          scrollable: find.byType(Scrollable).last);
       await tester.pumpAndSettle();
       await tester.tap(del);
       await tester.pumpAndSettle();

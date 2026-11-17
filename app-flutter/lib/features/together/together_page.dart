@@ -13,7 +13,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/sse/sse_client.dart';
+import '../../core/ui/page_heading.dart';
 import '../../core/together/together_data.dart';
+import '../period/period_colors.dart' show periodStageColor;
 import '../shell/web_chrome.dart' show webSerifStyle;
 import 'together_controller.dart';
 import '../../core/theme/tokens.dart';
@@ -65,14 +67,10 @@ class _TogetherPageState extends ConsumerState<TogetherPage> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text('关于我们，还有好多好多',
-                    style: theme.textTheme.headlineSmall
-                    ?.copyWith(fontWeight: FontWeight.w600, letterSpacing: -0.3)),
-                Text(
-                  '把喜欢落在实处，把日子过成纪念。',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.outline,
-                  ),
+                // 2.4.1 第 9 项：标题行统一引用共享 PageHeading 组件。
+                const PageHeading(
+                  title: '关于我们，还有好多好多',
+                  subtitle: '把喜欢落在实处，把日子过成纪念。',
                 ),
                 const SizedBox(height: 16),
                 // 条目 8 段 8-A（D1）：🌸 生理期宽卡置于 hub **顶部**，
@@ -217,6 +215,22 @@ class _TogetherPageState extends ConsumerState<TogetherPage> {
       );
 
   /// Web tool-card 形态：radius 20 白卡、emoji 24 顶部、标题 + 诗意副题。
+  /// 2.4.1 第 10 项①：各工具卡淡彩底座色（同一饱和度、彼此可区分）——
+  /// 年历蓝 / 心情橙 / 留言粉 / 愿望紫 / 问答青 / 打卡绿，其余按语义近似
+  /// 补齐（周报信蓝、账本金、歌单紫红、清单灰绿、生理期粉由宽卡自带）。
+  static const Map<String, (Color, Color)> _toolTints = <String, (Color, Color)>{
+    '共同年历': (Color(0xFFE8F0F6), Color(0xFF3F6A8E)), // info 蓝
+    '心情手记': (Color(0xFFF7EEDF), Color(0xFF8A5A22)), // amber 橙
+    '悄悄留言': (Color(0xFFFBE3EC), Color(0xFFC23F68)), // 粉（--period-soft）
+    '共同愿望': (Color(0xFFEDE8F6), Color(0xFF7B63A0)), // 紫
+    '情侣问答': (Color(0xFFE0F4F0), Color(0xFF2F9E88)), // 青
+    '共同打卡': (Color(0xFFEAF1E4), Color(0xFF4B6B3F)), // 绿
+    '回忆周报': (Color(0xFFE8F0F6), Color(0xFF3F6A8E)), // 信蓝
+    '共同账本': (Color(0xFFF7EEDF), Color(0xFF8A5A22)), // 金
+    '歌单': (Color(0xFFFBE3EC), Color(0xFF953753)), // 紫红
+    '恋爱清单': (Color(0xFFEAF1E4), Color(0xFF4B6B3F)), // 灰绿
+  };
+
   Widget _gridCard(
     BuildContext context, {
     required String emoji,
@@ -227,12 +241,15 @@ class _TogetherPageState extends ConsumerState<TogetherPage> {
   }) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
+    final tint = _toolTints[title] ?? (cs.surfaceContainerHighest, cs.onSurface);
     return InkWell(
       key: cardKey,
       borderRadius: BorderRadius.circular(20),
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.all(14),
+        // 2.4.1 第 10 项①：内边距收紧 14→10（约 -25% 高度参考）。
+        padding: const EdgeInsets.all(10),
+        constraints: const BoxConstraints(minHeight: 92),
         decoration: BoxDecoration(
           color: cs.surface,
           borderRadius: BorderRadius.circular(20),
@@ -242,7 +259,17 @@ class _TogetherPageState extends ConsumerState<TogetherPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text(emoji, style: const TextStyle(fontSize: 24)), // fs-xl 24
+            // emoji 收进 35px 圆角方底座（圆角 11，每卡淡彩底 + 同色图形）。
+            Container(
+              width: 35,
+              height: 35,
+              decoration: BoxDecoration(
+                color: tint.$1,
+                borderRadius: BorderRadius.circular(11),
+              ),
+              alignment: Alignment.center,
+              child: Text(emoji, style: const TextStyle(fontSize: 20)),
+            ),
             const SizedBox(height: 6),
             Text(title, style: theme.textTheme.titleSmall), // h3 fs-body
             const SizedBox(height: 2),
@@ -293,16 +320,22 @@ class _PeriodEntryCard extends StatelessWidget {
     // （linear-gradient(120deg,var(--soft),var(--surface) 64%)，style.css:1085）
     // ——soft → primaryContainer 映射（浅档口径，与试点 chrome 同机制）。
     final dark = theme.brightness == Brightness.dark;
+    // 2.4.1 第 10 项②：渐变换 --period 玫红系柔光（period_colors light/dark
+    // 值低透明度自左向右渐隐）；樱花 emoji 收进玻璃圆（半透明白底 + 细边）。
+    final periodColor = periodStageColor(context);
     return Container(
       margin: EdgeInsets.zero,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(AppRadius.card),
         border: Border.all(color: cs.outlineVariant),
         gradient: LinearGradient(
-          begin: dark ? Alignment.topLeft : Alignment.centerLeft,
-          end: dark ? Alignment.bottomRight : Alignment.centerRight,
-          colors: <Color>[cs.primaryContainer, cs.surface],
-          stops: const [0, 0.64],
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+          colors: <Color>[
+            periodColor.withValues(alpha: dark ? 0.22 : 0.14),
+            cs.surface,
+          ],
+          stops: const [0, 0.72],
         ),
       ),
       child: InkWell(
@@ -312,7 +345,18 @@ class _PeriodEntryCard extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
           child: Row(
             children: [
-              const Text('🌸', style: TextStyle(fontSize: 30)),
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.white.withValues(alpha: dark ? 0.14 : 0.65),
+                  border: Border.all(
+                      color: periodColor.withValues(alpha: 0.45)),
+                ),
+                alignment: Alignment.center,
+                child: const Text('🌸', style: TextStyle(fontSize: 24)),
+              ),
               const SizedBox(width: 14),
               Expanded(
                 child: Column(
@@ -355,13 +399,20 @@ class _AnniversaryCard extends StatelessWidget {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     final a = ann;
-    return Card(
+    // 2.4.1 第 10 项③：容器形态与生理期宽卡对齐（AppRadius.card + 边框 +
+    // padding 16/18，衬线大字保留）；Card→Container 消除双层 elevation 差。
+    return Container(
       margin: EdgeInsets.zero,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        border: Border.all(color: cs.outlineVariant),
+        color: cs.surface,
+      ),
       child: InkWell(
         borderRadius: BorderRadius.circular(AppRadius.card),
         onTap: () => context.push('/together/anniversary'),
         child: Padding(
-          padding: const EdgeInsets.all(Spacing.cardPad),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
           child: a == null
               ? Text(
                   '留一个日子，给仪式感 · 点此去首页添加纪念日。',
