@@ -17,7 +17,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_client.dart' as api;
 import '../../core/together/together_data.dart';
+import '../../core/ui/selection_sheet.dart';
 import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
+import '../settings/settings_widgets.dart' show GlassActionBar;
 import 'period_actions.dart';
 import 'period_controller.dart';
 import 'period_meta.dart';
@@ -179,21 +181,65 @@ class _PeriodFormDialogState extends ConsumerState<PeriodFormDialog> {
     Navigator.of(context).pop(true);
   }
 
+  /// 经量显示文案（0=不记，其余查 periodFlow）。
+  String _flowLabel() => _flow == 0 ? '不记' : (periodFlow[_flow] ?? '不记');
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    return AlertDialog(
-      title: Text(_editing ? '编辑这次经期' : '记录这次经期'),
-      content: Form(
-        key: _formKey,
-        child: SizedBox(
-          width: 420,
-          child: SingleChildScrollView(
-            child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
+    // 2.4.1 通则 A：居中弹窗改底部表单 sheet（抓手 + 标题 + 关闭圆钮 +
+    // 玻璃栏）；字段/校验/提交口径（含失败内联双呈现不 pop）零变化。
+    return Padding(
+      padding: EdgeInsets.only(
+          left: 16,
+          right: 16,
+          top: 12,
+          bottom: MediaQuery.of(context).viewInsets.bottom + 12),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Center(
+            child: Container(
+              width: 38,
+              height: 4.5,
+              margin: const EdgeInsets.only(bottom: 10),
+              decoration: BoxDecoration(
+                color: cs.outlineVariant.withValues(alpha: 0.8),
+                borderRadius: BorderRadius.circular(3),
+              ),
+            ),
+          ),
+          Row(children: [
+            Expanded(
+                child: Text(_editing ? '编辑这次经期' : '记录这次经期',
+                    style: theme.textTheme.titleMedium)),
+            Container(
+              width: 34,
+              height: 34,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: cs.surfaceContainerHighest.withValues(alpha: 0.6),
+              ),
+              child: IconButton(
+                  tooltip: '关闭',
+                  visualDensity: VisualDensity.compact,
+                  onPressed: _submitting
+                      ? null
+                      : () => Navigator.of(context).pop(false),
+                  icon: const Icon(Icons.close_rounded, size: 18)),
+            ),
+          ]),
+          const SizedBox(height: 10),
+          Flexible(
+            child: SingleChildScrollView(
+              child: Form(
+                key: _formKey,
+                child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                   TextFormField(
                     controller: _startCtrl,
                     readOnly: true,
@@ -234,18 +280,43 @@ class _PeriodFormDialogState extends ConsumerState<PeriodFormDialog> {
                     ),
                   ]),
                   const SizedBox(height: 10),
-                  DropdownButtonFormField<int>(
-                    initialValue: _flow,
-                    decoration:
-                        const InputDecoration(labelText: '整体经量'),
-                    items: <DropdownMenuItem<int>>[
-                      const DropdownMenuItem<int>(
-                          value: 0, child: Text('不记')),
-                      for (final entry in periodFlow.entries)
-                        DropdownMenuItem<int>(
-                            value: entry.key, child: Text(entry.value)),
-                    ],
-                    onChanged: (v) => setState(() => _flow = v ?? 0),
+                  // 2.4.1 通则 B：整体经量下拉改整行选择框 + 底部选择单。
+                  InkWell(
+                    key: const Key('period-flow-field'),
+                    borderRadius: BorderRadius.circular(12),
+                    onTap: () async {
+                      final picked = await showSelectionSheet<int>(
+                        context: context,
+                        title: '整体经量',
+                        selected: _flow,
+                        options: <SelectionOption<int>>[
+                          const SelectionOption<int>(value: 0, label: '不记'),
+                          for (final entry in periodFlow.entries)
+                            SelectionOption<int>(
+                                value: entry.key, label: entry.value),
+                        ],
+                      );
+                      if (picked != null) setState(() => _flow = picked);
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: cs.surfaceContainerHighest
+                            .withValues(alpha: 0.5),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(children: [
+                        Text('整体经量',
+                            style: theme.textTheme.labelSmall),
+                        const Spacer(),
+                        Text(_flowLabel(),
+                            style: theme.textTheme.bodyMedium),
+                        const SizedBox(width: 6),
+                        Icon(Icons.chevron_right_rounded,
+                            size: 18, color: cs.outline),
+                      ]),
+                    ),
                   ),
                   const SizedBox(height: 12),
                   Text('身体的感受（可多选）',
@@ -290,18 +361,22 @@ class _PeriodFormDialogState extends ConsumerState<PeriodFormDialog> {
                             ?.copyWith(color: cs.error)),
                   ],
                 ]),
+              ),
+            ),
           ),
-        ),
+          const SizedBox(height: 10),
+          GlassActionBar(
+            safeAreaBottom: false,
+            cancelLabel: '取消',
+            onCancel: _submitting
+                ? null
+                : () => Navigator.of(context).pop(false),
+            saveLabel: '保存',
+            onSave: _submit,
+            busy: _submitting,
+          ),
+        ],
       ),
-      actions: [
-        TextButton(
-            onPressed:
-                _submitting ? null : () => Navigator.of(context).pop(false),
-            child: const Text('取消')),
-        FilledButton(
-            onPressed: _submitting ? null : _submit,
-            child: const Text('保存')),
-      ],
     );
   }
 }

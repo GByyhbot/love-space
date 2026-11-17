@@ -10,6 +10,7 @@ library;
 import 'dart:async';
 import 'dart:io';
 
+import 'package:dio/dio.dart' show Dio;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
@@ -22,6 +23,9 @@ import '../chat/voice_recorder.dart';
 import 'composer_store.dart';
 import 'timeline_controller.dart';
 import '../../core/theme/tokens.dart';
+import '../../core/ui/selection_sheet.dart';
+import '../settings/settings_widgets.dart'
+    show GlassActionBar, filledFieldDecoration;
 
 /// 打开 composer 弹层（页头「记录此刻」/ FAB / 聊天「记入时光」/ 编辑共用）。
 /// · [editRecord] 非空 = 编辑态（C2）：预填原记录，PUT 全量 body（原始 body
@@ -67,6 +71,39 @@ class ComposerMedia {
   final ChatLocalFile localFile;
   String? uploadedId;
   double progress = 0; // 0..1（上传中）
+}
+
+/// 选图/视频共用入口（2.4.1 第 16 项抽共用：行为等价 composer 原实现——
+/// 先多选图，未选到再退回选一个视频；不弹任何提示）。
+Future<List<XFile>> pickImageVideoFiles() async {
+  final picked = await ImagePicker().pickMultiImage();
+  if (picked.isNotEmpty) return picked;
+  final v = await ImagePicker().pickVideo(source: ImageSource.gallery);
+  return v == null ? const <XFile>[] : <XFile>[v];
+}
+
+/// 相册分类抓取共用入口（2.4.1 第 16 项抽共用：请求与解析逐行等价
+/// composer 原实现——GET /api/records?kind=album&limit=200，失败静默空表）。
+Future<List<AlbumChoice>> fetchAlbumList(Future<Dio> Function() getDio) async {
+  try {
+    final dio = await getDio();
+    final r = await dio.get('/api/records',
+        queryParameters: {'kind': 'album', 'limit': 200});
+    final list = <AlbumChoice>[];
+    if (r.data is List) {
+      for (final e in r.data) {
+        if (e is Map) {
+          final body = (e['body'] ?? {}) as Map;
+          final id = (e['id'] ?? '').toString();
+          final title = (body['title'] ?? '').toString();
+          if (id.isNotEmpty) list.add(AlbumChoice(id: id, title: title));
+        }
+      }
+    }
+    return list;
+  } catch (_) {
+    return const <AlbumChoice>[];
+  }
 }
 
 /// 相册分类项（kind:'album' 记录）
@@ -278,21 +315,8 @@ class _ComposerSheetState extends ConsumerState<ComposerSheet> {
 
   Future<void> _fetchAlbums() async {
     try {
-      final dio = await ref.read(dioProvider.future);
-      final r = await dio.get('/api/records',
-          queryParameters: {'kind': 'album', 'limit': 200});
+      final list = await fetchAlbumList(() => ref.read(dioProvider.future));
       if (!mounted) return;
-      final list = <AlbumChoice>[];
-      if (r.data is List) {
-        for (final e in r.data) {
-          if (e is Map) {
-            final body = (e['body'] ?? {}) as Map;
-            final id = (e['id'] ?? '').toString();
-            final title = (body['title'] ?? '').toString();
-            if (id.isNotEmpty) list.add(AlbumChoice(id: id, title: title));
-          }
-        }
-      }
       setState(() { _albums = list; _albumsLoading = false; });
     } catch (_) {
       if (mounted) setState(() { _albumsLoading = false; });
@@ -321,12 +345,8 @@ class _ComposerSheetState extends ConsumerState<ComposerSheet> {
   // ── 媒体选择 ───────────────────────────────────────────────
 
   Future<void> _pickImageVideo() async {
-    final picked = await ImagePicker().pickMultiImage();
-    if (picked.isEmpty) {
-      final v = await ImagePicker().pickVideo(source: ImageSource.gallery);
-      if (v != null) await _addMedia([v]);
-      return;
-    }
+    final picked = await pickImageVideoFiles();
+    if (picked.isEmpty) return;
     await _addMedia(picked);
   }
 
@@ -646,14 +666,39 @@ class _ComposerSheetState extends ConsumerState<ComposerSheet> {
         child: Column(mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           // 顶部通知由 App 根部全局 ChatToastHost 承载（覆盖弹层）
-          Row(children: [
-            Expanded(child: Text(
-                widget.isEdit ? '编辑这一刻' : '记录此刻',
-                style: theme.textTheme.titleMedium)),
-            IconButton(
-                tooltip: '关闭',
-                onPressed: () => Navigator.of(context).pop(),
-                icon: const Icon(Icons.close_rounded)),
+          // 2.4.1 第 12 项①外壳：顶部小抓手（Dock 抽屉同款 38×4.5）+
+          // 关闭钮收进圆钮（半透圆底）。
+          Column(children: [
+            Center(
+              child: Container(
+                width: 38,
+                height: 4.5,
+                margin: const EdgeInsets.only(bottom: 10),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.outlineVariant.withValues(alpha: 0.8),
+                  borderRadius: BorderRadius.circular(3),
+                ),
+              ),
+            ),
+            Row(children: [
+              Expanded(child: Text(
+                  widget.isEdit ? '编辑这一刻' : '记录此刻',
+                  style: theme.textTheme.titleMedium)),
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: theme.colorScheme.surfaceContainerHighest
+                      .withValues(alpha: 0.6),
+                ),
+                child: IconButton(
+                    tooltip: '关闭',
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: const Icon(Icons.close_rounded, size: 18)),
+              ),
+            ]),
           ]),
           if (_pendingMediaNotice)
             Padding(
@@ -668,52 +713,72 @@ class _ComposerSheetState extends ConsumerState<ComposerSheet> {
                     style: theme.textTheme.bodySmall),
               ),
             ),
-          TextField(
-            controller: _title,
-            maxLength: 200,
-            decoration: const InputDecoration(
-                labelText: '标题（可选）', counterText: '', isDense: true),
-          ),
+          Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('标题（可选）', style: theme.textTheme.labelSmall),
+            const SizedBox(height: 6),
+            TextField(
+              controller: _title,
+              maxLength: 200,
+              decoration: filledFieldDecoration(counterText: ''),
+            ),
+          ]),
           const SizedBox(height: Spacing.gap),
-          TextField(
-            controller: _content,
-            maxLines: 4,
-            minLines: 2,
-            maxLength: 20000,
-            decoration: const InputDecoration(
-                labelText: '这一刻想说的话', counterText: '', alignLabelWithHint: true),
-          ),
+          Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('这一刻想说的话', style: theme.textTheme.labelSmall),
+            const SizedBox(height: 6),
+            TextField(
+              controller: _content,
+              maxLines: 6,
+              minLines: 4,
+              maxLength: 20000,
+              style: const TextStyle(height: 1.5),
+              decoration: filledFieldDecoration(alignLabelWithHint: true),
+            ),
+          ]),
           const SizedBox(height: Spacing.gap),
           // 日期 + 媒体入口。2.3.4（推广段一重做，QA 备案缺陷②）：
           // 原单行 Row（图标+文字+日期钮+Spacer+图/视频+音频）在 393 宽右溢出
           // 约 90px、320 更甚——改 Wrap：日期组 mainAxisSize.min 固定一行，
           // 媒体入口空间不足自动换行；发布字段/回调链零变化。
-          Wrap(
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              Row(mainAxisSize: MainAxisSize.min, children: [
-                Icon(Icons.event_rounded, size: 18, color: theme.colorScheme.primary),
-                const SizedBox(width: 8),
-                Text('发生日期', style: theme.textTheme.bodyMedium),
-                const SizedBox(width: 10),
-                TextButton(
-                  onPressed: _pickDate,
-                  child: Text(_fmtDate(_date)),
-                ),
+          // 2.4.1 第 12 项③：发生日期改整行选择框（标签 + 值 + 右箭头）。
+          InkWell(
+            key: const Key('composer-date-field'),
+            borderRadius: BorderRadius.circular(12),
+            onTap: _pickDate,
+            child: Container(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surfaceContainerHighest
+                    .withValues(alpha: 0.5),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(children: [
+                Text('发生日期', style: theme.textTheme.labelSmall),
+                const Spacer(),
+                Text(_fmtDate(_date), style: theme.textTheme.bodyMedium),
+                const SizedBox(width: 6),
+                Icon(Icons.chevron_right_rounded,
+                    size: 18, color: theme.colorScheme.outline),
               ]),
-              TextButton.icon(
-                onPressed: _pickImageVideo,
-                icon: const Icon(Icons.image_rounded, size: 18),
-                label: const Text('图/视频'),
-              ),
-              TextButton.icon(
-                onPressed: _pickFromLibrary,
-                icon: const Icon(Icons.audiotrack_rounded, size: 18),
-                label: const Text('音频'),
-              ),
-            ],
+            ),
           ),
-          // 录音 tile（三键：录制中=暂停/完成/取消，暂停中=继续/完成/取消）
+          const SizedBox(height: 8),
+          // 2.4.1 第 12 项④：媒体三入口一行三块等宽 tile（图标上文字下、
+          // 淡紫底 + 紫描边）；录音块点击开始录音，状态行保留原交互。
+          Row(children: [
+            Expanded(child: _mediaTile(theme, Icons.image_rounded, '图/视频',
+                onTap: _pickImageVideo)),
+            const SizedBox(width: 8),
+            Expanded(child: _mediaTile(theme, Icons.audiotrack_rounded, '音频',
+                onTap: _pickFromLibrary)),
+            const SizedBox(width: 8),
+            Expanded(child: _mediaTile(theme, Icons.mic_rounded, '录音',
+                onTap: _recState == _recIdle ? _startRecord : null)),
+          ]),
+          // 录音状态行（录制中=暂停/完成/取消，暂停中=继续/完成/取消；
+          // 入口已由上方「录音」tile 承担——2.4.1 第 12 项④只换容器）。
+          if (_recState != _recIdle)
           Padding(
             padding: const EdgeInsets.only(top: 4),
             child: Row(children: [
@@ -721,12 +786,6 @@ class _ComposerSheetState extends ConsumerState<ComposerSheet> {
               const SizedBox(width: 8),
               Text('录音', style: theme.textTheme.bodyMedium),
               const Spacer(),
-              if (_recState == _recIdle)
-                TextButton.icon(
-                  onPressed: _startRecord,
-                  icon: const Icon(Icons.mic_rounded, size: 18),
-                  label: const Text('开始录音'),
-                ),
               if (_recState == _recRecording) ...[
                 Text(_fmtDuration(_recElapsed),
                     style: theme.textTheme.bodyMedium),
@@ -763,18 +822,55 @@ class _ComposerSheetState extends ConsumerState<ComposerSheet> {
               ],
             ]),
           ),
-          // 相册分类 chips
+          // 2.4.1 第 12 项⑤：相册分类改选择框 + 底部选择单（每行相册
+          // 选中打勾，第一行「暂不分类」）。
           if (_albums.isNotEmpty || _albumsLoading)
             Padding(
               padding: const EdgeInsets.only(top: 8, bottom: 4),
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text('相册分类', style: theme.textTheme.bodyMedium),
-                const SizedBox(height: Spacing.gap),
-                Wrap(spacing: 6, runSpacing: 6, children: [
-                  _albumChip(theme, '暂不分类', _album == null, () => _selectAlbum(null)),
-                  for (final a in _albums)
-                    _albumChip(theme, a.title, _album == a.id, () => _selectAlbum(a.id)),
-                ]),
+                InkWell(
+                  key: const Key('composer-album-field'),
+                  borderRadius: BorderRadius.circular(12),
+                  onTap: _albumsLoading
+                      ? null
+                      : () async {
+                          final picked = await showSelectionSheet<String>(
+                            context: context,
+                            title: '相册分类',
+                            selected: _album ?? '',
+                            options: [
+                              const SelectionOption(
+                                  value: '', label: '暂不分类'),
+                              for (final a in _albums)
+                                SelectionOption(
+                                    value: a.id, label: a.title),
+                            ],
+                          );
+                          if (picked != null) _selectAlbum(picked);
+                        },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.surfaceContainerHighest
+                          .withValues(alpha: 0.5),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(children: [
+                      Text('相册', style: theme.textTheme.labelSmall),
+                      const Spacer(),
+                      Flexible(
+                        child: Text(_albumLabel(),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.bodyMedium),
+                      ),
+                      const SizedBox(width: 6),
+                      Icon(Icons.chevron_right_rounded,
+                          size: 18, color: theme.colorScheme.outline),
+                    ]),
+                  ),
+                ),
                 if (_albumsLoading)
                   const Padding(
                     padding: EdgeInsets.only(top: 4),
@@ -792,52 +888,56 @@ class _ComposerSheetState extends ConsumerState<ComposerSheet> {
                       ?.copyWith(color: theme.colorScheme.error)),
             ),
           const SizedBox(height: 10),
-          Row(children: [
-            // 保存草稿（次按钮；C2 编辑态不走草稿）
-            if (!widget.isEdit)
-              OutlinedButton(
-                onPressed: _draftSaving ? null : _saveDraft,
-                child: _draftSaving
-                    ? const SizedBox(width: 16, height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Text('存草稿'),
-              ),
-            const Spacer(),
-            // 发布 / 保存修改（主按钮）
-            FilledButton(
-              onPressed: _submitting ? null : _submit,
-              child: _submitting
-                  ? const SizedBox(width: 18, height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                  : Text(widget.isEdit ? '保存修改' : '发布'),
-            ),
-          ]),
+          // 2.4.1 第 12 项⑥：底部动作移入玻璃操作栏（存草稿 1/3 描边、
+          // 发布/保存修改 2/3 实心；编辑态整行）；键盘电梯沿用外层
+          // Padding(viewInsets) 电梯，只换皮不换骨。
+          GlassActionBar(
+            safeAreaBottom: false,
+            cancelLabel: widget.isEdit ? null : '存草稿',
+            onCancel: _draftSaving ? null : _saveDraft,
+            saveLabel: widget.isEdit ? '保存修改' : '发布',
+            onSave: _submitting ? () {} : _submit,
+            saveEnabled: !_submitting,
+            busy: _submitting || _draftSaving,
+          ),
         ]),
       ),
     );
   }
 
-  Widget _albumChip(ThemeData theme, String label, bool selected, VoidCallback onTap) {
+  String _albumLabel() {
+    if (_albumsLoading) return '加载中…';
+    if (_album == null) return '暂不分类';
+    for (final a in _albums) {
+      if (a.id == _album) return a.title;
+    }
+    return '暂不分类';
+  }
+
+  /// 媒体入口 tile（图标上文字下、淡紫底 + 紫描边）。
+  Widget _mediaTile(ThemeData theme, IconData icon, String label,
+      {required VoidCallback? onTap}) {
     return InkWell(
+      borderRadius: BorderRadius.circular(12),
       onTap: onTap,
-      borderRadius: BorderRadius.circular(999),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        height: 56,
         decoration: BoxDecoration(
-          color: selected
-              ? theme.colorScheme.primaryContainer
-              : theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-          borderRadius: BorderRadius.circular(999),
+          color: theme.colorScheme.primaryContainer.withValues(alpha: 0.35),
+          borderRadius: BorderRadius.circular(12),
           border: Border.all(
-              color: selected
-                  ? theme.colorScheme.primary
-                  : theme.colorScheme.outlineVariant),
+              color: theme.colorScheme.primary.withValues(alpha: 0.45)),
         ),
-        child: Text(label,
-            style: theme.textTheme.labelSmall?.copyWith(
-                color: selected
-                    ? theme.colorScheme.onPrimaryContainer
-                    : theme.colorScheme.outline)),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 20, color: theme.colorScheme.primary),
+            const SizedBox(height: 4),
+            Text(label,
+                style: theme.textTheme.labelSmall
+                    ?.copyWith(color: theme.colorScheme.primary)),
+          ],
+        ),
       ),
     );
   }

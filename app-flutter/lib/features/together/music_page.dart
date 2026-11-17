@@ -30,11 +30,13 @@ import '../../core/together/together_data.dart';
 import '../../core/ui/empty_view.dart';
 import '../../core/ui/error_view.dart';
 import '../../core/ui/progress.dart';
+import '../../core/theme/tokens.dart';
 import '../auth/auth_state.dart';
 import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
+import '../settings/settings_widgets.dart'
+    show filledFieldDecoration, showFormSheet;
 import 'together_controller.dart';
 import 'tool_pages.dart' show ToolTile;
-import '../../core/theme/tokens.dart';
 
 /// 音乐上传允许的扩展名（对齐 Web musicForm：建议 mp3，≤20MB——Web 口径）
 const _musicUploadExts = ['mp3', 'm4a', 'wav', 'aac', 'ogg'];
@@ -403,47 +405,46 @@ class _MusicPageState extends ConsumerState<MusicPage> {
     final titleCtrl = TextEditingController(text: defaultTitle);
     final contentCtrl = TextEditingController();
     final formKey = GlobalKey<FormState>();
-    final saved = await showDialog<bool>(
-      context: context,
-      builder: (dctx) => AlertDialog(
-        title: const Text('上传本地歌曲'),
-        content: Form(
-          key: formKey,
-          child: SizedBox(
-            width: 360,
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              Text('已选：$filename（${(bytes.length / 1024 / 1024).toStringAsFixed(1)} MB）',
-                  style: Theme.of(dctx).textTheme.bodySmall),
-              TextFormField(
-                controller: titleCtrl,
-                maxLength: 120,
-                decoration: const InputDecoration(
-                    labelText: '歌名', counterText: ''),
-                validator: (v) =>
-                    (v ?? '').trim().isEmpty ? '歌名不能为空' : null,
-              ),
-              TextFormField(
-                controller: contentCtrl,
-                maxLength: 200,
-                decoration: const InputDecoration(
-                    labelText: '歌手，或者想说的话', counterText: ''),
-              ),
-            ]),
-          ),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.of(dctx).pop(false),
-              child: const Text('取消')),
-          FilledButton(
-              onPressed: () {
-                if (formKey.currentState?.validate() ?? false) {
-                  Navigator.of(dctx).pop(true);
-                }
-              },
-              child: const Text('上传并放入歌单')),
-        ],
+    // 2.4.1 通则 A：底部表单 sheet。
+    final saved = await showFormSheet(
+      context,
+      title: '上传本地歌曲',
+      saveLabel: '上传并放入歌单',
+      cancelLabel: '取消',
+      builder: (_) => Form(
+        key: formKey,
+        child: Column(mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('已选：$filename（${(bytes.length / 1024 / 1024).toStringAsFixed(1)} MB）',
+              style: Theme.of(context).textTheme.bodySmall),
+          const SizedBox(height: 10),
+          Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('歌名', style: Theme.of(context).textTheme.labelSmall),
+            const SizedBox(height: 6),
+            TextFormField(
+              controller: titleCtrl,
+              maxLength: 120,
+              decoration: filledFieldDecoration(counterText: ''),
+              validator: (v) =>
+                  (v ?? '').trim().isEmpty ? '歌名不能为空' : null,
+            ),
+          ]),
+          const SizedBox(height: 10),
+          Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('歌手，或者想说的话',
+                style: Theme.of(context).textTheme.labelSmall),
+            const SizedBox(height: 6),
+            TextFormField(
+              controller: contentCtrl,
+              maxLength: 200,
+              decoration: filledFieldDecoration(counterText: ''),
+            ),
+          ]),
+        ]),
       ),
+      onSave: (closeOk, _) {
+        if (formKey.currentState?.validate() ?? false) closeOk();
+      },
     );
     if (saved != true) return;
     if (!mounted) return;
@@ -452,108 +453,154 @@ class _MusicPageState extends ConsumerState<MusicPage> {
         content: contentCtrl.text.trim());
   }
 
-/// 搜索入单：GET /api/music/search?q=&limit=20（服务端缓存 10 分钟，main.py:1780）。
+  /// 搜索入单：GET /api/music/search?q=&limit=20（服务端缓存 10 分钟，main.py:1780）。
   /// 返回 items: {title, artist, album, preview, art, dur}。
   /// 加入歌单 = POST /api/records kind=music，body 带 song 字段（clean_body
   /// permitted 含 song，main.py:949-973 会校验并归一化 src/art 白名单）。
+  /// 2.4.1 通则 A：搜索选择器同套底部 sheet 外壳（抓手+标题+关闭圆钮；
+  /// 无玻璃栏——结果即选即加入，加入成功自动关 sheet）。
   Future<void> _showSearch(BuildContext context, WidgetRef ref) async {
     final queryCtrl = TextEditingController();
     final results = <Map<String, String>>[];
     var searching = false;
     String? tip;
-    await showDialog<void>(
+    await showModalBottomSheet<void>(
       context: context,
-      builder: (dctx) => StatefulBuilder(
-        builder: (dctx, setDialogState) => AlertDialog(
-          title: const Text('搜歌入单'),
-          content: SizedBox(
-            width: 380,
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              TextField(
-                controller: queryCtrl,
-                autofocus: true,
-                decoration: const InputDecoration(labelText: '歌名或歌手'),
-                onSubmitted: (_) async {
-                  final q = queryCtrl.text.trim();
-                  if (q.isEmpty || searching) return;
-                  setDialogState(() {
-                    searching = true;
-                    tip = null;
-                  });
-                  try {
-                    final dio = await ref.read(api.dioProvider.future);
-                    final r = await dio.get('/api/music/search',
-                        queryParameters: {'q': q, 'limit': 20});
-                    results
-                      ..clear()
-                      ..addAll([
-                        for (final e in ((r.data as Map)['items'] ?? []) as List)
-                          if (e is Map)
-                            {
-                              for (final k in ['title', 'artist', 'album',
-                                    'preview', 'art', 'dur'])
-                                if (e[k] != null) k: e[k].toString(),
-                            },
-                      ]);
-                    tip = results.isEmpty ? '没搜到，换个关键词试试。' : null;
-                  } catch (e) {
-                    tip = '搜索失败：$e';
-                  }
-                  setDialogState(() => searching = false);
-                },
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+          borderRadius:
+              BorderRadius.vertical(top: Radius.circular(AppRadius.lg))),
+      builder: (sheetCtx) => StatefulBuilder(
+        builder: (sheetCtx, setSheetState) => Padding(
+          padding: EdgeInsets.only(
+              left: 16,
+              right: 16,
+              top: 12,
+              bottom: MediaQuery.of(sheetCtx).viewInsets.bottom + 12),
+          child: Column(mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            Center(
+              child: Container(
+                width: 38,
+                height: 4.5,
+                margin: const EdgeInsets.only(bottom: 10),
+                decoration: BoxDecoration(
+                  color: Theme.of(sheetCtx)
+                      .colorScheme
+                      .outlineVariant
+                      .withValues(alpha: 0.8),
+                  borderRadius: BorderRadius.circular(3),
+                ),
               ),
-              const SizedBox(height: Spacing.gap),
-              if (searching)
-                const Padding(
-                    padding: EdgeInsets.all(12),
-                    child: CircularProgressIndicator()),
-              if (!searching && tip != null)
-                Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    child: Text(tip!,
-                        style: Theme.of(dctx).textTheme.bodySmall)),
-              if (!searching)
-                for (final it in results.take(20))
-                  ListTile(
-                    dense: true,
-                    title: Text((it['title'] ?? '').toString(),
-                        maxLines: 1, overflow: TextOverflow.ellipsis),
-                    subtitle: Text((it['artist'] ?? '').toString(),
-                        maxLines: 1, overflow: TextOverflow.ellipsis),
-                    trailing: IconButton(
-                      tooltip: '加入歌单',
-                      icon: const Icon(Icons.playlist_add_rounded),
-                      onPressed: () async {
-                        final err = await ref
-                            .read(togetherControllerProvider.notifier)
-                            .add('music', {
-                          'title': (it['title'] ?? '').toString(),
-                          'content': (it['artist'] ?? '').toString(),
-                          'song': {
-                            'title': (it['title'] ?? '').toString(),
-                            'artist': (it['artist'] ?? '').toString(),
-                            'src': (it['preview'] ?? '').toString(),
-                            'art': (it['art'] ?? '').toString(),
-                            'dur': int.tryParse(it['dur'] ?? '') ?? 0,
-                          },
-                        });
-                        if (!dctx.mounted) return;
-                        ref.read(chatToastProvider.notifier).show(
-                            err == null ? '已经放进歌单了' : '添加失败：$err',
-                            tone: err == null
-                                ? ChatToastTone.success
-                                : ChatToastTone.error);
-                        if (err == null) Navigator.of(dctx).pop();
-                      },
-                    ),
-                  ),
+            ),
+            Row(children: [
+              Expanded(
+                  child: Text('搜歌入单',
+                      style: Theme.of(sheetCtx).textTheme.titleMedium)),
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Theme.of(sheetCtx)
+                      .colorScheme
+                      .surfaceContainerHighest
+                      .withValues(alpha: 0.6),
+                ),
+                child: IconButton(
+                    tooltip: '关闭',
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () => Navigator.of(sheetCtx).pop(),
+                    icon: const Icon(Icons.close_rounded, size: 18)),
+              ),
             ]),
-          ),
-          actions: [
-            TextButton(
-                onPressed: () => Navigator.of(dctx).pop(),
-                child: const Text('关闭')),
-          ],
+            const SizedBox(height: 10),
+            TextField(
+              controller: queryCtrl,
+              autofocus: true,
+              decoration: filledFieldDecoration(hint: '歌名或歌手'),
+              onSubmitted: (_) async {
+                final q = queryCtrl.text.trim();
+                if (q.isEmpty || searching) return;
+                setSheetState(() {
+                  searching = true;
+                  tip = null;
+                });
+                try {
+                  final dio = await ref.read(api.dioProvider.future);
+                  final r = await dio.get('/api/music/search',
+                      queryParameters: {'q': q, 'limit': 20});
+                  results
+                    ..clear()
+                    ..addAll([
+                      for (final e in ((r.data as Map)['items'] ?? []) as List)
+                        if (e is Map)
+                          {
+                            for (final k in ['title', 'artist', 'album',
+                                  'preview', 'art', 'dur'])
+                              if (e[k] != null) k: e[k].toString(),
+                          },
+                    ]);
+                  tip = results.isEmpty ? '没搜到，换个关键词试试。' : null;
+                } catch (e) {
+                  tip = '搜索失败：$e';
+                }
+                setSheetState(() => searching = false);
+              },
+            ),
+            const SizedBox(height: Spacing.gap),
+            Flexible(
+              child: SingleChildScrollView(
+                child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  if (searching)
+                    const Padding(
+                        padding: EdgeInsets.all(12),
+                        child: CircularProgressIndicator()),
+                  if (!searching && tip != null)
+                    Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        child: Text(tip!,
+                            style:
+                                Theme.of(sheetCtx).textTheme.bodySmall)),
+                  if (!searching)
+                    for (final it in results.take(20))
+                      ListTile(
+                        dense: true,
+                        title: Text((it['title'] ?? '').toString(),
+                            maxLines: 1, overflow: TextOverflow.ellipsis),
+                        subtitle: Text((it['artist'] ?? '').toString(),
+                            maxLines: 1, overflow: TextOverflow.ellipsis),
+                        trailing: IconButton(
+                          tooltip: '加入歌单',
+                          icon: const Icon(Icons.playlist_add_rounded),
+                          onPressed: () async {
+                            final err = await ref
+                                .read(togetherControllerProvider.notifier)
+                                .add('music', {
+                              'title': (it['title'] ?? '').toString(),
+                              'content': (it['artist'] ?? '').toString(),
+                              'song': {
+                                'title': (it['title'] ?? '').toString(),
+                                'artist': (it['artist'] ?? '').toString(),
+                                'src': (it['preview'] ?? '').toString(),
+                                'art': (it['art'] ?? '').toString(),
+                                'dur': int.tryParse(it['dur'] ?? '') ?? 0,
+                              },
+                            });
+                            if (!sheetCtx.mounted) return;
+                            ref.read(chatToastProvider.notifier).show(
+                                err == null ? '已经放进歌单了' : '添加失败：$err',
+                                tone: err == null
+                                    ? ChatToastTone.success
+                                    : ChatToastTone.error);
+                            if (err == null) Navigator.of(sheetCtx).pop();
+                          },
+                        ),
+                      ),
+                ]),
+              ),
+            ),
+          ]),
         ),
       ),
     );
@@ -567,44 +614,42 @@ class _MusicPageState extends ConsumerState<MusicPage> {
     final titleCtrl = TextEditingController(text: (b['title'] ?? '').toString());
     final contentCtrl = TextEditingController(text: (b['content'] ?? '').toString());
     final formKey = GlobalKey<FormState>();
-    final saved = await showDialog<bool>(
-      context: context,
-      builder: (dctx) => AlertDialog(
-        title: const Text('编辑这首歌'),
-        content: Form(
-          key: formKey,
-          child: SizedBox(
-            width: 360,
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              TextFormField(
-                controller: titleCtrl,
-                maxLength: 120,
-                decoration: const InputDecoration(
-                    labelText: '歌名', counterText: ''),
-                validator: (v) => (v ?? '').trim().isEmpty ? '歌名不能为空' : null,
-              ),
-              TextFormField(
-                controller: contentCtrl,
-                maxLength: 200,
-                decoration: const InputDecoration(
-                    labelText: '歌手，或者想说的话', counterText: ''),
-              ),
-            ]),
-          ),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.of(dctx).pop(false),
-              child: const Text('取消')),
-          FilledButton(
-              onPressed: () {
-                if (formKey.currentState?.validate() ?? false) {
-                  Navigator.of(dctx).pop(true);
-                }
-              },
-              child: const Text('保存')),
-        ],
+    // 2.4.1 通则 A：底部表单 sheet。
+    final saved = await showFormSheet(
+      context,
+      title: '编辑这首歌',
+      saveLabel: '保存',
+      cancelLabel: '取消',
+      builder: (_) => Form(
+        key: formKey,
+        child: Column(mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('歌名', style: Theme.of(context).textTheme.labelSmall),
+            const SizedBox(height: 6),
+            TextFormField(
+              controller: titleCtrl,
+              maxLength: 120,
+              decoration: filledFieldDecoration(counterText: ''),
+              validator: (v) => (v ?? '').trim().isEmpty ? '歌名不能为空' : null,
+            ),
+          ]),
+          const SizedBox(height: 10),
+          Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('歌手，或者想说的话',
+                style: Theme.of(context).textTheme.labelSmall),
+            const SizedBox(height: 6),
+            TextFormField(
+              controller: contentCtrl,
+              maxLength: 200,
+              decoration: filledFieldDecoration(counterText: ''),
+            ),
+          ]),
+        ]),
       ),
+      onSave: (closeOk, _) {
+        if (formKey.currentState?.validate() ?? false) closeOk();
+      },
     );
     if (saved != true) return;
     final err = await ref

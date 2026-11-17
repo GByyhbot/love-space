@@ -769,8 +769,10 @@ class _PeriodPageState extends ConsumerState<PeriodPage> {
 
   Future<void> _openEpisodeForm(TogetherRecord? record, String selected,
       PeriodData d, String today) async {
-    await showDialog<bool>(
+    // 2.4.1 通则 A：表单从居中弹窗改底部 sheet（PeriodFormDialog 已 sheet 化）。
+    await showModalBottomSheet<bool>(
       context: context,
+      isScrollControlled: true,
       builder: (_) => PeriodFormDialog(
         record: record,
         presetDay: selected,

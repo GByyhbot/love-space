@@ -212,12 +212,12 @@ void main() {
       await tester.tap(find.byTooltip('添加纪念日'));
       await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextFormField).at(0), '拍拖纪念日');
-      // date 必填：不选日期直接提交 → 校验拦截
+      // date 必填：不选日期直接提交 → 保存口拦截（toast，sheet 不关）
       await tester.tap(find.text('添加'));
       await tester.pumpAndSettle();
       expect(postCount, 0, reason: 'date 必填校验拦截');
-      // 选日期：点开系统日期选择器 → OK（选今天）
-      await tester.tap(find.byType(TextFormField).at(1));
+      // 选日期：点开日期选择框（2.4.1 通则 A：日期改整行选择框）→ OK（选今天）
+      await tester.tap(find.byKey(const Key('anniv-date-field')));
       await tester.pumpAndSettle();
       await tester.tap(find.text('OK'));
       await tester.pumpAndSettle();

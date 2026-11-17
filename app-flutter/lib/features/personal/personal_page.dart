@@ -17,6 +17,8 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/api/api_client.dart' as api;
 import '../../core/ui/page_heading.dart';
+import '../settings/settings_widgets.dart'
+    show SettingsGlassBar, filledFieldDecoration, SettingsFootnote;
 import '../../core/chat/chat_repository.dart' show newChatClientId;
 import '../../core/together/together_data.dart';
 import '../../core/ui/error_view.dart';
@@ -476,36 +478,55 @@ class _DiaryFormPageState extends ConsumerState<DiaryFormPage> {
     final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(title: Text(widget.record == null ? '写日记' : '编辑日记')),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
+      body: Stack(
         children: [
-          Text('只有你能看见，放心写吧',
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: theme.colorScheme.outline)),
-          const SizedBox(height: 10),
-          TextField(
-            controller: _content,
-            maxLines: 8,
-            minLines: 4,
-            maxLength: 20000,
-            autofocus: widget.record == null,
-            decoration: const InputDecoration(
-              labelText: '给自己的心里话',
-              alignLabelWithHint: true,
-              border: OutlineInputBorder(),
+          Positioned.fill(
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(
+                  16, 12, 16, SettingsGlassBar.barReserveHeight + 12),
+              children: [
+                // 2.4.1 第 11 项②：说明降注脚样式。
+                const SettingsFootnote('只有你能看见，放心写吧'),
+                const SizedBox(height: 10),
+                // 2.4.1 第 14 项①：圆角填充书写区（圆角 14、淡底、标签框上方）；
+                // 字数计数收进框内右下角；书写区高度约 1.3 倍（8→10 行）。
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text('给自己的心里话', style: theme.textTheme.labelSmall),
+                  const SizedBox(height: 6),
+                  TextField(
+                    controller: _content,
+                    maxLines: 10,
+                    minLines: 6,
+                    maxLength: 20000,
+                    autofocus: widget.record == null,
+                    style: const TextStyle(height: 1.5),
+                    decoration: filledFieldDecoration(
+                      hint: '只有你能看见，放心写吧',
+                      alignLabelWithHint: true,
+                    ),
+                  ),
+                ]),
+                if (_error != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Text(_error!,
+                        style: theme.textTheme.bodySmall
+                            ?.copyWith(color: theme.colorScheme.error)),
+                  ),
+              ],
             ),
           ),
-          if (_error != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Text(_error!,
-                  style: theme.textTheme.bodySmall
-                      ?.copyWith(color: theme.colorScheme.error)),
+          // 2.4.1 第 14 项②：保存移入底部玻璃操作栏（整行实心）。
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: SettingsGlassBar(
+              saveLabel: _saving ? '保存中…' : '保存日记',
+              onSave: _saving ? () {} : _save,
+              saveEnabled: !_saving,
+              busy: _saving,
             ),
-          const SizedBox(height: 16),
-          FilledButton(
-            onPressed: _saving ? null : _save,
-            child: Text(_saving ? '保存中…' : '保存日记'),
           ),
         ],
       ),
@@ -938,49 +959,95 @@ class _SurpriseFormPageState extends ConsumerState<SurpriseFormPage> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Scaffold(
+      backgroundColor: theme.colorScheme.surface,
       appBar: AppBar(
           title: Text(widget.record == null ? '准备惊喜' : '编辑惊喜')),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
+      body: Stack(
         children: [
-          Text(personalTabs[2].hint,
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: theme.colorScheme.outline)),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _content,
-            maxLines: 8,
-            minLines: 4,
-            maxLength: 20000,
-            autofocus: widget.record == null,
-            decoration: const InputDecoration(
-              labelText: '想说的话',
-              alignLabelWithHint: true,
-              border: OutlineInputBorder(),
+          Positioned.fill(
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(
+                  16, 12, 16, SettingsGlassBar.barReserveHeight + 12),
+              children: [
+                // 2.4.1 第 14 项③文案去重：页首副标题改为不重复短句
+                // （原与时间行下方说明同一句）。
+                const SettingsFootnote('写给未来的一句话，到时间才揭晓'),
+                const SizedBox(height: 12),
+                // 2.4.1 第 14 项①：圆角填充书写区（同日记表单规格）。
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text('想说的话', style: theme.textTheme.labelSmall),
+                  const SizedBox(height: 6),
+                  TextField(
+                    controller: _content,
+                    maxLines: 10,
+                    minLines: 6,
+                    maxLength: 20000,
+                    autofocus: widget.record == null,
+                    style: const TextStyle(height: 1.5),
+                    decoration: filledFieldDecoration(
+                      hint: '到约定时间，惊喜才会被另一半看见',
+                      alignLabelWithHint: true,
+                    ),
+                  ),
+                ]),
+                const SizedBox(height: 12),
+                // 2.4.1 第 14 项③：公开时间改整行选择框（样式同第 12 项）；
+                // 下方保留一处说明（页首副标题已去重）。
+                InkWell(
+                  key: const Key('surprise-publish-at'),
+                  borderRadius: BorderRadius.circular(12),
+                  onTap: _pick,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.surfaceContainerHighest
+                          .withValues(alpha: 0.5),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(children: [
+                      Text('公开时间', style: theme.textTheme.labelSmall),
+                      const Spacer(),
+                      Flexible(
+                        child: Text(
+                            _publishAt == null
+                                ? '选择未来的公开时间'
+                                : _fmtStamp(_publishAt!
+                                    .millisecondsSinceEpoch /
+                                    1000),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.bodyMedium),
+                      ),
+                      const SizedBox(width: 6),
+                      Icon(Icons.chevron_right_rounded,
+                          size: 18, color: theme.colorScheme.outline),
+                    ]),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const SettingsFootnote('到约定时间，惊喜才会被另一半看见'),
+                if (_error != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Text(_error!,
+                        style: theme.textTheme.bodySmall
+                            ?.copyWith(color: theme.colorScheme.error)),
+                  ),
+              ],
             ),
           ),
-          const SizedBox(height: 12),
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: const Icon(Icons.schedule_rounded),
-            title: Text(_publishAt == null
-                ? '选择未来的公开时间'
-                : '公开时间：${_fmtStamp(_publishAt!.millisecondsSinceEpoch / 1000)}'),
-            subtitle: const Text('到约定时间，惊喜才会被另一半看见'),
-            trailing: const Icon(Icons.chevron_right_rounded),
-            onTap: _pick,
-          ),
-          if (_error != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Text(_error!,
-                  style: theme.textTheme.bodySmall
-                      ?.copyWith(color: theme.colorScheme.error)),
+          // 2.4.1 第 14 项②：保存移入底部玻璃操作栏（整行实心）。
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: SettingsGlassBar(
+              saveLabel: _saving ? '保存中…' : '保存惊喜',
+              onSave: _saving ? () {} : _save,
+              saveEnabled: !_saving,
+              busy: _saving,
             ),
-          const SizedBox(height: 16),
-          FilledButton(
-            onPressed: _saving ? null : _save,
-            child: Text(_saving ? '保存中…' : '保存惊喜'),
           ),
         ],
       ),

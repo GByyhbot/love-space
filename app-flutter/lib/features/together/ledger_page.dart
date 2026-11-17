@@ -14,11 +14,14 @@ import '../../core/together/together_data.dart';
 import '../../core/ui/empty_view.dart';
 import '../../core/ui/error_view.dart';
 import '../../core/ui/progress.dart';
+import '../../core/ui/selection_sheet.dart';
+import '../../core/theme/tokens.dart';
 import '../auth/auth_state.dart';
 import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
+import '../settings/settings_widgets.dart'
+    show GlassActionBar, filledFieldDecoration;
 import 'together_controller.dart';
 import 'tool_pages.dart' show ToolTile;
-import '../../core/theme/tokens.dart';
 
 class LedgerPage extends ConsumerStatefulWidget {
   const LedgerPage({super.key});
@@ -268,6 +271,33 @@ class _LedgerPageState extends ConsumerState<LedgerPage> {
     );
   }
 
+  /// 分类彩色字徽（第 15 项：首字 + 淡彩底圆角块，选择框与选择单行共用；
+  /// 分类集合/顺序以 ledgerCategories 为准，一增不减）。
+  static const _categoryTints = <String, Color>{
+    '餐饮': Color(0xFFFFF3E0),
+    '交通': Color(0xFFE3F2FD),
+    '旅行': Color(0xFFE0F7FA),
+    '礼物': Color(0xFFFCE4EC),
+    '生活': Color(0xFFE8F5E9),
+    '娱乐': Color(0xFFEDE7F6),
+    '其他': Color(0xFFF5F5F5),
+  };
+
+  Widget _categoryBadge(String c) {
+    final tint = _categoryTints[c] ?? const Color(0xFFF5F5F5);
+    return Container(
+      width: 26,
+      height: 26,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: tint,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(c.isEmpty ? '?' : c.substring(0, 1),
+          style: Theme.of(context).textTheme.labelSmall),
+    );
+  }
+
   Widget _buildTile(BuildContext context, WidgetRef ref, TogetherRecord r,
       MeData? me) {
     final theme = Theme.of(context);
@@ -293,6 +323,12 @@ class _LedgerPageState extends ConsumerState<LedgerPage> {
   /// 记一笔/编辑表单（对齐 Web recordForm ledger 分支）：amount 必填
   /// （0–1 亿，step 0.01 → 允许两位小数，0 元合法）+ category 七选 +
   /// date 必填（默认今天）+ content 备注可选。编辑回填铁律。
+  /// 2.4.1 第 15 项：居中弹窗改底部 sheet（外壳同 composer：抓手 +
+  /// 标题 + 关闭圆钮）；金额大输入（¥ 前缀 + 数字字号 1.4×）；分类原生
+  /// 下拉改 showSelectionSheet 底部选择单（行 = 彩色字徽「分类首字 +
+  /// 淡彩底」+ 名称，选中淡紫底 + 勾、点选即关，分类集合/顺序以
+  /// ledgerCategories 现有列表为准一增不减）；花在哪天改整行日期选择框；
+  /// 备注圆角填充；取消/记下来移入 GlassActionBar。提交数据口径零变化。
   Future<void> _showForm(
       BuildContext context, WidgetRef ref, TogetherRecord? record) async {
     final editing = record != null;
@@ -307,21 +343,84 @@ class _LedgerPageState extends ConsumerState<LedgerPage> {
             : todayDateStr());
     final contentCtrl = TextEditingController(text: (b['content'] ?? '').toString());
     final formKey = GlobalKey<FormState>();
-    final saved = await showDialog<bool>(
+    String? dateError;
+    final saved = await showModalBottomSheet<bool>(
       context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+          borderRadius:
+              BorderRadius.vertical(top: Radius.circular(AppRadius.lg))),
       builder: (dctx) => StatefulBuilder(
-        builder: (dctx, setDialogState) => AlertDialog(
-          title: Text(editing ? '编辑这笔' : '记一笔'),
-          content: Form(
+        builder: (dctx, setDialogState) => Padding(
+          padding: EdgeInsets.only(
+              left: 16,
+              right: 16,
+              top: 12,
+              bottom: MediaQuery.of(dctx).viewInsets.bottom + 12),
+          child: Form(
             key: formKey,
-            child: SizedBox(
-              width: 360,
-              child: Column(mainAxisSize: MainAxisSize.min, children: [
+            child: Column(mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+              // 外壳（同 composer sheet）：抓手 + 标题 + 关闭圆钮。
+              Column(children: [
+                Center(
+                  child: Container(
+                    width: 38,
+                    height: 4.5,
+                    margin: const EdgeInsets.only(bottom: 10),
+                    decoration: BoxDecoration(
+                      color: Theme.of(dctx)
+                          .colorScheme
+                          .outlineVariant
+                          .withValues(alpha: 0.8),
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                  ),
+                ),
+                Row(children: [
+                  Expanded(
+                      child: Text(editing ? '编辑这笔' : '记一笔',
+                          style: Theme.of(dctx).textTheme.titleMedium)),
+                  Container(
+                    width: 34,
+                    height: 34,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Theme.of(dctx)
+                          .colorScheme
+                          .surfaceContainerHighest
+                          .withValues(alpha: 0.6),
+                    ),
+                    child: IconButton(
+                        tooltip: '关闭',
+                        visualDensity: VisualDensity.compact,
+                        onPressed: () => Navigator.of(dctx).pop(false),
+                        icon: const Icon(Icons.close_rounded, size: 18)),
+                  ),
+                ]),
+              ]),
+              const SizedBox(height: 10),
+              // 金额大输入：¥ 前缀 + 数字字号 1.4×（keyboardType 不变）。
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('金额（元）', style: Theme.of(dctx).textTheme.labelSmall),
+                const SizedBox(height: 6),
                 TextFormField(
                   controller: amountCtrl,
                   keyboardType:
                       const TextInputType.numberWithOptions(decimal: true),
-                  decoration: const InputDecoration(labelText: '金额（元）'),
+                  style: TextStyle(
+                      fontSize:
+                          (Theme.of(dctx).textTheme.bodyLarge?.fontSize ?? 16) *
+                              1.4),
+                  decoration: filledFieldDecoration(
+                    prefixText: '¥',
+                    prefixStyle: TextStyle(
+                        fontSize:
+                            (Theme.of(dctx).textTheme.bodyLarge?.fontSize ??
+                                    16) *
+                                1.4,
+                        color: Theme.of(dctx).colorScheme.onSurface),
+                  ),
                   validator: (v) {
                     final t = (v ?? '').trim();
                     if (t.isEmpty) return '请填写金额';
@@ -331,55 +430,137 @@ class _LedgerPageState extends ConsumerState<LedgerPage> {
                     return null;
                   },
                 ),
-                DropdownButtonFormField<String>(
-                  initialValue: category,
-                  decoration: const InputDecoration(labelText: '分类'),
-                  items: [
-                    for (final c in ledgerCategories)
-                      DropdownMenuItem(value: c, child: Text(c)),
-                  ],
-                  onChanged: (v) => setDialogState(() => category = v ?? '餐饮'),
+              ]),
+              const SizedBox(height: 10),
+              // 分类：整行选择框 + 底部选择单（行 = 彩色字徽 + 名称，
+              // 选中淡紫底 + 右勾、点选即关）。
+              InkWell(
+                key: const Key('ledger-category-field'),
+                borderRadius: BorderRadius.circular(12),
+                onTap: () async {
+                  final picked = await showSelectionSheet<String>(
+                    context: dctx,
+                    title: '分类',
+                    selected: category,
+                    options: [
+                      for (final c in ledgerCategories)
+                        SelectionOption(
+                            value: c,
+                            label: c,
+                            leading: _categoryBadge(c)),
+                    ],
+                  );
+                  if (picked != null) {
+                    setDialogState(() => category = picked);
+                  }
+                },
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: Theme.of(dctx)
+                        .colorScheme
+                        .surfaceContainerHighest
+                        .withValues(alpha: 0.5),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(children: [
+                    Text('分类', style: Theme.of(dctx).textTheme.labelSmall),
+                    const Spacer(),
+                    _categoryBadge(category),
+                    const SizedBox(width: 6),
+                    Text(category, style: Theme.of(dctx).textTheme.bodyMedium),
+                    const SizedBox(width: 6),
+                    Icon(Icons.chevron_right_rounded,
+                        size: 18, color: Theme.of(dctx).colorScheme.outline),
+                  ]),
                 ),
-                TextFormField(
-                  controller: dateCtrl,
-                  readOnly: true,
-                  decoration: const InputDecoration(labelText: '花在哪天'),
-                  onTap: () async {
-                    final picked = await showDatePicker(
-                        context: dctx,
-                        initialDate:
-                            DateTime.tryParse(dateCtrl.text) ?? DateTime.now(),
-                        firstDate: DateTime(2000),
-                        lastDate: DateTime(2100));
-                    if (picked != null) {
+              ),
+              const SizedBox(height: 10),
+              // 花在哪天：整行日期选择框（样式同第 12 项③）。
+              InkWell(
+                key: const Key('ledger-date-field'),
+                borderRadius: BorderRadius.circular(12),
+                onTap: () async {
+                  final picked = await showDatePicker(
+                      context: dctx,
+                      initialDate:
+                          DateTime.tryParse(dateCtrl.text) ?? DateTime.now(),
+                      firstDate: DateTime(2000),
+                      lastDate: DateTime(2100));
+                  if (picked != null) {
+                    setDialogState(() {
                       dateCtrl.text =
                           '${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
-                    }
-                  },
-                  validator: (v) => (v ?? '').length == 10 ? null : '请选择日期',
+                      dateError = null;
+                    });
+                  }
+                },
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: Theme.of(dctx)
+                        .colorScheme
+                        .surfaceContainerHighest
+                        .withValues(alpha: 0.5),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(children: [
+                    Text('花在哪天',
+                        style: Theme.of(dctx).textTheme.labelSmall),
+                    const Spacer(),
+                    Text(dateCtrl.text.isEmpty ? '请选择' : dateCtrl.text,
+                        style: Theme.of(dctx).textTheme.bodyMedium),
+                    const SizedBox(width: 6),
+                    Icon(Icons.chevron_right_rounded,
+                        size: 18, color: Theme.of(dctx).colorScheme.outline),
+                  ]),
                 ),
+              ),
+              const SizedBox(height: 10),
+              // 备注圆角填充「备注（可选）」。
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('备注（可选）', style: Theme.of(dctx).textTheme.labelSmall),
+                const SizedBox(height: 6),
                 TextFormField(
                   controller: contentCtrl,
                   maxLines: 2,
                   maxLength: 20000,
-                  decoration: const InputDecoration(
-                      labelText: '备注（可选）', counterText: ''),
+                  decoration: filledFieldDecoration(counterText: ''),
                 ),
               ]),
-            ),
-          ),
-          actions: [
-            TextButton(
-                onPressed: () => Navigator.of(dctx).pop(false),
-                child: const Text('取消')),
-            FilledButton(
-                onPressed: () {
+              const SizedBox(height: 10),
+              if (dateError != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(dateError!,
+                        style: Theme.of(dctx).textTheme.bodySmall?.copyWith(
+                            color: Theme.of(dctx).colorScheme.error)),
+                  ),
+                ),
+              // 取消/记下来（保存）移入玻璃操作栏（sheet 用
+              // safeAreaBottom:false，同 composer 口径）。
+              GlassActionBar(
+                safeAreaBottom: false,
+                cancelLabel: '取消',
+                onCancel: () => Navigator.of(dctx).pop(false),
+                saveLabel: editing ? '保存' : '记下来',
+                onSave: () {
+                  // 日期必填（dateCtrl 由整行选择框维护，不走 Form 校验）
+                  if (dateCtrl.text.trim().length != 10) {
+                    setDialogState(() => dateError = '请选择日期');
+                    return;
+                  }
                   if (formKey.currentState?.validate() ?? false) {
                     Navigator.of(dctx).pop(true);
                   }
                 },
-                child: Text(editing ? '保存' : '记下来')),
-          ],
+              ),
+            ]),
+          ),
         ),
       ),
     );

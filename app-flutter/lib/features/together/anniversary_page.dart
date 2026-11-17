@@ -12,8 +12,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/together/together_data.dart';
+import '../../core/ui/selection_sheet.dart';
 import '../auth/auth_state.dart';
 import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
+import '../settings/settings_widgets.dart'
+    show filledFieldDecoration, showFormSheet;
 import 'together_controller.dart';
 import '../../core/theme/tokens.dart';
 
@@ -208,87 +211,148 @@ Future<void> _showForm(
       TextEditingController(text: '${b['remind_days'] ?? 1}');
   final contentCtrl = TextEditingController(text: (b['content'] ?? '').toString());
   final formKey = GlobalKey<FormState>();
-  final saved = await showDialog<bool>(
-    context: context,
-    builder: (dctx) => StatefulBuilder(
-      builder: (dctx, setDialogState) => AlertDialog(
-        title: Text(editing ? '编辑纪念日' : '添加纪念日'),
-        content: Form(
-          key: formKey,
-          child: SizedBox(
-            width: 360,
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              TextFormField(
-                controller: titleCtrl,
-                autofocus: !editing,
-                maxLength: 200,
-                decoration: const InputDecoration(
-                    labelText: '纪念日名称', counterText: ''),
-                validator: (v) =>
-                    (v ?? '').trim().isEmpty ? '请填写标题' : null,
-              ),
-              TextFormField(
-                controller: dateCtrl,
-                readOnly: true,
-                decoration: const InputDecoration(labelText: '日期'),
-                onTap: () async {
-                  final picked = await showDatePicker(
-                      context: dctx,
-                      initialDate:
-                          DateTime.tryParse(dateCtrl.text) ?? DateTime.now(),
-                      firstDate: DateTime(1900),
-                      lastDate: DateTime(2100));
-                  if (picked != null) {
-                    dateCtrl.text =
-                        '${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
-                  }
-                },
-                validator: (v) => (v ?? '').length == 10 ? null : '请选择日期',
-              ),
-              DropdownButtonFormField<String>(
-                initialValue: annual,
-                decoration: const InputDecoration(labelText: '重复方式'),
-                items: const [
-                  DropdownMenuItem(value: 'true', child: Text('每年公历日期')),
-                  DropdownMenuItem(value: 'lunar', child: Text('每年农历日期')),
-                  DropdownMenuItem(value: 'false', child: Text('只纪念一次')),
-                ],
-                onChanged: (v) => setDialogState(() => annual = v ?? 'true'),
-              ),
-              TextFormField(
-                controller: remindCtrl,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: '提前几天提醒'),
-                validator: (v) {
-                  final n = int.tryParse(v ?? '');
-                  if (n == null || n < 0 || n > 365) return '提前提醒天数需在 0–365 之间';
-                  return null;
-                },
-              ),
-              TextFormField(
-                controller: contentCtrl,
-                maxLines: 2,
-                maxLength: 20000,
-                decoration: const InputDecoration(
-                    labelText: '补充一些小细节（可选）', counterText: ''),
-              ),
+  // 2.4.1 通则 A：底部表单 sheet；通则 B：重复方式下拉改底部选择单；
+  // 日期改整行选择框。annual 三态与 remind_days 校验口径零变化。
+  final saved = await showFormSheet(
+    context,
+    title: editing ? '编辑纪念日' : '添加纪念日',
+    saveLabel: editing ? '保存' : '添加',
+    cancelLabel: '取消',
+    builder: (setSheetState) => Form(
+      key: formKey,
+      child: Column(mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('纪念日名称', style: Theme.of(context).textTheme.labelSmall),
+          const SizedBox(height: 6),
+          TextFormField(
+            controller: titleCtrl,
+            autofocus: !editing,
+            maxLength: 200,
+            decoration: filledFieldDecoration(counterText: ''),
+            validator: (v) =>
+                (v ?? '').trim().isEmpty ? '请填写标题' : null,
+          ),
+        ]),
+        const SizedBox(height: 10),
+        // 日期：整行选择框（date 必填，校验留在保存口）。
+        InkWell(
+          key: const Key('anniv-date-field'),
+          borderRadius: BorderRadius.circular(12),
+          onTap: () async {
+            final picked = await showDatePicker(
+                context: context,
+                initialDate:
+                    DateTime.tryParse(dateCtrl.text) ?? DateTime.now(),
+                firstDate: DateTime(1900),
+                lastDate: DateTime(2100));
+            if (picked != null) {
+              setSheetState(() {
+                dateCtrl.text =
+                    '${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
+              });
+            }
+          },
+          child: Container(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: Theme.of(context)
+                  .colorScheme
+                  .surfaceContainerHighest
+                  .withValues(alpha: 0.5),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(children: [
+              Text('日期', style: Theme.of(context).textTheme.labelSmall),
+              const Spacer(),
+              Text(dateCtrl.text.isEmpty ? '请选择' : dateCtrl.text,
+                  style: Theme.of(context).textTheme.bodyMedium),
+              const SizedBox(width: 6),
+              Icon(Icons.chevron_right_rounded,
+                  size: 18, color: Theme.of(context).colorScheme.outline),
             ]),
           ),
         ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.of(dctx).pop(false),
-              child: const Text('取消')),
-          FilledButton(
-              onPressed: () {
-                if (formKey.currentState?.validate() ?? false) {
-                  Navigator.of(dctx).pop(true);
-                }
-              },
-              child: Text(editing ? '保存' : '添加')),
-        ],
-      ),
+        const SizedBox(height: 10),
+        // 重复方式：整行选择框 + 底部选择单（通则 B）。
+        InkWell(
+          key: const Key('anniv-annual-field'),
+          borderRadius: BorderRadius.circular(12),
+          onTap: () async {
+            final picked = await showSelectionSheet<String>(
+              context: context,
+              title: '重复方式',
+              selected: annual,
+              options: const [
+                SelectionOption(value: 'true', label: '每年公历日期'),
+                SelectionOption(value: 'lunar', label: '每年农历日期'),
+                SelectionOption(value: 'false', label: '只纪念一次'),
+              ],
+            );
+            if (picked != null) setSheetState(() => annual = picked);
+          },
+          child: Container(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: Theme.of(context)
+                  .colorScheme
+                  .surfaceContainerHighest
+                  .withValues(alpha: 0.5),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(children: [
+              Text('重复方式', style: Theme.of(context).textTheme.labelSmall),
+              const Spacer(),
+              Text(annualLabel(annual == 'true'
+                  ? true
+                  : (annual == 'lunar' ? 'lunar' : false)),
+                  style: Theme.of(context).textTheme.bodyMedium),
+              const SizedBox(width: 6),
+              Icon(Icons.chevron_right_rounded,
+                  size: 18, color: Theme.of(context).colorScheme.outline),
+            ]),
+          ),
+        ),
+        const SizedBox(height: 10),
+        Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('提前几天提醒', style: Theme.of(context).textTheme.labelSmall),
+          const SizedBox(height: 6),
+          TextFormField(
+            controller: remindCtrl,
+            keyboardType: TextInputType.number,
+            decoration: filledFieldDecoration(counterText: ''),
+            validator: (v) {
+              final n = int.tryParse(v ?? '');
+              if (n == null || n < 0 || n > 365) return '提前提醒天数需在 0–365 之间';
+              return null;
+            },
+          ),
+        ]),
+        const SizedBox(height: 10),
+        Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('补充一些小细节（可选）',
+              style: Theme.of(context).textTheme.labelSmall),
+          const SizedBox(height: 6),
+          TextFormField(
+            controller: contentCtrl,
+            maxLines: 2,
+            maxLength: 20000,
+            decoration: filledFieldDecoration(counterText: ''),
+          ),
+        ]),
+      ]),
     ),
+    onSave: (closeOk, _) {
+      // date 由整行选择框维护，不走 Form 校验
+      if (dateCtrl.text.trim().length != 10) {
+        ref.read(chatToastProvider.notifier).show('请选择日期',
+            tone: ChatToastTone.error);
+        return;
+      }
+      if (formKey.currentState?.validate() ?? false) closeOk();
+    },
   );
   if (saved != true) return; // 取消：不误写
   final changes = <String, dynamic>{

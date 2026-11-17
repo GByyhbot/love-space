@@ -24,6 +24,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_client.dart' as api;
+import '../../core/ui/selection_sheet.dart';
 import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
 import 'notify_api.dart';
 import 'notify_models.dart';
@@ -530,26 +531,49 @@ class _ChannelFormState extends State<_ChannelForm> {
             children: <Widget>[
               const Text('渠道类型'),
               const SizedBox(width: 12),
+              // 2.4.1 通则 B：原生下拉改底部选择单（点选即关、选中回显）。
               Expanded(
-                child: DropdownButton<String>(
+                child: InkWell(
                   key: const Key('channel-kind'),
-                  value: _kind,
-                  isExpanded: true,
-                  items: channelNames.entries
-                      .map((MapEntry<String, String> e) =>
-                          DropdownMenuItem<String>(
-                            value: e.key,
-                            child: Text(e.value),
-                          ))
-                      .toList(),
-                  onChanged: (String? v) {
-                    if (v == null || v == _kind) return;
+                  borderRadius: BorderRadius.circular(12),
+                  onTap: () async {
+                    final picked = await showSelectionSheet<String>(
+                      context: context,
+                      title: '渠道类型',
+                      selected: _kind,
+                      options: <SelectionOption<String>>[
+                        for (final MapEntry<String, String> e
+                            in channelNames.entries)
+                          SelectionOption<String>(value: e.key, label: e.value),
+                      ],
+                    );
+                    if (picked == null || picked == _kind) return;
+                    if (!mounted) return;
                     setState(() {
-                      _kind = v;
-                      _rebuildConfigControllers(v);
+                      _kind = picked;
+                      _rebuildConfigControllers(picked);
                       _inlineError = null;
                     });
                   },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context)
+                          .colorScheme
+                          .surfaceContainerHighest
+                          .withValues(alpha: 0.5),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(children: <Widget>[
+                      Text(channelNames[_kind] ?? _kind,
+                          style: Theme.of(context).textTheme.bodyMedium),
+                      const Spacer(),
+                      Icon(Icons.chevron_right_rounded,
+                          size: 18,
+                          color: Theme.of(context).colorScheme.outline),
+                    ]),
+                  ),
                 ),
               ),
             ],

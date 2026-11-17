@@ -12,8 +12,11 @@ import '../../core/together/together_data.dart';
 import '../../core/ui/empty_view.dart';
 import '../../core/ui/error_view.dart';
 import '../../core/ui/progress.dart';
+import '../../core/ui/selection_sheet.dart';
 import '../auth/auth_state.dart';
 import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
+import '../settings/settings_widgets.dart'
+    show filledFieldDecoration, showFormSheet;
 import 'together_controller.dart';
 import 'tool_pages.dart' show ToolTile;
 import '../../core/theme/tokens.dart';
@@ -282,75 +285,124 @@ class _QuestPageState extends ConsumerState<QuestPage> {
     final dateCtrl = TextEditingController(text: (b['date'] ?? '').toString());
     final contentCtrl = TextEditingController(text: (b['content'] ?? '').toString());
     final formKey = GlobalKey<FormState>();
-    final saved = await showDialog<bool>(
-      context: context,
-      builder: (dctx) => StatefulBuilder(
-        builder: (dctx, setDialogState) => AlertDialog(
-          title: Text(editing ? '编辑小事' : '添加小事'),
-          content: Form(
-            key: formKey,
-            child: SizedBox(
-              width: 360,
-              child: Column(mainAxisSize: MainAxisSize.min, children: [
-                TextFormField(
-                  controller: titleCtrl,
-                  autofocus: !editing,
-                  maxLength: 200,
-                  decoration:
-                      const InputDecoration(labelText: '标题', counterText: ''),
-                  validator: (v) => (v ?? '').trim().isEmpty ? '请填写标题' : null,
-                ),
-                DropdownButtonFormField<String>(
-                  initialValue: category,
-                  decoration: const InputDecoration(labelText: '分类'),
-                  items: [
-                    for (final c in questCategories)
-                      DropdownMenuItem(value: c, child: Text(c)),
-                  ],
-                  onChanged: (v) => setDialogState(() => category = v ?? '日常'),
-                ),
-                TextFormField(
-                  controller: dateCtrl,
-                  readOnly: true,
-                  decoration: const InputDecoration(labelText: '计划日期（可选）'),
-                  onTap: () async {
-                    final picked = await showDatePicker(
-                        context: dctx,
-                        initialDate:
-                            DateTime.tryParse(dateCtrl.text) ?? DateTime.now(),
-                        firstDate: DateTime(2000),
-                        lastDate: DateTime(2100));
-                    if (picked != null) {
-                      dateCtrl.text =
-                          '${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
-                    }
-                  },
-                ),
-                TextFormField(
-                  controller: contentCtrl,
-                  maxLines: 2,
-                  maxLength: 20000,
-                  decoration: const InputDecoration(
-                      labelText: '补充一些小细节（可选）', counterText: ''),
-                ),
-              ]),
-            ),
+    // 2.4.1 通则 A：底部表单 sheet；通则 B：分类下拉改底部选择单；
+  // 计划日期改整行选择框。数据口径零变化。
+  final saved = await showFormSheet(
+    context,
+    title: editing ? '编辑小事' : '添加小事',
+    saveLabel: editing ? '保存' : '添加',
+    cancelLabel: '取消',
+    builder: (setSheetState) => Form(
+      key: formKey,
+      child: Column(mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('标题', style: Theme.of(context).textTheme.labelSmall),
+          const SizedBox(height: 6),
+          TextFormField(
+            controller: titleCtrl,
+            autofocus: !editing,
+            maxLength: 200,
+            decoration: filledFieldDecoration(counterText: ''),
+            validator: (v) => (v ?? '').trim().isEmpty ? '请填写标题' : null,
           ),
-          actions: [
-            TextButton(
-                onPressed: () => Navigator.of(dctx).pop(false),
-                child: const Text('取消')),
-            FilledButton(
-                onPressed: () {
-                  if (formKey.currentState?.validate() ?? false) {
-                    Navigator.of(dctx).pop(true);
-                  }
-                },
-                child: Text(editing ? '保存' : '添加')),
-          ],
+        ]),
+        const SizedBox(height: 10),
+        // 分类：整行选择框 + 底部选择单（通则 B）。
+        InkWell(
+          key: const Key('quest-category-field'),
+          borderRadius: BorderRadius.circular(12),
+          onTap: () async {
+            final picked = await showSelectionSheet<String>(
+              context: context,
+              title: '分类',
+              selected: category,
+              options: [
+                for (final c in questCategories)
+                  SelectionOption(value: c, label: c),
+              ],
+            );
+            if (picked != null) setSheetState(() => category = picked);
+          },
+          child: Container(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: Theme.of(context)
+                  .colorScheme
+                  .surfaceContainerHighest
+                  .withValues(alpha: 0.5),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(children: [
+              Text('分类', style: Theme.of(context).textTheme.labelSmall),
+              const Spacer(),
+              Text(category, style: Theme.of(context).textTheme.bodyMedium),
+              const SizedBox(width: 6),
+              Icon(Icons.chevron_right_rounded,
+                  size: 18, color: Theme.of(context).colorScheme.outline),
+            ]),
+          ),
         ),
-      ),
-    );
+        const SizedBox(height: 10),
+        // 计划日期（可选）：整行选择框。
+        InkWell(
+          key: const Key('quest-date-field'),
+          borderRadius: BorderRadius.circular(12),
+          onTap: () async {
+            final picked = await showDatePicker(
+                context: context,
+                initialDate:
+                    DateTime.tryParse(dateCtrl.text) ?? DateTime.now(),
+                firstDate: DateTime(2000),
+                lastDate: DateTime(2100));
+            if (picked != null) {
+              setSheetState(() {
+                dateCtrl.text =
+                    '${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
+              });
+            }
+          },
+          child: Container(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: Theme.of(context)
+                  .colorScheme
+                  .surfaceContainerHighest
+                  .withValues(alpha: 0.5),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(children: [
+              Text('计划日期（可选）',
+                  style: Theme.of(context).textTheme.labelSmall),
+              const Spacer(),
+              Text(dateCtrl.text.isEmpty ? '未设置' : dateCtrl.text,
+                  style: Theme.of(context).textTheme.bodyMedium),
+              const SizedBox(width: 6),
+              Icon(Icons.chevron_right_rounded,
+                  size: 18, color: Theme.of(context).colorScheme.outline),
+            ]),
+          ),
+        ),
+        const SizedBox(height: 10),
+        Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('补充一些小细节（可选）',
+              style: Theme.of(context).textTheme.labelSmall),
+          const SizedBox(height: 6),
+          TextFormField(
+            controller: contentCtrl,
+            maxLines: 2,
+            maxLength: 20000,
+            decoration: filledFieldDecoration(counterText: ''),
+          ),
+        ]),
+      ]),
+    ),
+    onSave: (closeOk, _) {
+      if (formKey.currentState?.validate() ?? false) closeOk();
+    },
+  );
     if (saved != true) return;
     final changes = <String, dynamic>{
       'title': titleCtrl.text.trim(),

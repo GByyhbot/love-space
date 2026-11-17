@@ -364,7 +364,7 @@ void main() {
 
       await tester.tap(find.byTooltip('记心情'));
       await tester.pumpAndSettle();
-      await tester.enterText(find.byType(TextFormField).at(1), '今天天气很好');
+      await tester.enterText(find.byType(TextFormField).at(0), '今天天气很好');
       await tester.tap(find.text('记下今天'));
       await tester.pumpAndSettle();
       expect(postCount, 1);

@@ -17,8 +17,11 @@ import '../../core/together/together_data.dart';
 import '../../core/ui/empty_view.dart';
 import '../../core/ui/error_view.dart';
 import '../../core/ui/progress.dart';
+import '../../core/ui/selection_sheet.dart';
 import '../auth/auth_state.dart';
 import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
+import '../settings/settings_widgets.dart'
+    show filledFieldDecoration, showFormSheet;
 import 'together_controller.dart';
 import '../../core/theme/tokens.dart';
 
@@ -261,73 +264,96 @@ Future<void> _showMoodForm(
           : todayDateStr());
   final contentCtrl = TextEditingController(text: (b['content'] ?? '').toString());
   final formKey = GlobalKey<FormState>();
-  final saved = await showDialog<bool>(
-    context: context,
-    builder: (dctx) => StatefulBuilder(
-      builder: (dctx, setDialogState) => AlertDialog(
-        title: Text(editing ? '编辑心情' : '今天的心情'),
-        content: Form(
-          key: formKey,
-          child: SizedBox(
-            width: 360,
-            child: Column(mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Wrap(
-                spacing: 4,
-                runSpacing: 4,
-                children: [
-                  for (final e in moodOptions.keys)
-                    ChoiceChip(
-                      label: Text(e, style: const TextStyle(fontSize: 18)),
-                      selected: emoji == e,
-                      visualDensity: VisualDensity.compact,
-                      onSelected: (_) => setDialogState(() => emoji = e),
-                    ),
-                ],
+  /// 2.4.1 通则 A：居中弹窗改底部表单 sheet（外壳同 composer：抓手 +
+  /// 标题 + 关闭圆钮 + 玻璃栏）；字段圆角填充；日期改整行选择框。
+  /// 数据口径（emoji 十选一 + date 必填 + content 可选）零变化。
+  final saved = await showFormSheet(
+    context,
+    title: editing ? '编辑心情' : '今天的心情',
+    saveLabel: editing ? '保存' : '记下今天',
+    cancelLabel: '取消',
+    builder: (setSheetState) => Form(
+      key: formKey,
+      child: Column(mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Wrap(
+          spacing: 4,
+          runSpacing: 4,
+          children: [
+            for (final e in moodOptions.keys)
+              ChoiceChip(
+                label: Text(e, style: const TextStyle(fontSize: 18)),
+                selected: emoji == e,
+                visualDensity: VisualDensity.compact,
+                onSelected: (_) => setSheetState(() => emoji = e),
               ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: dateCtrl,
-                readOnly: true,
-                decoration: const InputDecoration(labelText: '心情日期'),
-                onTap: () async {
-                  final picked = await showDatePicker(
-                      context: dctx,
-                      initialDate: DateTime.tryParse(dateCtrl.text) ?? DateTime.now(),
-                      firstDate: DateTime(2000),
-                      lastDate: DateTime(2100));
-                  if (picked != null) {
-                    dateCtrl.text =
-                        '${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
-                  }
-                },
-                validator: (v) =>
-                    (v ?? '').length == 10 ? null : '请选择心情日期',
-              ),
-              TextFormField(
-                controller: contentCtrl,
-                maxLines: 3,
-                maxLength: 2000,
-                decoration: const InputDecoration(
-                    labelText: '再说一句今天的心情', counterText: ''),
-              ),
-            ]),
-          ),
+          ],
         ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.of(dctx).pop(false),
-              child: const Text('取消')),
-          FilledButton(
-              onPressed: () {
-                if (formKey.currentState?.validate() ?? false) {
-                  Navigator.of(dctx).pop(true);
-                }
-              },
-              child: Text(editing ? '保存' : '记下今天')),
-        ],
-      ),
+        const SizedBox(height: 12),
+        Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('心情日期', style: Theme.of(context).textTheme.labelSmall),
+          const SizedBox(height: 6),
+          InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: () async {
+              final picked = await showDatePicker(
+                  context: context,
+                  initialDate:
+                      DateTime.tryParse(dateCtrl.text) ?? DateTime.now(),
+                  firstDate: DateTime(2000),
+                  lastDate: DateTime(2100));
+              if (picked != null) {
+                setSheetState(() {
+                  dateCtrl.text =
+                      '${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
+                });
+              }
+            },
+            child: Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: Theme.of(context)
+                    .colorScheme
+                    .surfaceContainerHighest
+                    .withValues(alpha: 0.5),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(children: [
+                Text('心情日期', style: Theme.of(context).textTheme.labelSmall),
+                const Spacer(),
+                Text(dateCtrl.text.isEmpty ? '请选择' : dateCtrl.text,
+                    style: Theme.of(context).textTheme.bodyMedium),
+                const SizedBox(width: 6),
+                Icon(Icons.chevron_right_rounded,
+                    size: 18, color: Theme.of(context).colorScheme.outline),
+              ]),
+            ),
+          ),
+        ]),
+        const SizedBox(height: 10),
+        Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('再说一句今天的心情',
+              style: Theme.of(context).textTheme.labelSmall),
+          const SizedBox(height: 6),
+          TextFormField(
+            controller: contentCtrl,
+            maxLines: 3,
+            maxLength: 2000,
+            decoration: filledFieldDecoration(counterText: ''),
+          ),
+        ]),
+      ]),
     ),
+    onSave: (closeOk, _) {
+      // date 由整行选择框维护，不走 Form 校验
+      if (dateCtrl.text.trim().length != 10) {
+        ref.read(chatToastProvider.notifier).show('请选择心情日期',
+            tone: ChatToastTone.error);
+        return;
+      }
+      if (formKey.currentState?.validate() ?? false) closeOk();
+    },
   );
   if (saved != true) return; // 取消：不误写
   final changes = <String, dynamic>{
@@ -391,39 +417,31 @@ Future<void> _showNoteForm(
   final contentCtrl =
       TextEditingController(text: (record?.body['content'] ?? '').toString());
   final formKey = GlobalKey<FormState>();
-  final saved = await showDialog<bool>(
-    context: context,
-    builder: (dctx) => AlertDialog(
-      title: Text(editing ? '编辑留言' : '悄悄留言'),
-      content: Form(
-        key: formKey,
-        child: SizedBox(
-          width: 360,
-          child: TextFormField(
-            controller: contentCtrl,
-            maxLines: 6,
-            maxLength: 20000,
-            autofocus: !editing,
-            decoration: const InputDecoration(
-                labelText: '想对 TA 说的话', counterText: ''),
-            validator: (v) =>
-                (v ?? '').trim().isEmpty ? '写点什么再保存吧' : null,
-          ),
+  // 2.4.1 通则 A：底部表单 sheet（外壳同 composer），字段圆角填充。
+  final saved = await showFormSheet(
+    context,
+    title: editing ? '编辑留言' : '悄悄留言',
+    saveLabel: editing ? '保存' : '写下来',
+    cancelLabel: '取消',
+    builder: (_) => Form(
+      key: formKey,
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text('想对 TA 说的话', style: Theme.of(context).textTheme.labelSmall),
+        const SizedBox(height: 6),
+        TextFormField(
+          controller: contentCtrl,
+          maxLines: 6,
+          maxLength: 20000,
+          autofocus: !editing,
+          decoration: filledFieldDecoration(counterText: ''),
+          validator: (v) =>
+              (v ?? '').trim().isEmpty ? '写点什么再保存吧' : null,
         ),
-      ),
-      actions: [
-        TextButton(
-            onPressed: () => Navigator.of(dctx).pop(false),
-            child: const Text('取消')),
-        FilledButton(
-            onPressed: () {
-              if (formKey.currentState?.validate() ?? false) {
-                Navigator.of(dctx).pop(true);
-              }
-            },
-            child: Text(editing ? '保存' : '写下来')),
-      ],
+      ]),
     ),
+    onSave: (closeOk, _) {
+      if (formKey.currentState?.validate() ?? false) closeOk();
+    },
   );
   if (saved != true) return;
   final changes = <String, dynamic>{'content': contentCtrl.text.trim()};
@@ -538,75 +556,124 @@ Future<void> _showWishForm(
   final targetCtrl = TextEditingController(text: (b['target'] ?? '').toString());
   final contentCtrl = TextEditingController(text: (b['content'] ?? '').toString());
   final formKey = GlobalKey<FormState>();
-  final saved = await showDialog<bool>(
-    context: context,
-    builder: (dctx) => StatefulBuilder(
-      builder: (dctx, setDialogState) => AlertDialog(
-        title: Text(editing ? '编辑愿望' : '许个心愿'),
-        content: Form(
-          key: formKey,
-          child: SizedBox(
-            width: 360,
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              TextFormField(
-                controller: titleCtrl,
-                autofocus: !editing,
-                maxLength: 200,
-                decoration: const InputDecoration(
-                    labelText: '愿望标题', counterText: ''),
-                validator: (v) =>
-                    (v ?? '').trim().isEmpty ? '请填写标题' : null,
-              ),
-              DropdownButtonFormField<String>(
-                initialValue: category,
-                decoration: const InputDecoration(labelText: '分类'),
-                items: [
-                  for (final c in wishCategories)
-                    DropdownMenuItem(value: c, child: Text(c)),
-                ],
-                onChanged: (v) => setDialogState(() => category = v ?? '日常'),
-              ),
-              TextFormField(
-                controller: targetCtrl,
-                readOnly: true,
-                decoration: const InputDecoration(labelText: '约定日期（可选）'),
-                onTap: () async {
-                  final picked = await showDatePicker(
-                      context: dctx,
-                      initialDate:
-                          DateTime.tryParse(targetCtrl.text) ?? DateTime.now(),
-                      firstDate: DateTime(2000),
-                      lastDate: DateTime(2100));
-                  if (picked != null) {
-                    targetCtrl.text =
-                        '${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
-                  }
-                },
-              ),
-              TextFormField(
-                controller: contentCtrl,
-                maxLines: 3,
-                maxLength: 20000,
-                decoration: const InputDecoration(
-                    labelText: '补充一些小细节（可选）', counterText: ''),
-              ),
+  // 2.4.1 通则 A：底部表单 sheet；通则 B：分类下拉改底部选择单；
+  // 约定日期改整行选择框。数据口径（title 必填 + category 五选 +
+  // target 可选 + content 可选）零变化。
+  final saved = await showFormSheet(
+    context,
+    title: editing ? '编辑愿望' : '许个心愿',
+    saveLabel: editing ? '保存' : '许下心愿',
+    cancelLabel: '取消',
+    builder: (setSheetState) => Form(
+      key: formKey,
+      child: Column(mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('愿望标题', style: Theme.of(context).textTheme.labelSmall),
+          const SizedBox(height: 6),
+          TextFormField(
+            controller: titleCtrl,
+            autofocus: !editing,
+            maxLength: 200,
+            decoration: filledFieldDecoration(counterText: ''),
+            validator: (v) =>
+                (v ?? '').trim().isEmpty ? '请填写标题' : null,
+          ),
+        ]),
+        const SizedBox(height: 10),
+        // 分类：整行选择框 + 底部选择单（通则 B）。
+        InkWell(
+          key: const Key('wish-category-field'),
+          borderRadius: BorderRadius.circular(12),
+          onTap: () async {
+            final picked = await showSelectionSheet<String>(
+              context: context,
+              title: '分类',
+              selected: category,
+              options: [
+                for (final c in wishCategories) SelectionOption(value: c, label: c),
+              ],
+            );
+            if (picked != null) setSheetState(() => category = picked);
+          },
+          child: Container(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: Theme.of(context)
+                  .colorScheme
+                  .surfaceContainerHighest
+                  .withValues(alpha: 0.5),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(children: [
+              Text('分类', style: Theme.of(context).textTheme.labelSmall),
+              const Spacer(),
+              Text(category, style: Theme.of(context).textTheme.bodyMedium),
+              const SizedBox(width: 6),
+              Icon(Icons.chevron_right_rounded,
+                  size: 18, color: Theme.of(context).colorScheme.outline),
             ]),
           ),
         ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.of(dctx).pop(false),
-              child: const Text('取消')),
-          FilledButton(
-              onPressed: () {
-                if (formKey.currentState?.validate() ?? false) {
-                  Navigator.of(dctx).pop(true);
-                }
-              },
-              child: Text(editing ? '保存' : '许下心愿')),
-        ],
-      ),
+        const SizedBox(height: 10),
+        // 约定日期（可选）：整行选择框（可清空=再次点开重选遮罩关闭不改）。
+        InkWell(
+          key: const Key('wish-target-field'),
+          borderRadius: BorderRadius.circular(12),
+          onTap: () async {
+            final picked = await showDatePicker(
+                context: context,
+                initialDate:
+                    DateTime.tryParse(targetCtrl.text) ?? DateTime.now(),
+                firstDate: DateTime(2000),
+                lastDate: DateTime(2100));
+            if (picked != null) {
+              setSheetState(() {
+                targetCtrl.text =
+                    '${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
+              });
+            }
+          },
+          child: Container(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: Theme.of(context)
+                  .colorScheme
+                  .surfaceContainerHighest
+                  .withValues(alpha: 0.5),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(children: [
+              Text('约定日期（可选）',
+                  style: Theme.of(context).textTheme.labelSmall),
+              const Spacer(),
+              Text(targetCtrl.text.isEmpty ? '未设置' : targetCtrl.text,
+                  style: Theme.of(context).textTheme.bodyMedium),
+              const SizedBox(width: 6),
+              Icon(Icons.chevron_right_rounded,
+                  size: 18, color: Theme.of(context).colorScheme.outline),
+            ]),
+          ),
+        ),
+        const SizedBox(height: 10),
+        Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('补充一些小细节（可选）',
+              style: Theme.of(context).textTheme.labelSmall),
+          const SizedBox(height: 6),
+          TextFormField(
+            controller: contentCtrl,
+            maxLines: 3,
+            maxLength: 20000,
+            decoration: filledFieldDecoration(counterText: ''),
+          ),
+        ]),
+      ]),
     ),
+    onSave: (closeOk, _) {
+      if (formKey.currentState?.validate() ?? false) closeOk();
+    },
   );
   if (saved != true) return;
   final changes = <String, dynamic>{

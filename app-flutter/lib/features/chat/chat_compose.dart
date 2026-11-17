@@ -29,6 +29,7 @@ import '../../core/chat/chat_media.dart';
 import '../../core/chat/keyboard_metrics.dart';
 import '../../core/chat/chat_models.dart';
 import '../../core/chat/chat_state.dart';
+import '../../core/ui/selection_sheet.dart';
 import '../auth/auth_state.dart';
 import 'album_picker_sheet.dart';
 import 'chat_toast.dart';
@@ -570,21 +571,17 @@ class _ChatComposeState extends ConsumerState<ChatCompose>
     }
   }
 
-  /// 相册「上传」：本机选择器（Web 是 file input 收图+视频；Flutter 分两路多选图/选视频）
+  /// 相册「上传」：本机选择器（Web 是 file input 收图+视频；Flutter 分两路多选图/选视频）。
+  /// 2.4.1 通则 B：二选一弹层改底部选择单。
   Future<void> _showUploadChooser() async {
-    final choice = await showDialog<String>(
+    final choice = await showSelectionSheet<String>(
       context: context,
-      builder: (ctx) => SimpleDialog(
-        title: const Text('上传'),
-        children: [
-          SimpleDialogOption(
-              onPressed: () => Navigator.pop(ctx, 'image'),
-              child: const Text('图片（可多选）')),
-          SimpleDialogOption(
-              onPressed: () => Navigator.pop(ctx, 'video'),
-              child: const Text('视频')),
-        ],
-      ),
+      title: '上传',
+      selected: '',
+      options: const [
+        SelectionOption(value: 'image', label: '图片（可多选）'),
+        SelectionOption(value: 'video', label: '视频'),
+      ],
     );
     if (choice == 'image') await _pickFromGallery();
     if (choice == 'video') await _pickVideo();

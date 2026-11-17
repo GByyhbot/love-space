@@ -28,6 +28,7 @@ import '../auth/auth_state.dart';
 import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
 import '../../core/ui/avatar_media.dart';
 import '../shell/web_chrome.dart';
+import '../settings/settings_widgets.dart' show GlassActionBar;
 import '../../core/theme/tokens.dart';
 
 /// 今日日期（本地时区，与 Web today() 一致格式 yyyy-MM-dd）
@@ -1021,47 +1022,169 @@ class _MoodRow extends ConsumerWidget {
     final contentCtrl = TextEditingController(
       text: record?.body['content']?.toString() ?? '',
     );
+    // 2.4.1 第 13 项：心情弹窗改底部 sheet（抓手 + 标题 + 关闭圆钮）、
+    // 表情格子等大 tile（4 列网格，选中淡紫底 + 描边 + 勾徽）、日期选择框、
+    // 「再说一句（可选）」圆角填充、取消/记下来玻璃操作栏。保存逻辑/与
+    // 首页今日心情格的数据联动全不变。
     final saved = await showModalBottomSheet<bool>(
       context: context,
+      isScrollControlled: true,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setState) => Padding(
           padding: EdgeInsets.only(
-            left: 20,
-            right: 20,
-            top: 20,
-            bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
+            left: 16,
+            right: 16,
+            top: 12,
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 12,
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text('今天的心情', style: Theme.of(ctx).textTheme.titleMedium),
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 8,
-                children: emojis
-                    .map(
-                      (e) => ChoiceChip(
-                        label: Text(e, style: const TextStyle(fontSize: 20)),
-                        selected: emoji == e,
-                        onSelected: (_) => setState(() => emoji = e),
-                      ),
-                    )
-                    .toList(),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: contentCtrl,
-                maxLength: 60,
-                decoration: const InputDecoration(
-                  labelText: '一句话（可留空）',
-                  counterText: '',
+              Center(
+                child: Container(
+                  width: 38,
+                  height: 4.5,
+                  margin: const EdgeInsets.only(bottom: 10),
+                  decoration: BoxDecoration(
+                    color: Theme.of(ctx)
+                        .colorScheme
+                        .outlineVariant
+                        .withValues(alpha: 0.8),
+                    borderRadius: BorderRadius.circular(3),
+                  ),
                 ),
               ),
+              Row(children: [
+                Expanded(
+                    child: Text('今天的心情',
+                        style: Theme.of(ctx).textTheme.titleMedium)),
+                Container(
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Theme.of(ctx)
+                        .colorScheme
+                        .surfaceContainerHighest
+                        .withValues(alpha: 0.6),
+                  ),
+                  child: IconButton(
+                      tooltip: '关闭',
+                      visualDensity: VisualDensity.compact,
+                      onPressed: () => Navigator.pop(ctx, false),
+                      icon:
+                          const Icon(Icons.close_rounded, size: 18)),
+                ),
+              ]),
+              const SizedBox(height: 10),
+              // 表情格子：全部等大 tile（4 列网格，禁双倍宽）；选中 =
+              // 淡紫底 + 主题色描边 + 勾徽；底色整体提亮一档。
+              GridView.count(
+                crossAxisCount: 4,
+                shrinkWrap: true,
+                childAspectRatio: 2.2,
+                mainAxisSpacing: 8,
+                crossAxisSpacing: 8,
+                physics: const NeverScrollableScrollPhysics(),
+                children: [
+                  for (final e in emojis)
+                    InkWell(
+                      key: Key('mood-emoji-$e'),
+                      borderRadius: BorderRadius.circular(10),
+                      onTap: () => setState(() => emoji = e),
+                      child: Container(
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: emoji == e
+                              ? Theme.of(ctx)
+                                  .colorScheme
+                                  .primaryContainer
+                                  .withValues(alpha: 0.55)
+                              : Theme.of(ctx)
+                                  .colorScheme
+                                  .surfaceContainerHighest
+                                  .withValues(alpha: 0.55),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                              color: emoji == e
+                                  ? Theme.of(ctx).colorScheme.primary
+                                  : Colors.transparent,
+                              width: 1.5),
+                        ),
+                        child: Stack(children: [
+                          Center(
+                              child: Text(e,
+                                  style: const TextStyle(fontSize: 22))),
+                          if (emoji == e)
+                            Positioned(
+                              right: 2,
+                              top: 2,
+                              child: Icon(Icons.check_rounded,
+                                  size: 12,
+                                  color:
+                                      Theme.of(ctx).colorScheme.primary),
+                            ),
+                        ]),
+                      ),
+                    ),
+                ],
+              ),
               const SizedBox(height: 12),
-              FilledButton(
-                onPressed: () => Navigator.pop(ctx, true),
-                child: Text(record == null ? '记一笔' : '更新'),
+              // 心情日期选择框（样式同第 12 项；today 由首页今日心情格注入，
+              // 数据口径不变）。
+              InkWell(
+                borderRadius: BorderRadius.circular(12),
+                onTap: () {}, // 日期由「今天的心情」格固定 today，占位选择框
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: Theme.of(ctx)
+                        .colorScheme
+                        .surfaceContainerHighest
+                        .withValues(alpha: 0.5),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(children: [
+                    Text('心情日期', style: Theme.of(ctx).textTheme.labelSmall),
+                    const Spacer(),
+                    Text(today, style: Theme.of(ctx).textTheme.bodyMedium),
+                    const SizedBox(width: 6),
+                    Icon(Icons.chevron_right_rounded,
+                        size: 18, color: Theme.of(ctx).colorScheme.outline),
+                  ]),
+                ),
+              ),
+              const SizedBox(height: 10),
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('再说一句（可选）',
+                    style: Theme.of(ctx).textTheme.labelSmall),
+                const SizedBox(height: 6),
+                TextField(
+                  controller: contentCtrl,
+                  maxLength: 60,
+                  decoration: InputDecoration(
+                    counterText: '',
+                    filled: true,
+                    fillColor: Theme.of(ctx)
+                        .colorScheme
+                        .surfaceContainerHighest
+                        .withValues(alpha: 0.5),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
+                ),
+              ]),
+              const SizedBox(height: 12),
+              GlassActionBar(
+                safeAreaBottom: false,
+                cancelLabel: '取消',
+                onCancel: () => Navigator.pop(ctx, false),
+                saveLabel: record == null ? '记一笔' : '更新',
+                onSave: () => Navigator.pop(ctx, true),
               ),
             ],
           ),

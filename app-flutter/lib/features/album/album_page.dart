@@ -21,7 +21,8 @@ import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
 import '../chat/video_player_page.dart';
 import 'album_controller.dart';
 import '../../core/ui/page_heading.dart';
-import '../settings/settings_widgets.dart' show SettingsSegmented;
+import '../settings/settings_widgets.dart'
+    show SettingsSegmented, filledFieldDecoration, showFormSheet;
 import 'album_cover_tile.dart';
 import '../timeline/composer_sheet.dart';
 import '../../core/theme/motion.dart';
@@ -361,40 +362,33 @@ class _AlbumPageState extends ConsumerState<AlbumPage> {
   }
 
   /// 新建相册弹层（可取消）：标题必填，确认走 createAlbum。
+  /// 2.4.1 通则 A：底部表单 sheet。
   Future<void> _showCreateAlbumDialog(BuildContext context) async {
     final ctrl = TextEditingController();
     final formKey = GlobalKey<FormState>();
-    final submitted = await showDialog<bool>(
-      context: context,
-      builder: (dctx) => AlertDialog(
-        title: const Text('新建相册'),
-        content: Form(
-          key: formKey,
-          child: TextFormField(
+    final submitted = await showFormSheet(
+      context,
+      title: '新建相册',
+      saveLabel: '创建',
+      cancelLabel: '取消',
+      builder: (_) => Form(
+        key: formKey,
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('相册名称', style: Theme.of(context).textTheme.labelSmall),
+          const SizedBox(height: 6),
+          TextFormField(
             controller: ctrl,
             autofocus: true,
             maxLength: 100,
-            decoration: const InputDecoration(
-                labelText: '相册名称', counterText: ''),
+            decoration: filledFieldDecoration(counterText: ''),
             validator: (v) =>
                 (v ?? '').trim().isEmpty ? '相册名称不能为空' : null,
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dctx).pop(false), // 取消
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () {
-              if (formKey.currentState?.validate() ?? false) {
-                Navigator.of(dctx).pop(true);
-              }
-            },
-            child: const Text('创建'),
-          ),
-        ],
+        ]),
       ),
+      onSave: (closeOk, _) {
+        if (formKey.currentState?.validate() ?? false) closeOk();
+      },
     );
     if (submitted != true) return; // 取消/关闭：不动
     final title = ctrl.text.trim();
@@ -409,40 +403,33 @@ class _AlbumPageState extends ConsumerState<AlbumPage> {
   }
 
   /// 相册改名弹层（可取消）：预填原标题，确认走 renameAlbum（回填铁律）。
+  /// 2.4.1 通则 A：底部表单 sheet。
   Future<void> _showRenameDialog(BuildContext context, AlbumInfo album) async {
     final ctrl = TextEditingController(text: album.title);
     final formKey = GlobalKey<FormState>();
-    final submitted = await showDialog<bool>(
-      context: context,
-      builder: (dctx) => AlertDialog(
-        title: const Text('相册改名'),
-        content: Form(
-          key: formKey,
-          child: TextFormField(
+    final submitted = await showFormSheet(
+      context,
+      title: '相册改名',
+      saveLabel: '保存',
+      cancelLabel: '取消',
+      builder: (_) => Form(
+        key: formKey,
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('相册名称', style: Theme.of(context).textTheme.labelSmall),
+          const SizedBox(height: 6),
+          TextFormField(
             controller: ctrl,
             autofocus: true,
             maxLength: 100,
-            decoration: const InputDecoration(
-                labelText: '相册名称', counterText: ''),
+            decoration: filledFieldDecoration(counterText: ''),
             validator: (v) =>
                 (v ?? '').trim().isEmpty ? '相册名称不能为空' : null,
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dctx).pop(false), // 取消
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () {
-              if (formKey.currentState?.validate() ?? false) {
-                Navigator.of(dctx).pop(true);
-              }
-            },
-            child: const Text('保存'),
-          ),
-        ],
+        ]),
       ),
+      onSave: (closeOk, _) {
+        if (formKey.currentState?.validate() ?? false) closeOk();
+      },
     );
     if (submitted != true) return;
     final title = ctrl.text.trim();

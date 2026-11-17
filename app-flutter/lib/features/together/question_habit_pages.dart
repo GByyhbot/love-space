@@ -12,8 +12,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/together/together_data.dart';
+import '../../core/ui/selection_sheet.dart';
 import '../auth/auth_state.dart';
 import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
+import '../settings/settings_widgets.dart'
+    show filledFieldDecoration, showFormSheet;
 import 'together_controller.dart';
 import 'tool_pages.dart' show ToolTile;
 import '../../core/theme/tokens.dart';
@@ -176,62 +179,82 @@ class _QuestionPageState extends ConsumerState<QuestionPage> {
     final titleCtrl = TextEditingController(text: (b['title'] ?? '').toString());
     final contentCtrl = TextEditingController(text: (b['content'] ?? '').toString());
     final formKey = GlobalKey<FormState>();
-    final saved = await showDialog<bool>(
-      context: context,
-      builder: (dctx) => AlertDialog(
-        title: Text(editing ? '编辑问题' : '提个问题'),
-        content: Form(
-          key: formKey,
-          child: SizedBox(
-            width: 360,
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              TextFormField(
-                controller: titleCtrl,
-                autofocus: !editing,
-                maxLength: 200,
-                decoration:
-                    const InputDecoration(labelText: '想问 TA 的问题', counterText: ''),
-                validator: (v) => (v ?? '').trim().isEmpty ? '请填写标题' : null,
-              ),
-              DropdownButtonFormField<String>(
-                initialValue: null,
-                isExpanded: true,
-                decoration: const InputDecoration(labelText: '或从题库挑一个'),
-                items: [
+    // 2.4.1 通则 A：底部表单 sheet；通则 B：题库下拉改底部选择单
+    // （行 = 「分组 · 题目」，点选即关并回填标题，与原下拉行为等价）。
+    final saved = await showFormSheet(
+      context,
+      title: editing ? '编辑问题' : '提个问题',
+      saveLabel: editing ? '保存' : '提问',
+      cancelLabel: '取消',
+      builder: (setSheetState) => Form(
+        key: formKey,
+        child: Column(mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('想问 TA 的问题', style: Theme.of(context).textTheme.labelSmall),
+            const SizedBox(height: 6),
+            TextFormField(
+              controller: titleCtrl,
+              autofocus: !editing,
+              maxLength: 200,
+              decoration: filledFieldDecoration(counterText: ''),
+              validator: (v) => (v ?? '').trim().isEmpty ? '请填写标题' : null,
+            ),
+          ]),
+          const SizedBox(height: 10),
+          // 或从题库挑一个：整行选择框 + 底部选择单（回填标题）。
+          InkWell(
+            key: const Key('ask-bank-field'),
+            borderRadius: BorderRadius.circular(12),
+            onTap: () async {
+              final picked = await showSelectionSheet<String>(
+                context: context,
+                title: '或从题库挑一个',
+                selected: '',
+                options: [
                   for (final entry in questionBank.entries)
                     for (final q in entry.value)
-                      DropdownMenuItem(
-                          value: q,
-                          child: Text('${entry.key} · $q',
-                              maxLines: 1, overflow: TextOverflow.ellipsis)),
+                      SelectionOption(value: q, label: '${entry.key} · $q'),
                 ],
-                onChanged: (v) {
-                  if (v != null) titleCtrl.text = v;
-                },
+              );
+              if (picked != null) setSheetState(() => titleCtrl.text = picked);
+            },
+            child: Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: Theme.of(context)
+                    .colorScheme
+                    .surfaceContainerHighest
+                    .withValues(alpha: 0.5),
+                borderRadius: BorderRadius.circular(12),
               ),
-              TextFormField(
-                controller: contentCtrl,
-                maxLines: 2,
-                maxLength: 20000,
-                decoration: const InputDecoration(
-                    labelText: '补充一些小细节（可选）', counterText: ''),
-              ),
-            ]),
+              child: Row(children: [
+                Text('或从题库挑一个',
+                    style: Theme.of(context).textTheme.labelSmall),
+                const Spacer(),
+                Icon(Icons.chevron_right_rounded,
+                    size: 18, color: Theme.of(context).colorScheme.outline),
+              ]),
+            ),
           ),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.of(dctx).pop(false),
-              child: const Text('取消')),
-          FilledButton(
-              onPressed: () {
-                if (formKey.currentState?.validate() ?? false) {
-                  Navigator.of(dctx).pop(true);
-                }
-              },
-              child: Text(editing ? '保存' : '提问')),
-        ],
+          const SizedBox(height: 10),
+          Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('补充一些小细节（可选）',
+                style: Theme.of(context).textTheme.labelSmall),
+            const SizedBox(height: 6),
+            TextFormField(
+              controller: contentCtrl,
+              maxLines: 2,
+              maxLength: 20000,
+              decoration: filledFieldDecoration(counterText: ''),
+            ),
+          ]),
+        ]),
       ),
+      onSave: (closeOk, _) {
+        if (formKey.currentState?.validate() ?? false) closeOk();
+      },
     );
     if (saved != true) return; // 取消：不误写
     final changes = <String, dynamic>{
@@ -261,39 +284,31 @@ class _QuestionPageState extends ConsumerState<QuestionPage> {
     final contentCtrl = TextEditingController(
         text: mine.isNotEmpty ? (mine.first['content'] ?? '') : '');
     final formKey = GlobalKey<FormState>();
-    final saved = await showDialog<bool>(
-      context: context,
-      builder: (dctx) => AlertDialog(
-        title: Text((r.body['title'] ?? '问答').toString()),
-        content: Form(
-          key: formKey,
-          child: SizedBox(
-            width: 360,
-            child: TextFormField(
-              controller: contentCtrl,
-              maxLines: 5,
-              maxLength: 5000,
-              autofocus: true,
-              decoration: const InputDecoration(
-                  labelText: '我的答案', counterText: ''),
-              validator: (v) =>
-                  (v ?? '').trim().isEmpty ? '写下你的答案再提交吧' : null,
-            ),
+    // 2.4.1 通则 A：底部表单 sheet。
+    final saved = await showFormSheet(
+      context,
+      title: (r.body['title'] ?? '问答').toString(),
+      saveLabel: mine.isEmpty ? '提交答案' : '更新答案',
+      cancelLabel: '取消',
+      builder: (_) => Form(
+        key: formKey,
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('我的答案', style: Theme.of(context).textTheme.labelSmall),
+          const SizedBox(height: 6),
+          TextFormField(
+            controller: contentCtrl,
+            maxLines: 5,
+            maxLength: 5000,
+            autofocus: true,
+            decoration: filledFieldDecoration(counterText: ''),
+            validator: (v) =>
+                (v ?? '').trim().isEmpty ? '写下你的答案再提交吧' : null,
           ),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.of(dctx).pop(false),
-              child: const Text('取消')),
-          FilledButton(
-              onPressed: () {
-                if (formKey.currentState?.validate() ?? false) {
-                  Navigator.of(dctx).pop(true);
-                }
-              },
-              child: Text(mine.isEmpty ? '提交答案' : '更新答案')),
-        ],
+        ]),
       ),
+      onSave: (closeOk, _) {
+        if (formKey.currentState?.validate() ?? false) closeOk();
+      },
     );
     if (saved != true) return;
     final err = await ref
@@ -450,46 +465,44 @@ class _HabitPageState extends ConsumerState<HabitPage> {
     final titleCtrl = TextEditingController(text: (b['title'] ?? '').toString());
     final contentCtrl = TextEditingController(text: (b['content'] ?? '').toString());
     final formKey = GlobalKey<FormState>();
-    final saved = await showDialog<bool>(
-      context: context,
-      builder: (dctx) => AlertDialog(
-        title: Text(editing ? '编辑目标' : '立个目标'),
-        content: Form(
-          key: formKey,
-          child: SizedBox(
-            width: 360,
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              TextFormField(
-                controller: titleCtrl,
-                autofocus: !editing,
-                maxLength: 200,
-                decoration: const InputDecoration(
-                    labelText: '目标名称', counterText: ''),
-                validator: (v) => (v ?? '').trim().isEmpty ? '请填写标题' : null,
-              ),
-              TextFormField(
-                controller: contentCtrl,
-                maxLines: 2,
-                maxLength: 20000,
-                decoration: const InputDecoration(
-                    labelText: '补充一些小细节（可选）', counterText: ''),
-              ),
-            ]),
-          ),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.of(dctx).pop(false),
-              child: const Text('取消')),
-          FilledButton(
-              onPressed: () {
-                if (formKey.currentState?.validate() ?? false) {
-                  Navigator.of(dctx).pop(true);
-                }
-              },
-              child: Text(editing ? '保存' : '开始坚持')),
-        ],
+    // 2.4.1 通则 A：底部表单 sheet。
+    final saved = await showFormSheet(
+      context,
+      title: editing ? '编辑目标' : '立个目标',
+      saveLabel: editing ? '保存' : '开始坚持',
+      cancelLabel: '取消',
+      builder: (_) => Form(
+        key: formKey,
+        child: Column(mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('目标名称', style: Theme.of(context).textTheme.labelSmall),
+            const SizedBox(height: 6),
+            TextFormField(
+              controller: titleCtrl,
+              autofocus: !editing,
+              maxLength: 200,
+              decoration: filledFieldDecoration(counterText: ''),
+              validator: (v) => (v ?? '').trim().isEmpty ? '请填写标题' : null,
+            ),
+          ]),
+          const SizedBox(height: 10),
+          Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('补充一些小细节（可选）',
+                style: Theme.of(context).textTheme.labelSmall),
+            const SizedBox(height: 6),
+            TextFormField(
+              controller: contentCtrl,
+              maxLines: 2,
+              maxLength: 20000,
+              decoration: filledFieldDecoration(counterText: ''),
+            ),
+          ]),
+        ]),
       ),
+      onSave: (closeOk, _) {
+        if (formKey.currentState?.validate() ?? false) closeOk();
+      },
     );
     if (saved != true) return;
     final changes = <String, dynamic>{
