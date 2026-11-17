@@ -113,6 +113,8 @@ class _ShellPageState extends ConsumerState<ShellPage> {
             initial: (me?.user.name.isEmpty ?? true)
                 ? '?'
                 : me!.user.name.characters.first,
+            // 2.3.7：照片头像（media id 来自 users.avatar）
+            avatarId: me?.user.avatar ?? '',
           ),
           const SizedBox(width: 4),
         ],

@@ -2,6 +2,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -229,6 +230,14 @@ class LoveApp extends ConsumerWidget {
       darkTheme: buildTheme(darkSeed, Brightness.dark),
       themeMode: themeMode,
       routerConfig: router,
+      // 2.3.7：日期选择器等 Material 组件中文（zh-CN 本地化）。
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: const [Locale('zh', 'CN')],
+      locale: const Locale('zh', 'CN'),
       // `applyFontScale() :124-127` 等价：--fs-scale 乘数（1 / 1.08 / 1.16）。
       builder: (context, child) => MediaQuery(
         data: MediaQuery.of(context)

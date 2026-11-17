@@ -16,6 +16,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/chat/chat_media.dart' show chatBaseProvider;
+import '../../core/ui/avatar_media.dart';
 import '../../core/ui/error_view.dart';
 import '../auth/auth_state.dart';
 import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
@@ -367,7 +368,12 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                 GestureDetector(
                   onTap: _busy ? null : _pickAvatar,
                   child: Stack(children: [
-                    _Avatar(bytes: _avatarBytes, name: me.user.name, size: 88),
+                    _Avatar(
+                    bytes: _avatarBytes,
+                    name: me.user.name,
+                    size: 88,
+                    avatarId: _pendingAvatarId ?? _avatarId ?? '',
+                  ),
                     Positioned(right: 0, bottom: 0, child: CircleAvatar(
                       radius: 14, backgroundColor: theme.colorScheme.primary,
                       child: const Icon(Icons.edit, size: 14, color: Colors.white))),
@@ -513,12 +519,16 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   }
 }
 
-/// 头像：有图显示图，无图显示昵称首字（与 Web avatar() 行为一致）
+/// 头像：2.3.7 统一路径——刚选的新图（预览字节）优先本地即时显示；
+/// 否则走 AvatarMedia（LowFreqCache 落盘缓存 + 鉴权头，顶栏/心情格同一路径，
+/// media id 变化才重新拉取）；无图回退昵称首字（与 Web avatar() 一致）。
 class _Avatar extends StatelessWidget {
-  const _Avatar({this.bytes, required this.name, this.size = 40});
+  const _Avatar(
+      {this.bytes, required this.name, this.size = 40, this.avatarId = ''});
   final Uint8List? bytes;
   final String name;
   final double size;
+  final String avatarId;
 
   @override
   Widget build(BuildContext context) {
@@ -528,6 +538,9 @@ class _Avatar extends StatelessWidget {
         child: Image.memory(bytes!, width: size, height: size, fit: BoxFit.cover,
             gaplessPlayback: true),
       );
+    }
+    if (avatarId.isNotEmpty) {
+      return AvatarMedia(avatarId: avatarId, name: name, radius: size / 2);
     }
     return CircleAvatar(
       radius: size / 2,

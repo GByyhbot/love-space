@@ -19,6 +19,7 @@ import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart';
 
 import '../../core/theme/motion.dart';
+import '../../core/ui/avatar_media.dart';
 
 /// chrome 语义色表（深浅两档显式取值，widget 测试逐值断言）。
 ///
@@ -530,11 +531,16 @@ class WebAvatarButton extends StatelessWidget {
     super.key,
     required this.initial,
     required this.onPressed,
+    this.avatarId = '',
   });
 
   /// 首字母（空名兜底 '?'，与旧 CircleAvatar 口径一致）
   final String initial;
   final VoidCallback onPressed;
+
+  /// 2.3.7：头像媒体 id（users.avatar）——非空走 AvatarMedia 照片，
+  /// 空/加载失败回退首字母。低频缓存 + 鉴权头与动态图同一路径。
+  final String avatarId;
 
   @override
   Widget build(BuildContext context) {
@@ -559,15 +565,11 @@ class WebAvatarButton extends StatelessWidget {
               onTap: onPressed,
               customBorder: const CircleBorder(),
               child: Center(
-                child: CircleAvatar(
+                // 2.3.7：照片头像（低频缓存 + 鉴权头），空/失败回退首字母。
+                child: AvatarMedia(
+                  avatarId: avatarId,
+                  name: initial,
                   radius: 17,
-                  backgroundColor: cs.primaryContainer,
-                  child: Text(
-                    initial,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: cs.onPrimaryContainer,
-                        ),
-                  ),
                 ),
               ),
             ),

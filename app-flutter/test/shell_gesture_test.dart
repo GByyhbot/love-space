@@ -276,6 +276,50 @@ void main() {
       await _drainTimers(tester);
     });
 
+    testWidgets('2.3.7 心情格一行式：无名字、头像与胶囊同行、两胶囊左缘对齐同尺寸',
+        (tester) async {
+      final adapter = _Adapter((o, i) {
+        if (o.uri.path == '/api/me') return _json(_me());
+        return _json(<Object>[]);
+      });
+      final container = await _container(adapter);
+      await _pumpShell(tester, container);
+
+      // 名字文本已从心情格摘除（_MoodRow 不再渲染 user.name）。
+      expect(find.text('TA'), findsNothing,
+          reason: '🔴 心情格不再显示对方名字文本（2.3.7 一行式）');
+      // 头像与胶囊都在位（头像在范围内、显示照片本体路径）。
+      final av1 = find.byKey(const Key('mood-avatar-u1'));
+      final av2 = find.byKey(const Key('mood-avatar-u2'));
+      final pill1 = find.byKey(const Key('mood-pill-u1'));
+      final pill2 = find.byKey(const Key('mood-pill-u2'));
+      expect(av1, findsOneWidget);
+      expect(av2, findsOneWidget);
+      expect(pill1, findsOneWidget);
+      expect(pill2, findsOneWidget);
+
+      // 每行：头像与胶囊同一行（垂直中心对齐）。
+      final rAv1 = tester.getRect(av1);
+      final rPill1 = tester.getRect(pill1);
+      final rAv2 = tester.getRect(av2);
+      final rPill2 = tester.getRect(pill2);
+      expect((rAv1.top + rAv1.bottom) / 2,
+          closeTo((rPill1.top + rPill1.bottom) / 2, 2.0),
+          reason: '🔴 u1 头像与胶囊同一行（非「头像+名字/胶囊」两行式）');
+      expect((rAv2.top + rAv2.bottom) / 2,
+          closeTo((rPill2.top + rPill2.bottom) / 2, 2.0),
+          reason: '🔴 u2 头像与胶囊同一行');
+
+      // 两行胶囊左缘对齐、同尺寸（同 Expanded + 同 padding）。
+      expect(rPill1.left, closeTo(rPill2.left, 1.0),
+          reason: '🔴 两行胶囊左缘对齐');
+      expect(rPill1.width, closeTo(rPill2.width, 1.0),
+          reason: '🔴 两行胶囊等宽');
+      expect(rPill1.height, closeTo(rPill2.height, 1.0),
+          reason: '🔴 两行胶囊等高');
+      await _drainTimers(tester);
+    });
+
     testWidgets('hero 卡 tap → 弹「空间信息」编辑层', (tester) async {
       final adapter = _Adapter((o, i) {
         if (o.uri.path == '/api/me') return _json(_me());

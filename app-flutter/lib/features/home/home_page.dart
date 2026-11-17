@@ -27,6 +27,7 @@ import '../../core/ui/progress.dart';
 import '../auth/auth_state.dart';
 import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
 import '../settings/settings_state.dart' show spaceEditRequestedProvider;
+import '../../core/ui/avatar_media.dart';
 import '../shell/web_chrome.dart';
 import '../../core/theme/tokens.dart';
 
@@ -480,14 +481,17 @@ class _Hero extends ConsumerWidget {
                 ),
                 // 段 D：主页封面（space.cover / cover_pos），保存后立刻变。
                 if (hasCover) _HomeCover(me: me),
+                // 2.3.7（主人构图拍板）：名字行固定顶部；天数大数字与日期行
+                // 整体下移锚到封面卡下边缘上方（底部可读性靠 hero-shade 遮罩）。
                 Padding(
                   // 手机档 hero padding 18px 16px（style.css:1405）
                   padding: const EdgeInsets.fromLTRB(16, 18, 16, 18),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
+                  child: Align(
+                    alignment: Alignment.topLeft,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
                       Text.rich(
                         TextSpan(
                           children: <InlineSpan>[
@@ -520,7 +524,19 @@ class _Hero extends ConsumerWidget {
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
-                      const SizedBox(height: 8), // hero-main gap 8（:2288）
+                      ],
+                    ),
+                  ),
+                ),
+                // 天数大数字 + 日期行：锚到封面卡下边缘上方（padding 18）
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 18, 16, 18),
+                  child: Align(
+                    alignment: Alignment.bottomLeft,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
                       Text.rich(
                         TextSpan(
                           children: <InlineSpan>[
@@ -546,13 +562,14 @@ class _Hero extends ConsumerWidget {
                         )
                       else
                         Text(
-                          '${me.spaceSince} 起 · 点卡片可编辑 · 今天也要好好相爱',
+                          '${me.spaceSince} 起 · 今天也要好好相爱',
                           style: theme.textTheme.bodySmall
                               ?.copyWith(color: metaColor),
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                         ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
                 Positioned(
@@ -653,7 +670,9 @@ Future<void> showSpaceEditDialog(
   WidgetRef ref,
   MeData me,
 ) async {
-  final nameCtrl = TextEditingController(text: me.spaceName);
+  // 2.3.7（主人实证：改了没用）：「空间名称」输入框摘除——PUT 全量合并
+  // 口径不破，name 固定带回 me.spaceName 原值（updateSpace ...spaceRaw 展开），
+  // 名字不会存没。
   DateTime? picked = me.spaceSince.isNotEmpty
       ? DateTime.tryParse(me.spaceSince)
       : null;
@@ -665,10 +684,18 @@ Future<void> showSpaceEditDialog(
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            TextField(
-              controller: nameCtrl,
-              maxLength: 60,
-              decoration: const InputDecoration(labelText: '空间名称'),
+            // 2.3.7：空间名称输入框已摘除（只读展示当前名，不可在此改）。
+            Row(
+              children: [
+                Text('空间名称',
+                    style: Theme.of(ctx).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(ctx).colorScheme.outline)),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(me.spaceName,
+                      style: Theme.of(ctx).textTheme.bodyLarge),
+                ),
+              ],
             ),
             const SizedBox(height: 12),
             Row(
@@ -716,9 +743,8 @@ Future<void> showSpaceEditDialog(
   if (ok != true || picked == null) return;
   try {
     final dio = await ref.read(dioProvider.future);
-    final name = nameCtrl.text.trim().isEmpty
-        ? me.spaceName
-        : nameCtrl.text.trim();
+    // 2.3.7：名称原样带回（输入框已摘除，全量合并口径不破）。
+    final name = me.spaceName;
     final since = _fmtDate(picked!);
     // 7-C：4xx 被 validateAppStatus 放行，updateSpace 返回服务端 detail 原文；
     // 失败只发错误通知、不重拉、不自动重试（输入随弹层关闭本就保留在控件里）。
@@ -864,6 +890,20 @@ class _TodayCells extends StatelessWidget {
                       ),
                       const SizedBox(height: 8),
                       if (ann != null) ...[
+                        // 2.3.7（主人实证标题腰斩）：标题独占一行、最多两行、
+                        // 超宽字号自适应（FittedBox scaleDown）——不再与「天后」
+                        // 挤同一行省略；倒计时数字口径不变。
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            '${ann.r.body['title'] ?? '纪念日'}',
+                            maxLines: 1,
+                            style: theme.textTheme.titleSmall
+                                ?.copyWith(fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                        const SizedBox(height: 6),
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.end,
                           children: [
@@ -872,18 +912,9 @@ class _TodayCells extends StatelessWidget {
                             Text('${ann.days}',
                                 style: webSerifStyle(26, color: cs.primary)),
                             const SizedBox(width: 6),
-                            Expanded(
-                              child: Padding(
-                                padding: const EdgeInsets.only(bottom: 4),
-                                child: Text(
-                                  '天后 · ${(ann.r.body['title'] ?? '纪念日')}',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: theme.textTheme.bodySmall
-                                      ?.copyWith(color: cs.outline),
-                                ),
-                              ),
-                            ),
+                            Text('天后',
+                                style: theme.textTheme.bodySmall
+                                    ?.copyWith(color: cs.outline)),
                           ],
                         ),
                         const SizedBox(height: 4),
@@ -943,69 +974,53 @@ class _MoodRow extends ConsumerWidget {
         ? '${(m.body['emoji'] ?? '')} ${(m.body['content'] ?? '已记录')}'
         : (mine ? '＋ 记一笔' : '还没记');
 
+    // 2.3.7 范围再修正（主人裁定）：「头像 + 胶囊」一行式——每人一行，
+    // 左头像圈、右胶囊（记一笔/还没记），不显示名字文本；两行胶囊左缘对齐、
+    // 同尺寸（同 Expanded + 同 padding，头像半径一致 14）；点胶囊既有行为不变。
+    // 头像保留 AvatarMedia 照片本体（低频缓存 + 鉴权头，空/失败回退首字母）。
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
-      // 2.3.4（推广段一重做，QA 备案缺陷①）：Web 手机档今天的心情为
-      // 「头像 + 昵称一行 / 胶囊另一行」的横向 pill（对照图 22_compare_light
-      // 左侧 + --radius-pill style.css:132）；原单行 Row 把胶囊 Expanded 压窄
-      // → 393 宽「＋ 记一笔」竖排碎字。改分行 Column + pill 胶囊，
-      // 文本单行 ellipsis，绝不换行；记/改仍走 _openMoodSheet 原链。
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          CircleAvatar(
+          // 2.3.7：照片头像（低频缓存 + 鉴权头），空/失败回退首字母。
+          AvatarMedia(
+            key: Key('mood-avatar-${user.id}'),
+            avatarId: user.avatar,
+            name: user.name,
             radius: 14,
-            backgroundColor: theme.colorScheme.primaryContainer,
-            child: Text(
-              user.name.isEmpty ? '?' : user.name.characters.first,
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: theme.colorScheme.onPrimaryContainer),
-            ),
           ),
           const SizedBox(width: 10),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // S2：长昵称 ellipsis 不回退（段 B 约定）。
-                Text(
-                  user.name,
-                  style: theme.textTheme.labelLarge,
+            child: InkWell(
+              key: Key('mood-pill-${user.id}'),
+              borderRadius: BorderRadius.circular(999),
+              onTap: (m != null && !mine)
+                  ? null // 对方的心情手记回顾在「我们」页（条目 6）
+                  : () => _openMoodSheet(context, ref),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: m != null
+                      ? theme.colorScheme.primaryContainer.withValues(
+                          alpha: 0.45,
+                        )
+                      : theme.colorScheme.surfaceContainerHighest.withValues(
+                          alpha: 0.5,
+                        ),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  bubble,
+                  style: theme.textTheme.bodyMedium,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
+                  softWrap: false,
                 ),
-                const SizedBox(height: 5),
-                InkWell(
-                  borderRadius: BorderRadius.circular(999),
-                  onTap: (m != null && !mine)
-                      ? null // 对方的心情手记回顾在「我们」页（条目 6）
-                      : () => _openMoodSheet(context, ref),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: m != null
-                          ? theme.colorScheme.primaryContainer.withValues(
-                              alpha: 0.45,
-                            )
-                          : theme.colorScheme.surfaceContainerHighest.withValues(
-                              alpha: 0.5,
-                            ),
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    child: Text(
-                      bubble,
-                      style: theme.textTheme.bodyMedium,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      softWrap: false,
-                    ),
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
         ],
@@ -1219,8 +1234,10 @@ class _HomeCover extends ConsumerWidget {
                 gradient: LinearGradient(
                   begin: Alignment.bottomCenter,
                   end: Alignment.topCenter,
+                  // 2.3.7：下移后底部文字可读性加强（主人拍板口径：靠既有
+                  // hero-shade 加强下半部）——下缘 alpha .52→.62。
                   colors: <Color>[
-                    const Color.fromRGBO(37, 28, 34, 0.52),
+                    const Color.fromRGBO(37, 28, 34, 0.62),
                     const Color.fromRGBO(37, 28, 34, 0),
                   ],
                   stops: const <double>[0, 0.52],
