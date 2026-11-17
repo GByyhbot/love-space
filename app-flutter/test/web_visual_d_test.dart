@@ -377,6 +377,21 @@ void main() {
       expect(find.text('今天的一句'), findsOneWidget);
     });
 
+    testWidgets('2.3.7 真机修复：天数行锚到 hero 下半部（非贴名字顶部）',
+        (tester) async {
+      await pumpHome(tester, const Size(393, 1200));
+      final heroRect = tester.getRect(find.byKey(const Key('home-hero')));
+      final daysRect = tester.getRect(find.byKey(const Key('home-hero-days')));
+      final heroMidY = (heroRect.top + heroRect.bottom) / 2;
+      final daysMidY = (daysRect.top + daysRect.bottom) / 2;
+      expect(daysMidY, greaterThan(heroMidY),
+          reason: '🔴 天数行须锚到 hero 卡下半部（2.3.7 第6项：下移锚到底部，'
+              '非 Pos...Align 失效贴顶）');
+      // 且不超出卡片下边缘（bottom 定位留 18 padding）
+      expect(daysRect.bottom, lessThan(heroRect.bottom),
+          reason: '天数行不得溢出 hero 卡下边缘');
+    });
+
     testWidgets('320×700 窄屏零 RenderFlex overflow', (tester) async {
       await pumpHome(tester, const Size(320, 700));
       expect(tester.takeException(), isNull,

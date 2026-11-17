@@ -528,48 +528,51 @@ class _Hero extends ConsumerWidget {
                     ),
                   ),
                 ),
-                // 天数大数字 + 日期行：锚到封面卡下边缘上方（padding 18）
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 18, 16, 18),
-                  child: Align(
-                    alignment: Alignment.bottomLeft,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                      Text.rich(
-                        TextSpan(
-                          children: <InlineSpan>[
-                            TextSpan(
-                              // hero-days strong：serif 42（手机档 :2289）/500
-                              text: days == null ? '—' : '$days',
-                              style: webSerifStyle(42, color: daysColor, height: 1.15),
-                            ),
-                            TextSpan(
-                              // em「天」：fs-body、常规字族（:2272-2274）
-                              text: ' 天',
-                              style: TextStyle(fontSize: 14, color: daysColor),
-                            ),
-                          ],
-                        ),
+                // 2.3.7 真机修复：天数大数字 + 日期行锚到封面卡下边缘上方。
+                // 原用非定位 Padding+Align(bottomLeft)，Stack 对非定位子元素
+                // shrink-wrap，bottomLeft 失效 → 天数紧贴名字停在顶部（真机实证）。
+                // 改 Positioned(bottom) 相对撑满的 Stack 底部定位，名字行仍在顶部。
+                Positioned(
+                  key: const Key('home-hero-days'),
+                  bottom: 18,
+                  left: 16,
+                  right: 16,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                    Text.rich(
+                      TextSpan(
+                        children: <InlineSpan>[
+                          TextSpan(
+                            // hero-days strong：serif 42（手机档 :2289）/500
+                            text: days == null ? '—' : '$days',
+                            style: webSerifStyle(42, color: daysColor, height: 1.15),
+                          ),
+                          TextSpan(
+                            // em「天」：fs-body、常规字族（:2272-2274）
+                            text: ' 天',
+                            style: TextStyle(fontSize: 14, color: daysColor),
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 4),
-                      if (me.spaceSince.isEmpty)
-                        Text(
-                          '点这里设置相恋日期 →',
-                          style: theme.textTheme.bodySmall
-                              ?.copyWith(color: cs.primary),
-                        )
-                      else
-                        Text(
-                          '${me.spaceSince} 起 · 今天也要好好相爱',
-                          style: theme.textTheme.bodySmall
-                              ?.copyWith(color: metaColor),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
                     ),
+                    const SizedBox(height: 4),
+                    if (me.spaceSince.isEmpty)
+                      Text(
+                        '点这里设置相恋日期 →',
+                        style: theme.textTheme.bodySmall
+                            ?.copyWith(color: cs.primary),
+                      )
+                    else
+                      Text(
+                        '${me.spaceSince} 起 · 今天也要好好相爱',
+                        style: theme.textTheme.bodySmall
+                            ?.copyWith(color: metaColor),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
                   ),
                 ),
                 Positioned(
