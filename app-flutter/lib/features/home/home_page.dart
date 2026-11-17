@@ -26,7 +26,6 @@ import '../../core/ui/error_view.dart';
 import '../../core/ui/progress.dart';
 import '../auth/auth_state.dart';
 import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
-import '../settings/settings_state.dart' show spaceEditRequestedProvider;
 import '../../core/ui/avatar_media.dart';
 import '../shell/web_chrome.dart';
 import '../../core/theme/tokens.dart';
@@ -91,22 +90,6 @@ class HomePage extends ConsumerWidget {
     final records = ref.watch(recordsProvider);
     final theme = Theme.of(context);
     final me = ref.watch(authProvider.notifier).me;
-    // 段 D：「空间信息」跳转入口（设置页 / hub 卡）置位后，回首页自动打开
-    // 已有的空间信息编辑弹层——只做导航，不复制该弹层 UI。
-    ref.listen(spaceEditRequestedProvider, (prev, next) {
-      if (next == true) {
-        ref.read(spaceEditRequestedProvider.notifier).state = false;
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (context.mounted && ref.read(authProvider.notifier).me != null) {
-            showSpaceEditDialog(
-              context,
-              ref,
-              ref.read(authProvider.notifier).me!,
-            );
-          }
-        });
-      }
-    });
 
     if (me == null) {
       return const AppProgress();

@@ -636,8 +636,6 @@ void main() {
       ]) {
         expect(find.byKey(Key(key)), findsNothing, reason: '$key 卡不再存在');
       }
-      // 空间信息原经由设置卡跳首页触发编辑——设置区退役后标志不得被误置位。
-      expect(c.read(spaceEditRequestedProvider), isFalse);
       // 工具区不受瘦身影响：工具卡文案仍在位（宽卡 emoji 与标题分开渲染）。
       expect(find.text('🌸'), findsOneWidget, reason: '生理期宽卡 emoji 在位');
       expect(find.text('生理期'), findsOneWidget,
@@ -708,13 +706,6 @@ void main() {
         expect(find.byKey(Key(marker)), findsOneWidget,
             reason: '$key 点击必须真到达落点（无死行）');
       }
-      // 空间信息行：置位弹窗意图标志（真实首页消费）。
-      router.go('/settings');
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('settings-home-space')));
-      await tester.pumpAndSettle();
-      expect(c.read(spaceEditRequestedProvider), isTrue,
-          reason: '空间信息行置位编辑意图（沿用原机制）');
       // 返回按钮可回原页：先 go('/hub') 清掉逐行循环残留的 push 栈，
       // 再 push('/settings')（/hub 保留在栈底 → AppBar 出自动返回钮）。
       router.go('/hub');
@@ -725,6 +716,25 @@ void main() {
       await tester.tap(find.byType(BackButton));
       await tester.pumpAndSettle();
       expect(find.text('page-hub'), findsOneWidget);
+
+      // 2.4.1 第 1 项：空间信息行 → 独立页 /settings/space（弹窗机制退役）。
+      // 放在用例末尾：此处用含 stub 的临时路由整树替换验证。
+      final spaceRouter = GoRouter(
+        initialLocation: '/settings',
+        routes: <RouteBase>[
+          GoRoute(
+              path: '/settings',
+              builder: (_, _) => const SettingsHomePage()),
+          GoRoute(
+              path: '/settings/space',
+              builder: (_, _) => const Scaffold(body: Text('SPACE_PAGE'))),
+        ],
+      );
+      await _pump(tester, _app(c, router: spaceRouter));
+      await tester.tap(find.byKey(const Key('settings-home-space')));
+      await tester.pumpAndSettle();
+      expect(find.text('SPACE_PAGE'), findsOneWidget,
+          reason: '🔴 空间信息行点击落独立页（非弹窗、非掉回 tab）');
     });
   });
 }

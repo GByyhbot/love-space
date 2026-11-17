@@ -18,6 +18,7 @@ import '../../core/chat/chat_wallpaper.dart';
 import '../auth/auth_state.dart';
 import 'chat_toast.dart' show ChatToastTone, chatToastProvider;
 import '../../core/theme/tokens.dart';
+import '../settings/settings_widgets.dart' show SettingsSegmented;
 
 Future<void> showWallpaperSheet(BuildContext context) {
   return showModalBottomSheet<void>(
@@ -40,10 +41,12 @@ class WallpaperSheet extends ConsumerStatefulWidget {
   final bool embedded;
 
   @override
-  ConsumerState<WallpaperSheet> createState() => _WallpaperSheetState();
+  ConsumerState<WallpaperSheet> createState() => WallpaperSheetState();
 }
 
-class _WallpaperSheetState extends ConsumerState<WallpaperSheet> {
+/// State 公开：设置独立页用 GlobalKey 触发 [WallpaperSheetState.saveNow]
+/// （底部玻璃操作栏调同一保存实现，禁止复制第二套保存链）。
+class WallpaperSheetState extends ConsumerState<WallpaperSheet> {
   String _target = ''; // '' = 自己（initState 里填）
   String _bg = '';
   String _media = '';
@@ -170,28 +173,30 @@ class _WallpaperSheetState extends ConsumerState<WallpaperSheet> {
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
         child: Column(mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          Row(children: [
-            Expanded(child: Text('聊天背景', style: theme.textTheme.titleMedium)),
-            // embedded（设置独立页内嵌）不渲染关闭钮：pop 会误关设置页；
-            // sheet 模式保留（2.4.0 同一组件两处消费）。
-            if (!widget.embedded)
+          // embedded（设置独立页）：标题行不渲染（页 AppBar 已有「聊天背景」，
+          // 避免重复）；sheet 模式保留标题 + 关闭钮。
+          if (!widget.embedded)
+            Row(children: [
+              Expanded(
+                  child:
+                      Text('聊天背景', style: theme.textTheme.titleMedium)),
               IconButton(
                   onPressed: () => Navigator.of(context).pop(),
                   icon: const Icon(Icons.close_rounded)),
-          ]),
-          const SizedBox(height: 4),
+            ]),
+          SizedBox(height: widget.embedded ? 0 : 4),
           if (partner != null)
             Row(children: [
-              Text('设给谁', style: theme.textTheme.bodyMedium),
-              const SizedBox(width: 12),
+              // 2.4.1 第 4 项②：「设给谁」三字删除（yang 明确）——分段器
+              // 语义自明（我的手机 / TA 的手机）。
               Expanded(
-                child: SegmentedButton<String>(
+                child: SettingsSegmented<String>(
                   segments: [
-                    ButtonSegment(value: me.user.id, label: Text('我的手机')),
-                    ButtonSegment(value: partner.id, label: Text('TA 的手机')),
+                    (me.user.id, '我的手机'),
+                    (partner.id, 'TA 的手机'),
                   ],
-                  selected: {_target},
-                  onSelectionChanged: (s) => _switchTarget(s.first),
+                  selected: _target,
+                  onChanged: _switchTarget,
                 ),
               ),
             ]),
@@ -214,15 +219,22 @@ class _WallpaperSheetState extends ConsumerState<WallpaperSheet> {
                   ),
               ]),
           const SizedBox(height: 12),
+          // 2.4.1 第 4 项④：聊天效果预览——两条样例气泡浮在当前选中背景
+          // 之上，遮罩浓度实时跟随滑杆（同一 _bg/_dim 状态，天然同源）。
+          _previewZone(theme),
+          const SizedBox(height: 12),
           Row(children: [
             Text('背景遮罩', style: theme.textTheme.bodyMedium),
             Expanded(
               child: Slider(
                 min: 0, max: 80, divisions: 16, // 0–80 步进 5（对齐 Web range step=5）
                 value: _dim.clamp(0, 80).toDouble(),
+                // 2.4.1 第 4 项⑤：主题色轨道。
+                activeColor: theme.colorScheme.primary,
                 onChanged: (v) => setState(() => _dim = v),
               ),
             ),
+            // 右端固定百分比读数。
             Text('${_dim.round()}%',
                 style: theme.textTheme.bodySmall
                     ?.copyWith(color: theme.colorScheme.outline)),
@@ -231,18 +243,84 @@ class _WallpaperSheetState extends ConsumerState<WallpaperSheet> {
           Text('你们各看各的背景，互不打扰；但谁都能替对方换一张——上面选「TA 的手机」就行。',
               style: theme.textTheme.bodySmall
                   ?.copyWith(color: theme.colorScheme.outline)),
-          const SizedBox(height: 12),
-          FilledButton(
-            onPressed: _saving ? null : _save,
-            child: _saving
-                ? const SizedBox(width: 18, height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                : const Text('保存'),
-          ),
+          // embedded（设置独立页）：保存移入底部玻璃操作栏（页面层
+          // GlobalKey 调 saveNow），此处不渲染；sheet 模式保留原保存钮。
+          if (!widget.embedded) ...[
+            const SizedBox(height: 12),
+            FilledButton(
+              onPressed: _saving ? null : _save,
+              child: _saving
+                  ? const SizedBox(width: 18, height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  : const Text('保存'),
+            ),
+          ],
         ]),
       ),
     );
   }
+
+  /// 效果预览区：当前选中背景（预设渐变 / 照片缺省占位）+ 遮罩黑层
+  /// （α = dim/100）+ 对方/我方两条样例气泡。
+  Widget _previewZone(ThemeData theme) {
+    final cs = theme.colorScheme;
+    return Container(
+      key: const Key('wallpaper-preview'),
+      height: 120,
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(14),
+        gradient: presetGradient(_bg) ??
+            LinearGradient(colors: [
+              cs.surfaceContainerHighest,
+              cs.surfaceContainerHighest.withValues(alpha: 0.6),
+            ]),
+      ),
+      child: Stack(
+        children: [
+          // 遮罩黑层实时跟随 _dim。
+          Positioned.fill(
+            child: ColoredBox(
+              color: Colors.black.withValues(alpha: _dim / 100),
+            ),
+          ),
+          Positioned(
+            left: 12,
+            top: 16,
+            child: Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: cs.surface,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text('这是对方说的',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                      color: cs.onSurface)),
+            ),
+          ),
+          Positioned(
+            right: 12,
+            bottom: 16,
+            child: Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: cs.primary,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text('我们的一条样例',
+                  style: theme.textTheme.bodySmall
+                      ?.copyWith(color: cs.onPrimary)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 公开保存入口（设置独立页玻璃操作栏触发，与 sheet 保存同一实现）。
+  Future<void> saveNow() => _save();
 }
 
 /// 色卡（预设渐变缩略 / 照片缩略 / 📷 占位）
@@ -280,23 +358,42 @@ class _Swatch extends StatelessWidget {
           borderRadius: BorderRadius.circular(AppRadius.sm),
         ),
         child: Column(children: [
-          Container(
-            width: 72, height: 48,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(6),
-              gradient: presetGradient(bgKey),
+          Stack(children: [
+            Container(
+              width: 72, height: 48,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(6),
+                gradient: presetGradient(bgKey),
+              ),
+              child: bgKey == 'photo'
+                  ? (media.isNotEmpty && base != null
+                      ? ClipRRect(
+                          borderRadius: BorderRadius.circular(6),
+                          child: CachedNetworkImage(
+                              imageUrl: mediaUrl(base!, media),
+                              httpHeaders: headers,
+                              fit: BoxFit.cover))
+                      : const Icon(Icons.photo_camera_rounded, size: 22))
+                  : null,
             ),
-            child: bgKey == 'photo'
-                ? (media.isNotEmpty && base != null
-                    ? ClipRRect(
-                        borderRadius: BorderRadius.circular(6),
-                        child: CachedNetworkImage(
-                            imageUrl: mediaUrl(base!, media),
-                            httpHeaders: headers,
-                            fit: BoxFit.cover))
-                    : const Icon(Icons.photo_camera_rounded, size: 22))
-                : null,
-          ),
+            // 2.4.1 第 4 项③：选中态统一勾徽（原只有「用照片」卡有边框，
+            // 其余靠色差区分——现在全部主题色描边 + 右上角勾）。
+            if (selected)
+              Positioned(
+                right: 2,
+                top: 2,
+                child: Container(
+                  width: 16,
+                  height: 16,
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primary,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.check,
+                      size: 11, color: Colors.white),
+                ),
+              ),
+          ]),
           const SizedBox(height: 4),
           Text(label, style: theme.textTheme.labelSmall),
         ]),

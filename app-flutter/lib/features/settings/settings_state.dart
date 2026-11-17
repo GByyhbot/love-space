@@ -262,7 +262,6 @@ final appearancePrefsProvider =
 
 /// 「空间信息」跳转入口的意图标志（`home_page.dart` 的 `_Hero` 消费后打开
 /// 已有的空间信息编辑弹层；设置页与 hub 卡都只置位，不复制该弹层 UI）。
-final spaceEditRequestedProvider = StateProvider<bool>((ref) => false);
 
 // ── 空间外观状态（Riverpod 驱动 MaterialApp 立刻重建） ───────────────
 

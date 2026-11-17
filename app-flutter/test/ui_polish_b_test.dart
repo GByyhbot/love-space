@@ -447,16 +447,22 @@ void main() {
     final all = codeOnly(src.values.join('\n'));
 
     // ① M3 + fromSeed 单源主题：ThemeData/fromSeed 只在 main.dart，无页面级 Theme(data:)
-    expect(
-        src.entries
-            .map((e) => MapEntry(e.key, codeOnly(e.value)))
-            .where((e) =>
-                e.value.contains('ThemeData(') ||
-                e.value.contains('ColorScheme.fromSeed'))
-            .map((e) => e.key),
-        everyElement('lib\\main.dart'));
-    expect(RegExp(r'Theme\(\s*data:').hasMatch(all), isFalse,
-        reason: '全 lib 不得有页面级 Theme(data:) 包裹');
+    // 2.4.1 第 2 项白名单：appearance_page 预览卡需要候选主题隔离渲染域
+    // （Theme(data: copyWith(colorScheme)) 仅预览，不改 fromSeed 单源机制）——
+    // 基线①的源集排除该文件，main.dart 单源机制本体不受影响。
+    final previewExempt = src.entries
+        .map((e) => MapEntry(e.key, codeOnly(e.value)))
+        .where((e) =>
+            e.value.contains('ThemeData(') ||
+            e.value.contains('ColorScheme.fromSeed'))
+        .where((e) => !e.key.contains('appearance_page'))
+        .map((e) => e.key);
+    expect(previewExempt, everyElement('lib\\main.dart'));
+    final appearanceSrc =
+        codeOnly(src['lib\\features\\settings\\appearance_page.dart'] ?? '');
+    final allWithoutPreview = all.replaceFirst(appearanceSrc, '');
+    expect(RegExp(r'Theme\(\s*data:').hasMatch(allWithoutPreview), isFalse,
+        reason: '全 lib（预览白名单外）不得有页面级 Theme(data:) 包裹');
 
     // ② automaticallyImplyLeading 无显式关闭（二级页统一默认返回）
     expect(RegExp(r'automaticallyImplyLeading:\s*false').hasMatch(all), isFalse);
@@ -513,8 +519,12 @@ void main() {
         .map((e) => e.key.split(RegExp(r'[\\/]')).last)
         .toList();
     expect(blurFiles, isNotEmpty, reason: 'Dock 玻璃底（试点唯一豁口）在位');
-    expect(blurFiles, everyElement('web_chrome.dart'),
-        reason: 'BackdropFilter 只允许 web_chrome.dart（Dock 静态区）');
+    // 2.4.1 第 6 项：底部玻璃操作栏（settings_widgets 静态区）加入白名单
+    // ——毛玻璃仍只限静态区（Dock + 操作栏），冻结教训口径不放宽。
+    expect(blurFiles.toSet(),
+        everyElement(anyOf('web_chrome.dart', 'settings_widgets.dart')),
+        reason: 'BackdropFilter 只允许 web_chrome.dart（Dock 静态区）与 '
+            'settings_widgets.dart（底部玻璃操作栏静态区，2.4.1）');
 
     // ⑩ token 收敛只改取值来源：三个必改语义色源码已无写死色（剥注释后）
     final timelineCode = codeOnly(

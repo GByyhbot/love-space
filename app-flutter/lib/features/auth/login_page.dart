@@ -25,6 +25,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   final _username = TextEditingController();
   final _password = TextEditingController();
   final _token = TextEditingController();
+  bool _showPw = false; // 2.4.1 第 6 项④：密码显隐（纯客户端，不改校验/提交）
   AuthMode _mode = AuthMode.login;
   bool _tokenRequired = false;
   bool _busy = false;
@@ -98,20 +99,84 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final halo = cs.primary;
     return Scaffold(
-      body: Center(
+      body: Stack(children: [
+      // 2.4.1 第 6 项①：主题光晕背景——顶部居中 primary 径向光（低透明度）
+      // + 右上玫红余光；深浅两档底色随主题（跟随主题色的光晕）。
+      Positioned.fill(
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: cs.surface,
+            gradient: RadialGradient(
+              center: const Alignment(0, -1.1),
+              radius: 1.1,
+              colors: [
+                halo.withValues(alpha: theme.brightness == Brightness.dark ? 0.22 : 0.16),
+                halo.withValues(alpha: 0),
+              ],
+            ),
+          ),
+        ),
+      ),
+      Positioned.fill(
+        child: Align(
+          alignment: Alignment.topRight,
+          child: Container(
+            width: 220,
+            height: 220,
+            decoration: BoxDecoration(
+              gradient: RadialGradient(
+                colors: [
+                  const Color(0x33C23F68),
+                  const Color(0x00C23F68),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+      Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(28),
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 380),
             child: Form(
               key: _form,
+              // 2.4.1 第 6 项④：表单进毛玻璃卡。
+              child: Container(
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                color: cs.surface.withValues(alpha: 0.6),
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(
+                    color: cs.outlineVariant.withValues(alpha: 0.7)),
+              ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  // 2.4.1 第 6 项②：玻璃圆徽（半透底 + 细边 + 爱心，不引新资源）。
+                  Center(
+                    child: Container(
+                      width: 64,
+                      height: 64,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: cs.surface.withValues(alpha: 0.55),
+                        border: Border.all(
+                            color: cs.outlineVariant.withValues(alpha: 0.9)),
+                      ),
+                      child: Icon(Icons.favorite_rounded,
+                          size: 28, color: cs.primary),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
                   Text('恋爱空间', textAlign: TextAlign.center,
-                      style: theme.textTheme.headlineMedium),
+                      // 标题字距拉开（约 3）。
+                      style: theme.textTheme.headlineMedium
+                          ?.copyWith(letterSpacing: 3)),
                   const SizedBox(height: 4),
                   Text('把喜欢，写进每一天', textAlign: TextAlign.center,
                       style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.outline)),
@@ -147,9 +212,19 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                   const SizedBox(height: 14),
                   TextFormField(
                     controller: _password,
-                    obscureText: true,
-                    decoration: InputDecoration(labelText: '密码',
-                        hintText: _mode == AuthMode.login ? null : '至少 10 个字符'),
+                    obscureText: !_showPw,
+                    decoration: InputDecoration(
+                        labelText: '密码',
+                        hintText: _mode == AuthMode.login
+                            ? null
+                            : '至少 10 个字符',
+                        suffixIcon: IconButton(
+                          icon: Icon(_showPw
+                              ? Icons.visibility_off_rounded
+                              : Icons.visibility_rounded),
+                          onPressed: () =>
+                              setState(() => _showPw = !_showPw),
+                        )),
                     autofillHints: [if (_mode == AuthMode.login) AutofillHints.password else AutofillHints.newPassword],
                     onFieldSubmitted: (_) => _submit(),
                     validator: (v) {
@@ -181,6 +256,11 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                   const SizedBox(height: 22),
                   FilledButton(
                     onPressed: _busy ? null : _submit,
+                    // 2.4.1 第 6 项⑤：实心主色 + 柔和投影。
+                    style: FilledButton.styleFrom(
+                      elevation: 3,
+                      shadowColor: cs.primary.withValues(alpha: 0.35),
+                    ),
                     child: _busy
                         ? const SizedBox(width: 18, height: 18,
                             child: CircularProgressIndicator(strokeWidth: 2))
@@ -192,35 +272,51 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                         style: TextStyle(color: theme.colorScheme.error)),
                   ],
                   const SizedBox(height: Spacing.gap),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      if (_mode != AuthMode.setup)
-                        TextButton(
+                  // 2.4.1 第 6 项⑥：模式切换改两个等宽描边胶囊并排一行
+                  //（当前模式自隐，语义同原文字链，跳转不变）。
+                  Row(children: [
+                    if (_mode != AuthMode.setup)
+                      Expanded(
+                        child: OutlinedButton(
                           onPressed: _busy ? null : () => setState(() {
                             _mode = AuthMode.setup;
                             _error = null;
                           }),
+                          style: OutlinedButton.styleFrom(
+                              padding:
+                                  const EdgeInsets.symmetric(vertical: 10)),
                           child: const Text('初始化新空间'),
                         ),
-                      if (_mode == AuthMode.setup)
-                        TextButton(
-                          onPressed: _busy ? null : () => setState(() {
-                            _mode = AuthMode.login;
-                            _error = null;
-                          }),
-                          child: const Text('已有账号，直接登录'),
-                        ),
-                      if (_mode != AuthMode.join)
-                        TextButton(
+                      ),
+                    if (_mode != AuthMode.setup && _mode != AuthMode.join)
+                      const SizedBox(width: 10),
+                    if (_mode != AuthMode.join)
+                      Expanded(
+                        child: OutlinedButton(
                           onPressed: _busy ? null : () => setState(() {
                             _mode = AuthMode.join;
                             _error = null;
                           }),
+                          style: OutlinedButton.styleFrom(
+                              padding:
+                                  const EdgeInsets.symmetric(vertical: 10)),
                           child: const Text('我有邀请链接'),
                         ),
-                    ],
-                  ),
+                      ),
+                    if (_mode == AuthMode.setup)
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: _busy ? null : () => setState(() {
+                            _mode = AuthMode.login;
+                            _error = null;
+                          }),
+                          style: OutlinedButton.styleFrom(
+                              padding:
+                                  const EdgeInsets.symmetric(vertical: 10)),
+                          child: const Text('已有账号，直接登录'),
+                        ),
+                      ),
+                  ]),
                   const SizedBox(height: 10),
                   TextButton(
                     onPressed: _busy ? null : () {
@@ -235,10 +331,12 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                       style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.outline)),
                 ],
               ),
+              ),
             ),
           ),
         ),
       ),
+      ]),
     );
   }
 }

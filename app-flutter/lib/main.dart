@@ -19,6 +19,7 @@ import 'features/settings/export_page.dart';
 import 'features/settings/invite_page.dart';
 import 'features/settings/links_page.dart';
 import 'features/settings/settings_home_page.dart';
+import 'features/settings/space_info_page.dart';
 import 'features/settings/settings_state.dart';
 import 'features/album/album_viewer_page.dart';
 import 'features/auth/auth_state.dart';
@@ -90,6 +91,8 @@ final routerProvider = Provider<GoRouter>((ref) {
           path: '/settings/export', builder: (_, _) => const ExportPage()),
       GoRoute(
           path: '/settings/invite', builder: (_, _) => const InvitePage()),
+      GoRoute(
+          path: '/settings/space', builder: (_, _) => const SpaceInfoPage()),
       GoRoute(
           path: '/settings/chat-wallpaper',
           builder: (_, _) => const ChatWallpaperPage()),

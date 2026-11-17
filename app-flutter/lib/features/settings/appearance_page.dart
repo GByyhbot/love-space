@@ -1,8 +1,16 @@
-/// 主题与外观（2.4.0 设置拆分段）：原全量 /settings 的「主题与外观」节
-/// 整节搬入独立页（settings_page.dart 退役，节代码原样搬移零逻辑改动）。
-/// 保存链不变：saveSpaceChanges + themeSpaceChanges（全量 space 合并 PUT，
-/// 绝不丢字段）；失败行内保留 + 顶部 toast、成功顶部 toast。
-/// Web 出处 themeForm :1870-1942。
+/// 主题与外观（2.4.1 修复包第 2 项改版；原 2.4.0 拆页，字段与保存链全不动）：
+/// · 主题色卡：卡面带该主题 primary 低透明度渐变（渐隐到透明）、圆点放大
+///   +柔和投影、选中态 = 该主题色描边 + 右上角勾徽，禁止整卡实心填充；
+/// · 实时预览卡：样例气泡对 + 主按钮，用「当前正选中的候选主题」渲染，
+///   点色卡预览即时跟随（仅预览，落库以「保存」为准，「取消」还原进页时主题）；
+/// · 夜间模式 / 字号：Material 下拉 → 圆角分段器（SettingsSegmented，
+///   与第 8 项相册分段器共用组件）；
+/// · 「启用轻柔动效」改卡片行（左标题 + 说明，右开关）；
+/// · 说明文字降为页脚注脚（SettingsFootnote）；
+/// · 取消/保存移入底部玻璃操作栏（SettingsGlassBar 共享组件，1/3 + 2/3）；
+/// · 页面顶部当前主题色极淡渐变罩（第 7 项，自顶部向下渐隐）。
+/// 功能与保存链全不动：主题色 PUT /api/space 全量合并
+/// （themeSpaceChanges + saveSpaceChanges）；dark/font 只写本机。
 library;
 
 import 'package:flutter/material.dart';
@@ -13,6 +21,7 @@ import '../../core/theme/tokens.dart';
 import '../auth/auth_state.dart';
 import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
 import 'settings_state.dart';
+import 'settings_widgets.dart';
 
 class AppearancePage extends ConsumerStatefulWidget {
   const AppearancePage({super.key});
@@ -63,135 +72,131 @@ class _AppearancePageState extends ConsumerState<AppearancePage> {
         }
       }
     });
+    // 第 7 项：顶部当前主题色极淡渐变罩（自顶部向下渐隐）。
+    final halo = themeSeedColor(_theme, _customColor);
     return Scaffold(
+      backgroundColor: cs.surface,
       appBar: AppBar(title: const Text('主题与外观')),
-      body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            Text('主题配色　·　两个人共用',
-                style: Theme.of(context).textTheme.labelSmall),
-            const SizedBox(height: Spacing.gap),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [for (final id in themeIds) _swatch(context, id)],
-            ),
-            if (_theme == 'custom') ...[
-              const SizedBox(height: 10),
-              TextField(
-                key: const Key('settings-custom-color'),
-                controller: TextEditingController(text: _customColor)
-                  ..selection = TextSelection.collapsed(
-                    offset: _customColor.length,
-                  ),
-                onChanged: (v) {
-                  _customColor = v;
-                  _previewTheme();
-                },
-                decoration: const InputDecoration(
-                  labelText: '自定义颜色（#RRGGBB）',
-                  isDense: true,
-                  border: OutlineInputBorder(),
+      body: Stack(
+        children: [
+          Positioned.fill(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    halo.withValues(alpha: 0.10),
+                    cs.surface,
+                  ],
+                  stops: const [0, 0.28],
                 ),
               ),
-            ],
-            const SizedBox(height: 12),
-            Row(
+              child: const SizedBox.expand(),
+            ),
+          ),
+          SafeArea(
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(
+                  16, 12, 16, SettingsGlassBar.barReserveHeight + 12),
               children: [
-                Expanded(
-                  child: DropdownButtonFormField<String>(
-                    key: const Key('settings-dark'),
-                    initialValue: _dark,
-                    decoration: const InputDecoration(
-                      labelText: '夜间模式',
-                      isDense: true,
-                    ),
-                    items: const <DropdownMenuItem<String>>[
-                      DropdownMenuItem(value: 'auto', child: Text('跟随系统')),
-                      DropdownMenuItem(value: 'on', child: Text('始终开启')),
-                      DropdownMenuItem(value: 'off', child: Text('始终关闭')),
-                    ],
+                _themeSwatches(context),
+                const SizedBox(height: 14),
+                _previewCard(context),
+                const SizedBox(height: 14),
+                Text('夜间模式', style: Theme.of(context).textTheme.labelSmall),
+                const SizedBox(height: 6),
+                SettingsSegmented<String>(
+                  key: const Key('settings-dark'),
+                  segments: const [
+                    ('auto', '跟随系统'),
+                    ('on', '浅色'),
+                    ('off', '深色'),
+                  ],
+                  selected: _dark,
+                  onChanged: (v) {
+                    setState(() => _dark = v);
+                    // 夜间模式即时预览（`:1917-1923`）
+                    ref.read(appearancePrefsProvider.notifier).preview(dark: v);
+                  },
+                ),
+                const SizedBox(height: 12),
+                Text('字号', style: Theme.of(context).textTheme.labelSmall),
+                const SizedBox(height: 6),
+                SettingsSegmented<String>(
+                  key: const Key('settings-font'),
+                  segments: const [
+                    ('std', '标准'),
+                    ('large', '大一号'),
+                    ('xl', '特大'),
+                  ],
+                  selected: _font,
+                  onChanged: (v) {
+                    setState(() => _font = v);
+                    ref.read(appearancePrefsProvider.notifier).preview(font: v);
+                  },
+                ),
+                const SizedBox(height: 12),
+                // 第 4 项：动效开关改卡片行（左标题+说明，右开关）。
+                Card(
+                  child: SwitchListTile(
+                    key: const Key('settings-motion'),
+                    contentPadding:
+                        const EdgeInsets.symmetric(horizontal: 14),
+                    title: const Text('启用轻柔动效'),
+                    subtitle: Text('转场与点按的柔感动画',
+                        style: Theme.of(context)
+                            .textTheme
+                            .labelSmall
+                            ?.copyWith(color: cs.outline)),
+                    value: _motion,
                     onChanged: (v) {
-                      if (v == null) return;
-                      setState(() => _dark = v);
-                      // 夜间模式即时预览（`:1917-1923`）
-                      ref.read(appearancePrefsProvider.notifier).preview(dark: v);
+                      setState(() => _motion = v);
+                      _previewTheme();
                     },
                   ),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: DropdownButtonFormField<String>(
-                    key: const Key('settings-font'),
-                    initialValue: _font,
-                    decoration: const InputDecoration(
-                      labelText: '字号',
-                      isDense: true,
-                    ),
-                    items: const <DropdownMenuItem<String>>[
-                      DropdownMenuItem(value: 'std', child: Text('标准')),
-                      DropdownMenuItem(value: 'large', child: Text('大一号')),
-                      DropdownMenuItem(value: 'xl', child: Text('特大')),
-                    ],
-                    onChanged: (v) {
-                      if (v == null) return;
-                      setState(() => _font = v);
-                      ref.read(appearancePrefsProvider.notifier).preview(font: v);
-                    },
+                const SizedBox(height: 12),
+                // 第 5 项：说明降为页脚注脚。
+                SettingsFootnote(themeFormNote),
+                if (_themeError != null) ...[
+                  const SizedBox(height: Spacing.gap),
+                  Text(
+                    _themeError!,
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodySmall
+                        ?.copyWith(color: cs.error),
                   ),
-                ),
+                ],
               ],
             ),
-            const SizedBox(height: Spacing.gap),
-            SwitchListTile(
-              key: const Key('settings-motion'),
-              contentPadding: EdgeInsets.zero,
-              title: const Text('启用轻柔动效'),
-              value: _motion,
-              onChanged: (v) {
-                setState(() => _motion = v);
-                _previewTheme();
-              },
+          ),
+          // 第 6 项：取消/保存固定底部玻璃操作栏（共享组件 1/3 + 2/3）。
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: SettingsGlassBar(
+              cancelLabel: '取消',
+              onCancel: _themeBusy ? null : _cancelTheme,
+              saveLabel: '保存',
+              onSave: _themeBusy ? () {} : _saveTheme,
+              saveEnabled: !_themeBusy,
+              busy: _themeBusy,
             ),
-            Text(
-              themeFormNote,
-              style:
-                  Theme.of(context).textTheme.bodySmall?.copyWith(color: cs.outline),
-            ),
-            if (_themeError != null) ...[
-              const SizedBox(height: Spacing.gap),
-              Text(
-                _themeError!,
-                style:
-                    Theme.of(context).textTheme.bodySmall?.copyWith(color: cs.error),
-              ),
-            ],
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                OutlinedButton(
-                  key: const Key('settings-theme-cancel'),
-                  onPressed: _themeBusy ? null : _cancelTheme,
-                  child: const Text('取消'),
-                ),
-                const SizedBox(width: 10),
-                FilledButton(
-                  key: const Key('settings-theme-save'),
-                  onPressed: _themeBusy ? null : _saveTheme,
-                  child: _themeBusy
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Text('保存'),
-                ),
-              ],
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
+    );
+  }
+
+  // ── 主题色卡（第 2 项①：渐变卡面 + 大圆点投影 + 描边勾徽选中态） ──
+  Widget _themeSwatches(BuildContext context) {
+    return Wrap(
+      spacing: 10,
+      runSpacing: 10,
+      children: [for (final id in themeIds) _swatch(context, id)],
     );
   }
 
@@ -202,42 +207,173 @@ class _AppearancePageState extends ConsumerState<AppearancePage> {
     final seed = themeSeedColor(id, _customColor);
     return InkWell(
       key: Key('settings-theme-$id'),
-      borderRadius: BorderRadius.circular(AppRadius.sm),
+      borderRadius: BorderRadius.circular(14),
       onTap: () {
         setState(() => _theme = id);
         _previewTheme();
       },
       child: Container(
-        width: 92,
-        padding: const EdgeInsets.all(8),
+        width: 104,
+        height: 86,
+        padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
-          color: on
-              ? Theme.of(context).colorScheme.primaryContainer
-              : Theme.of(context).colorScheme.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(AppRadius.sm),
+          // 卡面：该主题 primary 低透明度渐变（由该色渐隐到透明），
+          // 禁止整卡实心填充（第 2 项①）。
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              seed.withValues(alpha: on ? 0.22 : 0.10),
+              Colors.transparent,
+            ],
+          ),
+          borderRadius: BorderRadius.circular(14),
           border: Border.all(
-            color: on
-                ? Theme.of(context).colorScheme.primary
-                : Colors.transparent,
-            width: 2,
+            // 选中态 = 该主题色描边。
+            color: on ? seed : Theme.of(context).colorScheme.outlineVariant,
+            width: on ? 2 : 1,
           ),
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
+        child: Stack(
           children: [
-            Container(
-              width: 28,
-              height: 28,
-              decoration: BoxDecoration(color: seed, shape: BoxShape.circle),
-              child: on
-                  ? const Icon(Icons.check, size: 16, color: Colors.white)
-                  : null,
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // 圆点放大 + 柔和投影。
+                Container(
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    color: seed,
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: seed.withValues(alpha: 0.45),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.labelSmall,
+                ),
+              ],
             ),
-            const SizedBox(height: 4),
-            Text(
-              label,
-              style: Theme.of(context).textTheme.labelSmall,
-              textAlign: TextAlign.center,
+            // 选中态右上角勾徽。
+            if (on)
+              Positioned(
+                right: 0,
+                top: 0,
+                child: Container(
+                  width: 20,
+                  height: 20,
+                  decoration:
+                      BoxDecoration(color: seed, shape: BoxShape.circle),
+                  child: const Icon(Icons.check,
+                      size: 13, color: Colors.white),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── 第 2 项②：实时预览卡（候选主题渲染样例气泡对 + 主按钮） ────────
+  Widget _previewCard(BuildContext context) {
+    final candidateSeed = themeSeedColor(_theme, _customColor);
+    final candidateScheme = ColorScheme.fromSeed(
+      seedColor: candidateSeed,
+      brightness: Theme.of(context).brightness,
+    );
+    return Card(
+      key: const Key('settings-theme-preview'),
+      child: Padding(
+        padding: const EdgeInsets.all(Spacing.cardPad),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('实时预览　·　当前候选主题',
+                style: Theme.of(context).textTheme.labelSmall),
+            const SizedBox(height: 10),
+            // 候选主题的隔离渲染域：气泡对 + 主按钮全部用候选配色。
+            Theme(
+              data: Theme.of(context).copyWith(colorScheme: candidateScheme),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(children: [
+                    Flexible(
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 8),
+                          constraints:
+                              const BoxConstraints(maxWidth: 220),
+                          decoration: BoxDecoration(
+                            color: candidateScheme.surfaceContainerHighest,
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          child: Text('对方的一条样例消息',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodyMedium
+                                  ?.copyWith(
+                                      color:
+                                          candidateScheme.onSurface)),
+                        ),
+                      ),
+                    ),
+                  ]),
+                  const SizedBox(height: 8),
+                  Row(children: [
+                    Flexible(
+                      child: Align(
+                        alignment: Alignment.centerRight,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 8),
+                          constraints:
+                              const BoxConstraints(maxWidth: 220),
+                          decoration: BoxDecoration(
+                            color: candidateScheme.primary,
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          child: Text('我方的一条样例消息',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodyMedium
+                                  ?.copyWith(
+                                      color:
+                                          candidateScheme.onPrimary)),
+                        ),
+                      ),
+                    ),
+                  ]),
+                  const SizedBox(height: 12),
+                  FilledButton(
+                    key: const Key('settings-theme-preview-button'),
+                    onPressed: null,
+                    style: FilledButton.styleFrom(
+                      // 主按钮柔光（Web btn-primary 同款口径）。
+                      elevation: 3,
+                      shadowColor:
+                          candidateScheme.primary.withValues(alpha: 0.35),
+                    ),
+                    child: const Text('回到我们的世界'),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
@@ -297,7 +433,9 @@ class _AppearancePageState extends ConsumerState<AppearancePage> {
         return; // 不发成功通知、不 pop、输入保留、不重试
       }
       // dark / font 只写本机，绝不进 PUT body
-      await ref.read(appearancePrefsProvider.notifier).save(dark: _dark, font: _font);
+      await ref
+          .read(appearancePrefsProvider.notifier)
+          .save(dark: _dark, font: _font);
       if (merged != null) {
         ref.read(spaceAppearanceProvider.notifier).commit(merged);
       }

@@ -101,12 +101,9 @@ class _SettingsHomePageState extends ConsumerState<SettingsHomePage> {
               emoji: '🏡',
               title: '空间信息',
               subtitle: '空间名称与相恋日期',
-              onTap: () {
-                // 沿用原机制：设标志位回首页触发 hero 编辑弹窗（弹窗本体
-                // 挂在首页 hero，双端同步写回）。
-                ref.read(spaceEditRequestedProvider.notifier).state = true;
-                context.go('/home');
-              },
+              // 2.4.1 第 1 项：弹窗机制退役（关闭弹窗会连 /settings 一起
+              // 带走掉回原 tab），改独立路由页；二级页一律 push 禁 go。
+              onTap: () => context.push('/settings/space'),
             ),
             _row(
               context,

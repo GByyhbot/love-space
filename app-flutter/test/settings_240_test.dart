@@ -1,5 +1,6 @@
 // 2.4.0 设置搬家 + 入口拆分段防回归：四独立页内容隔离、聊天背景/气泡
 // 同源护栏、顶栏齿轮入口源码护栏。数据层契约在 settings_d_test（不动）。
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -9,9 +10,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:love_space/features/settings/appearance_page.dart';
 import 'package:love_space/features/settings/cover_page.dart';
 import 'package:love_space/features/settings/links_page.dart';
-
-import 'package:dio/dio.dart';
+import 'package:love_space/features/settings/space_info_page.dart';
 import 'package:love_space/core/api/api_client.dart' as api;
+
+import 'package:dio/dio.dart'
+    show Dio, BaseOptions, Headers, ResponseBody, HttpClientAdapter, RequestOptions;
 
 class _FakeAdapter implements HttpClientAdapter {
   _FakeAdapter(this.handler);
@@ -46,10 +49,17 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets('主题与外观页：本节内容在位 + 其他节标志文案隔离', (tester) async {
+    // 2.4.1 改版后页面变长：大视口 + 滚动到底让尾部行进树。
+    tester.view.physicalSize = const Size(393, 2400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
     await _wrap(tester, const AppearancePage());
-    expect(find.text('主题配色　·　两个人共用'), findsOneWidget,
-        reason: '本节标志文案在位');
-    expect(find.text('启用轻柔动效'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 10));
+    // 2.4.1 改版：本节标志文案换为「实时预览　·　当前候选主题」。
+    expect(find.text('实时预览　·　当前候选主题'), findsOneWidget,
+        reason: '本节标志文案在位（2.4.1 实时预览卡）');
+    expect(find.byKey(const Key('settings-motion')), findsOneWidget,
+        reason: '动效卡片行在位');
     // 隔离：其他节标志文案不得出现在本页。
     expect(find.text('首页封面照片'), findsNothing, reason: '主页背景节已拆走');
     expect(find.text('看看现在哪条线路最快，也可以手动切换。'), findsNothing,
@@ -58,8 +68,13 @@ void main() {
   });
 
   testWidgets('主页背景页：本节内容在位 + 其他节标志文案隔离', (tester) async {
+    tester.view.physicalSize = const Size(393, 2400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
     await _wrap(tester, const CoverPage());
-    expect(find.text('首页封面照片'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 10));
+    // 2.4.1 改版：封面预览即 hero 真实布局（HeroPreviewCard）。
+    expect(find.byKey(const Key('hero-preview')), findsOneWidget);
     expect(find.text('选择一张照片作为我们的空间封面'), findsOneWidget);
     expect(find.text('主题配色　·　两个人共用'), findsNothing, reason: '主题节已拆走');
     expect(find.text('看看现在哪条线路最快，也可以手动切换。'), findsNothing);
@@ -81,14 +96,16 @@ void main() {
   test('🔴 同源护栏：聊天背景/气泡设置页与聊天页面板共用同一组件', () {
     final page = File('lib/features/settings/chat_wallpaper_page.dart')
         .readAsStringSync();
-    expect(page.contains('WallpaperSheet(embedded: true)'), isTrue,
+    expect(page.contains('WallpaperSheet('), isTrue,
         reason: '设置页必须内嵌 WallpaperSheet 本体（与聊天页 sheet 同一实现）');
+    expect(page.contains('embedded: true'), isTrue);
     expect(page.contains("chat_bg:"), isFalse, reason: '不得复制第二套读写实现');
     expect(page.contains("dio.put("), isFalse, reason: '不得直发 PUT');
     final bubblePage =
         File('lib/features/settings/chat_bubble_page.dart').readAsStringSync();
-    expect(bubblePage.contains('BubbleSkinSheet(embedded: true)'), isTrue,
+    expect(bubblePage.contains('BubbleSkinSheet('), isTrue,
         reason: '设置页必须内嵌 BubbleSkinSheet 本体');
+    expect(bubblePage.contains('embedded: true'), isTrue);
     expect(bubblePage.contains("chat_bubble:"), isFalse,
         reason: '不得复制第二套读写实现');
     expect(bubblePage.contains("dio.put("), isFalse, reason: '不得直发 PUT');
@@ -114,6 +131,54 @@ void main() {
     expect(widgetIdx, greaterThan(-1), reason: '齿轮用顶栏同款 WebTopIconButton');
     // 顶栏按钮区不得出现 Overlay/Positioned 包裹的独立齿轮浮层。
     expect(shell.contains('shell-settings-overlay'), isFalse);
+  });
+
+  test('🔴 2.4.1 第 1 项：空间信息保存 PUT 全量合并——name 原样带回 + 新 since 不丢字段', () async {
+    final spaceRaw = <String, dynamic>{
+      'name': '我们的小世界',
+      'since': '2020-05-20',
+      'theme': 'rose',
+      'chat_bg': 'sakura',
+      'chat_bubble': 'p1/1000.png',
+      'cover': 'old-cover-id',
+    };
+    Map<String, dynamic>? putBody;
+    final dio = Dio(BaseOptions(baseUrl: 'https://test.local'))
+      ..httpClientAdapter = _FakeAdapter((o) async {
+        if (o.method == 'PUT' && o.uri.path == '/api/space') {
+          putBody = Map<String, dynamic>.from(o.data as Map<String, dynamic>);
+          return ResponseBody.fromString(
+              jsonEncode(<String, dynamic>{...spaceRaw, 'since': '2021-01-01'}),
+              200,
+              headers: {
+                Headers.contentTypeHeader: const ['application/json']
+              });
+        }
+        return ResponseBody.fromString('{}', 200);
+      });
+    final err = await api.updateSpace(
+        dio, spaceRaw, name: '我们的小世界', since: '2021-01-01');
+    expect(err, isNull);
+    expect(putBody, isNotNull);
+    // 🔴 name 原样带回（2.3.7 输入框摘除定案：名字不许存没）。
+    expect(putBody!['name'], '我们的小世界');
+    expect(putBody!['since'], '2021-01-01', reason: '新日期落库');
+    // 全量合并：其余字段一个不丢。
+    expect(putBody!['theme'], 'rose');
+    expect(putBody!['chat_bg'], 'sakura');
+    expect(putBody!['chat_bubble'], 'p1/1000.png');
+    expect(putBody!['cover'], 'old-cover-id');
+  });
+
+  testWidgets('2.4.1 第 1 项：空间信息页冒烟——无日期时保存禁用、选日期后可用', (tester) async {
+    await _wrap(tester, const SpaceInfoPage());
+    expect(find.text('空间名称'), findsOneWidget);
+    expect(find.text('还没选择相恋日期'), findsOneWidget);
+    expect(find.byKey(const Key('space-info-save')), findsOneWidget);
+    // me==null（无登录态夹具）→ picked null → 保存禁用，防空日期误存。
+    final btn = tester.widget<FilledButton>(
+        find.byKey(const Key('space-info-save')));
+    expect(btn.onPressed, isNull, reason: 'picked==null 时保存禁用');
   });
 
   test('🔴 退役护栏：全量设置页已删，无死路由死入口', () {

@@ -21,6 +21,8 @@ import '../../core/ui/error_view.dart';
 import '../auth/auth_state.dart';
 import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
 import '../chat/voice_diag.dart';
+import '../settings/settings_widgets.dart'
+    show SettingsGlassBar, filledFieldDecoration;
 import '../settings/invite_card.dart';
 import '../../core/theme/tokens.dart';
 
@@ -331,12 +333,20 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     if (me == null) return const Scaffold(body: Center(child: CircularProgressIndicator()));
     final partner = me.users.where((u) => u.id != me.user.id).toList();
 
+    // 2.4.1 第 5 项：身份卡（大头像 + 编辑徽标 + 昵称 + 身份 chip）
+    // + 圆角填充输入 + 底部玻璃操作栏（整行保存）。
+    final roleLabel = me.user.admin ? '管理员' : '成员';
     return Scaffold(
+      backgroundColor: theme.colorScheme.surface,
       appBar: AppBar(title: const Text('账号资料')),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
+      body: Stack(
         children: [
-          // ── 头像 + 昵称 ──
+          Positioned.fill(
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(
+                  16, 12, 16, SettingsGlassBar.barReserveHeight + 12),
+              children: [
+          // ── 身份卡（头像 + 编辑徽标 + 昵称 + 身份 chip） ──
           Card(
             child: Padding(
               padding: const EdgeInsets.all(Spacing.cardPad),
@@ -357,13 +367,34 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                 ),
                 const SizedBox(height: Spacing.gap),
                 Text('点击更换头像', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.outline)),
-                const SizedBox(height: 14),
-                TextField(
-                  controller: _name,
-                  maxLength: 30,
-                  decoration: const InputDecoration(labelText: '昵称',
-                      hintText: '让 TA 一眼认出你', counterText: ''),
+                const SizedBox(height: 10),
+                // 居中昵称 + 身份 chip（@账号名 · 角色）。
+                Text(me.user.name, style: theme.textTheme.titleMedium),
+                const SizedBox(height: 6),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.surfaceContainerHighest
+                        .withValues(alpha: 0.6),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    '@${me.user.username} · $roleLabel',
+                    style: theme.textTheme.labelSmall
+                        ?.copyWith(color: theme.colorScheme.outline),
+                  ),
                 ),
+                const SizedBox(height: 14),
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text('昵称', style: theme.textTheme.labelSmall),
+                  const SizedBox(height: 6),
+                  TextField(
+                    controller: _name,
+                    maxLength: 30,
+                    decoration: filledFieldDecoration(hint: '让 TA 一眼认出你'),
+                  ),
+                ]),
               ]),
             ),
           ),
@@ -374,25 +405,25 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
               child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                 Text('修改密码', style: theme.textTheme.titleSmall),
                 const SizedBox(height: 10),
-                TextField(
-                  controller: _oldPw, obscureText: true,
-                  decoration: const InputDecoration(labelText: '原密码（修改密码时填写）'),
-                ),
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text('原密码（修改密码时填写）', style: theme.textTheme.labelSmall),
+                  const SizedBox(height: 6),
+                  TextField(
+                    controller: _oldPw, obscureText: true,
+                    decoration: filledFieldDecoration(),
+                  ),
+                ]),
                 const SizedBox(height: 10),
-                TextField(
-                  controller: _newPw, obscureText: true,
-                  decoration: const InputDecoration(labelText: '新密码（不修改请留空）',
-                      hintText: '至少 10 个字符'),
-                ),
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text('新密码（不修改请留空）', style: theme.textTheme.labelSmall),
+                  const SizedBox(height: 6),
+                  TextField(
+                    controller: _newPw, obscureText: true,
+                    decoration: filledFieldDecoration(hint: '至少 10 个字符'),
+                  ),
+                ]),
               ]),
             ),
-          ),
-          FilledButton(
-            onPressed: _busy ? null : _save,
-            child: _busy
-                ? const SizedBox(width: 18, height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                : const Text('保存'),
           ),
           if (_error != null) ...[
             const SizedBox(height: Spacing.gap),
@@ -421,7 +452,18 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
             final latest = records.isNotEmpty ? records.first : null;
             return Card(
               child: ListTile(
-                leading: const Icon(Icons.bug_report),
+                // 2.4.1 第 5 项⑤：图标收进淡彩圆角方块底座。
+                leading: Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.secondaryContainer,
+                    borderRadius: BorderRadius.circular(11),
+                  ),
+                  alignment: Alignment.center,
+                  child: Icon(Icons.bug_report,
+                      size: 20, color: theme.colorScheme.onSecondaryContainer),
+                ),
                 title: const Text('语音诊断'),
                 subtitle: latest == null
                     ? const Text('暂无失败记录')
@@ -459,6 +501,21 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
               style: theme.textTheme.bodySmall
                   ?.copyWith(color: theme.colorScheme.outline)),
           const SizedBox(height: 24),
+        ],
+      ),
+          ),
+          // 2.4.1 第 5 项③：保存移入底部玻璃操作栏（整行保存）。
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: SettingsGlassBar(
+              saveLabel: '保存',
+              onSave: _busy ? () {} : _save,
+              saveEnabled: !_busy,
+              busy: _busy,
+            ),
+          ),
         ],
       ),
     );
@@ -505,7 +562,9 @@ class _PersonLine extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Row(children: [
-      _Avatar(name: user.name, size: 44),
+      // 2.4.1 第 5 项④ BUG 修复：补传 avatarId → 有照片走 AvatarMedia
+      // （low_freq_cache 同源），无照片才回退首字母；原实现漏传恒显首字母。
+      _Avatar(name: user.name, size: 44, avatarId: user.avatar),
       const SizedBox(width: 12),
       Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text(user.name, style: theme.textTheme.titleSmall),

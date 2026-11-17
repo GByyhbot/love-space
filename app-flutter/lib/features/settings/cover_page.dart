@@ -1,8 +1,11 @@
-/// 主页背景（2.4.0 设置拆分段）：原全量 /settings 的「主页背景」节整节
-/// 搬入独立页，代码原样搬移零逻辑改动。保存链不变：uploadMedia +
-/// saveSpaceChanges(coverSpaceChanges)（全量 space 合并 PUT，绝不丢字段）；
-/// 失败行内保留 + 顶部 toast、成功顶部 toast 并清空本地待选。
-/// Web 出处 homeBgForm :1943-1956。
+/// 主页背景（2.4.1 修复包第 3 项改版；上传与保存链全不动）：
+/// ①「当前封面」徽标 + 「两个人共用这张封面」小字；
+/// ②「首页效果预览」卡——候选封面按首页 hero 真实布局渲染
+///   （HeroPreviewCard，数值与首页 2.3.8 实现逐位一致），选了新图未保存
+///   时预览先行变化；
+/// ③「选择封面照片」整行实心主按钮；
+/// ④保存移入底部玻璃操作栏（SettingsGlassBar 共享组件，单动作整行）；
+/// ⑤说明小字注脚样式（SettingsFootnote）。
 library;
 
 import 'dart:typed_data';
@@ -17,7 +20,9 @@ import '../../core/chat/chat_media.dart'
 import '../../core/theme/tokens.dart';
 import '../auth/auth_state.dart';
 import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
+import 'hero_preview_card.dart';
 import 'settings_state.dart';
+import 'settings_widgets.dart';
 
 class CoverPage extends ConsumerStatefulWidget {
   const CoverPage({super.key});
@@ -39,91 +44,123 @@ class _CoverPageState extends ConsumerState<CoverPage> {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final cover = (_knownSpace?['cover'] ?? '').toString();
-    return Scaffold(
-      appBar: AppBar(title: const Text('主页背景')),
-      body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            Text('首页封面照片', style: Theme.of(context).textTheme.labelSmall),
-            const SizedBox(height: Spacing.gap),
-            _coverPreview(context, cover),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                OutlinedButton.icon(
-                  key: const Key('settings-cover-pick'),
-                  onPressed: _coverBusy ? null : _pickCover,
-                  icon: const Icon(Icons.image_outlined),
-                  label: Text(_picked == null ? '选择封面照片' : '重新选择'),
-                ),
-                const SizedBox(width: 10),
-                FilledButton(
-                  key: const Key('settings-cover-save'),
-                  onPressed: _coverBusy || _picked == null ? null : _saveCover,
-                  child: _coverBusy
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Text('保存'),
-                ),
-              ],
-            ),
-            if (_picked != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 6),
-                child: Text(
-                  _picked!.name,
-                  style: Theme.of(context).textTheme.labelSmall,
-                ),
-              ),
-            if (_coverError != null) ...[
-              const SizedBox(height: Spacing.gap),
-              Text(
-                _coverError!,
-                style: Theme.of(context)
-                    .textTheme
-                    .bodySmall
-                    ?.copyWith(color: cs.error),
-              ),
-            ],
-            const SizedBox(height: Spacing.gap),
-            Text(
-              '换好照片保存后会直接更新首页封面；想再换，回这里重选就行。',
-              style: Theme.of(context)
-                  .textTheme
-                  .bodySmall
-                  ?.copyWith(color: cs.outline),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _coverPreview(BuildContext context, String cover) {
-    final cs = Theme.of(context).colorScheme;
-    final headers = ref.watch(mediaCookieHeadersProvider).valueOrNull;
-    final base = ref.watch(chatBaseProvider).valueOrNull;
+    final me = ref.watch(authProvider.notifier).me;
+    // 预览：已选字节优先（未保存先行变化），否则当前封面网络图，无则占位。
     final bytes = _pickedBytes;
-    Widget image;
+    final base = ref.watch(chatBaseProvider).valueOrNull;
+    final headers = ref.watch(mediaCookieHeadersProvider).valueOrNull;
+    Widget previewImage;
     if (bytes != null) {
-      image = Image.memory(bytes, fit: BoxFit.cover);
+      previewImage = Image.memory(bytes, fit: BoxFit.cover);
     } else if (cover.isNotEmpty && base != null) {
-      image = Image.network(
+      previewImage = Image.network(
         '$base/media/$cover?preview=true',
         fit: BoxFit.cover,
         headers: headers,
         errorBuilder: (_, _, _) => _coverPlaceholder(cs),
       );
     } else {
-      image = _coverPlaceholder(cs);
+      previewImage = _coverPlaceholder(cs);
     }
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(AppRadius.sm),
-      child: SizedBox(height: 120, width: double.infinity, child: image),
+    // 名字行/天数/日期取真实 me（预览数值与首页一致）。
+    final names = me == null
+        ? '…'
+        : me.users.map((u) => u.name).join(' ♥ ');
+    final since = me?.spaceSince ?? '';
+    final days = (me?.spaceSince.isNotEmpty ?? false)
+        ? DateTime.now().difference(DateTime.parse(me!.spaceSince)).inDays + 1
+        : 0;
+
+    return Scaffold(
+      backgroundColor: cs.surface,
+      appBar: AppBar(title: const Text('主页背景')),
+      body: Stack(
+        children: [
+          Positioned.fill(
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(
+                  16, 12, 16, SettingsGlassBar.barReserveHeight + 12),
+              children: [
+                // ① 封面预览 + 「当前封面」徽标 + 共用小字。
+                Stack(
+                  children: [
+                    HeroPreviewCard(
+                      names: names,
+                      days: days,
+                      since: since,
+                      coverImage: previewImage,
+                    ),
+                    if (cover.isNotEmpty && bytes == null)
+                      Positioned(
+                        right: 10,
+                        top: 10,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 9, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.35),
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: Text('当前封面',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .labelSmall
+                                  ?.copyWith(
+                                      color: Colors.white
+                                          .withValues(alpha: 0.92))),
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                const SettingsFootnote('两个人共用这张封面'),
+                const SizedBox(height: 14),
+                // ③ 整行实心主按钮。
+                FilledButton.icon(
+                  key: const Key('settings-cover-pick'),
+                  onPressed: _coverBusy ? null : _pickCover,
+                  icon: const Icon(Icons.image_outlined),
+                  label: Text(_picked == null ? '选择封面照片' : '重新选择'),
+                ),
+                if (_picked != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Text(
+                      _picked!.name,
+                      style: Theme.of(context).textTheme.labelSmall,
+                    ),
+                  ),
+                if (_coverError != null) ...[
+                  const SizedBox(height: Spacing.gap),
+                  Text(
+                    _coverError!,
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodySmall
+                        ?.copyWith(color: cs.error),
+                  ),
+                ],
+                const SizedBox(height: 12),
+                // ⑤ 说明注脚（预览卡下方）。
+                const SettingsFootnote(
+                    '换好照片保存后会直接更新首页封面；想再换，回这里重选就行。'),
+              ],
+            ),
+          ),
+          // ④ 底部玻璃操作栏（单动作 → 整行保存）。
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: SettingsGlassBar(
+              saveLabel: '保存',
+              onSave: _saveCover,
+              saveEnabled: _picked != null,
+              busy: _coverBusy,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
