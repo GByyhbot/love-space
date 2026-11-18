@@ -1,6 +1,9 @@
 name: Docker
 
-# 推 main 出 latest + sha，打 tag（v1.2.3）出对应版本号，也可手动触发
+# 二标制（定案）：任何构建（main 推送、v* 标签、手动触发）都只打
+# latest + 版本号两个标签（ghcr 与 Docker Hub 同清单）；版本号统一取
+# 「计算版本号与构建号」步骤的 version 输出。历史 sha-*/edge/小版本
+# 标签从此不再更新，保留在 registry 不做清理。也可手动触发。
 on:
   push:
     branches: [main]
@@ -64,27 +67,19 @@ jobs:
             --build-arg LOVE_APK_VERSION="${{ steps.ver.outputs.version }}" \
             --build-arg LOVE_BUILD="${{ steps.ver.outputs.build }}" .
 
+      # 二标制（定案）：不再区分 branch/tag 两套清单——任何构建都只产出
+      # latest + 版本号两个标签；版本号唯一来源是上面 ver 步骤的 version
+      # 输出（main 推送 = 最近一个 v 标签的纯版本号；打 v* = 该标签版本号），
+      # 此处禁止另算一份。sha-*/edge/小版本标签逻辑已删，历史旧标签保留
+      # 在 registry 不清理、只是从此不再前进。
       - name: 计算镜像标签
         id: tags
         run: |
           set -euo pipefail
           OWNER="${GITHUB_REPOSITORY_OWNER,,}"   # ghcr 要求全小写
-          SHORT="${GITHUB_SHA::7}"
-          TAGS="ghcr.io/$OWNER/love-space:sha-$SHORT"
-          if [ "$GITHUB_REF_TYPE" = "branch" ]; then
-            # 滚动标签：跟随 main 最新提交，供"尝鲜"用
-            TAGS="$TAGS"$'\n'"ghcr.io/$OWNER/love-space:edge"
-          fi
-          if [ "$GITHUB_REF_TYPE" = "tag" ] && [[ "$GITHUB_REF_NAME" == v* ]]; then
-            V="${GITHUB_REF_NAME#v}"          # 1.2.3
-            MINOR="${V%.*}"                    # 1.2
-            TAGS="$TAGS"$'\n'"ghcr.io/$OWNER/love-space:$V"
-            if [ "$MINOR" != "$V" ]; then
-              TAGS="$TAGS"$'\n'"ghcr.io/$OWNER/love-space:$MINOR"
-            fi
-            # latest 只在正式发版时前进，保证它永远是"最近一次发布"
-            TAGS="$TAGS"$'\n'"ghcr.io/$OWNER/love-space:latest"
-          fi
+          V="${{ steps.ver.outputs.version }}"
+          TAGS="ghcr.io/$OWNER/love-space:latest"
+          TAGS="$TAGS"$'\n'"ghcr.io/$OWNER/love-space:$V"
           echo "tags<<EOF" >> "$GITHUB_OUTPUT"
           echo "$TAGS" >> "$GITHUB_OUTPUT"
           echo "EOF" >> "$GITHUB_OUTPUT"
