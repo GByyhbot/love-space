@@ -87,7 +87,10 @@ class _FakeAdapter implements HttpClientAdapter {
     if (method == 'GET' && path == '/api/me') {
       store.meGets++;
       return _json(<String, dynamic>{
-        'user': <String, dynamic>{'id': 'u1', 'name': '我', 'username': 'u1'},
+        // 2.4.6 按人皮肤：user 带三键（sheet 初始 _pick 取 user.bubbleSkin，
+        // 空串会让「使用这个」禁用）
+        'user': <String, dynamic>{'id': 'u1', 'name': '我', 'username': 'u1',
+          'bubble_skin': 'g1/b1.png', 'bubble_fg': 'dark', 'bubble_swap': 1},
         'users': <Object>[
           <String, dynamic>{'id': 'u1', 'name': '我', 'username': 'u1'},
           <String, dynamic>{'id': 'u2', 'name': 'TA', 'username': 'u2'},
@@ -392,7 +395,7 @@ void main() {
     });
   });
 
-  // ── ④ bubble_skin_sheet PUT /api/space ────────────────────────────
+  // ── ④ bubble_skin_sheet PUT /api/profile（2.4.6 改按人端点）──────────────
   group('bubble_skin_sheet 保存 4xx 显式判', () {
     /// 弹层内 CachedNetworkImage/SkinBubble 的图片链路在测试环境无真网可达，
     /// pumpAndSettle 永不静置 —— 改用**定量 pump**（不弱化断言，只换推进方式）。
@@ -410,7 +413,7 @@ void main() {
     testWidgets('422：原文 toast、不 reload、不 pop（弹层留在原地）',
         (WidgetTester tester) async {
       final _Store store = _Store();
-      store.replies['PUT /api/space'] =
+      store.replies['PUT /api/profile'] =
           const _Reply(422, <String, dynamic>{'detail': '皮肤字段不合法'});
       final ProviderContainer c = _container(store);
       // 🔴 FakeAsync 纪律：bootstrap 内层是 Timer.run 宏任务，不能在 pump 前
@@ -438,6 +441,10 @@ void main() {
       expect(find.text('使用这个'), findsOneWidget);
       // 不 reload：/api/me 计数不变（reload 会再拉一次）
       expect(store.meGets, 1);
+      // 硬性护栏：气泡保存不发空间 PUT（mock 计数=0）
+      expect(
+          store.requests.where((r) => '${r.method} ${r.uri.path}' == 'PUT /api/space'),
+          isEmpty);
     });
 
     testWidgets('成功路径：reload + pop（显式判不破坏正常流）',

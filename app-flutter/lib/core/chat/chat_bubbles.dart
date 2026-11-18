@@ -21,13 +21,11 @@ class ChatSkin {
 
   bool get enabled => skin.isNotEmpty;
 
-  /// 左（对方气泡）图路径与右（我的气泡）图路径：
-  /// 基础图 <组>/<名>，镜像图 <组>/<名去掉.png>-r.png；swap 时对调
-  (String, String) get leftRightUrls {
-    if (!enabled) return ('', '');
-    final mirror = skin.replaceAll(RegExp(r'\.png$'), '-r.png');
-    return swap ? (mirror, skin) : (skin, mirror);
-  }
+  /// 作者消息渲染图（2.4.6 各发各的）：swap=true 用 -r 镜像图，false 用原图。
+  /// 与查看者无关——同一条消息在两台手机上渲染同一张图（验收标准「两台看到
+  /// 的一致」）；swap 是作者对「自己的气泡用哪张图」的偏好（yang 拍板按人三键）。
+  String get authorMessageUrl =>
+      swap ? skin.replaceAll(RegExp(r'\.png$'), '-r.png') : skin;
 
   ChatSkin copyWith({String? skin, String? fg, bool? swap}) => ChatSkin(
         skin: skin ?? this.skin,
@@ -40,12 +38,22 @@ class ChatSkin {
         fg: (space['chat_bubble_fg'] ?? 'dark').toString(),
         swap: space['chat_bubble_swap'] != false,
       );
-}
 
-/// PUT /api/space 全量覆盖 payload：spaceRaw 原样带回 + 皮肤三键
-Map<String, dynamic> applyChatSkinPayload(Map<String, dynamic> spaceRaw,
-    {required String skin, required String fg, required bool swap}) {
-  return {...spaceRaw, 'chat_bubble': skin, 'chat_bubble_fg': fg, 'chat_bubble_swap': swap};
+  /// 2.4.6 气泡各发各的（作者原则，纯函数三态可单测）：
+  /// 每条消息的气泡皮肤 = 该消息作者的按人皮肤；作者未设置（skin 空）→
+  /// 回退现行空间级选择；空间级也没有 → 默认皮肤。
+  /// fg/swap 同样按人优先：作者未设对应键则回退空间级（yang 拍板「按人三键」）。
+  /// [skin] 作者 bubbleSkin；[fg] 作者 bubbleFg（''=未设）；[swap] 作者
+  /// bubbleSwap（null=未设）；[fallback] 空间级 ChatSkin（fromSpace）。
+  static ChatSkin fromAuthor(
+      {String skin = '', String fg = '', bool? swap, required ChatSkin fallback}) {
+    if (skin.isEmpty) return fallback; // 作者未设 → 空间级回退（可能仍是默认）
+    return ChatSkin(
+      skin: skin,
+      fg: fg.isEmpty ? fallback.fg : fg,
+      swap: swap ?? fallback.swap,
+    );
+  }
 }
 
 /// 分批渲染页大小（对齐 Web BP_PAGE=90）

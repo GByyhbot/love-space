@@ -1,7 +1,10 @@
-/// 气泡皮肤弹层（段三 · Step 9，对齐 Web bubblePicker）：
+/// 气泡皮肤弹层（段三 · Step 9，对齐 Web bubblePicker；2.4.6 改按人）：
 /// GET /api/bubbles 分组 tab（第 N 组）+ 网格分批渲染（BP_PAGE=90，滚到底续载）
-/// + 预览行（与实际气泡相同的左右规则）+ 字色深/浅 + 左右互换 + 恢复默认。
-/// 落库 PUT /api/space 的 chat_bubble/chat_bubble_fg/chat_bubble_swap 三键。
+/// + 预览行（左右两侧各自实际皮肤）+ 字色深/浅 + 作者互换 + 恢复默认。
+/// 保存走按人端点 PUT /api/profile 的 bubble_skin/bubble_fg/bubble_swap
+/// 三键（yang 2026-11-18 定案「各发各的」+ AskUserQuestion 拍板按人三键）——
+/// 只换你发出的气泡，对方的由对方设置；硬性护栏：不得再走 PUT /api/space
+/// 写空间字段（空间级 chat_bubble* 仅作渲染回退基底与 Web 数据源）。
 /// 文案对照 Web：字色「气泡图有深有浅，按这张图选」；互换「气泡的装饰朝哪边，
 /// 看着别扭就勾一下」；空素材「服务器上还没有气泡素材…」；计数「共 N 张 · 这一组 N 张」。
 library;
@@ -60,10 +63,14 @@ class _BubbleSkinSheetState extends ConsumerState<BubbleSkinSheet> {
   void initState() {
     super.initState();
     final me = ref.read(authProvider.notifier).me;
-    final skin = ChatSkin.fromSpace(me?.spaceRaw ?? const {});
-    _pick = skin.skin;
-    _fg = skin.fg;
-    _swap = skin.swap;
+    // 2.4.6 各发各的：面板读写的是「我的」按人皮肤三键（/api/me 的
+    // me.user.bubble*）；空间级 chat_bubble* 只作渲染回退基底，不再从
+    // 这里写入。fg/swap 初始值：按人未设时回退空间级现值。
+    final spaceSkin = ChatSkin.fromSpace(me?.spaceRaw ?? const {});
+    final user = me?.user;
+    _pick = user?.bubbleSkin ?? '';
+    _fg = (user == null || user.bubbleFg.isEmpty) ? spaceSkin.fg : user.bubbleFg;
+    _swap = user?.bubbleSwap ?? spaceSkin.swap;
     _pack = _pick.split('/').first;
     _gridController.addListener(_onGridScroll);
     _load();
@@ -119,16 +126,28 @@ class _BubbleSkinSheetState extends ConsumerState<BubbleSkinSheet> {
     if (_gridController.hasClients) _gridController.jumpTo(0);
   }
 
-  Future<void> _save(ChatSkin skin) async {
+  /// 2.4.6 各发各的：保存走按人端点 PUT /api/profile（服务端强制只能改
+  /// 自己，X-Love-Space: 1 由 dio 拦截器统一附加）；name/avatar 必填取现值。
+  /// [clear]=true：bubble_skin 传空串，服务端把三键整体清空（恢复未设置，
+  /// 渲染回退空间级）；硬性护栏：不得再走 PUT /api/space 写空间字段。
+  Future<void> _save(ChatSkin skin, {bool clear = false}) async {
     if (_saving) return;
     final me = ref.read(authProvider.notifier).me;
     if (me == null) return;
     setState(() => _saving = true);
     try {
       final dio = await ref.read(dioProvider.future);
-      final payload =
-          applyChatSkinPayload(me.spaceRaw, skin: skin.skin, fg: skin.fg, swap: skin.swap);
-      final r = await dio.put('/api/space', data: payload);
+      final r = await dio.put('/api/profile', data: {
+        'name': me.user.name,
+        'avatar': me.user.avatar,
+        ...(clear
+            ? {'bubble_skin': ''}
+            : {
+                'bubble_skin': skin.skin,
+                'bubble_fg': skin.fg,
+                'bubble_swap': skin.swap,
+              }),
+      });
       // 段 A：validateAppStatus 放行 4xx——失败原文呈现，不 reload、不 pop
       // （照 wallpaper_sheet._save 同款结构，只补显式判）
       final err = writeResponseError(r);
@@ -166,6 +185,10 @@ class _BubbleSkinSheetState extends ConsumerState<BubbleSkinSheet> {
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text('聊天气泡', style: theme.textTheme.titleMedium),
+              // 2.4.6 各发各的：点明写的是「我的」按人皮肤
+              Text('只换你发出的气泡，对方的由对方设置',
+                  style: theme.textTheme.bodySmall
+                      ?.copyWith(color: theme.colorScheme.outline)),
               if (_groups.isNotEmpty)
                 Text('共 $total 张 · 这一组 ${_currentGroup?.count ?? 0} 张',
                     style: theme.textTheme.bodySmall
@@ -245,7 +268,7 @@ class _BubbleSkinSheetState extends ConsumerState<BubbleSkinSheet> {
                 child: OutlinedButton(
                   onPressed: _saving
                       ? null
-                      : () => _save(const ChatSkin()), // 恢复默认（不用皮肤）
+                      : () => _save(const ChatSkin(), clear: true), // 恢复未设置（回退空间级）
                   child: const Text('不用皮肤'),
                 ),
               ),
@@ -323,45 +346,76 @@ class _BubbleSkinSheetState extends ConsumerState<BubbleSkinSheet> {
     );
   }
 
-  /// 预览行：与实际气泡相同的左右规则（左=对方用 left 图，右=我用 right 图，
-  /// ChatSkin.leftRightUrls 已按 swap 对调），字色按 fg
+  /// 预览行（2.4.6 各发各的）：与实际气泡同规则——左=对方消息图（对方的
+  /// 实际皮肤：按人→空间回退，作者 swap 定原图/镜像），右=我方消息图（所选
+  /// 皮肤按作者 swap）；任一侧未启用皮肤 → 默认气泡占位，保证「预览=实际」。
   Widget _previewRow(ThemeData theme, String? base) {
-    if (base == null || _pick.isEmpty) {
+    final me = ref.read(authProvider.notifier).me;
+    final spaceSkin = ChatSkin.fromSpace(me?.spaceRaw ?? const {});
+    final partner =
+        me?.users.where((u) => u.id != me.user.id).firstOrNull;
+    final peerSkin = partner == null
+        ? spaceSkin
+        : ChatSkin.fromAuthor(
+            skin: partner.bubbleSkin,
+            fg: partner.bubbleFg,
+            swap: partner.bubbleSwap,
+            fallback: spaceSkin);
+    final pickSkin = ChatSkin(skin: _pick, fg: _fg, swap: _swap);
+    if (base == null || (!pickSkin.enabled && !peerSkin.enabled)) {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 10),
         child: Center(child: Text('未选择皮肤（使用默认气泡）',
             style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.outline))),
       );
     }
-    final skin = ChatSkin(skin: _pick, fg: _fg, swap: _swap);
-    final (left, right) = skin.leftRightUrls;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Row(children: [
-        Expanded(child: _skinBubble(theme, base, left, mine: false)),
+        Expanded(child: _skinBubble(
+            theme, base, peerSkin,
+            label: peerSkin.enabled ? '这是对方说的' : '对方未设置（默认气泡）')),
         const SizedBox(width: 8),
-        Expanded(child: _skinBubble(theme, base, right, mine: true)),
+        Expanded(child: _skinBubble(
+            theme, base, pickSkin, label: '我们的小气泡')),
       ]),
     );
   }
 
-  Widget _skinBubble(ThemeData theme, String base, String packName,
-      {required bool mine}) {
+  Widget _skinBubble(ThemeData theme, String base, ChatSkin skin,
+      {required String label}) {
     // 预览与实际气泡共用 SkinBubble：同一 NinePatch painter（42 源角→16 目标角）、
     // 同一 CSS 盒模型内边距（padding 3/7 + border 16）、同一字色契约，
     // 保证「预览=实际」。内容高 24 + 上下各 19 → 预览总高 62，与单行真气泡接近。
-    // mine 侧 url 已是服务器 -r 镜像图。
+    // 图 url 用 authorMessageUrl（作者消息渲染图，与聊天页行级同源）。
+    // base 由调用方空判后传入（非空类型）；皮肤未启用走默认占位。
+    if (!skin.enabled) {
+      // 默认气泡占位（与聊天页默认态同款：圆角灰底 + 常规字色）
+      return Container(
+        height: 62,
+        alignment: Alignment.center,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Text(label,
+            maxLines: 2, textAlign: TextAlign.center,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.bodySmall),
+      );
+    }
     return SkinBubble(
-      url: bubbleSkinUrl(base, packName),
-      fgLight: _fg == 'light',
+      url: bubbleSkinUrl(base, skin.authorMessageUrl),
+      fgLight: skin.fg == 'light',
       child: SizedBox(
         height: 24,
         child: Align(
           alignment: Alignment.center,
-          child: Text(mine ? '我们的小气泡' : '这是对方说的',
+          child: Text(label,
               maxLines: 1, overflow: TextOverflow.ellipsis,
               style: skinTextStyle(theme.textTheme.bodySmall,
-                  fgLight: _fg == 'light')),
+                  fgLight: skin.fg == 'light')),
         ),
       ),
     );

@@ -220,13 +220,37 @@ void main() {
       expect(nextBubbleVisible(2000, 2000), 2000); // 已到底不再增长
     });
 
-    test('ChatSkin 左右图与 swap', () {
-      const skin = ChatSkin(skin: 'p1/abc.png', fg: 'dark', swap: false);
-      expect(skin.leftRightUrls, ('p1/abc.png', 'p1/abc-r.png'));
+    test('ChatSkin 作者消息图与按人回退链（2.4.6 各发各的）', () {
+      // 作者消息图：swap=true 用 -r 镜像，false 用原图（与查看者无关，
+      // 同一条消息两台手机渲染同一张图）
+      const plain = ChatSkin(skin: 'p1/abc.png', fg: 'dark', swap: false);
+      expect(plain.authorMessageUrl, 'p1/abc.png');
       const swapped = ChatSkin(skin: 'p1/abc.png', fg: 'light', swap: true);
-      expect(swapped.leftRightUrls, ('p1/abc-r.png', 'p1/abc.png'));
-      expect(applyChatSkinPayload({'name': 'n'}, skin: '', fg: 'dark', swap: true),
-          {'name': 'n', 'chat_bubble': '', 'chat_bubble_fg': 'dark', 'chat_bubble_swap': true});
+      expect(swapped.authorMessageUrl, 'p1/abc-r.png');
+      // 回退链三态：双方都设→各用各的；作者未设→空间级回退；都未设→默认
+      // （ChatSkin 无 == 逐字段断言）
+      const space = ChatSkin(skin: 'p9/space.png', fg: 'dark', swap: true);
+      final mine = ChatSkin.fromAuthor(
+          skin: 'p1/mine.png', fg: 'light', swap: false, fallback: space);
+      expect(mine.skin, 'p1/mine.png');
+      expect(mine.fg, 'light');
+      expect(mine.swap, isFalse);
+      // 作者未设 → 原样返回空间级（同一实例）
+      expect(
+          identical(
+              ChatSkin.fromAuthor(skin: '', fg: '', swap: null, fallback: space),
+              space),
+          isTrue);
+      // 空间级也没有 → 默认（skin 空）
+      final dflt = ChatSkin.fromAuthor(
+          skin: '', fg: '', swap: null, fallback: const ChatSkin());
+      expect(dflt.skin, '');
+      expect(dflt.enabled, isFalse);
+      // 作者设了皮肤但 fg/swap 未设 → 只皮肤按人，字色互换回退空间级
+      final half = ChatSkin.fromAuthor(skin: 'p2/x.png', fallback: space);
+      expect(half.skin, 'p2/x.png');
+      expect(half.fg, 'dark');
+      expect(half.swap, isTrue);
     });
   });
 

@@ -17,12 +17,27 @@ import '../settings/settings_state.dart' show spaceAppearanceProvider;
 enum AuthPhase { checking, out, authed }
 
 class SpaceUser {
-  const SpaceUser({required this.id, required this.name, required this.username, this.avatar = '', this.admin = false});
+  const SpaceUser({
+    required this.id,
+    required this.name,
+    required this.username,
+    this.avatar = '',
+    this.admin = false,
+    this.bubbleSkin = '',
+    this.bubbleFg = '',
+    this.bubbleSwap,
+  });
   final String id;
   final String name;
   final String username;
   final String avatar;
   final bool admin;
+  /// 2.4.6 气泡各发各的：按人皮肤三键（/api/me 成员载荷下发，main.py
+  /// public_user）。''/null=未设置，渲染回退空间级（回退链见
+  /// ChatSkin.fromAuthor）；旧后端不下发这些键 → fromJson 容错取缺省。
+  final String bubbleSkin;
+  final String bubbleFg;
+  final bool? bubbleSwap;
 
   factory SpaceUser.fromJson(Map<String, dynamic> j) => SpaceUser(
         id: (j['id'] ?? '').toString(),
@@ -30,6 +45,11 @@ class SpaceUser {
         username: (j['username'] ?? '').toString(),
         avatar: (j['avatar'] ?? '').toString(),
         admin: j['admin'] == 1 || j['admin'] == true,
+        bubbleSkin: (j['bubble_skin'] ?? '').toString(),
+        bubbleFg: (j['bubble_fg'] ?? '').toString(),
+        bubbleSwap: j['bubble_swap'] == null
+            ? null
+            : (j['bubble_swap'] == 1 || j['bubble_swap'] == true),
       );
 }
 

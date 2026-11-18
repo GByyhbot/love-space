@@ -274,7 +274,22 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
     }
     final partner = me.users.where((u) => u.id != me.user.id).firstOrNull;
     final wp = chatBgOf(me.spaceRaw, me.user.id);
-    final skin = ChatSkin.fromSpace(me.spaceRaw);
+    // 2.4.6 气泡各发各的（作者原则）：每条消息的气泡皮肤 = 该消息作者的
+    // 按人皮肤（ChatSkin.fromAuthor 回退链：按人→空间级→默认）。同一页两份：
+    // 我发的用我的，对方发的用对方的（对方未加入时全部走空间级回退）。
+    final spaceSkin = ChatSkin.fromSpace(me.spaceRaw);
+    final mySkin = ChatSkin.fromAuthor(
+        skin: me.user.bubbleSkin,
+        fg: me.user.bubbleFg,
+        swap: me.user.bubbleSwap,
+        fallback: spaceSkin);
+    final peerSkin = partner == null
+        ? spaceSkin
+        : ChatSkin.fromAuthor(
+            skin: partner.bubbleSkin,
+            fg: partner.bubbleFg,
+            swap: partner.bubbleSwap,
+            fallback: spaceSkin);
     final immersive = wp.isPhoto;
     // 背景层固定用完整视口高度：Scaffold 在键盘弹出时会压缩 body，
     // 若背景用 Positioned.fill 会跟着收缩并被 BoxFit.cover 重新裁剪，
@@ -365,7 +380,7 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
         Column(children: [
           if (_searchOpen) _buildSearchBar(immersive),
           _buildPinnedBar(chat, immersive),
-          Expanded(child: _buildList(context, me, chat, skin, immersive)),
+          Expanded(child: _buildList(context, me, chat, mySkin, peerSkin, immersive)),
           // 录音态把输入栏整体滑出隐藏（对齐微信：录音时底栏消失，
           // 只剩全屏遮罩上的弧形区）；手势已开始，move/up 仍由原
           // GestureDetector 接收，隐藏不中断录音。高度保留，列表不跳动。
@@ -528,7 +543,7 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
   }
 
   Widget _buildList(BuildContext context, MeData me, ChatState chat,
-      ChatSkin skin, bool immersive) {
+      ChatSkin mySkin, ChatSkin peerSkin, bool immersive) {
     final q = _searchCtrl.text.trim();
     final rows = q.isEmpty
         ? chat.rows
@@ -605,7 +620,7 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
                       me: me,
                       record: record,
                       mine: mine,
-                      skin: skin,
+                      skin: mine ? mySkin : peerSkin,
                       immersive: immersive,
                       pressed: _pressedId == record.id,
                       flashTick: _flashId == record.id ? _flashTick : 0,
@@ -792,13 +807,14 @@ class _BubbleRow extends ConsumerWidget {
     }
 
     // 皮肤九宫格（对齐 Web border-image slice 42 fill / width 16px）：
-    // 左=对方图，右=我的图；swap 由 ChatSkin.leftRightUrls 对调。
+    // 2.4.6 各发各的：skin 已按作者解析（build 里 mine ? mySkin : peerSkin），
+    // 作者消息图 = 作者 swap 决定的 authorMessageUrl（与查看者无关，
+    // 两台手机同一条消息渲染同一张图）。
     // 渲染走 SkinBubble 自绘九宫格：Flutter 的 centerSlice 没有 border-image-width
     // 「42px 源角 → 16px 目标角」的缩放语义，角饰会按原像素绘制而比例失调
     //（皮肤真机取证根因）；SkinBubble 内部按 url 走低频缓存 + Cookie 头。
     final useSkin = skin.enabled && base != null;
-    final (leftSkin, rightSkin) = skin.leftRightUrls;
-    final skinName = mine ? rightSkin : leftSkin;
+    final skinName = skin.authorMessageUrl;
     final lightText = skin.fg == 'light';
 
     // 歌卡 / 位置卡：整条卡片渲染（对齐 Web songCard/locCard 分支）
