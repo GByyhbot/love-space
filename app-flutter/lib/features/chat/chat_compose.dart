@@ -32,6 +32,7 @@ import '../../core/chat/chat_state.dart';
 import '../../core/ui/selection_sheet.dart';
 import '../auth/auth_state.dart';
 import 'album_picker_sheet.dart';
+import 'bubble_skin_sheet.dart' show showBubbleSkinSheet;
 import 'chat_toast.dart';
 import 'input_slots.dart';
 import 'media_bubble_widgets.dart';
@@ -538,9 +539,9 @@ class _ChatComposeState extends ConsumerState<ChatCompose>
       case 'camera': // 拍摄（对齐 Web chat-shot：拍照）
         _pickFunction();
         _pickCamera();
-      case 'voice': // 语音改为长按手势，面板入口只做引导
+      case 'bubble': // 聊天气泡（原语音位，2.4.4 第 5 项置换：原顶栏气泡图标同组件同数据源）
         _pickFunction();
-        _snack('长按输入框旁的麦克风录音，松开发送；上滑可取消或转文字');
+        showBubbleSkinSheet(context);
       case 'sticker-panel': // 表情 → 切到贴纸坞（同槽位互换）
         _toggleSticker();
       case 'chat-locate': // 位置（段三：定位+发送）
@@ -779,6 +780,53 @@ class _ChatComposeState extends ConsumerState<ChatCompose>
 
 // ── ⊕功能面板（16 格对齐 Web fnPanel）────────────────────────────────
 
+/// ── 面板悬浮面（2.4.4 第 1 项）────────────────────────────────────────
+/// 工具面板与表情面板共用的容器单一事实源：左右 10 / 底 10 / 顶 4 边距、
+/// 圆角 26、chatChromeColor 底——与输入栏胶囊同 margin 同圆角。改这里
+/// 一处两个面板同步生效（护栏测试钉死 kChatPanelPadding/kChatPanelRadius）。
+const EdgeInsets kChatPanelPadding = EdgeInsets.fromLTRB(10, 4, 10, 10);
+const double kChatPanelRadius = 26;
+
+class _PanelSurface extends StatelessWidget {
+  const _PanelSurface({
+    required this.height,
+    required this.immersive,
+    required this.dark,
+    required this.surfaceKey,
+    required this.child,
+    this.contentPadding = EdgeInsets.zero,
+  });
+
+  final double height;
+  final bool immersive;
+  final bool dark;
+  final Key surfaceKey;
+  final EdgeInsets contentPadding;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return SizedBox(
+      height: height,
+      child: Padding(
+        padding: kChatPanelPadding,
+        child: Container(
+          key: surfaceKey,
+          width: double.infinity,
+          decoration: BoxDecoration(
+            color: chatChromeColor(theme, immersive: immersive, dark: dark),
+            borderRadius: BorderRadius.circular(kChatPanelRadius),
+          ),
+          padding: contentPadding,
+          child: child,
+        ),
+      ),
+    );
+  }
+}
+
+/// ⊕工具面板（悬浮胶囊：用户定版与输入框同宽同圆角，浮在底部）。
 class _FnPanel extends StatelessWidget {
   const _FnPanel(
       {required this.height,
@@ -793,7 +841,7 @@ class _FnPanel extends StatelessWidget {
   static const List<(String, IconData, String)> tiles = [
     ('media', Icons.photo_rounded, '相册'),
     ('camera', Icons.photo_camera_rounded, '拍摄'),
-    ('voice', Icons.mic_rounded, '语音'),
+    ('bubble', Icons.chat_bubble_rounded, '聊天气泡'),
     ('sticker-panel', Icons.emoji_emotions_rounded, '表情'),
     ('chat-locate', Icons.location_on_rounded, '位置'),
     ('chat-song', Icons.music_note_rounded, '音乐'),
@@ -811,39 +859,31 @@ class _FnPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final onDark = chromeIsDark(dark, immersive);
-    // 悬浮胶囊（用户定版：与输入框同宽同圆角，浮在底部；与输入栏同 margin）。
+    // 悬浮胶囊（与输入框同宽同圆角，浮在底部；容器与表情面板共用 _PanelSurface）。
     // 固定 4×4 布局：Column+Row 均分，不用 GridView——网格天然可滚动，
     // 真机上内容不满一屏也能拖动（用户反馈的「上下滑动一点点」根因）。
-    return SizedBox(
+    return _PanelSurface(
       height: height,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(10, 4, 10, 10),
-        child: Container(
-          width: double.infinity,
-          decoration: BoxDecoration(
-            color: chatChromeColor(theme, immersive: immersive, dark: dark),
-            borderRadius: BorderRadius.circular(26),
+      immersive: immersive,
+      dark: dark,
+      surfaceKey: const Key('fn-panel-surface'),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+      child: Column(children: [
+        for (var row = 0; row < 4; row++)
+          Expanded(
+            child: Row(children: [
+              for (var col = 0; col < 4; col++)
+                Expanded(
+                  child: _FnCell(
+                    tile: tiles[row * 4 + col],
+                    onDark: onDark,
+                    onTap: () => onAction(tiles[row * 4 + col].$1),
+                  ),
+                ),
+            ]),
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-          child: Column(children: [
-            for (var row = 0; row < 4; row++)
-              Expanded(
-                child: Row(children: [
-                  for (var col = 0; col < 4; col++)
-                    Expanded(
-                      child: _FnCell(
-                        tile: tiles[row * 4 + col],
-                        onDark: onDark,
-                        onTap: () => onAction(tiles[row * 4 + col].$1),
-                      ),
-                    ),
-                ]),
-              ),
-          ]),
-        ),
-      ),
+      ]),
     );
   }
 }
@@ -918,9 +958,11 @@ class _StickerDock extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final onDark = chromeIsDark(dark, immersive);
-    return Container(
+    return _PanelSurface(
       height: height,
-      color: chatChromeColor(theme, immersive: immersive, dark: dark),
+      immersive: immersive,
+      dark: dark,
+      surfaceKey: const Key('sticker-panel-surface'),
       child: Column(children: [
         // tabs（对齐 Web renderStickerTabs 顺序与文案）
         SizedBox(

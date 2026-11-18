@@ -23,7 +23,6 @@ import '../../core/chat/chat_wallpaper.dart';
 import '../../core/sse/sse_client.dart';
 import '../auth/auth_state.dart';
 import '../timeline/composer_sheet.dart' show showComposerSheet;
-import 'bubble_skin_sheet.dart';
 import 'chat_compose.dart';
 import 'chat_toast.dart';
 import 'chat_wallpaper_frame.dart';
@@ -322,21 +321,9 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
               ],
             ),
           ),
-          IconButton(
-            tooltip: '聊天气泡',
-            onPressed: () => showBubbleSkinSheet(context),
-            icon: const Icon(Icons.format_paint_rounded),
-          ),
-          IconButton(
-            tooltip: '聊天背景',
-            onPressed: () => showWallpaperSheet(context),
-            icon: const Icon(Icons.wallpaper_rounded),
-          ),
-          IconButton(
-            tooltip: '搜索',
-            onPressed: () => setState(() { _searchOpen = true; _searchCtrl.clear(); }),
-            icon: const Icon(Icons.search_rounded),
-          ),
+          // 2.4.4 第 5 项：顶栏精简——删除「聊天气泡/聊天背景/搜索」三图标，
+          // 只保留返回键 + 对方头像与名字/副标题；入口收进 ⊕工具面板
+          // （聊天气泡=原语音位，聊天背景/搜消息面板内本就有）。
           const SizedBox(width: 4),
         ]),
       ),
