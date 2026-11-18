@@ -1032,6 +1032,35 @@ class _StickerDock extends ConsumerWidget {
   }
 
   Widget _packGrid(BuildContext context, WidgetRef ref, StickerPack pack) {
+    // 2.4.4 本地包（大表情/梗图）：资产打包进 App，面板离线秒开，无需 base
+    if (pack.local) {
+      return GridView.builder(
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 5),
+        padding: const EdgeInsets.all(8),
+        itemCount: pack.count,
+        itemBuilder: (context, i) {
+          final path = '/static/stickers/${pack.dir}/$i.${pack.ext}';
+          return InkWell(
+            borderRadius: BorderRadius.circular(10),
+            onTap: () {
+              onPickFunction(); // 发送即收起贴纸坞（对齐 Web dock.hidden=true）
+              ref
+                  .read(chatControllerProvider.notifier)
+                  .sendSticker(path); // 服务端相对路径（资产双落位）
+            },
+            child: Padding(
+              padding: const EdgeInsets.all(3),
+              child: Image.asset(
+                'assets/stickers/${pack.dir}/$i.${pack.ext}',
+                fit: BoxFit.contain,
+                errorBuilder: (_, _, _) => const SizedBox(),
+              ),
+            ),
+          );
+        },
+      );
+    }
     final base = ref.watch(chatBaseProvider).valueOrNull;
     if (base == null) {
       return const Center(child: CircularProgressIndicator());

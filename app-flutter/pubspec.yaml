@@ -103,6 +103,13 @@ dev_dependencies:
 # The following section is specific to Flutter packages.
 flutter:
 
+  # 2.4.4 第 2 项：内置贴纸包 A「大表情」（OpenMoji CC BY-SA 4.0）/
+  # 包 B「梗图」（ChineseBQB 公开合集），面板离线秒开；发送走服务端
+  # /static/stickers/<dir>/（双落位，见 assets/stickers/README.md）
+  assets:
+    - assets/stickers/bigmoji/
+    - assets/stickers/memes/
+
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in
   # the material Icons class.
