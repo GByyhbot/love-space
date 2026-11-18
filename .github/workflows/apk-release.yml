@@ -49,6 +49,10 @@ jobs:
           printf '%s' "$KEYSTORE_B64" | base64 --decode > "$HOME/.android/debug.keystore"
           chmod 600 "$HOME/.android/debug.keystore"
           keytool -list -keystore "$HOME/.android/debug.keystore" -storepass android > /dev/null
+          # 2.4.3 第 0 点诊断 a：打印还原钥匙的证书指纹（只打指纹，不打内容）
+          echo "── 诊断 a：还原的 debug.keystore 证书指纹 ──"
+          keytool -list -v -keystore "$HOME/.android/debug.keystore" -storepass android \
+            | grep -E "SHA1:|SHA256:" || true
 
       - name: Read version
         id: ver
@@ -61,6 +65,14 @@ jobs:
       - run: flutter pub get
 
       - run: flutter build apk --release --split-per-abi
+
+      # 2.4.3 第 0 点诊断 b：打印产物实际签名者证书指纹（与 a 对账）
+      - name: Verify signature (print certs)
+        run: |
+          APK="build/app/outputs/flutter-apk/app-arm64-v8a-release.apk"
+          BT="$(ls -d "$ANDROID_HOME/build-tools/"*/ | sort -V | tail -1 | tr -d '\n')"
+          echo "── 诊断 b：产物 apksigner 证书指纹（build-tools: $BT）──"
+          "$BT/apksigner" verify --print-certs "$APK"
 
       - uses: actions/upload-artifact@v4
         with:
