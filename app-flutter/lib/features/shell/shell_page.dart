@@ -12,6 +12,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import '../auth/auth_state.dart';
 import '../../core/chat/chat_state.dart';
@@ -25,6 +26,8 @@ import '../timeline/photo_upload_sheet.dart';
 import 'composer_drawer.dart';
 import '../timeline/timeline_page.dart';
 import '../together/together_page.dart';
+import '../update/update_service.dart'
+    show autoCheckSilently, purgeApkCache;
 import 'web_chrome.dart';
 
 class ShellPage extends ConsumerStatefulWidget {
@@ -42,6 +45,18 @@ class _ShellPageState extends ConsumerState<ShellPage> {
     super.initState();
     // 认证后启动 SSE（脚手架打底；聊天页阶段直接复用 events 流）
     Future.microtask(() => ref.read(sseProvider.notifier).start());
+    // 2.4.3 提交三：冷启动自动检查更新（可观测链：6h 节流+静默+不冒泡）。
+    // 必须异步且隔离（不进首页构建路径）；先清历史安装包再检查。
+    Future.microtask(() async {
+      try {
+        await purgeApkCache();
+        final info = await PackageInfo.fromPlatform();
+        if (!mounted) return;
+        await autoCheckSilently(ref, context, info.version);
+      } catch (_) {
+        // 自动检查异常绝不影响启动/首页
+      }
+    });
   }
 
   @override

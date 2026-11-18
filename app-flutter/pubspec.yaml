@@ -70,6 +70,9 @@ dependencies:
   flutter_cache_manager: ^3.4.1
   # App 内展示「实际安装包」版本（versionName + buildNumber，取自 PackageInfo，不写死）
   package_info_plus: ^8.0.0
+  # 2.4.3 提交三：在线更新——SHA-256 验签（crypto）+ 系统安装器调起（open_filex，FileProvider）
+  crypto: ^3.0.3
+  open_filex: ^4.5.0
   shared_preferences: 2.3.0
 
 # 上游错位修正：record 5.2.1 允许 platform_interface 升到 1.6.0，但其约束的
@@ -84,6 +87,8 @@ dev_dependencies:
   file: ^7.0.1
   flutter_test:
     sdk: flutter
+  # 更新单测 mock 文档目录用（path_provider 的平台接口层，仅测试期引用）
+  path_provider_platform_interface: ^2.1.3
 
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is

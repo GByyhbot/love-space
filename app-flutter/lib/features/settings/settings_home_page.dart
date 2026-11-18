@@ -11,6 +11,8 @@
 /// 页头文案「设置 / 管理空间、账号和数据。」（沿用原页副题逐字）。
 library;
 
+import 'dart:io' show Platform;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -21,6 +23,7 @@ import '../../core/api/api_client.dart' as api;
 import '../../core/config.dart';
 import '../../core/theme/tokens.dart';
 import '../chat/chat_toast.dart' show chatToastProvider;
+import '../update/update_service.dart' show manualCheck;
 import 'settings_state.dart';
 
 class SettingsHomePage extends ConsumerStatefulWidget {
@@ -36,6 +39,7 @@ class _SettingsHomePageState extends ConsumerState<SettingsHomePage> {
   String _pkgVersion = '';
   String _pkgBuild = '';
   String? _updateError;
+  bool _checking = false;
 
   @override
   void initState() {
@@ -76,6 +80,31 @@ class _SettingsHomePageState extends ConsumerState<SettingsHomePage> {
   Future<void> _copyLink(String link) async {
     await Clipboard.setData(ClipboardData(text: link));
     ref.read(chatToastProvider.notifier).show('下载链接已复制，可以直接发给对方');
+  }
+
+  /// 手动检查更新（2.4.3 提交三）：接 GitHub Releases 新数据源，
+  /// 不受节流、有明确反馈——有新版弹更新 sheet；无新版顶部 toast
+  /// 「已是最新版本」；失败 toast 原因简述。
+  Future<void> _manualUpdateCheck() async {
+    if (_checking) return;
+    if (Platform.isIOS) return; // iOS 不检查（平台判断收口）
+    setState(() => _checking = true);
+    String status;
+    try {
+      status = await manualCheck(ref, context, _pkgVersion);
+    } catch (_) {
+      status = 'error';
+    }
+    if (!mounted) return;
+    setState(() => _checking = false);
+    if (status == 'up-to-date') {
+      ref.read(chatToastProvider.notifier).show('已是最新版本');
+    } else if (status == 'error') {
+      ref
+          .read(chatToastProvider.notifier)
+          .show('检查更新失败：请稍后再试（网络原因）');
+    }
+    // has-update 已弹层，无需 toast
   }
 
   @override
@@ -227,12 +256,9 @@ class _SettingsHomePageState extends ConsumerState<SettingsHomePage> {
   Widget _aboutCard(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final s = _status;
-    final updateTarget = s?.apkVersion ?? '';
-    final notes = s?.apkNotes ?? '';
-    final hasUpdate = s != null &&
-        s.apkVersion.isNotEmpty &&
-        _pkgVersion.isNotEmpty &&
-        newerVer(s.apkVersion, _pkgVersion);
+    // 2.4.3 提交三：版本比对改接 GitHub Releases 新数据源（弹层/toast），
+    // /api/status 的 apk_version 不再驱动「可更新到」提示；服务端版本展示
+    // 与「复制 App 下载链接」原样保留（B3 口径）。
     final link = s == null ? '' : apkDownloadLink(s, AppConfig.builtinMainRoute);
     return Card(
       child: Padding(
@@ -249,29 +275,7 @@ class _SettingsHomePageState extends ConsumerState<SettingsHomePage> {
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ),
-            if (hasUpdate)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Text(
-                  '可更新到 v$updateTarget',
-                  style: Theme.of(context)
-                      .textTheme
-                      .bodySmall
-                      ?.copyWith(color: cs.error),
-                ),
-              ),
-            if (notes.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Text(
-                  '更新说明：$notes',
-                  style: Theme.of(context)
-                      .textTheme
-                      .labelSmall
-                      ?.copyWith(color: cs.outline),
-                ),
-              ),
-            if (!hasUpdate && s != null)
+            if (s != null)
               Padding(
                 padding: const EdgeInsets.only(bottom: 8),
                 child: Text(
@@ -296,11 +300,18 @@ class _SettingsHomePageState extends ConsumerState<SettingsHomePage> {
             Wrap(
               spacing: 10,
               children: [
-                OutlinedButton(
-                  key: const Key('settings-check-update'),
-                  onPressed: _checkUpdate,
-                  child: const Text('检查更新'),
-                ),
+                // 2.4.3 提交三：检查更新改接 GitHub Releases 新数据源
+                // （手动检查不受节流、有明确反馈；iOS 不显示不检查）。
+                // /api/status 的服务端版本展示（ initState 的 _checkUpdate）
+                // 原样保留不动，仅不再驱动更新提示。
+                if (!Platform.isIOS)
+                  OutlinedButton(
+                    key: const Key('settings-check-update'),
+                    onPressed: _checking
+                        ? null
+                        : () => _manualUpdateCheck(),
+                    child: Text(_checking ? '检查中…' : '检查更新'),
+                  ),
                 OutlinedButton(
                   key: const Key('settings-copy-apk'),
                   onPressed: link.isEmpty ? null : () => _copyLink(link),

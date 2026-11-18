@@ -1,10 +1,13 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
     <!-- INTERNET 权限必须在 main 清单声明：debug/profile 清单自带的仅覆盖开发构建，
          release 合并清单若无此条，真机上所有 socket 直接被系统拒绝（2026-11-11 真机事故）。 -->
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+    <!-- 2.4.3 提交三（第 4 项第 10 点）：在线更新的安装包调起系统安装器 -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
     <application
         android:label="love_space"
         android:name="${applicationName}"
@@ -36,6 +39,18 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+        <!-- 2.4.3 提交三：open_filex 的 FileProvider（安装包经 content:// 共享给
+             系统安装器；未配此 provider 则 openFilex 直接失败）。路径表 res/xml/file_paths.xml -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileProvider"
+            android:exported="false"
+            android:grantUriPermissions="true"
+            tools:replace="android:authorities">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and
