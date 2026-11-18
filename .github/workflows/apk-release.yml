@@ -3,16 +3,36 @@
 # 用途：本机 Gradle 路径在系统级文件 I/O 上死锁（重启/杀软排除均无效），
 # 出包改走 CI。本工作流与 flutter-ci.yml 完全独立——既有 analyze/test 作业不动。
 #
-# 签名一致性：release 构建用 signingConfigs.debug（默认 ~/.android/debug.keystore）。
-# 构建前把仓库 Secret ANDROID_DEBUG_KEYSTORE（base64）解码还原到该路径，
-# 保证 CI 产物签名指纹与本机历史出包一致、可覆盖安装真机。
+# 签名一致性（2.4.3 提交二改造）：release 构建走正式签名——
+# ANDROID_KEYSTORE_BASE64 / ANDROID_KEYSTORE_PASSWORD / ANDROID_KEY_ALIAS /
+# ANDROID_KEY_PASSWORD 四个 Secret 在 job 里拼成 key.properties（落
+# $RUNNER_TEMP，仓库外），经 LOVE_KEY_PROPERTIES 传给 Gradle 启用正式签名。
+# 钥匙缺失/损坏 → 硬失败，禁止回退 debug 签名出包（debug 签名的正式版
+# 会污染之后全部覆盖更新与在线更新——熔断特例）。
+# 构建后 apksigner 对账：产物签名者指纹必须等于钥匙证书指纹，不一致
+# 当场失败不许上传。debug 构建链（flutter-ci.yml / 本机）不受影响——
+# build.gradle.kts 只在 LOVE_KEY_PROPERTIES 四项齐全时启用正式签名。
 #
-# 触发：GitHub 仓库 Actions → "APK Release" → Run workflow → 选 main(adb9e34)。
-# 产物：artifact lovespace-arm64-v<版本>，取回后放 output/ 按三行证据交付。
+# 诊断保留（2.4.3 第 0 点）：还原指纹（a）与产物指纹（b）只打指纹地
+# 打印在日志里，供历次构建对账；定位用的路径探测步已完成使命移除。
+#
+# 触发：GitHub 仓库 Actions → "APK Release" → Run workflow → 选 main；
+# 可选 inputs.notes 填本次更新要点（写入 Release 说明，缺省给通用句）。
+# 产物：artifact lovespace-arm64-v<版本> + GitHub Release app-v<版本>
+# （APK + .sha256 资产；「⚠️ 卸载重装」提醒见 2.4.3 交付摘要）。
 name: APK Release
 
 on:
   workflow_dispatch:
+    inputs:
+      notes:
+        description: '本次更新要点（逐条短句，写入 Release 说明；可空）'
+        required: false
+        default: ''
+
+# 发布 Release 需要 contents: write（gh release create/upload）
+permissions:
+  contents: write
 
 jobs:
   build-arm64:
@@ -20,6 +40,12 @@ jobs:
     defaults:
       run:
         working-directory: app-flutter
+    env:
+      # secrets 不能直接用在 step 的 if 里，先经 env 中转
+      KS_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      KEY_PASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
 
@@ -35,24 +61,31 @@ jobs:
           flutter-version: 3.47.9
           cache: true
 
-      # 还原 debug 签名密钥：release 构建走 signingConfigs.debug，
-      # 必须与本机历史出包同一 keystore，否则真机覆盖安装会报签名不一致。
-      - name: Restore debug keystore
-        env:
-          KEYSTORE_B64: ${{ secrets.ANDROID_DEBUG_KEYSTORE }}
+      # 正式钥匙还原：解码到 runner 临时目录（禁止进工作区/artifact）。
+      # 缺失/损坏 → 硬失败（熔断特例，禁止 debug 签名兜底）。
+      - name: Restore release keystore
         run: |
-          if [ -z "$KEYSTORE_B64" ]; then
-            echo "::error::Secret ANDROID_DEBUG_KEYSTORE 未设置，请在仓库 Settings → Secrets → Actions 新建"
+          if [ -z "$KS_B64" ] || [ -z "$KS_PASS" ] || [ -z "$KEY_ALIAS" ] || [ -z "$KEY_PASS" ]; then
+            echo "::error::正式签名 Secret 不齐（ANDROID_KEYSTORE_BASE64 / ANDROID_KEYSTORE_PASSWORD / ANDROID_KEY_ALIAS / ANDROID_KEY_PASSWORD），按熔断特例硬失败——禁止回退 debug 签名出包"
             exit 1
           fi
-          mkdir -p "$HOME/.android"
-          printf '%s' "$KEYSTORE_B64" | base64 --decode > "$HOME/.android/debug.keystore"
-          chmod 600 "$HOME/.android/debug.keystore"
-          keytool -list -keystore "$HOME/.android/debug.keystore" -storepass android > /dev/null
-          # 2.4.3 第 0 点诊断 a：打印还原钥匙的证书指纹（只打指纹，不打内容）
-          echo "── 诊断 a：还原的 debug.keystore 证书指纹 ──"
-          keytool -list -v -keystore "$HOME/.android/debug.keystore" -storepass android \
+          mkdir -p "$RUNNER_TEMP"
+          printf '%s' "$KS_B64" | base64 --decode > "$RUNNER_TEMP/release.keystore"
+          chmod 600 "$RUNNER_TEMP/release.keystore"
+          # 自检：打不开（口令不配/文件损坏）当场失败
+          keytool -list -keystore "$RUNNER_TEMP/release.keystore" -storepass "$KS_PASS" > /dev/null
+          # 诊断 a（保留）：打印正式钥匙证书指纹（只打指纹，不打内容）
+          echo "── 诊断 a：正式钥匙 $KEY_ALIAS 证书指纹 ──"
+          keytool -list -v -keystore "$RUNNER_TEMP/release.keystore" -storepass "$KS_PASS" \
             | grep -E "SHA1:|SHA256:" || true
+          # key.properties：四项齐全才启用正式签名（见 build.gradle.kts）。
+          # storeFile 用绝对路径，文件与本 properties 都在 $RUNNER_TEMP（仓库外）。
+          cat > "$RUNNER_TEMP/key.properties" <<EOF
+          storeFile=$RUNNER_TEMP/release.keystore
+          storePassword=$KS_PASS
+          keyAlias=$KEY_ALIAS
+          keyPassword=$KEY_PASS
+          EOF
 
       - name: Read version
         id: ver
@@ -63,49 +96,63 @@ jobs:
           echo "构建版本 $VERSION_NAME"
 
       - run: flutter pub get
+        env:
+          LOVE_KEY_PROPERTIES: ${{ runner.temp }}/key.properties
 
-      # 诊断定位：还原钥匙指纹是否会被构建改写 + AGP 实际读哪把钥匙
-      - name: Diagnose before build
-        run: |
-          echo "HOME=$HOME"
-          echo "ANDROID_HOME=$ANDROID_HOME"
-          echo "ANDROID_SDK_HOME=${ANDROID_SDK_HOME:-<unset>}"
-          echo "ANDROID_USER_HOME=${ANDROID_USER_HOME:-<unset>}"
-          echo "GRADLE_USER_HOME=${GRADLE_USER_HOME:-<unset>}"
-
+      # 正式签名构建：LOVE_KEY_PROPERTIES 四项齐全 → signingConfigs.release
       - run: flutter build apk --release --split-per-abi
+        env:
+          LOVE_KEY_PROPERTIES: ${{ runner.temp }}/key.properties
 
-      # 2.4.3 第 0 点诊断 b：打印产物实际签名者证书指纹（与 a 对账）
-      - name: Verify signature (print certs)
+      # 签名对账（硬性）：产物签名者指纹必须等于钥匙证书指纹，不一致当场
+      # 失败不许把错签名的包传上去。
+      - name: Verify signature (must match keystore)
         run: |
           APK="build/app/outputs/flutter-apk/app-arm64-v8a-release.apk"
           BT="$(ls -d "$ANDROID_HOME/build-tools/"*/ | sort -V | tail -1 | tr -d '\n')"
           echo "── 诊断 b：产物 apksigner 证书指纹（build-tools: $BT）──"
           "$BT/apksigner" verify --print-certs "$APK"
-
-      # 诊断定位：构建后 ~/.android 是否被改写 + 构建期间出现过的所有
-      # debug.keystore（AGP 实际读写的那把=指纹等于诊断 b 的那个文件）
-      - name: Diagnose after build
-        run: |
-          echo "── 构建后 \$HOME/.android/debug.keystore 指纹（应仍=诊断 a）──"
-          if [ -f "$HOME/.android/debug.keystore" ]; then
-            keytool -list -v -keystore "$HOME/.android/debug.keystore" -storepass android \
-              | grep -E "SHA1:|SHA256:" || true
-            stat -c '%y %s' "$HOME/.android/debug.keystore"
-          else
-            echo "文件不存在"
+          APKSIGNER_SHA1="$("$BT/apksigner" verify --print-certs "$APK" \
+            | grep 'SHA-1 digest' | head -1 | awk '{print tolower($NF)}' | tr -d ':')"
+          KS_SHA1="$(keytool -list -v -keystore "$RUNNER_TEMP/release.keystore" \
+            -storepass "$KS_PASS" | grep 'SHA1:' | head -1 \
+            | awk '{print tolower($NF)}' | tr -d ':')"
+          echo "对账：产物 SHA-1=$APKSIGNER_SHA1 / 钥匙 SHA-1=$KS_SHA1"
+          if [ "$APKSIGNER_SHA1" != "$KS_SHA1" ]; then
+            echo "::error::产物签名指纹与正式钥匙不一致——错签名的包禁止上传（熔断）"
+            exit 1
           fi
-          echo "── 构建期间出现过的 debug.keystore（全盘常见位置）──"
-          for d in "$HOME" /tmp /usr/local/lib/android/sdk /home; do
-            find "$d" -maxdepth 6 -name "debug.keystore" 2>/dev/null
-          done | sort -u | while read -r f; do
-            echo "== $f"
-            keytool -list -v -keystore "$f" -storepass android 2>/dev/null \
-              | grep -E "SHA1:" || echo "  (打不开，可能非默认口令)"
-          done
 
       - uses: actions/upload-artifact@v4
         with:
           name: lovespace-arm64-v${{ steps.ver.outputs.name }}
           path: app-flutter/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
           if-no-files-found: error
+
+      # GitHub Release 发布（第 4 项发布侧）：标签 app-v<版本>——严禁裸 v*
+      # 前缀（会误触 docker.yml 镜像构建与 android.yml 老壳发布两条流水线）。
+      # 幂等：同版本重跑 → 更新既有 Release 资产（--clobber），不产生重复。
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NOTES: ${{ github.event.inputs.notes }}
+        run: |
+          VER="${{ steps.ver.outputs.name }}"
+          TAG="app-v$VER"
+          APK="build/app/outputs/flutter-apk/app-arm64-v8a-release.apk"
+          APK_NAME="app-arm64-v8a-release.apk"
+          cp "$APK" "$RUNNER_TEMP/$APK_NAME"
+          sha256sum "$RUNNER_TEMP/$APK_NAME" | awk '{print $1}' > "$RUNNER_TEMP/$APK_NAME.sha256"
+          BODY="v$VER"$'\n\n'"${NOTES:-本次为正式签名版更新，请参照 2.4.3 交付摘要的卸载重装提醒执行。}"
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            echo "Release $TAG 已存在 → 更新说明与资产（幂等）"
+            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --title "恋爱空间 v$VER" --notes "$BODY"
+            gh release upload "$TAG" "$RUNNER_TEMP/$APK_NAME" "$RUNNER_TEMP/$APK_NAME.sha256" \
+              --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            gh release create "$TAG" \
+              --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+              --title "恋爱空间 v$VER" --notes "$BODY" \
+              "$RUNNER_TEMP/$APK_NAME" "$RUNNER_TEMP/$APK_NAME.sha256"
+          fi
+          echo "发布完成：https://github.com/$GITHUB_REPOSITORY/releases/tag/$TAG"
