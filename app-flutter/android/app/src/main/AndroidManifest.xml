@@ -8,6 +8,15 @@
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
     <!-- 2.4.3 提交三（第 4 项第 10 点）：在线更新的安装包调起系统安装器 -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
+    <!-- 2.4.5 甲组（原生通知 · 自托管常驻连接）：
+         · POST_NOTIFICATIONS：Android 13+ 运行时通知权限（插件 manifest 已带，这里显式重申）；
+         · FOREGROUND_SERVICE + SPECIAL_USE：前台服务保活 SSE 长连接。type 取舍
+           （第 0 步 4）：dataSync 在 Android 15+ 有 24h 内 6h 上限（常驻必被杀停）
+           出局；remoteMessaging 要求默认短信应用资格出局；specialUse 无时限且
+           side-load 无商店审核负担 → 选 specialUse，subtype 说明见 service property。 -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE"/>
     <application
         android:label="love_space"
         android:name="${applicationName}"
@@ -39,6 +48,19 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+        <!-- 2.4.5 甲组：flutter_foreground_task 11 的前台服务（service name 是插件
+             硬约定不许改）。type=specialUse（依据见上方权限注释）；subtype 用英文
+             避免 aapt 对非 ASCII property 的兼容风险。插件 manifest 自带 BOOT
+             receiver（RebootReceiver，autoRunOnBoot: true 生效）与 WAKE_LOCK/
+             RECEIVE_BOOT_COMPLETED/POST_NOTIFICATIONS 权限，合并清单自动获得。 -->
+        <service
+            android:name="com.pravera.flutter_foreground_task.service.ForegroundService"
+            android:foregroundServiceType="specialUse"
+            android:exported="false">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Keep a persistent SSE connection to the self-hosted partner server so message notifications can be delivered while the app is in the background."/>
+        </service>
         <!-- 2.4.3 提交三：open_filex 的 FileProvider（安装包经 content:// 共享给
              系统安装器；未配此 provider 则 openFilex 直接失败）。路径表 res/xml/file_paths.xml -->
         <provider

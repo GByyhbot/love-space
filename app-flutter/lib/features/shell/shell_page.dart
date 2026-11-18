@@ -16,6 +16,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 
 import '../auth/auth_state.dart';
 import '../../core/chat/chat_state.dart';
+import '../../core/notify/notify_service.dart' show NotifyCoordinator;
 import '../../core/sse/sse_client.dart';
 import '../album/album_page.dart';
 import '../home/home_page.dart';
@@ -45,6 +46,15 @@ class _ShellPageState extends ConsumerState<ShellPage> {
     super.initState();
     // 认证后启动 SSE（脚手架打底；聊天页阶段直接复用 events 流）
     Future.microtask(() => ref.read(sseProvider.notifier).start());
+    // 2.4.5 甲组：进入主框架（已登录态）→ 服务配置注入 + 拉起前台服务 +
+    // 生命周期/线路跟随上报 + 消费服务判定结果。登出时 dispose → leaveShell。
+    Future.microtask(() async {
+      try {
+        await NotifyCoordinator.instance.enterShell(ref);
+      } catch (_) {
+        // 通知装配失败绝不影响主链（无权限/插件异常等）
+      }
+    });
     // 2.4.3 提交三：冷启动自动检查更新（可观测链：6h 节流+静默+不冒泡）。
     // 必须异步且隔离（不进首页构建路径）；先清历史安装包再检查。
     Future.microtask(() async {
@@ -57,6 +67,13 @@ class _ShellPageState extends ConsumerState<ShellPage> {
         // 自动检查异常绝不影响启动/首页
       }
     });
+  }
+
+  @override
+  void dispose() {
+    // 2.4.5 甲组：退出主框架（登出/会话失效被 redirect 走）→ 停服务（未登录不空跑）
+    NotifyCoordinator.instance.leaveShell();
+    super.dispose();
   }
 
   @override

@@ -9,6 +9,7 @@ import 'package:go_router/go_router.dart';
 import 'core/album/album_data.dart' show PhotoItem;
 import 'core/theme/tokens.dart';
 import 'core/together/together_data.dart' show TogetherRecord;
+import 'core/notify/notify_service.dart' show NotifyCoordinator, notifyRouteHandler;
 import 'features/account/profile_page.dart';
 import 'features/settings/appearance_page.dart';
 import 'features/settings/backups_page.dart';
@@ -44,10 +45,15 @@ import 'features/together/quest_page.dart';
 import 'features/together/tool_pages.dart';
 import 'features/together/weekly_page.dart';
 
-void main() {
+/// 2.4.5 甲组：通知/前台服务全局初始化先于首帧（Android only；失败不影响主链）。
+/// 冷启动点击通知的 launch 详情只有在 initialize 完成后才可恢复。
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  try {
+    await NotifyCoordinator.platformInit();
+  } catch (_) {}
   runApp(const ProviderScope(child: LoveApp()));
 }
-
 /// 认证驱动的路由重定向：checking → splash；out → /login；authed → 主框架。
 final routerProvider = Provider<GoRouter>((ref) {
   final notifier = ValueNotifier(0);
@@ -216,6 +222,8 @@ class LoveApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final router = ref.watch(routerProvider);
+    // 2.4.5 甲组：通知点击路由（回调由 local_notifications 层调用）
+    notifyRouteHandler = (route) => router.push(route);
     // 🔴 段 D：ThemeData 真的吃到 space.theme / custom_color。
     // spaceAppearanceProvider / appearancePrefsProvider 任一变化都会让
     // MaterialApp 立刻重建（Riverpod 驱动），主题色 + 夜间模式正确叠加。
