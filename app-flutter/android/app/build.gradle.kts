@@ -10,18 +10,22 @@ plugins {
 // flutter-ci（analyze+test+debug APK）等无该环境时自动退回 debug 签名，
 // 任何既有本地/CI 流程不得被本项改坏。key.properties 与 keystore 文件都
 // 只落 CI 的 $RUNNER_TEMP（仓库外临时目录），禁止进工作区与 artifact。
+// 写法刻意保守（无 apply/takeIf 链）：kts 编译环境差异下最不易碎。
+val keystoreProps = java.util.Properties()
 val keystorePropsFile: java.io.File? = System.getenv("LOVE_KEY_PROPERTIES")?.let {
     val f = java.io.File(it)
-    if (f.exists()) f else null
+    if (f.isFile) f else null
 }
-val keystoreProps = java.util.Properties().apply {
-    keystorePropsFile?.inputStream()?.use { stream -> load(stream) }
+if (keystorePropsFile != null) {
+    keystorePropsFile.inputStream().use { keystoreProps.load(it) }
 }
-val hasReleaseSigning = keystorePropsFile != null &&
-    !keystoreProps.getProperty("storeFile").isNullOrBlank() &&
-    !keystoreProps.getProperty("storePassword").isNullOrBlank() &&
-    !keystoreProps.getProperty("keyAlias").isNullOrBlank() &&
-    !keystoreProps.getProperty("keyPassword").isNullOrBlank()
+val ksStoreFile = keystoreProps.getProperty("storeFile")
+val ksStorePass = keystoreProps.getProperty("storePassword")
+val ksKeyAlias = keystoreProps.getProperty("keyAlias")
+val ksKeyPass = keystoreProps.getProperty("keyPassword")
+val hasReleaseSigning = (keystorePropsFile != null &&
+    ksStoreFile != null && ksStorePass != null &&
+    ksKeyAlias != null && ksKeyPass != null)
 
 android {
     namespace = "cn.iepose.lovespace.love_space"
@@ -51,13 +55,10 @@ android {
     signingConfigs {
         if (hasReleaseSigning) {
             create("release") {
-                storeFile = keystorePropsFile!!.parentFile
-                    .resolve(keystoreProps.getProperty("storeFile"))
-                    .takeIf { it.exists() }
-                    ?: file(keystoreProps.getProperty("storeFile"))
-                storePassword = keystoreProps.getProperty("storePassword")
-                keyAlias = keystoreProps.getProperty("keyAlias")
-                keyPassword = keystoreProps.getProperty("keyPassword")
+                storeFile = file(ksStoreFile!!)
+                storePassword = ksStorePass
+                keyAlias = ksKeyAlias
+                keyPassword = ksKeyPass
             }
         }
     }
@@ -66,10 +67,10 @@ android {
         release {
             // 正式签名只在 CI 注入钥匙时启用；否则回退 debug 签名
             // （保持 flutter run --release 等本地流程原样可用）。
-            signingConfig = if (hasReleaseSigning) {
-                signingConfigs.getByName("release")
+            if (hasReleaseSigning) {
+                signingConfig = signingConfigs.getByName("release")
             } else {
-                signingConfigs.getByName("debug")
+                signingConfig = signingConfigs.getByName("debug")
             }
         }
     }
