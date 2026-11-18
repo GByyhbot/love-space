@@ -352,7 +352,13 @@ class Credentials(BaseModel):
 
 
 def public_user(row):
-    return {k: row[k] for k in ('id', 'username', 'name', 'admin', 'avatar')}
+    # 2.4.6 气泡各发各的：按人三键随成员载荷下发（与头像/昵称同一份）。
+    # bubble_skin/bubble_fg：''=未设置；bubble_swap：NULL=未设置（老库 ALTER 后
+    # 恒有列，row 取键不会 KeyError），0/1 归一成 false/true。
+    out = {k: row[k] for k in ('id', 'username', 'name', 'admin', 'avatar',
+                               'bubble_skin', 'bubble_fg')}
+    out['bubble_swap'] = None if row['bubble_swap'] is None else bool(row['bubble_swap'])
+    return out
 
 
 # ---- APK 分发：站内静态副本优先，GitHub Release 兜底 -------------------------
@@ -730,13 +736,52 @@ class Profile(BaseModel):
     avatar: str = ''
     old_password: str = ''
     new_password: str = ''
+    # 2.4.6 气泡各发各的：按人三键。None=本次不改；bubble_skin/bubble_fg 用 ''
+    # 表示清空（bubble_skin='' 时连同 fg/swap 一起清空=恢复未设置整体）；
+    # bubble_swap 只能设置 true/false（独立清空无入口，随 skin='' 整体清空，
+    # 摘要注明取舍）。Profile 没有 user id 字段，pydantic 对额外字段默认忽略
+    # ——请求里带别人的 id 一律被丢弃，永远只改当前登录用户自己。
+    bubble_skin: str | None = Field(default=None, max_length=80)
+    bubble_fg: str | None = Field(default=None, max_length=8)
+    bubble_swap: bool | None = None
+
+
+def validate_bubble_skin(skin):
+    """按人皮肤 id 必须在 /api/bubbles 目录内（与清单同一套正则与排除规则），
+    不存在 → 422 透传文案。镜像图 <名>-r.png 不是可选皮肤，一并拒绝。"""
+    m = re.fullmatch(r'([A-Za-z0-9_-]{1,24})/([A-Za-z0-9_-]{1,40})\.png', skin or '')
+    if not m or (m.group(2) + '.png').endswith('-r.png'):
+        raise HTTPException(422, '没有这张气泡')
+    path = _bubble_dir() / m.group(1) / (m.group(2) + '.png')
+    if not path.is_file():
+        raise HTTPException(422, '没有这张气泡')
 
 
 @app.put('/api/profile')
 def profile(body: Profile, user=Depends(current_user)):
     with connect() as c:
         validate_owned_image(c, body.avatar, user['id'])
-        c.execute('UPDATE users SET name=?,avatar=? WHERE id=?', (body.name, body.avatar, user['id']))
+        # 按人三键：先全部校验通过再落库（一次 UPDATE，半途不写脏数据）。
+        # bubble_skin=''：清空=三键整体回未设置（不走 COALESCE，直接置空）。
+        # 其余情况三参数恒绑定，None=保留现值（COALESCE），值=设置。
+        sets = {'name': body.name, 'avatar': body.avatar}
+        if body.bubble_skin is not None and body.bubble_skin != '':
+            validate_bubble_skin(body.bubble_skin)
+        if body.bubble_fg is not None and body.bubble_fg not in ('', 'dark', 'light'):
+            raise HTTPException(422, '字色只能是深色或浅色')
+        if body.bubble_skin == '':
+            c.execute("UPDATE users SET name=:name, avatar=:avatar,"
+                      " bubble_skin='', bubble_fg='', bubble_swap=NULL WHERE id=:id",
+                      {**sets, 'id': user['id']})
+        else:
+            sets['bubble_skin'] = body.bubble_skin
+            sets['bubble_fg'] = body.bubble_fg
+            sets['bubble_swap'] = None if body.bubble_swap is None else (1 if body.bubble_swap else 0)
+            c.execute('UPDATE users SET name=:name, avatar=:avatar,'
+                      ' bubble_skin=COALESCE(:bubble_skin, bubble_skin),'
+                      ' bubble_fg=COALESCE(:bubble_fg, bubble_fg),'
+                      ' bubble_swap=COALESCE(:bubble_swap, bubble_swap) WHERE id=:id',
+                      {**sets, 'id': user['id']})
         if body.new_password:
             if not password_ok(body.old_password, user['password']):
                 raise HTTPException(403, '原密码不正确')

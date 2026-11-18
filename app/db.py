@@ -75,7 +75,8 @@ def init():
         c.executescript('''
         CREATE TABLE IF NOT EXISTS users(id TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL,
           name TEXT NOT NULL, password TEXT NOT NULL, admin INTEGER NOT NULL DEFAULT 0,
-          avatar TEXT NOT NULL DEFAULT '', created REAL NOT NULL);        CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id), expires REAL NOT NULL);
+          avatar TEXT NOT NULL DEFAULT '', created REAL NOT NULL,
+          bubble_skin TEXT NOT NULL DEFAULT '', bubble_fg TEXT NOT NULL DEFAULT '', bubble_swap INTEGER);        CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id), expires REAL NOT NULL);
         CREATE TABLE IF NOT EXISTS invites(token TEXT PRIMARY KEY, expires REAL NOT NULL, used INTEGER NOT NULL DEFAULT 0);
         CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY, value TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS records(id TEXT PRIMARY KEY, kind TEXT NOT NULL, author TEXT NOT NULL REFERENCES users(id),
@@ -150,6 +151,16 @@ def init():
         c.execute('CREATE INDEX IF NOT EXISTS import_messages_media ON import_messages(media_id)')
         if 'attached' not in {r[1] for r in c.execute('PRAGMA table_info(media)')}:
             c.execute('ALTER TABLE media ADD COLUMN attached INTEGER NOT NULL DEFAULT 0')
+        # 2.4.6 气泡各发各的：users 侧按人三键（skin/fg/swap）。存量库幂等 ALTER，
+        # 与上面 media 的两列同一惯例；bubble_swap 不给 NOT NULL —— NULL = 未设置，
+        # 渲染回退空间级 chat_bubble_swap。
+        _users_cols = {r[1] for r in c.execute('PRAGMA table_info(users)')}
+        if 'bubble_skin' not in _users_cols:
+            c.execute("ALTER TABLE users ADD COLUMN bubble_skin TEXT NOT NULL DEFAULT ''")
+        if 'bubble_fg' not in _users_cols:
+            c.execute("ALTER TABLE users ADD COLUMN bubble_fg TEXT NOT NULL DEFAULT ''")
+        if 'bubble_swap' not in _users_cols:
+            c.execute('ALTER TABLE users ADD COLUMN bubble_swap INTEGER')
         # Public changes share one O(1) revision. Private records, uploaded
         # unshared media and imported logs advance only their owner's revision.
         for table in ('records', 'media', 'likes', 'comments', 'answers', 'checks', 'notices', 'imports', 'import_messages', 'settings', 'users'):
