@@ -137,12 +137,16 @@ class _PhotoUploadSheetState extends ConsumerState<PhotoUploadSheet> {
         ids.add(id);
         if (mounted) setState(() {});
       }
-      // 发布：kind=post，body 只含 media+album（正文空）、client_id 幂等。
+      // 发布：kind=post，body 只含 media+album（正文空）+ album_only=true
+      // （2.4.2 传照片专属标记：服务端按它把记录从一切动态列表里滤掉，
+      // 只留相册；正常发动态绝不带此键——差异由 settings_242 护栏钉死）、
+      // client_id 幂等。
       final r = await dio.post('/api/records', data: {
         'kind': 'post',
         'body': {
           'media': ids,
           if (_album != null && _album!.isNotEmpty) 'album': _album,
+          'album_only': true,
         },
         'client_id': _clientId,
       });

@@ -62,7 +62,10 @@ class _TogetherPageState extends ConsumerState<TogetherPage> {
           // RefreshIndicator 在内容不足一屏时仍需可滚动，故 AlwaysScrollable。
           child: SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, Spacing.pageBottom),
+            // 2.4.2 第 4 项：容器 padding 归零——标题行由共享 PageHeading
+            // 自带 16/8（原容器 16+12 与其叠加成左 32/顶 20，是「我们页标题
+            // 没有左对齐」的根因）；卡片内容用内层 Padding 保持原左缘。
+            padding: const EdgeInsets.only(bottom: Spacing.pageBottom),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -72,7 +75,12 @@ class _TogetherPageState extends ConsumerState<TogetherPage> {
                   title: '关于我们，还有好多好多',
                   subtitle: '把喜欢落在实处，把日子过成纪念。',
                 ),
-                const SizedBox(height: 16),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                  child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
                 // 条目 8 段 8-A（D1）：🌸 生理期宽卡置于 hub **顶部**，
                 // 文案与位置逐字对齐 Web `app.js:1229` tools-grid 首位硬编码宽卡
                 // 「🌸 生理期 / 记下周期，把照顾提前一点」；点击 push('/period')。
@@ -174,11 +182,14 @@ class _TogetherPageState extends ConsumerState<TogetherPage> {
                     ),
                   ),
                 ],
-              ],
-            ), // Column
-          ), // SingleChildScrollView
-        ), // RefreshIndicator
-      ), // Scaffold
+                ], // 内层 Column children（卡片内容 Padding）
+              ), // 内层 Column
+            ), // 卡片内容 Padding
+            ], // 外层 Column children
+          ), // 外层 Column
+        ), // SingleChildScrollView
+      ), // RefreshIndicator
+    ), // Scaffold
     ); // SafeArea
   }
 

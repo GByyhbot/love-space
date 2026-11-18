@@ -29,25 +29,33 @@ TextStyle pageSubtitleStyle(ThemeData theme) =>
       color: theme.colorScheme.outline,
     );
 
-/// 标题行组件：五页（时光/相册/我们/个人角落…）统一引用。
+/// 标题行组件：五页（时光/相册/我们/个人角落/首页）统一引用。
 /// [trailing] 可选（部分页保留右侧动作位）。
+/// [embedded] = true：页面滚动容器自身供左右内边距与顶部间距（2.4.2 第 4
+/// 项，供懒加载 ListView 里需要随页滚动的首页用）——组件只保留顶部
+/// pageHeadingTopGap，不再叠加左右 16，避免双重内边距把标题挤成 32；
+/// 常量仍同源，页面不得自写数值。默认 false（自带 16/8，直接放 Column）。
 class PageHeading extends StatelessWidget {
   const PageHeading({
     super.key,
     required this.title,
     required this.subtitle,
     this.trailing,
+    this.embedded = false,
   });
 
   final String title;
   final String subtitle;
   final Widget? trailing;
+  final bool embedded;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, pageHeadingTopGap, 16, 0),
+      padding: embedded
+          ? const EdgeInsets.only(top: pageHeadingTopGap)
+          : const EdgeInsets.fromLTRB(16, pageHeadingTopGap, 16, 0),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

@@ -84,11 +84,49 @@ class PersonalPage extends ConsumerStatefulWidget {
 class _PersonalPageState extends ConsumerState<PersonalPage> {
   int _tab = 0;
 
+  // 2.4.2 第 3 项：胶囊行滚动控制（半露胶囊点击后滚到完全可见）。
+  final ScrollController _tabsCtrl = ScrollController();
+  final List<GlobalKey> _tabKeys =
+      List.generate(personalTabs.length, (_) => GlobalKey());
+
   @override
   void initState() {
     super.initState();
     Future.microtask(
         () => ref.read(personalControllerProvider.notifier).bootstrap());
+  }
+
+  @override
+  void dispose() {
+    _tabsCtrl.dispose();
+    super.dispose();
+  }
+
+  /// 半露胶囊滚到完全可见（避开右端 28px 渐隐区 + 左缘 padding）。
+  /// 根因修复配套：末尾 padding 加到 40 后，末颗能完全滚出渐隐区；
+  /// 本方法负责点击半露胶囊时自动滚位（先选中后滚位，选中心不不变）。
+  Future<void> _revealTab(int i) async {
+    final ctx = _tabKeys[i].currentContext;
+    if (ctx == null || !_tabsCtrl.hasClients) return;
+    final box = ctx.findRenderObject();
+    if (box is! RenderBox) return;
+    const fade = 30.0; // 渐隐层 28 + 余量
+    final itemLeft = box.localToGlobal(Offset.zero).dx;
+    final itemRight = itemLeft + box.size.width;
+    final vp = _tabsCtrl.position.viewportDimension;
+    final offset = _tabsCtrl.offset;
+    var target = offset;
+    if (itemLeft < 0) {
+      target = offset + itemLeft - 12;
+    } else if (itemRight > vp - fade) {
+      target = offset + (itemRight - (vp - fade));
+    }
+    target = target.clamp(0.0, _tabsCtrl.position.maxScrollExtent);
+    if ((target - offset).abs() > 1) {
+      await _tabsCtrl.animateTo(target,
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOut);
+    }
   }
 
   @override
@@ -109,11 +147,15 @@ class _PersonalPageState extends ConsumerState<PersonalPage> {
             height: 40,
             child: Stack(children: [
               ListView(
+                controller: _tabsCtrl,
                 scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 12),
+                // 2.4.2 第 3 项：末尾留白 40（≥24dp 要求 + 28px 渐隐层）——
+                // 原末尾只 12，第五颗滚到底仍停在渐隐区下看不全。
+                padding: const EdgeInsets.fromLTRB(12, 0, 40, 0),
                 children: [
                   for (var i = 0; i < personalTabs.length; i++)
                     Padding(
+                      key: _tabKeys[i],
                       padding: const EdgeInsets.symmetric(horizontal: 3),
                       child: ChoiceChip(
                         key: Key('personal-tab-${personalTabs[i].id}'),
@@ -134,7 +176,13 @@ class _PersonalPageState extends ConsumerState<PersonalPage> {
                                 ? theme.colorScheme.onPrimary
                                 : null),
                         showCheckmark: false,
-                        onSelected: (_) => setState(() => _tab = i),
+                        onSelected: (_) {
+                          setState(() => _tab = i);
+                          // 半露点击：立即选中 + 自动滚到完全可见
+                          // （行为口径：先选中后滚位；渐隐层已 IgnorePointer
+                          // 不吸点击，拖拽手势按轴向分配到标签行不滚页面）。
+                          _revealTab(i);
+                        },
                       ),
                     ),
                 ],

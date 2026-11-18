@@ -23,6 +23,7 @@ import '../../core/chat/chat_media.dart'
 import '../../core/sse/sse_client.dart';
 import '../../core/together/together_data.dart' show anniversaryDue;
 import '../../core/ui/error_view.dart';
+import '../../core/ui/page_heading.dart';
 import '../../core/ui/progress.dart';
 import '../auth/auth_state.dart';
 import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
@@ -113,13 +114,21 @@ class HomePage extends ConsumerWidget {
       data: (list) => RefreshIndicator(
         onRefresh: () async => ref.invalidate(recordsProvider),
         child: ListView(
-          // Web `.main` 手机档 padding 18px 18px 104px（style.css:1391/:2750；
-          // 底部 104 为 Dock 让位，ChromeMetrics.contentBottom）
+          // 2.4.2 第 4 项：左右 18→16（五页标题行同线）；顶部归零——
+          // 由标题行 PageHeading embedded 模式供 pageHeadingTopGap(8)
+          // （原 18，与四页不一致的根因；embedded 组件不再叠加左右 16，
+          // 防双重内边距把左缘挤成 32）。
           padding: const EdgeInsets.fromLTRB(
-              18, 18, 18, ChromeMetrics.contentBottom),
+              16, 0, 16, ChromeMetrics.contentBottom),
           children: [
-            // 页头：h1 + 副题（文案逐字 app.js:725；布局 style.css:342-343）
-            _PageHeading(theme: theme),
+            // 页头：h1 + 副题（文案逐字 app.js:725）
+            // 2.4.2 第 4 项：删私有 _PageHeading（距顶 18/副题间距 5 的
+            // 私有数值），改走共享 PageHeading 同一套常量。
+            const PageHeading(
+              title: '我们的每一天',
+              subtitle: '一半是生活，一半是你。',
+              embedded: true,
+            ),
             const SizedBox(height: ChromeMetrics.headingMargin),
             _Hero(
               me: me,
@@ -357,40 +366,6 @@ Color _kindTint(String kind, ColorScheme cs, Brightness brightness) {
       return WebSemanticColors.green(brightness).withValues(alpha: 0.06);
     default: // post/diary/draft/surprise/question/note/period（:1955-1956）
       return cs.primary.withValues(alpha: 0.04);
-  }
-}
-
-/// 页头：「我们的每一天」+ 副题「一半是生活，一半是你。」
-/// 文案逐字 app.js:725；布局 style.css:342-343（h1 26px/600、副题 13px muted、
-/// 间距 5px）。字阶映射：h1 26 → headlineSmall（24，任务定案「26→headlineSmall
-/// 或体感一致档」，App 手机档 Web 实为 22/:1401，取字阶中档并注明）；副题 13 →
-/// bodySmall（12）；muted → outline（全 App 辅助文字基线）。
-class _PageHeading extends StatelessWidget {
-  const _PageHeading({required this.theme});
-
-  final ThemeData theme;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          '我们的每一天',
-          style: theme.textTheme.headlineSmall?.copyWith(
-            fontWeight: FontWeight.w600,
-            letterSpacing: -0.3, // h1 letter-spacing -.3px（style.css:212）
-            color: theme.colorScheme.onSurface,
-          ),
-        ),
-        const SizedBox(height: ChromeMetrics.headingSubGap), // 副题 mt 5（:343）
-        Text(
-          '一半是生活，一半是你。',
-          style: theme.textTheme.bodySmall
-              ?.copyWith(color: theme.colorScheme.outline),
-        ),
-      ],
-    );
   }
 }
 

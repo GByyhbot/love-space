@@ -201,23 +201,34 @@ class WallpaperSheetState extends ConsumerState<WallpaperSheet> {
               ),
             ]),
           const SizedBox(height: 12),
-          Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                for (final (key, label) in chatBgPresets)
-                  _Swatch(
-                    bgKey: key,
-                    label: label,
-                    selected: _bg == key,
-                    media: key == 'photo' ? _media : '',
-                    base: ref.watch(chatBaseProvider).valueOrNull,
-                    headers: ref.watch(mediaCookieHeadersProvider).valueOrNull,
-                    onTap: () => key == 'photo'
-                        ? (_media.isEmpty ? _pickPhoto() : _pickFromLibrary())
-                        : setState(() => _bg = key),
-                  ),
-              ]),
+          // 2.4.2 第 1 项：色卡网格改 GridView 等分拉满（与分段器/预览区
+          // 同宽同缘）——原 Wrap+固定宽 86 卡在 393 宽下每行 3 张
+          // （3×86+2×8=274，右空 87px）整体偏左；改 4 列等分后行间距与
+          // 列间距一致，末行（「用照片」）保持同卡宽左起排列。
+          GridView.count(
+            key: const Key('wallpaper-swatches'),
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            padding: EdgeInsets.zero,
+            crossAxisCount: 4,
+            mainAxisSpacing: 8,
+            crossAxisSpacing: 8,
+            childAspectRatio: 0.98,
+            children: [
+              for (final (key, label) in chatBgPresets)
+                _Swatch(
+                  bgKey: key,
+                  label: label,
+                  selected: _bg == key,
+                  media: key == 'photo' ? _media : '',
+                  base: ref.watch(chatBaseProvider).valueOrNull,
+                  headers: ref.watch(mediaCookieHeadersProvider).valueOrNull,
+                  onTap: () => key == 'photo'
+                      ? (_media.isEmpty ? _pickPhoto() : _pickFromLibrary())
+                      : setState(() => _bg = key),
+                ),
+            ],
+          ),
           const SizedBox(height: 12),
           // 2.4.1 第 4 项④：聊天效果预览——两条样例气泡浮在当前选中背景
           // 之上，遮罩浓度实时跟随滑杆（同一 _bg/_dim 状态，天然同源）。
@@ -240,9 +251,8 @@ class WallpaperSheetState extends ConsumerState<WallpaperSheet> {
                     ?.copyWith(color: theme.colorScheme.outline)),
           ]),
           const SizedBox(height: Spacing.gap),
-          Text('你们各看各的背景，互不打扰；但谁都能替对方换一张——上面选「TA 的手机」就行。',
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: theme.colorScheme.outline)),
+          // 2.4.2 第 1 项：面板内说明文案已删（与设置独立页分区末尾注脚
+          // 重复——保留注脚位置那份，全文只出现一次）。
           // embedded（设置独立页）：保存移入底部玻璃操作栏（页面层
           // GlobalKey 调 saveNow），此处不渲染；sheet 模式保留原保存钮。
           if (!widget.embedded) ...[
@@ -349,7 +359,8 @@ class _Swatch extends StatelessWidget {
       borderRadius: BorderRadius.circular(AppRadius.sm),
       onTap: onTap,
       child: Container(
-        width: 86,
+        // 2.4.2 第 1 项：去固定宽 86（等分格内自适应），色块按 72:48
+        // 比例随格宽缩放，文字 FittedBox 防窄屏溢出。
         padding: const EdgeInsets.all(6),
         decoration: BoxDecoration(
           border: Border.all(
@@ -358,44 +369,53 @@ class _Swatch extends StatelessWidget {
           borderRadius: BorderRadius.circular(AppRadius.sm),
         ),
         child: Column(children: [
-          Stack(children: [
-            Container(
-              width: 72, height: 48,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(6),
-                gradient: presetGradient(bgKey),
-              ),
-              child: bgKey == 'photo'
-                  ? (media.isNotEmpty && base != null
-                      ? ClipRRect(
-                          borderRadius: BorderRadius.circular(6),
-                          child: CachedNetworkImage(
-                              imageUrl: mediaUrl(base!, media),
-                              httpHeaders: headers,
-                              fit: BoxFit.cover))
-                      : const Icon(Icons.photo_camera_rounded, size: 22))
-                  : null,
-            ),
-            // 2.4.1 第 4 项③：选中态统一勾徽（原只有「用照片」卡有边框，
-            // 其余靠色差区分——现在全部主题色描边 + 右上角勾）。
-            if (selected)
-              Positioned(
-                right: 2,
-                top: 2,
-                child: Container(
-                  width: 16,
-                  height: 16,
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.primary,
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(Icons.check,
-                      size: 11, color: Colors.white),
+          AspectRatio(
+            aspectRatio: 72 / 48,
+            child: Stack(children: [
+              Container(
+                width: double.infinity,
+                height: double.infinity,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(6),
+                  gradient: presetGradient(bgKey),
                 ),
+                child: bgKey == 'photo'
+                    ? (media.isNotEmpty && base != null
+                        ? ClipRRect(
+                            borderRadius: BorderRadius.circular(6),
+                            child: CachedNetworkImage(
+                                imageUrl: mediaUrl(base!, media),
+                                httpHeaders: headers,
+                                fit: BoxFit.cover))
+                        : const Icon(Icons.photo_camera_rounded, size: 22))
+                    : null,
               ),
-          ]),
+              // 2.4.1 第 4 项③：选中态统一勾徽（原只有「用照片」卡有边框，
+              // 其余靠色差区分——现在全部主题色描边 + 右上角勾）。
+              if (selected)
+                Positioned(
+                  right: 2,
+                  top: 2,
+                  child: Container(
+                    width: 16,
+                    height: 16,
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.primary,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.check,
+                        size: 11, color: Colors.white),
+                  ),
+                ),
+            ]),
+          ),
           const SizedBox(height: 4),
-          Text(label, style: theme.textTheme.labelSmall),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(label,
+                maxLines: 1,
+                style: theme.textTheme.labelSmall),
+          ),
         ]),
       ),
     );
