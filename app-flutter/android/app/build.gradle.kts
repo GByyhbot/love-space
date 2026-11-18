@@ -35,6 +35,12 @@ android {
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
+    // 2.4.5 乙组：flutter_local_notifications 23 的 AAR 元数据要求
+    // compileSdk >= 37（checkReleaseAarMetadata 硬校验）；flutter 工具链默认
+    // 36（AGP 9.1.0 对 37 仅「recommended max」警告，不阻塞）。compileSdk
+    // 只影响编译期可见 API，targetSdk/minSdk 不动（运行时行为与装机面不变）。
+    compileSdk = 37
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
