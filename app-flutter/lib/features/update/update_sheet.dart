@@ -59,6 +59,7 @@ class _UpdateSheetState extends ConsumerState<_UpdateSheet> {
   int _received = 0;
   int _total = 0;
   String _channel = '';
+  String _channelStatus = ''; // 慢速自动切换状态字（弹窗内一行，不弹 toast）
   CancelToken? _cancel;
   File? _apkFile;
 
@@ -98,6 +99,20 @@ class _UpdateSheetState extends ConsumerState<_UpdateSheet> {
           setState(() {
             _received = received;
             _total = total;
+          });
+        }
+      }, onChannelChange: (label) {
+        // 2.4.5 乙组：慢速自动切换/通道切换 → 弹窗内一行状态字（不关弹窗、
+        // 进度从头计、不弹 toast）
+        if (mounted) {
+          setState(() {
+            _received = 0;
+            _total = 0;
+            _channel = label;
+            _channelStatus = label.startsWith('当前线路较慢') ||
+                    label.startsWith('所有线路均较慢')
+                ? label
+                : '';
           });
         }
       }, cancelToken: _cancel);
@@ -221,11 +236,18 @@ class _UpdateSheetState extends ConsumerState<_UpdateSheet> {
             const SizedBox(height: 4),
             Text(
               _total > 0
-                  ? '$_channel · ${(_received / _total * 100).toStringAsFixed(0)}%（${_sizeLabel(_received)} / ${_sizeLabel(_total)}）'
-                  : '$_channel · 连接中…',
+                  ? '${_channel.isEmpty ? '下载中' : _channel} · ${(_received / _total * 100).toStringAsFixed(0)}%（${_sizeLabel(_received)} / ${_sizeLabel(_total)}）'
+                  : '${_channel.isEmpty ? '下载中' : _channel} · 连接中…',
               style: theme.textTheme.bodySmall
                   ?.copyWith(color: theme.colorScheme.outline),
             ),
+            if (_channelStatus.isNotEmpty)
+              Text(
+                _channelStatus,
+                key: const Key('update-channel-status'),
+                style: theme.textTheme.bodySmall
+                    ?.copyWith(color: theme.colorScheme.tertiary),
+              ),
           ],
           const SizedBox(height: Spacing.gap),
           Row(children: [

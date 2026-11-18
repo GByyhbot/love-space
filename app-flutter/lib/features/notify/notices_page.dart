@@ -21,12 +21,16 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/api/api_client.dart' as api;
+import '../../core/notify/notify_decision.dart'
+    show NoticeTargetKind, noticeTargetOf;
 import '../../core/theme/tokens.dart';
 import '../../core/ui/progress.dart';
 import '../auth/auth_state.dart';
 import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
+import '../timeline/record_story_sheet.dart' show showRecordStorySheet;
 import 'notify_api.dart';
 import 'notify_models.dart';
 import 'notify_widgets.dart';
@@ -171,10 +175,63 @@ class _NoticesPageState extends ConsumerState<NoticesPage> {
     );
   }
 
-  /// 查看详情（对齐 `app.js:2613` notice-detail）：弹层只呈现服务端
-  /// notice 字段（title / event 中文名 / 时间），查看时按 record_id 单条已读。
+  /// 查看详情（2.4.5 乙组第 4 项改造：点击一条通知 → 跳到它指的内容，
+  /// 落点判定走 noticeTargetOf 逐类映射表；已读逻辑保持现行——查看后按
+  /// record_id 单条已读（notices_page.dart 原语义，app.js:2613 口径））：
+  /// · route：push 功能页（anniversary/period/wish/habit）后标已读；
+  /// · fallback：原弹层（服务端 title + 事件名 + 时间）后标已读；
+  /// · recordStory 由 _openRecordStory 处理（本函数兜不住，见 _noticeRow）。
   Future<void> _onDetail(NoticeItem n) async {
+    final target = noticeTargetOf(n.event, n.recordId);
+    if (target.kind == NoticeTargetKind.route) {
+      if (!mounted) return;
+      await _runWrite(
+        (NotifyApi svc) => svc.markNoticesRead(recordId: n.recordId),
+        successText: '已标记为已读',
+      );
+      if (mounted) context.push(target.route);
+      return;
+    }
+    // 兜底弹层（fallback 落点）
     if (!mounted) return;
+    await _showFallbackDialog(n);
+    if (!mounted) return;
+    await _runWrite(
+      (NotifyApi svc) => svc.markNoticesRead(recordId: n.recordId),
+      successText: '已标记为已读',
+    );
+  }
+
+  /// recordStory 落点：拉单条记录 → 弹层；失败退兜底弹层。
+  Future<void> _openRecordStory(NoticeItem n) async {
+    try {
+      final dio = await ref.read(api.dioProvider.future);
+      final r = await dio.get('/api/records/${n.recordId}');
+      if (!mounted) return;
+      if (r.statusCode != 200 || r.data is! Map) {
+        await _showFallbackDialog(n);
+      } else {
+        final record = api.Record.fromJson((r.data as Map).cast<String, dynamic>());
+        final me = ref.read(authProvider.notifier).me;
+        if (!mounted) return;
+        if (me == null) {
+          await _showFallbackDialog(n);
+        } else {
+          await showRecordStorySheet(context, record: record, me: me);
+        }
+      }
+    } catch (_) {
+      if (mounted) await _showFallbackDialog(n);
+    }
+    if (!mounted) return;
+    await _runWrite(
+      (NotifyApi svc) => svc.markNoticesRead(recordId: n.recordId),
+      successText: '已标记为已读',
+    );
+  }
+
+  /// 原兜底弹层（fallback 落点；与 recordStory 拉取失败共用）。
+  Future<void> _showFallbackDialog(NoticeItem n) async {
     await showDialog<void>(
       context: context,
       builder: (BuildContext ctx) => AlertDialog(
@@ -198,11 +255,6 @@ class _NoticesPageState extends ConsumerState<NoticesPage> {
           ),
         ],
       ),
-    );
-    if (!mounted) return;
-    await _runWrite(
-      (NotifyApi svc) => svc.markNoticesRead(recordId: n.recordId),
-      successText: '已标记为已读',
     );
   }
 
@@ -275,8 +327,20 @@ class _NoticesPageState extends ConsumerState<NoticesPage> {
 
   Widget _noticeRow(ThemeData theme, NoticeItem n) {
     final ColorScheme cs = theme.colorScheme;
+    final target = noticeTargetOf(n.event, n.recordId);
     return ListTile(
       key: Key('notice-card-${n.id}'),
+      // 2.4.5 乙组第 4 项：整行可点，不许留「点了没反应」的死条目；
+      // recordStory 落点走弹层拉取（非 _busy 限定），其余同原「查看」入口。
+      onTap: _busy
+          ? null
+          : () {
+              if (target.kind == NoticeTargetKind.recordStory) {
+                _openRecordStory(n);
+              } else {
+                _onDetail(n);
+              }
+            },
       leading: Icon(
         n.seen ? Icons.notifications_none_rounded : Icons.notifications_rounded,
         size: 20,
@@ -298,7 +362,15 @@ class _NoticesPageState extends ConsumerState<NoticesPage> {
               : Icon(Icons.brightness_1, size: 8, color: cs.primary))
           : TextButton(
               key: Key('notice-detail-${n.id}'),
-              onPressed: _busy ? null : () => _onDetail(n),
+              onPressed: _busy
+                  ? null
+                  : () {
+                      if (target.kind == NoticeTargetKind.recordStory) {
+                        _openRecordStory(n);
+                      } else {
+                        _onDetail(n);
+                      }
+                    },
               child: const Text('查看'),
             ),
     );

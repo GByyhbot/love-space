@@ -19,6 +19,7 @@ import 'features/settings/cover_page.dart';
 import 'features/settings/export_page.dart';
 import 'features/settings/invite_page.dart';
 import 'features/settings/links_page.dart';
+import 'features/settings/notify_settings_page.dart';
 import 'features/settings/settings_home_page.dart';
 import 'features/settings/space_info_page.dart';
 import 'features/settings/settings_state.dart';
@@ -100,6 +101,10 @@ final routerProvider = Provider<GoRouter>((ref) {
           path: '/settings/cover', builder: (_, _) => const CoverPage()),
       GoRoute(
           path: '/settings/links', builder: (_, _) => const LinksPage()),
+      // 2.4.5 乙组第 3 项：消息通知独立页（权限/服务状态/测试通知/小米放行引导）
+      GoRoute(
+          path: '/settings/notify',
+          builder: (_, _) => const NotifySettingsPage()),
       GoRoute(
           path: '/settings/export', builder: (_, _) => const ExportPage()),
       GoRoute(

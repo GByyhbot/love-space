@@ -194,7 +194,10 @@ void main() {
     final mainSrc = File('lib/main.dart').readAsStringSync();
     expect(mainSrc.contains('const SettingsHomePage()'), isTrue,
         reason: '/settings 由设置主页接管');
-    expect(mainSrc.contains('SettingsPage()'), isFalse, reason: '旧页引用清零');
+    // 2.4.5 乙组：新增 NotifySettingsPage —— 断言改词边界语义
+    //（\b 使 'NotifySettingsPage()' 不命中，裸 SettingsPage() 仍命中）
+    expect(mainSrc.contains(RegExp(r'\bSettingsPage\(\)')), isFalse,
+        reason: '旧页引用清零');
     // 六张内容独立页路由在位。
     for (final path in [
       '/settings/theme',

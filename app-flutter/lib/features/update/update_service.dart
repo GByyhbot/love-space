@@ -17,6 +17,12 @@
 /// （分片不跨通道续传）；全部通道失败才算失败。代理只加速不信任——
 /// 校验值永远只取 GitHub 元数据（.sha256 资产直连获取，禁止走代理）。
 ///
+/// 慢速自动切换（2.4.5 乙组第 5 项，修订 2.4.3 通道策略）：除既有失败触发外
+/// 新增速度触发——下载开始 10s 爬坡期后按 10s 滚动窗口算平均速度，持续低于
+/// 60KB/s 且还有未试过的通道 → 弃当前通道从头走下一通道。防抖三条：①每条
+/// 通道同一次下载只判一次慢；②全员皆慢 → 回直连（2.4.3 实测最快）禁判慢
+/// 走完；③直连同样受速度判定。切换总次数 ≤ 候选数+收尾轮。
+///
 /// 验签与安装：下载完成先算本地 SHA-256 与 .sha256 对账，不一致立即删
 /// 文件禁止进入安装步；一致调起系统安装器（open_filex，FileProvider）。
 /// 任何环节失败 App 照常可用；自动检查全程静默；下载可取消（删半成品）。
@@ -44,7 +50,10 @@ const String kApkAssetName = 'app-arm64-v8a-release.apk';
 const String kShaAssetSuffix = '.sha256';
 
 /// 代理候选（域名级内置写死；只服务于 APK 文件下载加速，禁止代理业务
-/// API/媒体/SSE 等任何其他流量）。实测记录见 2.4.3 交付摘要第 5 项。
+/// API/媒体/SSE 等任何其他流量）。
+/// 2.4.5 乙组第 5 项：ghfast.top 实测（2026-11-18，app-v2.4.4 真实资产
+/// URL）返回 403 不可用 → 按提示词「测速结果成立才加入」条款不加入候选列；
+/// 现有三家维持 2.4.3 实测顺序不变。实测表见交付摘要。
 const List<String> kProxyPrefixes = [
   'https://gh-proxy.com/',
   'https://ghproxy.net/',
@@ -58,6 +67,37 @@ const String kPrefLastCheck = 'update_last_check_ms';
 /// 下载失败判定参数（第 5 项第 3 点；实现时微调值，摘要注明最终值）。
 const Duration kConnectTimeout = Duration(seconds: 10);
 const Duration kStallWindow = Duration(seconds: 15);
+
+/// 慢速切换参数（2.4.5 乙组第 5 项，摘要注明最终值与依据）：
+/// 爬坡 10s（下载启动的 TLS/缓冲抖动不判速）→ 其后按 10s 滚动窗口算平均
+/// 速度，持续 <60KB/s 判慢（阈值取用户体感：60KB/s 下载 27MB APK 需 7.5 分钟，
+/// 明显劣于 2.4.3 实测最快的 gh-proxy.com 119KB/s）。窗口有效判定要求跨度
+/// ≥8s（0.7×窗口，避免窗口太短误判）。
+const Duration kRampUp = Duration(seconds: 10);
+const Duration kSpeedWindow = Duration(seconds: 10);
+const int kSlowSpeedBps = 60 * 1024;
+const Duration kSpeedWindowMinSpan = Duration(milliseconds: 8000);
+
+/// 速度判定参数包（生产用 [prod]；测试注入短参数，不依赖真实时钟长等）
+class SpeedProbeConfig {
+  const SpeedProbeConfig({
+    required this.rampUp,
+    required this.window,
+    required this.minSpan,
+    required this.slowBps,
+  });
+  final Duration rampUp;
+  final Duration window;
+  final Duration minSpan;
+  final int slowBps;
+
+  static const SpeedProbeConfig prod = SpeedProbeConfig(
+    rampUp: kRampUp,
+    window: kSpeedWindow,
+    minSpan: kSpeedWindowMinSpan,
+    slowBps: kSlowSpeedBps,
+  );
+}
 
 /// 「以后再说」：本次冷启动不再弹（session 级；下次冷启动仍可提示）。
 final Set<String> sessionDeferredVersions = <String>{};
@@ -224,64 +264,142 @@ class DownloadOutcome {
 
 /// 下载 APK：先直连 GitHub 资产 → 失败/过慢逐个切代理候选（换通道就
 /// 重下，不跨通道续传）；进度回调（received/total）；[cancelToken] 取消
-/// 会向上抛 DioException(cancel) 由调用方清理半成品。
+/// 会向上抛 DioException(cancel) 由调用方清理半成品。[onChannelChange]
+/// 通道切换时回调（含慢速切换状态字，弹窗内一行展示，不弹 toast）。
 Future<DownloadOutcome> downloadApk(
   Dio dio,
   GithubAsset asset,
   File target, {
   void Function(int received, int total)? onProgress,
+  void Function(String label)? onChannelChange,
   CancelToken? cancelToken,
+  SpeedProbeConfig speedProbe = SpeedProbeConfig.prod,
 }) async {
   final channels = <String>[asset.url];
   for (final p in kProxyPrefixes) {
     channels.add('$p${asset.url}');
   }
+  String labelOf(int i) =>
+      i == 0 ? '直连 GitHub' : '代理 ${kProxyPrefixes[i - 1]}';
   Object? lastError;
-  for (var i = 0; i < channels.length; i++) {
-    final url = channels[i];
+  var i = 0;
+  final slowSet = <int>{}; // 已判慢通道（防抖①：每通道只判一次）
+  var finishRound = false; // 全员皆慢后的收尾轮（禁判慢走完，防无限轮换）
+  // 🔴 每通道独立临时文件：慢切/失败中止后 dio 的流句柄不会立即释放
+  // （Windows 句柄竞态，60af347 家族），对同一文件立即 deleteSync 必炸——
+  // 各通道写自己的 tmp，成功后 rename 到 target；弃用的 tmp 容忍式清理。
+  void tryDelete(File f) {
     try {
-      final ok = await _downloadVia(dio, url, target,
-          onProgress: onProgress, cancelToken: cancelToken);
-      if (ok) {
-        return DownloadOutcome(
-            file: target,
-            channelUsed:
-                i == 0 ? '直连 GitHub' : '代理 ${kProxyPrefixes[i - 1]}');
-      }
-      lastError = 'HTTP 非 200';
-    } on DioException catch (e) {
-      if (e.type == DioExceptionType.cancel) rethrow; // 用户取消直接上抛
-      lastError = e;
-    } catch (e) {
-      lastError = e;
+      if (f.existsSync()) f.deleteSync();
+    } on FileSystemException {
+      // 句柄未释放：容忍（rename 目标不冲突，残留 tmp 由下次启动
+      // purgeApkCache 兼 .apk 清理不了的非 .apk 残留——文件名带 .tmp 由
+      // 下方 finally 兜底再试）
     }
-    if (target.existsSync()) target.deleteSync(); // 换通道重下
   }
-  throw Exception('全部下载通道失败：$lastError');
+
+  try {
+    while (true) {
+      final tmp = File('${target.path}.t$i');
+      try {
+        final ok = await _downloadVia(dio, channels[i], tmp,
+            onProgress: onProgress,
+            cancelToken: cancelToken,
+            judgeSlow: !finishRound && !slowSet.contains(i),
+            onSlowSwitch: () => slowSet.add(i),
+            onSlowSwitched: () {
+              onChannelChange?.call('当前线路较慢，已自动切换');
+            },
+            probe: speedProbe);
+        if (ok) {
+          tryDelete(target);
+          await tmp.rename(target.path);
+          return DownloadOutcome(file: target, channelUsed: labelOf(i));
+        }
+        lastError = 'HTTP 非 200';
+      } on DioException catch (e) {
+        if (e.type == DioExceptionType.cancel) rethrow; // 用户取消直接上抛
+        lastError = e;
+      } catch (e) {
+        lastError = e;
+      }
+      tryDelete(tmp);
+      if (finishRound) {
+        throw Exception('全部下载通道失败：$lastError');
+      }
+      if (slowSet.length >= channels.length) {
+        // 防抖②：全员皆慢 → 回直连（实测最快候选）禁判慢走完
+        i = 0;
+        finishRound = true;
+        onChannelChange?.call('所有线路均较慢，正在以最快候选继续下载');
+      } else {
+        onChannelChange?.call(labelOf(i));
+        i = (i + 1) % channels.length;
+      }
+    }
+  } finally {
+    // 收尾：清全部通道 tmp（容忍式，句柄占用时残留由下次 purge 兑底）
+    for (var k = 0; k < channels.length; k++) {
+      tryDelete(File('${target.path}.t$k'));
+    }
+  }
 }
 
 /// 单通道下载；连接超时 10s、开始后连续 15s 无进展 → 经 CancelToken 中止
 /// 本通道（stall 与用户取消用 local token 隔离：stall 算通道失败继续切换，
 /// 用户取消向上抛）。直接写盘（dio.download），非 200 抛 badResponse 判败。
+/// 慢速判定（2.4.5 乙组）：[judgeSlow] 为 true 时启用——爬坡 10s 后按 10s
+/// 滚动窗口算平均速度 <60KB/s → [onSlowSwitch]（记入防抖集合）+ 中止本通道
+/// 返回 false 走下一通道；[onSlowSwitched] 在中止前回调（弹窗状态字）。
 Future<bool> _downloadVia(
   Dio dio,
   String url,
   File target, {
   void Function(int received, int total)? onProgress,
   CancelToken? cancelToken,
+  bool judgeSlow = false,
+  void Function()? onSlowSwitch,
+  void Function()? onSlowSwitched,
+  SpeedProbeConfig probe = SpeedProbeConfig.prod,
 }) async {
   var stalled = false;
+  var slowTriggered = false;
   int lastReceived = -1;
   var lastProgressAt = DateTime.now();
   final localCancel = CancelToken();
   cancelToken?.whenCancel.then((_) {
     if (!localCancel.isCancelled) localCancel.cancel('user');
   });
+  // 滚动窗口采样：(时间, 收到的字节数)；每秒 tick 维护
+  final samples = <(DateTime, int)>[];
+  final startAt = DateTime.now();
   final timer = Timer.periodic(const Duration(seconds: 1), (_) {
+    final now = DateTime.now();
     if (lastReceived >= 0 &&
         DateTime.now().difference(lastProgressAt) >= kStallWindow) {
       stalled = true;
       if (!localCancel.isCancelled) localCancel.cancel('stall');
+      return;
+    }
+    if (!judgeSlow || lastReceived < 0) return;
+    samples.add((now, lastReceived));
+    while (samples.isNotEmpty &&
+        now.difference(samples.first.$1) > probe.window) {
+      samples.removeAt(0);
+    }
+    // 爬坡期不判；窗口跨度不足不判；窗口内零进展交给 stall 判定
+    if (now.difference(startAt) < probe.rampUp || samples.length < 2) return;
+    final (oldestAt, oldestRcv) = samples.first;
+    final span = now.difference(oldestAt);
+    if (span < probe.minSpan) return;
+    final bytes = lastReceived - oldestRcv;
+    if (bytes <= 0) return; // 零进展由 stall 通道处理
+    final bps = bytes * 1000 ~/ span.inMilliseconds;
+    if (bps < probe.slowBps) {
+      slowTriggered = true;
+      onSlowSwitch?.call();
+      onSlowSwitched?.call();
+      if (!localCancel.isCancelled) localCancel.cancel('slow');
     }
   });
   try {
@@ -305,8 +423,10 @@ Future<bool> _downloadVia(
     );
     return target.existsSync() && target.lengthSync() > 0;
   } on DioException catch (e) {
-    if (e.type == DioExceptionType.cancel && !stalled) rethrow; // 用户取消
-    return false; // stall / 非 200 / 连接失败 → 切下一个通道
+    if (e.type == DioExceptionType.cancel && !stalled && !slowTriggered) {
+      rethrow; // 用户取消
+    }
+    return false; // stall / slow / 非 200 / 连接失败 → 切下一个通道
   } finally {
     timer.cancel();
   }

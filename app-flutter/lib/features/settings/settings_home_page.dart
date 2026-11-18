@@ -184,6 +184,16 @@ class _SettingsHomePageState extends ConsumerState<SettingsHomePage> {
               subtitle: '链路检测与手动切线路',
               onTap: () => context.push('/settings/links'),
             ),
+            // 2.4.5 乙组第 3 项：消息通知独立页（权限/服务状态/测试通知/
+            // 小米放行引导）
+            _row(
+              context,
+              key: const Key('settings-home-notify'),
+              emoji: '📬',
+              title: '消息通知',
+              subtitle: 'App 后台收 TA 的消息提醒',
+              onTap: () => context.push('/settings/notify'),
+            ),
             const SizedBox(height: 16),
             _heading(context, '数据与账号'),
             _row(

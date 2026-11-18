@@ -271,3 +271,45 @@ String eventTitle(String event) {
 
 /// 系统通知点击落点（与软件内通知中心共用 kNoticeRoutes；无直达 = 打开 App）
 String noticeRoute(String event) => kNoticeRoutes[event] ?? '';
+
+/// ── 软件内通知中心点击落点（2.4.5 乙组第 4 项）────────────────────────
+///
+/// 服务端通知生成点盘点（db.notice() 全部调用）：带 record_id 的事件=记录级
+/// 可定位（activity/comment/note/surprise/wish 有 rid；anniversary 有两种——
+/// 记录型 worker.py:239 带 rid、里程碑 worker.py:262 不带）；不带 rid 的=
+/// 功能提醒（period）或运维（system/storage/backup）。
+enum NoticeTargetKind {
+  /// 打开「历史上的今天」同款纪录底部弹层（showRecordStorySheet，乙组选型：
+  /// 现行可复用组件，直显该条内容，无需时光定位复杂联动）
+  recordStory,
+
+  /// push 到对应功能页（kNoticeRoutes）
+  route,
+
+  /// 兜底弹层（现行 AlertDialog 展示服务端 title + 已读标记——非死条目：
+  /// 有内容呈现、有点击反馈、标记已读；无 rid 的记录类通知（如 main.py:2913
+  /// 导入聊天记录提醒）也归此类）
+  fallback,
+}
+
+class NoticeTarget {
+  const NoticeTarget({required this.kind, this.route = ''});
+  final NoticeTargetKind kind;
+  final String route;
+}
+
+/// 单条通知的落点判定（逐类映射表，乙组测试逐类钉死；映射规则：
+/// ① 有 recordId → 弹层直显该条（跨事件类型统一，弹层即内容本体）；
+/// ② 无 recordId 但有直达路由（kNoticeRoutes）→ 功能页；
+/// ③ 都没有 → 兜底弹层（title + 事件名 + 时间，标已读））。
+NoticeTarget noticeTargetOf(String event, String recordId) {
+  final rid = recordId.trim();
+  if (rid.isNotEmpty) {
+    return const NoticeTarget(kind: NoticeTargetKind.recordStory);
+  }
+  final route = kNoticeRoutes[event];
+  if (route != null && route.isNotEmpty) {
+    return NoticeTarget(kind: NoticeTargetKind.route, route: route);
+  }
+  return const NoticeTarget(kind: NoticeTargetKind.fallback);
+}
