@@ -1,3 +1,6 @@
+import java.io.File
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
@@ -11,9 +14,9 @@ plugins {
 // 任何既有本地/CI 流程不得被本项改坏。key.properties 与 keystore 文件都
 // 只落 CI 的 $RUNNER_TEMP（仓库外临时目录），禁止进工作区与 artifact。
 // 写法刻意保守（无 apply/takeIf 链）：kts 编译环境差异下最不易碎。
-val keystoreProps = java.util.Properties()
-val keystorePropsFile: java.io.File? = System.getenv("LOVE_KEY_PROPERTIES")?.let {
-    val f = java.io.File(it)
+val keystoreProps = Properties()
+val keystorePropsFile: File? = System.getenv("LOVE_KEY_PROPERTIES")?.let {
+    val f = File(it)
     if (f.isFile) f else null
 }
 if (keystorePropsFile != null) {
