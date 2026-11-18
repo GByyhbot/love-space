@@ -931,8 +931,19 @@ def clean_body(c, kind, data, user_id, previous=None):
                  'category', 'done', 'emoji', 'target', 'completion_post', 'sticker', 'amount',
                  'start', 'cycle', 'length', 'flow', 'symptoms',
                  'color', 'pain', 'sex', 'mood', 'weight', 'discharge', 'temp',
-                 'reply_to', 'pinned', 'location', 'song'}
+                 'reply_to', 'pinned', 'location', 'song', 'album_only'}
     body = {k: v for k, v in data.items() if k in permitted}
+    if 'album_only' in body:
+        # 传照片专属动态的显式标记（2.4.2）：只有 body 里带这个键的 post 才
+        # 会被动态列表收口过滤（见 GET /api/records）；禁止按"正文为空"之类
+        # 特征猜测——正常发动态（哪怕纯图无字）绝不带这个键。
+        if not isinstance(body['album_only'], bool):
+            raise HTTPException(422, '标记格式不正确')
+    elif kind == 'post' and previous and previous.get('album_only') is True:
+        # 编辑既有标记记录时客户端以原始 body 为底只盖改动键，可能不显式
+        # 带这个键：保留原标记，防止半截 body 的 PUT 把标记洗掉，退化成
+        # 普通动态重新出现在时光里。
+        body['album_only'] = True
     if 'location' in body:
         # 聊天里的「位置」消息：只存经纬度，地名让客户端去地图里显示，
         # 免得把第三方逆地理编码服务写进数据层。
@@ -1158,6 +1169,13 @@ def records(kind: str = '', q: str = '', author: str = '', date: str = '', media
         if kinds:
             clauses.append('kind IN (' + ','.join('?' for _ in kinds) + ')')
             params.extend(kinds)
+        # 传照片专属动态（album_only=true 的 post）只进相册（2.4.2）：
+        # 动态列表/搜索的唯一收口在这里过滤一次，App 时光、Web 时光、
+        # 站内搜索全部覆盖；回收站（trash）不过滤，删除/恢复链路照常。
+        # SQLite `x IS NOT 1`：键不存在（NULL）与非 1 值都算未标记。
+        # 只在可能含 post 的查询上加条件（未指定 kind 或显式含 post）。
+        if not trash and (not kinds or 'post' in kinds):
+            clauses.append("json_extract(body,'$.album_only') IS NOT 1")
         # 独立的排除列表：比让前端把十几个类型名拼进 kind 更好读，也不会漏
         excluded = [value for value in exclude.split(',') if value]
         # 生理期在独立的 period.db 里：列表要把它并进来，前端不必知道换了库。
@@ -2170,6 +2188,10 @@ def weekly(offset: int = 0, user=Depends(current_user)):
             photos += c.execute(f"SELECT count(*) FROM media WHERE id IN ({marks}) AND mime LIKE 'image/%'",
                                 chunk).fetchone()[0]
         by_kind, moods, days = {}, {}, set()
+        # 传照片专属动态只进相册（2.4.2）：不进动态分类计数与本周精选；
+        # 天数活跃格（days/streak）保留——传照片也是当天的真实活动。
+        presentable = [r for r in rows
+                       if not (r['kind'] == 'post' and bodies[r['id']].get('album_only'))]
         for row in rows:
             by_kind[row['kind']] = by_kind.get(row['kind'], 0) + 1
             days.add(dt.datetime.fromtimestamp(row['created'], tz).date())
@@ -2177,12 +2199,19 @@ def weekly(offset: int = 0, user=Depends(current_user)):
                 emoji = bodies[row['id']].get('emoji')
                 if emoji:
                     moods[emoji] = moods.get(emoji, 0) + 1
-        # 挑最有内容的几条做"本周精选"：有图优先，再看互动
+        # 修正 post 计数：album_only 的 post 不算"动态"
+        if 'post' in by_kind:
+            hidden = sum(1 for r in rows
+                         if r['kind'] == 'post' and bodies[r['id']].get('album_only'))
+            by_kind['post'] -= hidden
+            if by_kind['post'] <= 0:
+                by_kind.pop('post')
+        # 挑最有内容的几条做"本周精选"：有图优先，再看互动（album_only 除外）
         def weight(row):
             return ((2 if bodies[row['id']].get('media') else 0)
                     + 2 * likes.get(row['id'], 0) + comments.get(row['id'], 0))
 
-        picked = sorted(sorted(rows, key=weight, reverse=True)[:4], key=lambda row: row['created'])
+        picked = sorted(sorted(presentable, key=weight, reverse=True)[:4], key=lambda row: row['created'])
         highlights = serialize_many(c, picked, user['id'])
 
     # streak：从今天往前数连续有记录的天数（上限 365 天，够用即可）
@@ -2356,6 +2385,9 @@ def calendar(month: str = '', user=Depends(current_user)):
             days.setdefault(r['body']['date'][8:10], {}).setdefault('moods', []).append(
                 {'author': r['author'], 'emoji': r['body'].get('emoji', '☀️')})
         elif r['kind'] == 'post' and (r['body'].get('date') or '').startswith(month):
+            # 传照片专属动态只进相册：月历 dashboard 的动态点不呈现（2.4.2）
+            if r['body'].get('album_only'):
+                continue
             days.setdefault(r['body']['date'][8:10], {}).setdefault('posts', []).append(
                 {'id': r['id'], 'title': r['body'].get('title') or (r['body'].get('content') or '')[:40]})
         elif r['kind'] == 'anniversary':
@@ -2410,6 +2442,9 @@ def on_this_day(user=Depends(current_user)):
         rows = serialize_many(c, candidates, user['id'])
     groups = {}
     for r in rows:
+        # 传照片专属动态只进相册：历史上的今天不呈现（2.4.2）
+        if r['kind'] == 'post' and r['body'].get('album_only'):
+            continue
         date = (r['body'].get('date') or '')[:10]
         if date.endswith(today_md):
             groups.setdefault(int(date[:4]), []).append(r)
