@@ -45,8 +45,9 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
         // 2.4.5 乙组：flutter_local_notifications 23 明文要求启用 core library
-        // desugaring（checkReleaseAarMetadata 硬校验，run 44330022473 根因）
-        coreLibraryDesugaringEnabled = true
+        // desugaring（checkReleaseAarMetadata 硬校验，run 44330022473 根因）。
+        // AGP 9 新 DSL 属性名带 is 前缀（run 44331596546 根因：旧名 unresolved）
+        isCoreLibraryDesugaringEnabled = true
     }
 
     defaultConfig {
