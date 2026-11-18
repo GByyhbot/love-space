@@ -122,6 +122,17 @@ Future<void> _pumpShellRouter(
     GoRoute(
         path: '/together/ledger',
         builder: (_, _) => const Scaffold(body: Text('LEDGER_PAGE'))),
+    // 2.4.3 双卡二级页 stub（手势护栏用）
+    GoRoute(
+        path: '/on-this-day',
+        builder: (_, _) => Scaffold(
+            appBar: AppBar(title: const Text('OTD')),
+            body: const Text('ON_THIS_DAY_PAGE'))),
+    GoRoute(
+        path: '/yearbook',
+        builder: (_, _) => Scaffold(
+            appBar: AppBar(title: const Text('YB')),
+            body: const Text('YEARBOOK_PAGE'))),
   ]);
   addTearDown(router.dispose);
   await tester.pumpWidget(UncontrolledProviderScope(
@@ -393,8 +404,110 @@ void main() {
       await _drainTimers(tester);
     });
 
-    testWidgets('主体区命中路径不被浮层截获（BackdropFilter 不得出现）', (tester) async {
-      final adapter = _Adapter((o, i) {
+    // ── 2.4.3 双卡手势护栏：新卡区可点可拖、Dock 与顶栏不受影响 ──────────
+    group('2.4.3 双卡手势（历史卡/年报卡可点可拖）', () {
+      // 双卡 mock：on-this-day 给一组往年记录（卡渲染）、yearbook 给全零
+      // （恒渲染），其余路径照旧空对象（失败静默口径下 provider 不炸）。
+      _Adapter cardsAdapter() => _Adapter((o, i) {
+            if (o.uri.path == '/api/me') return _json(_me());
+            if (o.uri.path == '/api/records') return _json(<Object>[]);
+            if (o.uri.path == '/api/on-this-day') {
+              return _json(<Object>[
+                {
+                  'year': 2025,
+                  'is_today': false,
+                  'items': [
+                    {
+                      'id': 'r1', 'kind': 'post', 'author': 'u1',
+                      'body': {'content': '去年今天', 'date': '2025-05-01'},
+                      'created': 1730000000, 'likes': <String>[],
+                      'comments': <Object>[], 'media': <Object>[],
+                    },
+                  ],
+                },
+              ]);
+            }
+            if (o.uri.path == '/api/yearbook') {
+              return _json(<String, Object>{
+                'year': 2026, 'is_current': true, 'total': 0,
+                'photos': 0, 'mood_days': 0, 'wishes_done': 0,
+                'moods': 0, 'anniversaries': 0, 'active_days': 0,
+                'streak': 0, 'interactions': 0, 'by_kind': <String, Object>{},
+                'mood_top': <Object>[], 'words': <Object>[],
+              });
+            }
+            return _json(<String, Object>{});
+          });
+
+
+      testWidgets('双卡可点：历史卡 tap → /on-this-day；返回后年报卡 tap → /yearbook',
+          (tester) async {
+        final container = await _container(cardsAdapter());
+        await _pumpShellRouter(tester, container);
+        // 双卡在每日一句下方，视口外：滚到可见（这也是「可拖动」的路径）
+        await tester.scrollUntilVisible(
+          find.byKey(const Key('home-card-otd')),
+          200,
+          scrollable: find.descendant(
+              of: find.byType(ShellPage),
+              matching: find.byType(Scrollable)).first,
+        );
+        await tester.pump(const Duration(milliseconds: 200));
+        await tester.tap(find.byKey(const Key('home-card-otd')));
+        await tester.pump();
+        await tester.pump(const Duration(seconds: 1));
+        expect(find.text('ON_THIS_DAY_PAGE'), findsOneWidget,
+            reason: '🔴 历史卡 tap 必须生效（新卡不得吞手势/被浮层截获）');
+
+        // 系统返回 → 回首页且首页可继续交互（再滚到年报卡可点）
+        await tester.pageBack();
+        await tester.pump(const Duration(seconds: 1));
+        await tester.scrollUntilVisible(
+          find.byKey(const Key('home-card-yearbook')),
+          200,
+          scrollable: find.descendant(
+              of: find.byType(ShellPage),
+              matching: find.byType(Scrollable)).first,
+        );
+        await tester.pump(const Duration(milliseconds: 200));
+        await tester.tap(find.byKey(const Key('home-card-yearbook')));
+        await tester.pump();
+        await tester.pump(const Duration(seconds: 1));
+        expect(find.text('YEARBOOK_PAGE'), findsOneWidget,
+            reason: '🔴 返回后年报卡 tap 继续生效（首页未锁死）');
+        await _drainTimers(tester);
+      });
+
+      testWidgets('双卡区可纵向拖动滚动 + Dock 不受影响', (tester) async {
+        final container = await _container(cardsAdapter());
+        await _pumpShellRouter(tester, container);
+        final scrollable = find
+            .descendant(
+                of: find.byType(ShellPage),
+                matching: find.byType(Scrollable))
+            .first;
+        final before = tester.state<ScrollableState>(scrollable).position.pixels;
+        // 从卡区起手向上拖：新卡不得拦截纵向手势
+        await tester.scrollUntilVisible(
+          find.byKey(const Key('home-card-yearbook')),
+          200,
+          scrollable: scrollable,
+        );
+        await tester.pump(const Duration(milliseconds: 200));
+        final after = tester.state<ScrollableState>(scrollable).position.pixels;
+        expect(after, greaterThan(before),
+            reason: '🔴 双卡区纵向拖动必须能滚动首页（2.3.5 事故回归护栏）');
+        // Dock 不受影响：五 tab 切换仍可用（切到时光 tab）
+        await tester.tap(find.byKey(const Key('shell-nav-1')));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+        expect(find.byKey(const Key('home-card-yearbook')), findsNothing,
+            reason: 'Dock 切 tab 正常（首页卡随 IndexedStack 隐藏）');
+        await _drainTimers(tester);
+      });
+    });
+
+    testWidgets('主体区命中路径不被浮层截获（BackdropFilter 不得出现）', (tester) async {      final adapter = _Adapter((o, i) {
         if (o.uri.path == '/api/me') return _json(_me());
         if (o.uri.path == '/api/records') return _json(<Object>[]);
         return _json(<String, Object>{});

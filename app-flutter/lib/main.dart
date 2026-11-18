@@ -24,6 +24,8 @@ import 'features/settings/settings_state.dart';
 import 'features/album/album_viewer_page.dart';
 import 'features/auth/auth_state.dart';
 import 'features/auth/login_page.dart';
+import 'features/home/on_this_day_page.dart';
+import 'features/home/yearbook_page.dart';
 import 'features/chat/chat_toast.dart' show ChatToastHost;
 import 'features/chat/messages_page.dart';
 import 'features/notify/channels_page.dart';
@@ -75,6 +77,11 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/splash', builder: (_, _) => const _SplashPage()),
       GoRoute(path: '/login', builder: (_, _) => const LoginPage()),
       GoRoute(path: '/home', builder: (_, _) => const ShellPage()),
+      // 2.4.3 双卡二级页：首页历史卡/年报卡 context.push 进入；
+      // AppBar 自动返回按钮 + 系统手势都能回上一页。
+      GoRoute(
+          path: '/on-this-day', builder: (_, _) => const OnThisDayPage()),
+      GoRoute(path: '/yearbook', builder: (_, _) => const YearbookPage()),
       // 聊天（悄悄话）：二级页，Shell AppBar 私聊图标 push 进入（对齐 Web 顶栏入口）
       GoRoute(path: '/messages', builder: (_, _) => const MessagesPage()),
       GoRoute(path: '/profile', builder: (_, _) => const ProfilePage()),

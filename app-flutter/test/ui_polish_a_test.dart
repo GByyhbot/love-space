@@ -192,7 +192,9 @@ GoRouter _router({
 Future<void> _pump(WidgetTester tester, Widget w) async {
   tester.view.physicalSize = const Size(1080, 3600);
   tester.view.devicePixelRatio = 1.0;
-  await tester.pumpWidget(w);
+  // 2.4.3 双卡落首页后页内有了 InkWell（需 Material 祖先）；裸 pump 页面
+  // 统一套一层不占布局的 Material（对齐 settings_242/shell_gesture 先例）。
+  await tester.pumpWidget(Material(child: w));
   await tester.pump(const Duration(milliseconds: 10));
   await tester.pumpAndSettle();
 }

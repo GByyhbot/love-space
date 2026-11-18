@@ -31,6 +31,7 @@ import '../../core/ui/avatar_media.dart';
 import '../shell/web_chrome.dart';
 import '../settings/settings_widgets.dart' show GlassActionBar;
 import '../../core/theme/tokens.dart';
+import 'home_cards.dart' show OnThisDayCard, YearbookCard, onThisDayProvider, yearbookProvider;
 
 /// 今日日期（本地时区，与 Web today() 一致格式 yyyy-MM-dd）
 String todayStr() {
@@ -97,6 +98,13 @@ class HomePage extends ConsumerWidget {
       return const AppProgress();
     }
 
+    // 2.4.3 双卡显隐：onThisDayProvider 就绪且存在往年今日记录才渲染
+    // 历史卡（加载未完成先不渲染，无假卡闪烁；失败静默同形）。
+    final showOtdCard = ref.watch(onThisDayProvider).valueOrNull?.any(
+          (g) => !g.isToday && g.items.isNotEmpty,
+        ) ??
+        false;
+
     // 2.3.5（紧急 BugFix，主人真机点测拍板）：摘除「最近的小美好」动态卡区。
     // 🔴 主人最终裁定：问题出在动态卡（最近的小美好），心情与纪念日双格保留。
     // 首页构成：页头 → hero → today 双格 → 每日一句。
@@ -112,7 +120,12 @@ class HomePage extends ConsumerWidget {
         ),
       ),
       data: (list) => RefreshIndicator(
-        onRefresh: () async => ref.invalidate(recordsProvider),
+        // 2.4.3：下拉刷新把双卡数据一并刷新（与 hero/双格同一批生命周期）。
+        onRefresh: () async {
+          ref.invalidate(recordsProvider);
+          ref.invalidate(onThisDayProvider);
+          ref.invalidate(yearbookProvider);
+        },
         child: ListView(
           // 2.4.2 第 4 项：左右 18→16（五页标题行同线）；顶部归零——
           // 由标题行 PageHeading embedded 模式供 pageHeadingTopGap(8)
@@ -145,6 +158,15 @@ class HomePage extends ConsumerWidget {
             const SizedBox(height: 14), // today-card margin-bottom 14（:1414）
             _DailyQuote(theme: theme),
             const SizedBox(height: 18), // daily-quote margin-bottom 18（:1906）
+            // 2.4.3 第 1 项：历史上的今天卡（往年无记录整卡不渲染，间距随卡
+            // 消隐——报年份无记录时年报卡直接接在每日一句下方，间距仍是 18）。
+            if (showOtdCard) ...[
+              const OnThisDayCard(),
+              const SizedBox(height: 14), // 卡间统一间距（today-card 家族）
+            ],
+            // 2.4.3 第 2 项：今年的我们卡（恒渲染，全零也显示）。
+            const YearbookCard(),
+            const SizedBox(height: 18),
             // 2.3.5：「最近的小美好」动态卡区摘除（主人裁定吞首页手势）——
             // 完整动态与互动仍在时光页；_recentPosts 保留待复用。
             // ListView 尾部留白保持 104（Dock 让位）.
