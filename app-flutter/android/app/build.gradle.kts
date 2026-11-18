@@ -44,6 +44,9 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        // 2.4.5 乙组：flutter_local_notifications 23 明文要求启用 core library
+        // desugaring（checkReleaseAarMetadata 硬校验，run 44330022473 根因）
+        coreLibraryDesugaringEnabled = true
     }
 
     defaultConfig {
@@ -93,4 +96,10 @@ kotlin {
 
 flutter {
     source = "../.."
+}
+
+// 2.4.5 乙组：core library desugaring 依赖（随 coreLibraryDesugaringEnabled；
+// 2.1.4 需 AGP 8.4+，本工程 AGP 9.1.0 满足）
+dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }
