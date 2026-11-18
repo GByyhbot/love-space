@@ -25,8 +25,11 @@ const String _kApkName = 'app-arm64-v8a-release.apk';
 const String _kBaseUrl =
     'https://github.com/GByyhbot/love-space/releases/download';
 
-GithubAsset _apkAsset([String tag = 'app-v2.4.3']) => GithubAsset(
-    name: _kApkName, url: '$_kBaseUrl/$tag/$_kApkName');
+GithubAsset _apkAsset([String tag = 'app-v2.4.3', String digest = '']) =>
+    GithubAsset(
+        name: _kApkName,
+        url: '$_kBaseUrl/$tag/$_kApkName',
+        digest: digest);
 
 GithubRelease _rel(String tag, {bool pre = false, bool apk = true}) =>
     GithubRelease(
@@ -207,7 +210,7 @@ void main() {
   });
 
   // ── ④ 验签失败：删文件、不进安装步 ────────────────────────────
-  group('④ 验签对账（sha256 硬性校验）', () {
+  group('④ 验签对账（digest 锚点优先，2026-11-18 裁定）', () {
     late Directory tmp;
     setUp(() {
       tmp = Directory.systemTemp.createTempSync('upd243');
@@ -220,52 +223,73 @@ void main() {
       } catch (_) {}
     });
 
-    test('下载成功但 .sha256 不符 → 验签失败、文件被删、不进安装步', () async {
+    test('digest 存在 → 期望值取 digest、零额外请求（不发 .sha256）', () async {
+      final bytes = List<int>.generate(2048, (i) => i % 256);
+      final hex = crypto.sha256.convert(bytes).toString();
+      final adapter = _FakeAdapter(apkBytes: bytes, shaText: 'shoud-not-be-hit');
+      final dio = Dio()..httpClientAdapter = adapter;
+      final asset = _apkAsset('app-v2.4.3', 'sha256:$hex');
+      final target = await apkTargetFile('2.4.3');
+      await downloadApk(dio, asset, target);
+
+      final expected = await resolveExpectedSha256(dio, asset);
+      expect(expected, hex); // 与本地一致 → 对账通过可进安装步
+      expect(target.existsSync(), isTrue);
+      // 计数断言：digest 存在时不发 .sha256 请求（只用元数据，零额外请求）
+      expect(adapter.urls.where((u) => u.endsWith('.sha256')).length, 0);
+      expect(
+          adapter.urls.where((u) => u.endsWith(_kApkName)).length, 1);
+    });
+
+    test('digest 不符 → 删文件、不进安装步、不发 .sha256 请求', () async {
       final adapter = _FakeAdapter(
         apkBytes: List<int>.generate(2048, (i) => i % 256),
-        shaText: 'ff' * 32, // 故意与内容不符
+        shaText: 'shoud-not-be-hit',
       );
       final dio = Dio()..httpClientAdapter = adapter;
-      final asset = _apkAsset();
+      final asset = _apkAsset('app-v2.4.3', 'sha256:${'ff' * 32}'); // 与内容不符
       final target = await apkTargetFile('2.4.3');
-
-      // 下载（直连成功落盘）
-      final outcome = await downloadApk(dio, asset, target);
+      await downloadApk(dio, asset, target);
       expect(target.existsSync(), isTrue);
-      expect(outcome.channelUsed, '直连 GitHub');
 
-      // sheet 验签段落的等价对账逻辑（update_sheet.dart:111-124）
-      final expected = await fetchSha256(dio, asset);
+      // sheet 验签段落的等价对账逻辑（update_sheet.dart）
+      final expected = await resolveExpectedSha256(dio, asset);
       final actual =
           crypto.sha256.convert(await target.readAsBytes()).toString();
       final failed = expected == null || actual != expected;
       if (failed && target.existsSync()) target.deleteSync();
 
-      expect(failed, isTrue); // sha 不符 → 判失败
+      expect(failed, isTrue); // digest 不符 → 判失败
       expect(target.existsSync(), isFalse); // 文件已删（禁进安装步）
-      // .sha256 只走 GitHub 直连（无代理前缀），APK 直连 1 次
-      expect(
-          adapter.urls.where((u) => u.endsWith(_kApkName)).length, 1);
-      expect(
-          adapter.urls.where((u) => u.endsWith('.sha256')).length, 1);
+      expect(adapter.urls.where((u) => u.endsWith('.sha256')).length, 0);
       // 安装器零调用的证据：OpenFilex.open 调用点仅在验签通过之后
       // （update_sheet._install，且前置 existsSync 守卫）；文件已删即不可能安装。
     });
 
-    test('.sha256 相符 → 验签通过、文件保留（才会进安装步）', () async {
+    test('digest 缺失 → 回退 .sha256 文件获取（仍只走直连）', () async {
       final bytes = List<int>.generate(2048, (i) => i % 256);
       final hex = crypto.sha256.convert(bytes).toString();
-      final adapter = _FakeAdapter(apkBytes: bytes, shaText: hex);
+      final adapter = _FakeAdapter(apkBytes: bytes, shaText: '$hex  $_kApkName');
       final dio = Dio()..httpClientAdapter = adapter;
-      final asset = _apkAsset();
+      final asset = _apkAsset(); // 无 digest
       final target = await apkTargetFile('2.4.3');
       await downloadApk(dio, asset, target);
-      final expected = await fetchSha256(dio, asset);
-      final actual =
-          crypto.sha256.convert(await target.readAsBytes()).toString();
-      expect(expected, isNotNull);
-      expect(actual, expected); // 对账通过 → sheet 才会调 _install()
-      expect(target.existsSync(), isTrue);
+
+      final expected = await resolveExpectedSha256(dio, asset);
+      expect(expected, hex);
+      expect(adapter.urls.where((u) => u.endsWith('.sha256')).length, 1);
+      expect(
+          adapter.urls
+              .where((u) => u.startsWith('https://gh-proxy'))
+              .isEmpty,
+          isTrue); // 校验值不经代理（原口径）
+    });
+
+    test('digest 缺失且 .sha256 也拿不到 → null（验签失败，不许无校验安装）',
+        () async {
+      final adapter = _FakeAdapter(apkBytes: const [], shaText: 'oops');
+      final dio = Dio()..httpClientAdapter = adapter;
+      expect(await resolveExpectedSha256(dio, _apkAsset()), isNull);
     });
 
     testWidgets('「以后再说」→ sessionDeferredVersions 记录 + sheet 关闭',

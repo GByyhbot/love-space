@@ -65,13 +65,29 @@ final Set<String> sessionDeferredVersions = <String>{};
 /// ── 模型 ─────────────────────────────────────────────────────────────
 
 class GithubAsset {
-  const GithubAsset({required this.name, required this.url});
+  const GithubAsset({
+    required this.name,
+    required this.url,
+    this.digest = '',
+  });
   final String name;
   final String url;
+
+  /// GitHub API 资产 digest（`sha256:<hex>`；老响应/无该字段 → 空串）。
+  final String digest;
+
+  /// digest 中的小写 hex；缺失或格式不符返回 null（走 .sha256 回退）。
+  String? get digestHex {
+    final d = digest.trim();
+    if (d.isEmpty) return null;
+    final m = RegExp(r'^sha256:([0-9a-fA-F]{64})$').firstMatch(d);
+    return m?.group(1)?.toLowerCase();
+  }
 
   factory GithubAsset.fromJson(Map<String, dynamic> j) => GithubAsset(
         name: (j['name'] ?? '').toString(),
         url: (j['browser_download_url'] ?? '').toString(),
+        digest: (j['digest'] ?? '').toString(),
       );
 }
 
@@ -298,6 +314,17 @@ Future<bool> _downloadVia(
 
 /// 校验值获取（硬性）：.sha256 资产只走 GitHub 直连（禁代理），拿不到
 /// 视为验签失败（不许从下载通道取校验值）。
+/// 期望校验值获取（2026-11-18 yang 裁定）：优先取 Releases API 资产
+/// digest 字段（`sha256:<hex>`）——它与版本元数据同响应、同 GitHub 直连
+/// HTTPS，零额外请求、不经代理，满足「校验值不经代理」原口径；digest
+/// 缺失才回退 .sha256 资产文件获取（仍只走直连禁代理）。两者都拿不到 →
+/// null，调用方按验签失败处理（不许无校验安装）。
+Future<String?> resolveExpectedSha256(Dio dio, GithubAsset apkAsset) async {
+  final fromDigest = apkAsset.digestHex;
+  if (fromDigest != null) return fromDigest;
+  return fetchSha256(dio, apkAsset);
+}
+
 Future<String?> fetchSha256(Dio dio, GithubAsset apkAsset) async {
   try {
     final r = await dio.get<String>(

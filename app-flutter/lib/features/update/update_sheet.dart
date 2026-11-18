@@ -107,8 +107,10 @@ class _UpdateSheetState extends ConsumerState<_UpdateSheet> {
         _channel = outcome.channelUsed;
         _phase = _Phase.verifying;
       });
-      // ── 验签（硬性）：本地 SHA-256 vs GitHub 元数据 .sha256 ──
-      final expected = await fetchSha256(dio, asset);
+      // ── 验签（硬性）：期望值优先取 API 资产 digest（零请求、不经
+      // 代理）；缺失回退 .sha256 直连。本地 SHA-256 对账不符 → 立即
+      // 删文件，禁止进入安装步（不许无校验安装）──
+      final expected = await resolveExpectedSha256(dio, asset);
       final actual = expected == null || !_apkFile!.existsSync()
           ? null
           : crypto
