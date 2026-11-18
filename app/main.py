@@ -2309,6 +2309,10 @@ def yearbook(year: int = 0, user=Depends(current_user)):
     # 按"这条记录属于哪天"归年：优先 body.date（用户填的事发日），没有就用创建时间
     in_year = []
     for r in rows:
+        # 传照片专属动态只进相册：年报统计不捞回（2.4.2 album_only 口径对齐，
+        # 与 /api/on-this-day main.py 同规则；否则 total/photos 会混入专属照片）
+        if r['kind'] == 'post' and r['body'].get('album_only'):
+            continue
         day = (r['body'].get('date') or '')[:10]
         if not day:
             try:
@@ -2355,6 +2359,10 @@ def yearbook(year: int = 0, user=Depends(current_user)):
     return {'year': y, 'is_current': y == current_year,
             'total': len(in_year), 'by_kind': by_kind, 'photos': photos,
             'moods': sum(1 for r in in_year if r['kind'] == 'mood'),
+            # 2.4.3 四格「天心情」：今年有 mood 记录的去重天数（App 端 records
+            # 列表 limit=1000 无法证明拉全，口径单一事实源放在这里算）
+            'mood_days': len({r['_day'] for r in in_year
+                              if r['kind'] == 'mood' and r['_day']}),
             'wishes_done': sum(1 for r in in_year if r['kind'] == 'wish' and r['body'].get('done')),
             'anniversaries': sum(1 for r in in_year if r['kind'] == 'anniversary'),
             'active_days': len(days), 'streak': streak,
