@@ -421,36 +421,77 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
     }
   }
 
-  /// 搜索栏（带清空；placeholder 对齐 Web「搜索最近的消息…」）
+  /// 搜索栏（2.4.4 第 3 项悬浮胶囊化：底板去掉透出聊天背景，胶囊与输入栏
+  /// 同处理——chatChromeColor 同源 + 圆角 26 + 左右 10 同面板 margin）。
+  /// placeholder 对齐 Web「搜索最近的消息…」；关闭 ✕ 收进胶囊右端小圆钮
+  /// （直径 34，底色为胶囊内浅一档的圆）。搜索逻辑/输入处理/关闭语义原样。
   Widget _buildSearchBar(bool immersive) {
     final theme = Theme.of(context);
+    final onDark = immersive;
     return Container(
-      color: theme.colorScheme.surface.withValues(alpha: immersive ? 0.85 : 1),
-      padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
-      child: Row(children: [
-        Expanded(
-          child: TextField(
-            controller: _searchCtrl,
-            autofocus: true,
-            onChanged: (_) => setState(() {}),
-            decoration: const InputDecoration(
-              hintText: '搜索最近的消息…',
-              prefixIcon: Icon(Icons.search_rounded),
-              isDense: true,
-              border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(AppRadius.card))),
+      color: Colors.transparent, // 底板去掉，直接透出聊天背景
+      padding: const EdgeInsets.fromLTRB(10, 6, 10, 6),
+      child: Container(
+        key: const Key('search-bar-capsule'),
+        decoration: BoxDecoration(
+          color: chatChromeColor(theme, immersive: immersive),
+          borderRadius: BorderRadius.circular(26),
+          // 浅色 = 白色悬浮 + 柔和阴影（对齐 PostCard 家族双影口径）；
+          // 深色（immersive 压黑）不加阴影
+          boxShadow: onDark
+              ? null
+              : <BoxShadow>[
+                  BoxShadow(
+                    color: theme.colorScheme.shadow.withValues(alpha: 0.06),
+                    offset: const Offset(0, 2),
+                    blurRadius: 10,
+                  ),
+                ],
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+        child: Row(children: [
+          Expanded(
+            child: TextField(
+              controller: _searchCtrl,
+              autofocus: true,
+              onChanged: (_) => setState(() {}),
+              decoration: const InputDecoration(
+                hintText: '搜索最近的消息…',
+                prefixIcon: Icon(Icons.search_rounded),
+                isDense: true,
+                filled: false,
+                border: InputBorder.none,
+                enabledBorder: InputBorder.none,
+                focusedBorder: InputBorder.none,
+              ),
             ),
           ),
-        ),
-        IconButton(
-          tooltip: '关闭搜索',
-          onPressed: () => setState(() {
-            // 清空搜索词并收起搜索栏，恢复完整列表（真机缺陷 3：此前只清文本）
-            _searchOpen = false;
-            _searchCtrl.clear();
-          }),
-          icon: const Icon(Icons.close_rounded),
-        ),
-      ]),
+          // ✕ 收进胶囊右端的小圆钮（直径 34，底色为胶囊内浅一档的圆）
+          Tooltip(
+            message: '关闭搜索',
+            child: InkWell(
+              onTap: () => setState(() {
+                // 清空搜索词并收起搜索栏，恢复完整列表（真机缺陷 3：此前只清文本）
+                _searchOpen = false;
+                _searchCtrl.clear();
+              }),
+              customBorder: const CircleBorder(),
+              child: Container(
+                key: const Key('search-close-dot'),
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: onDark
+                      ? Colors.white.withValues(alpha: 0.14)
+                      : theme.colorScheme.surfaceContainerHighest,
+                ),
+                child: const Icon(Icons.close_rounded, size: 18),
+              ),
+            ),
+          ),
+        ]),
+      ),
     );
   }
 

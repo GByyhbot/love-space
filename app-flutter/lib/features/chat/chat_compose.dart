@@ -556,18 +556,30 @@ class _ChatComposeState extends ConsumerState<ChatCompose>
       case 'chat-bg': // 聊天背景（段三：背景弹层）
         _pickFunction();
         widget.onOpenWallpaper?.call();
-      case 'tool-calendar':
-      case 'tool-quest':
-      case 'tool-wish':
-      case 'tool-ledger':
-        _snack('条目 6 迁移后开放');
+      // ── 2.4.4 第 4 项：迁移期占位全部摘除，接 hub 同款真路由
+      // （路由出处=hub 卡片 together_page.dart:99/120/141/148/162/169）──
+      case 'tool-calendar': // 共同年历
+        _pickFunction();
+        context.push('/together/calendar');
+      case 'tool-quest': // 恋爱清单
+        _pickFunction();
+        context.push('/together/quest');
+      case 'tool-wish': // 共同愿望
+        _pickFunction();
+        context.push('/together/wish');
+      case 'tool-ledger': // 共同账本
+        _pickFunction();
+        context.push('/together/ledger');
       case 'tool-period': // 条目 8 段 8-A：与 hub 🌸 宽卡同一 /period 二级页
         _pickFunction();
         context.push('/period');
-      case 'dashboard':
-      case 'weekly':
-        _snack('条目 9 迁移后开放');
-      case 'figure':
+      case 'dashboard': // 数据看板（条目 6 段 E 已交付页，main.dart /together/dashboard）
+        _pickFunction();
+        context.push('/together/dashboard');
+      case 'weekly': // 回忆周报（条目 6 段 E 已交付页，main.dart /together/weekly）
+        _pickFunction();
+        context.push('/together/weekly');
+      case 'figure': // 情侣摆拍：功能确实不存在（Web 专属页），列清单报告
         _snack('情侣摆拍为 Web 专属页，不在 App 迁移范围');
     }
   }

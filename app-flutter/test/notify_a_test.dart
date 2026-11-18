@@ -1127,27 +1127,25 @@ void main() {
       expect(apiSrc.contains('dio.put('), isFalse, reason: '无 PUT /api/channels 编辑');
     });
 
-    test('D9：⊕ 面板旧编号占位留痕 + 无真跳转（语义护栏）', () {
+    test('D9：⊕ 面板占位已摘除、接 hub 同款真跳转（2.4.4 第 4 项语义护栏）', () {
       final String src =
           File('lib/features/chat/chat_compose.dart').readAsStringSync();
-      // ① 正向：历史占位仍在（D9 仅文档层面口径定案，不改行为）。
-      expect(src.contains("case 'dashboard':"), isTrue);
-      expect(src.contains("case 'weekly':"), isTrue);
-      expect(src.contains("_snack('条目 9 迁移后开放')"), isTrue,
-          reason: 'D9 仅文档层面口径定案；占位原样保留为历史留痕');
-      // ② 反向：不得出现 ⊕ 面板 → 工具页的**真导航调用**（占位必须还是占位）。
-      expect(src.contains("push('/together/dashboard')"), isFalse,
-          reason: 'D9：dashboard 占位不得改成真跳转');
-      expect(src.contains("push('/together/weekly')"), isFalse,
-          reason: 'D9：weekly 占位不得改成真跳转');
-      expect(src.contains("go('/together/dashboard')"), isFalse,
-          reason: 'D9：dashboard 占位不得改成真跳转（go 形态）');
-      expect(src.contains("go('/together/weekly')"), isFalse,
-          reason: 'D9：weekly 占位不得改成真跳转（go 形态）');
-      // ③ 段 A（2.2.8）起本护栏由「与 2dcb4a4 全文逐字比对」改为**语义断言**：
-      //    错误通道清偿是合法改动（chat_compose 的 catch 分支接 MediaValidationError
-      //    detail 直通），逐字比对会误红；行为红线只针对 D9 本身——占位仍在 +
-      //    无真跳转，以上 ①② 已完整覆盖，护栏强度不弱化。
+      // ① 反向：旧占位 toast 清零（D9「占位留痕 + 无真跳转」口径由 2.4.4
+      //    第 4 项主人拍板解除——页面本体早已交付，占位只是没接线）。
+      expect(src.contains("_snack('条目 9 迁移后开放')"), isFalse,
+          reason: '2.4.4 第 4 项：dashboard/weekly 占位已摘除');
+      expect(src.contains('迁移后开放'), isFalse,
+          reason: '全仓迁移占位文案清零（含条目 6 四入口）');
+      // ② 正向：六入口全部接 hub 同款真路由（route 出处=together_page 卡片）。
+      expect(src.contains("push('/together/dashboard')"), isTrue);
+      expect(src.contains("push('/together/weekly')"), isTrue);
+      expect(src.contains("push('/together/calendar')"), isTrue);
+      expect(src.contains("push('/together/quest')"), isTrue);
+      expect(src.contains("push('/together/wish')"), isTrue);
+      expect(src.contains("push('/together/ledger')"), isTrue);
+      // ③ 历史口径变迁：段 A（2.2.8）时 D9 为「占位留痕 + 无真跳转」语义
+      //    护栏；2.4.4 第 4 项摘占位接线后本护栏反转为上述 ①② 新语义，
+      //    护栏强度不弱化（占位清零 + 六真跳转逐条断言）。
     });
 
     test('2.4.0：提醒设置入口迁设置主页（hub 8 卡退役）', () {
