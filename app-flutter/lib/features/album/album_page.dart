@@ -18,6 +18,7 @@ import '../../core/album/album_data.dart';
 import '../../core/chat/chat_media.dart';
 import '../../core/sse/sse_client.dart';
 import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
+import '../../core/ui/hold_to_confirm.dart' show HoldToConfirmButton;
 import '../chat/video_player_page.dart';
 import 'album_controller.dart';
 import '../../core/ui/page_heading.dart';
@@ -462,12 +463,8 @@ class _AlbumPageState extends ConsumerState<AlbumPage> {
             onPressed: () => Navigator.of(dctx).pop(false), // 取消
             child: const Text('取消'),
           ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-                backgroundColor: Theme.of(context).colorScheme.error),
-            onPressed: () => Navigator.of(dctx).pop(true),
-            child: const Text('删除'),
-          ),
+          // 2.4.10 第 04 项：删除确认改长按确认。
+          HoldToConfirmButton(onConfirm: () => Navigator.of(dctx).pop(true)),
         ],
       ),
     );

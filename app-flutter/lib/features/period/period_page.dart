@@ -25,6 +25,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/api/api_client.dart' as api;
+import '../../core/ui/hold_to_confirm.dart' show HoldToConfirmButton;
 import '../../core/sse/sse_client.dart';
 import '../../core/together/together_data.dart';
 import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
@@ -928,11 +929,8 @@ class _PeriodPageState extends ConsumerState<PeriodPage> {
           TextButton(
               onPressed: () => Navigator.of(dctx).pop(false),
               child: const Text('取消')),
-          FilledButton(
-              style: FilledButton.styleFrom(
-                  backgroundColor: Theme.of(context).colorScheme.error),
-              onPressed: () => Navigator.of(dctx).pop(true),
-              child: const Text('删除')),
+          // 2.4.10 第 04 项：删除确认改长按确认。
+          HoldToConfirmButton(onConfirm: () => Navigator.of(dctx).pop(true)),
         ],
       ),
     );

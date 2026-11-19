@@ -11,10 +11,12 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
+import '_hold_helper.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:love_space/core/api/api_client.dart' as api;
+import 'package:love_space/core/ui/hold_to_confirm.dart';
 import 'package:love_space/core/chat/chat_media.dart'
     show chatBaseProvider, mediaCookieHeadersProvider;
 import 'package:love_space/core/together/together_data.dart';
@@ -286,8 +288,8 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('删除'));
       await tester.pumpAndSettle();
-      await tester.tap(find.widgetWithText(FilledButton, '删除'));
-      await tester.pumpAndSettle();
+      // 2.4.10：确认钮换长按确认（走满才落点）。
+      await holdConfirm(tester, find.byType(HoldToConfirmButton));
       expect(deleteCount, 1);
       expect(find.text('已删除'), findsOneWidget);
       await tester.pump(const Duration(seconds: 3));

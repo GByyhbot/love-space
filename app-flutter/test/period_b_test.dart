@@ -16,11 +16,13 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
+import '_hold_helper.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:love_space/core/api/api_client.dart' as api;
+import 'package:love_space/core/ui/hold_to_confirm.dart';
 import 'package:love_space/core/sse/sse_client.dart'
     show SseEvent, sseEventsProvider;
 import 'package:love_space/features/chat/chat_toast.dart'
@@ -678,7 +680,7 @@ void main() {
       await tester.tap(find.text('删除这次'));
       await tester.pumpAndSettle();
       expect(find.text('删掉这次经期？'), findsOneWidget);
-      await tester.tap(find.text('删除').last);
+      await holdConfirm(tester, find.byType(HoldToConfirmButton));
       await tester.pumpAndSettle();
       expect(s.deletedIds, ['f1', 'f2', 'f3'],
           reason: 'period-del-episode 对整次全部碎片逐个 DELETE');

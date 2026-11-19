@@ -11,6 +11,7 @@ import '../auth/auth_state.dart';
 import '../../core/ui/submit_morph.dart' show SubmitMorphButton;
 import 'timeline_controller.dart';
 import '../../core/theme/tokens.dart';
+import '../../core/ui/hold_to_confirm.dart' show HoldToConfirmButton;
 
 /// 打开评论 Sheet（footer 评论数点击 / 「回复」入口）
 Future<void> showCommentSheet(BuildContext context,
@@ -55,9 +56,8 @@ class _CommentSheetState extends ConsumerState<CommentSheet> {
           TextButton(
               onPressed: () => Navigator.of(ctx).pop(false),
               child: const Text('取消')),
-          FilledButton(
-              onPressed: () => Navigator.of(ctx).pop(true),
-              child: const Text('删除')),
+          // 2.4.10 第 04 项：删除确认改长按确认。
+          HoldToConfirmButton(onConfirm: () => Navigator.of(ctx).pop(true)),
         ],
       ),
     );

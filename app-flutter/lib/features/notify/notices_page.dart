@@ -34,6 +34,7 @@ import '../timeline/record_story_sheet.dart' show showRecordStorySheet;
 import 'notify_api.dart';
 import 'notify_models.dart';
 import 'notify_widgets.dart';
+import '../../core/ui/hold_to_confirm.dart' show HoldToConfirmButton;
 
 class NoticesPage extends ConsumerStatefulWidget {
   const NoticesPage({super.key});
@@ -160,10 +161,10 @@ class _NoticesPageState extends ConsumerState<NoticesPage> {
             onPressed: () => Navigator.pop(ctx, false),
             child: const Text('取消'),
           ),
-          TextButton(
+          // 2.4.10 第 04 项：确认改长按确认（key 保留供测试）。
+          HoldToConfirmButton(
             key: const Key('notices-delete-confirm'),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('删除'),
+            onConfirm: () => Navigator.pop(ctx, true),
           ),
         ],
       ),

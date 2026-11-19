@@ -20,6 +20,7 @@ import '../../core/timeline/timeline_data.dart';
 import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
 import '../chat/media_bubble_widgets.dart' show MediaImageView, VideoCardView, VoiceChipView;
 import '../shell/web_chrome.dart' show WebSemanticColors;
+import '../../core/ui/hold_to_confirm.dart' show HoldToConfirmButton;
 import '../../core/ui/like_burst.dart' show LikeBurstIcon, LikeCountLabel;
 import 'comment_sheet.dart';
 import 'composer_sheet.dart';
@@ -354,9 +355,9 @@ class _OwnMenu extends ConsumerWidget {
           TextButton(
               onPressed: () => Navigator.of(ctx).pop(false),
               child: const Text('取消')),
-          FilledButton(
-              onPressed: () => Navigator.of(ctx).pop(true),
-              child: const Text('删除')),
+          // 2.4.10 第 04 项：删除确认改长按确认（1.5s 进度环，走满
+          // 才回 true；软删/回收站逻辑零改动）。
+          HoldToConfirmButton(onConfirm: () => Navigator.of(ctx).pop(true)),
         ],
       ),
     );
@@ -425,9 +426,9 @@ class _CommentRow extends ConsumerWidget {
           TextButton(
               onPressed: () => Navigator.of(ctx).pop(false),
               child: const Text('取消')),
-          FilledButton(
-              onPressed: () => Navigator.of(ctx).pop(true),
-              child: const Text('删除')),
+          // 2.4.10 第 04 项：删除确认改长按确认（1.5s 进度环，走满
+          // 才回 true；软删/回收站逻辑零改动）。
+          HoldToConfirmButton(onConfirm: () => Navigator.of(ctx).pop(true)),
         ],
       ),
     );

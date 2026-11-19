@@ -30,6 +30,7 @@ import 'notify_api.dart';
 import 'notify_models.dart';
 import 'notify_widgets.dart';
 import '../../core/theme/tokens.dart';
+import '../../core/ui/hold_to_confirm.dart' show HoldToConfirmButton;
 
 class ChannelsPage extends ConsumerStatefulWidget {
   const ChannelsPage({super.key});
@@ -154,10 +155,10 @@ class _ChannelsPageState extends ConsumerState<ChannelsPage> {
             onPressed: () => Navigator.pop(ctx, false),
             child: const Text('取消'),
           ),
-          TextButton(
+          // 2.4.10 第 04 项：确认改长按确认（key 保留供测试）。
+          HoldToConfirmButton(
             key: const Key('channel-delete-confirm'),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('移除'),
+            onConfirm: () => Navigator.pop(ctx, true),
           ),
         ],
       ),

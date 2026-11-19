@@ -197,6 +197,7 @@ class ChatRecord {
     required this.body,
     this.clientId = '',
     this.media = const [],
+    this.likes = const [],
   });
   final String id;
   final String author;
@@ -205,6 +206,10 @@ class ChatRecord {
   final ChatBody body;
   final String clientId;
   final List<ChatMedia> media;
+
+  /// 2.4.10 第 09 项：每记录点赞（服务端 records.likes 本就随序列化下发，
+  /// 此前未解析）；点赞接口对 kind='chat' 放行可用（盘点已核）。
+  final List<String> likes;
 
   factory ChatRecord.fromJson(Map<String, dynamic> j) => ChatRecord(
         id: (j['id'] ?? '').toString(),
@@ -217,6 +222,7 @@ class ChatRecord {
             .whereType<Map>()
             .map((m) => ChatMedia.fromJson(m.cast<String, dynamic>()))
             .toList(),
+        likes: ((j['likes'] ?? const []) as List).map((e) => e.toString()).toList(),
       );
 
   Map<String, dynamic> toJson() => {
@@ -227,7 +233,20 @@ class ChatRecord {
         'client_id': clientId,
         'body': body.toJson(),
         'media': media.map((m) => m.toJson()).toList(),
+        'likes': likes,
       };
+
+  /// 2.4.10：点赞乐观翻转用副本。
+  ChatRecord copyLikes(List<String> newLikes) => ChatRecord(
+        id: id,
+        author: author,
+        created: created,
+        updated: updated,
+        body: body,
+        clientId: clientId,
+        media: media,
+        likes: newLikes,
+      );
 
   /// 渲染是否与 [o] 相同（对账合并时判断既有行是否需要原地更新）。
   /// 以 updated 时间戳 + 影响渲染的全部字段为准：撤回/置顶/引用变化都会推 updated。
@@ -248,7 +267,8 @@ class ChatRecord {
       body.song == o.body.song &&
       _listEq(body.mediaIds, o.body.mediaIds) &&
       _listEq(media.map((m) => m.id), o.media.map((m) => m.id)) &&
-      _listEq(media.map((m) => m.status), o.media.map((m) => m.status));
+      _listEq(media.map((m) => m.status), o.media.map((m) => m.status)) &&
+      _listEq(likes, o.likes);
 
   static bool _listEq(Iterable<String> a, Iterable<String> b) {
     if (a.length != b.length) return false;

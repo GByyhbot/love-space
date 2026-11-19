@@ -25,6 +25,7 @@ import '../auth/auth_state.dart';
 import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
 import '../../core/ui/like_burst.dart' show LikeBurstIcon, LikeCountLabel;
 import '../../core/ui/submit_morph.dart' show SubmitMorphButton;
+import '../../core/ui/hold_to_confirm.dart' show HoldToConfirmButton;
 import '../chat/media_bubble_widgets.dart'
     show MediaImageView, VideoCardView, VoiceChipView;
 import 'image_viewer.dart';
@@ -145,9 +146,8 @@ class _RecordStorySheetState extends ConsumerState<_RecordStorySheet> {
           TextButton(
               onPressed: () => Navigator.of(ctx).pop(false),
               child: const Text('取消')),
-          FilledButton(
-              onPressed: () => Navigator.of(ctx).pop(true),
-              child: const Text('删除')),
+          // 2.4.10 第 04 项：删除确认改长按确认。
+          HoldToConfirmButton(onConfirm: () => Navigator.of(ctx).pop(true)),
         ],
       ),
     );

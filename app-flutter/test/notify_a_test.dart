@@ -11,6 +11,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
+import '_hold_helper.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -824,7 +825,7 @@ void main() {
       expect(store.notices.length, 4, reason: '确认可取消，不删');
       await tester.tap(find.byKey(const Key('notices-delete-read')));
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('notices-delete-confirm')));
+      await holdConfirm(tester, find.byKey(const Key('notices-delete-confirm')));
       await tester.pumpAndSettle();
       expect(
         store.notices.any((Map<String, dynamic> n) => n['id'] == 'n3'),
@@ -1025,7 +1026,7 @@ void main() {
       expect(store.channels.length, 1);
       await tester.tap(find.byKey(const Key('channel-delete-c-existing')));
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('channel-delete-confirm')));
+      await holdConfirm(tester, find.byKey(const Key('channel-delete-confirm')));
       await tester.pumpAndSettle();
       expect(store.channels, isEmpty);
       expect(find.text('选择你的提醒方式'), findsOneWidget,

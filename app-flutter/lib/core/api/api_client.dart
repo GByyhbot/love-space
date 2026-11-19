@@ -49,11 +49,18 @@ final statusProvider = FutureProvider<SpaceStatus>((ref) async {
 /// （与 5xx 同一呈现通道）：调用方既有 `catch (e) + errorDetail(e)` 即可取到
 /// 服务端 `detail` **原文**，不新增异常类型（本库无法引用 chat_media 的
 /// MediaValidationError，避免反向依赖）。
-Future<String> uploadMedia(Dio dio, String filename, List<int> bytes) async {
+/// [onProgress] 2.4.10 第 05 项：真实字节进度回调（0.0–1.0，dio
+/// onSendProgress 换算），null = 不回调（既有调用零改动）。错误通道不变。
+Future<String> uploadMedia(Dio dio, String filename, List<int> bytes,
+    {void Function(double progress)? onProgress}) async {
   final form = FormData.fromMap({
     'file': MultipartFile.fromBytes(bytes, filename: filename),
   });
-  final r = await dio.post('/api/media', data: form);
+  final r = await dio.post('/api/media', data: form,
+      onSendProgress: onProgress == null
+          ? null
+          : (count, total) =>
+              total > 0 ? onProgress((count / total).clamp(0.0, 1.0)) : null);
   final err = writeResponseError(r);
   if (err != null) {
     throw DioException(

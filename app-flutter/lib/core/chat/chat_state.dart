@@ -551,6 +551,44 @@ class ChatController extends Notifier<ChatState> {
     return writeResponseError(r);
   }
 
+  /// 2.4.10 第 09 项：双击爱心回应（每记录点赞 toggle，kind='chat' 放行
+  /// 可用）。乐观翻转即时呈现（爱心回应 chip），失败回滚返回 detail 原文
+  ///（页面走既有错误通道）；无通知依赖、无假状态。
+  Future<String?> toggleChatLike(String id, String userId) async {
+    ChatRecord? before;
+    Future<void> patch(List<String> likes) async {
+      await _patchRecordLocally(id, (rec) {
+        before ??= rec;
+        return rec.copyLikes(likes);
+      });
+    }
+
+    final current =
+        state.rows.whereType<ChatRecordRow>().map((r) => r.record);
+    final target = current.where((r) => r.id == id).firstOrNull;
+    if (target == null) return '消息不在当前列表';
+    final likes = List<String>.of(target.likes);
+    if (likes.contains(userId)) {
+      likes.remove(userId);
+    } else {
+      likes.add(userId);
+    }
+    await patch(likes);
+    try {
+      final dio = await ref.read(dioProvider.future);
+      final r = await dio.post('/api/records/$id/like');
+      final err = writeResponseError(r);
+      if (err != null) {
+        if (before != null) await patch(before!.likes); // 回滚
+        return err;
+      }
+      return null;
+    } catch (e) {
+      if (before != null) await patch(before!.likes); // 回滚
+      return errorDetail(e);
+    }
+  }
+
   /// 本地原地更新一条已确认记录（pin/recall 后即时反馈；SSE 对账幂等）
   Future<void> _patchRecordLocally(
       String id, ChatRecord Function(ChatRecord) f) async {

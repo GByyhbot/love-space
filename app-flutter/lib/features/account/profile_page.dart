@@ -7,6 +7,7 @@
 library;
 
 import 'dart:typed_data';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show Clipboard, ClipboardData;
@@ -93,28 +94,60 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     } catch (_) {}
   }
 
+  // 2.4.10 第 05 项：上传进度态（与资料保存的 _busy 拆分）。
+  double? _uploadProgress; // null=空闲；0..1（ease-out 映射后）
+  bool _uploadReady = false; // 填满后「全部准备就绪」交叉淡出期
+  bool _showCompleteArc = false; // 阶段二：新头像外圈完成弧
+
   Future<void> _pickAvatar() async {
     try {
       final picked = await ImagePicker().pickImage(
         source: ImageSource.gallery, maxWidth: 1024, imageQuality: 85);
       if (picked == null) return;
-      setState(() { _busy = true; _error = null; });
+      setState(() {
+        _busy = true;
+        _uploadProgress = 0;
+        _uploadReady = false;
+        _error = null;
+      });
       final bytes = await picked.readAsBytes();
       final dio = await ref.read(dioProvider.future);
-      final mid = await uploadMedia(dio, picked.name, bytes);
+      final mid = await uploadMedia(dio, picked.name, bytes,
+          // 真实字节进度，ease-out 映射（先快后慢，提示词钦定节奏）。
+          onProgress: (p) {
+        if (mounted) {
+          setState(() => _uploadProgress = Curves.easeOut.transform(p));
+        }
+      });
       if (!mounted) return;
       setState(() {
         _pendingAvatarId = mid;
         _avatarBytes = Uint8List.fromList(bytes); // 本地即时预览（无需等服务端转码）
+        _uploadReady = true; // 「正在上传头像」↔「全部准备就绪」交叉淡出
       });
+      // 阶段一收尾驻留一拍，随后溶解过渡回账号页 + 新头像完成弧。
+      await Future<void>.delayed(const Duration(milliseconds: 700));
+      if (!mounted) return;
+      setState(() {
+        _busy = false;
+        _uploadProgress = null;
+        _uploadReady = false;
+        _showCompleteArc = true;
+      });
+      // 完成弧 0→100% + 数字同步，画完整体淡出（动画时长在 widget 内）。
+      await Future<void>.delayed(const Duration(milliseconds: 1400));
+      if (mounted) setState(() => _showCompleteArc = false);
     } catch (e) {
       if (mounted) {
-        setState(() => _error = '头像上传失败，可重试后重新保存');
+        setState(() {
+          _error = '头像上传失败，可重试后重新保存';
+          _uploadProgress = null;
+          _uploadReady = false;
+          _busy = false;
+        });
         ref.read(chatToastProvider.notifier).show(
             '头像上传失败，可重试后重新保存', tone: ChatToastTone.error);
       }
-    } finally {
-      if (mounted) setState(() => _busy = false);
     }
   }
 
@@ -354,19 +387,54 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                 GestureDetector(
                   onTap: _busy ? null : _pickAvatar,
                   child: Stack(children: [
-                    _Avatar(
-                    bytes: _avatarBytes,
-                    name: me.user.name,
-                    size: 88,
-                    avatarId: _pendingAvatarId ?? _avatarId ?? '',
-                  ),
+                    // 2.4.10 阶段二：溶解过渡（缩放 1.04→1，约 0.5s）。
+                    TweenAnimationBuilder<double>(
+                      key: ValueKey(_showCompleteArc),
+                      tween: Tween(
+                          begin: _showCompleteArc ? 1.04 : 1.0, end: 1.0),
+                      duration: _showCompleteArc
+                          ? const Duration(milliseconds: 500)
+                          : Duration.zero,
+                      curve: Curves.easeOut,
+                      builder: (context, scale, child) => Transform.scale(
+                          scale: scale, child: child),
+                      child: _Avatar(
+                        bytes: _avatarBytes,
+                        name: me.user.name,
+                        size: 88,
+                        avatarId: _pendingAvatarId ?? _avatarId ?? '',
+                      ),
+                    ),
+                    // 2.4.10 阶段二：完成弧（底环细环 + 强调弧 12 点顺时针
+                    // 画到 100%、端点圆头，环内百分比数字同步；画完淡出）。
+                    if (_showCompleteArc)
+                      Positioned.fill(
+                        child: AnimatedOpacity(
+                          opacity: 1,
+                          duration: const Duration(milliseconds: 300),
+                          child: const _AvatarCompleteArc(size: 88),
+                        ),
+                      ),
                     Positioned(right: 0, bottom: 0, child: CircleAvatar(
                       radius: 14, backgroundColor: theme.colorScheme.primary,
                       child: const Icon(Icons.edit, size: 14, color: Colors.white))),
                   ]),
                 ),
                 const SizedBox(height: Spacing.gap),
-                Text('点击更换头像', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.outline)),
+                // 2.4.10 阶段一：上传进度呈现（一行小字 + 进度胶囊 240×10）。
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 240),
+                  child: _uploadProgress != null
+                      ? _UploadProgressLine(
+                          key: const ValueKey('upload-line'),
+                          progress: _uploadProgress!,
+                          ready: _uploadReady,
+                        )
+                      : Text('点击更换头像',
+                          key: const ValueKey('upload-idle'),
+                          style: theme.textTheme.bodySmall
+                              ?.copyWith(color: theme.colorScheme.outline)),
+                ),
                 const SizedBox(height: 10),
                 // 居中昵称 + 身份 chip（@账号名 · 角色）。
                 Text(me.user.name, style: theme.textTheme.titleMedium),
@@ -552,6 +620,130 @@ class _Avatar extends StatelessWidget {
           style: TextStyle(fontSize: size * 0.38, color: theme.colorScheme.onPrimaryContainer)),
     );
   }
+}
+
+/// 2.4.10 阶段一：上传进度行——小字「正在上传头像」/「全部准备就绪」
+/// + 进度胶囊（宽 240 高 10，圆角 999，填充+百分比由真实字节进度驱动）。
+class _UploadProgressLine extends StatelessWidget {
+  const _UploadProgressLine({
+    super.key,
+    required this.progress,
+    required this.ready,
+  });
+
+  final double progress;
+  final bool ready;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Column(children: [
+      AnimatedSwitcher(
+        duration: const Duration(milliseconds: 240),
+        child: Text(
+          ready ? '全部准备就绪' : '正在上传头像',
+          key: ValueKey(ready),
+          style: Theme.of(context)
+              .textTheme
+              .labelSmall
+              ?.copyWith(color: cs.outline),
+        ),
+      ),
+      const SizedBox(height: 6),
+      SizedBox(
+        width: 240,
+        height: 10,
+        child: Stack(children: [
+          Container(
+            decoration: BoxDecoration(
+              color: cs.surfaceContainerHighest.withValues(alpha: 0.6),
+              borderRadius: BorderRadius.circular(999),
+            ),
+          ),
+          FractionallySizedBox(
+            widthFactor: progress.clamp(0.0, 1.0),
+            child: Container(
+              decoration: BoxDecoration(
+                color: cs.primary,
+                borderRadius: BorderRadius.circular(999),
+              ),
+            ),
+          ),
+        ]),
+      ),
+      const SizedBox(height: 4),
+      Text('${(progress * 100).round()}%',
+          style: Theme.of(context)
+              .textTheme
+              .labelSmall
+              ?.copyWith(color: cs.primary)),
+    ]);
+  }
+}
+
+/// 2.4.10 阶段二：新头像外圈完成弧——底环细环 + 强调弧 12 点顺时针
+/// 画到 100%（端点圆头），环内百分比数字同步；画完随宿主淡出。
+/// 🔴 提示词定案：App 无对应指标，弧一律画到 100%（上传完成），不自造假百分比。
+class _AvatarCompleteArc extends StatelessWidget {
+  const _AvatarCompleteArc({required this.size});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: const Duration(milliseconds: 800),
+      curve: Curves.easeOut,
+      builder: (context, v, _) => CustomPaint(
+        size: Size.square(size),
+        painter: _CompleteArcPainter(progress: v, track: cs.outlineVariant, arc: cs.primary),
+        child: Center(
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: cs.surface.withValues(alpha: 0.85),
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: Text(
+              '${(v * 100).round()}%',
+              style: Theme.of(context)
+                  .textTheme
+                  .labelSmall
+                  ?.copyWith(color: cs.primary, fontWeight: FontWeight.w600),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CompleteArcPainter extends CustomPainter {
+  const _CompleteArcPainter({
+    required this.progress,
+    required this.track,
+    required this.arc,
+  });
+
+  final double progress;
+  final Color track;
+  final Color arc;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final stroke = 3.0;
+    final rect = (Offset.zero & size).deflate(stroke);
+    canvas.drawArc(rect, 0, 2 * math.pi, false,
+        Paint()..style = PaintingStyle.stroke..strokeWidth = stroke..color = track);
+    if (progress <= 0) return;
+    canvas.drawArc(rect, -math.pi / 2, 2 * math.pi * progress, false,
+        Paint()..style = PaintingStyle.stroke..strokeWidth = stroke..strokeCap = StrokeCap.round..color = arc);
+  }
+
+  @override
+  bool shouldRepaint(_CompleteArcPainter old) => old.progress != progress;
 }
 
 class _PersonLine extends StatelessWidget {

@@ -12,6 +12,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/together/together_data.dart';
+import '../../core/ui/hold_to_confirm.dart' show HoldToConfirmButton;
 import '../../core/ui/avatar_media.dart';
 import '../../core/ui/empty_view.dart';
 import '../../core/ui/error_view.dart';
@@ -175,11 +176,8 @@ class _AnniversaryPageState extends ConsumerState<AnniversaryPage> {
           TextButton(
               onPressed: () => Navigator.of(dctx).pop(false),
               child: const Text('取消')),
-          FilledButton(
-              style: FilledButton.styleFrom(
-                  backgroundColor: Theme.of(context).colorScheme.error),
-              onPressed: () => Navigator.of(dctx).pop(true),
-              child: const Text('删除')),
+          // 2.4.10 第 04 项：删除确认改长按确认。
+          HoldToConfirmButton(onConfirm: () => Navigator.of(dctx).pop(true)),
         ],
       ),
     );

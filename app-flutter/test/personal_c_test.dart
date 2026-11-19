@@ -85,11 +85,13 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
+import '_hold_helper.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:love_space/core/api/api_client.dart' as api;
+import 'package:love_space/core/ui/hold_to_confirm.dart';
 import 'package:love_space/core/ui/submit_morph.dart';
 import 'package:love_space/core/chat/chat_media.dart'
     show chatBaseProvider, mediaCookieHeadersProvider;
@@ -1085,8 +1087,8 @@ void main() {
       expect(find.textContaining('不进回收站'), findsNothing);
       expect(find.textContaining('不可恢复'), findsNothing);
 
-      await tester.tap(find.widgetWithText(FilledButton, '删除'));
-      await tester.pumpAndSettle();
+      // 2.4.10：确认钮换长按确认（走满才 DELETE）。
+      await holdConfirm(tester, find.byType(HoldToConfirmButton));
       expect(
           adapter.requests,
           anyElement(predicate<RequestOptions>((r) =>

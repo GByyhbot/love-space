@@ -499,11 +499,12 @@ void main() {
     expect(File('lib/main.dart').readAsStringSync().contains('ChatToastHost'),
         isTrue);
 
-    // ⑧ 删除确认弹层统一：AlertDialog + FilledButton（error 底色）仍在四页
+    // ⑧ 删除确认弹层统一：2.4.10 起确认钮换 HoldToConfirmButton（长按
+    // 1.5s 进度环）；AlertDialog + 长按确认钮组合仍在四页。
     expect(src.entries
         .where((e) =>
             e.value.contains('AlertDialog') &&
-            e.value.contains('FilledButton'))
+            e.value.contains('HoldToConfirmButton'))
         .map((e) => e.key.split(RegExp(r'[\\/]')).last), containsAll(<String>[
       'album_page.dart',
       'tool_pages.dart',

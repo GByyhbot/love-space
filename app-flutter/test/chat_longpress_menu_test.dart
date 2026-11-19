@@ -6,10 +6,12 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
+import '_hold_helper.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:love_space/core/api/api_client.dart';
+import 'package:love_space/core/ui/hold_to_confirm.dart';
 import 'package:love_space/core/chat/chat_media.dart';
 import 'package:love_space/core/chat/chat_models.dart';
 import 'package:love_space/core/chat/chat_state.dart';
@@ -154,7 +156,7 @@ Future<void> _probe(WidgetTester tester) async {
   await tester.tap(find.text('撤回'));
   await tester.pumpAndSettle();
   expect(find.text('撤回这条悄悄话？'), findsOneWidget);
-  await tester.tap(find.text('确认'));
+  await holdConfirm(tester, find.byType(HoldToConfirmButton));
   await tester.pumpAndSettle();
 
   expect(recallPosted, true, reason: 'POST /api/records/r1/recall 应已发出');

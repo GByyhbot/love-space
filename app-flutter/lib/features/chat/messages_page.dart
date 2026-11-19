@@ -7,11 +7,14 @@
 library;
 
 import 'package:cached_network_image/cached_network_image.dart';
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_client.dart';
+import '../../core/ui/hold_to_confirm.dart' show HoldToConfirmButton;
 import '../../core/cache/low_freq_cache.dart';
 import '../../core/chat/chat_bubbles.dart';
 import '../../core/chat/chat_chrome.dart';
@@ -47,6 +50,11 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
   StateController<bool>? _pageActive;
   final _replyNotifier = ValueNotifier<(String, String)?>(null);
   final _rowKeys = <String, GlobalKey>{};
+  // 2.4.10 第 09 项：双击爱心——顶栏对方头像 GlobalKey（飞行终点/吸入点）
+  // + 脉冲 tick（爱心到达时头像缩一下再弹回）。
+  final GlobalKey _partnerAvatarKey = GlobalKey();
+  int _avatarPulse = 0;
+  OverlayEntry? _heartFlight;
   final _searchCtrl = TextEditingController();
   bool _searchOpen = false;
   String _flashId = '';
@@ -214,6 +222,48 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
     );
   }
 
+  // ── 2.4.10 第 09 项：双击爱心回应 ──────────────────────────────
+  // 双击消息气泡：数据层即刻乐观 toggle（爱心回应 chip 即时出现，
+  // 失败回滚走既有通道）；动画为纯装饰——五颗爱心从落点先散开、
+  // 再沿同一条弧线飞向顶栏对方头像吸入，头像缩放回弹。
+  // 撤回行/贴纸行/待发行不接（无手势链路，盘点口径）。
+  void _onBubbleDoubleTap(ChatRecord record, Offset globalPosition) {
+    if (record.body.recalled) return;
+    final me = ref.read(authProvider.notifier).me;
+    final meId = me?.user.id ?? '';
+    if (meId.isEmpty) return;
+    ref
+        .read(chatControllerProvider.notifier)
+        .toggleChatLike(record.id, meId)
+        .then((err) {
+      if (err != null && mounted) {
+        _snack(err, tone: ChatToastTone.error);
+      }
+    });
+    _launchHeartFlight(globalPosition);
+  }
+
+  void _launchHeartFlight(Offset start) {
+    final box =
+        _partnerAvatarKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null || !box.attached) return; // 对方未加入：无吸入点，仅翻转数据
+    final end = box.localToGlobal(box.size.center(Offset.zero));
+    _heartFlight?.remove();
+    var arrived = false;
+    _heartFlight = OverlayEntry(
+      builder: (_) => _HeartFlight(
+        start: start,
+        end: end,
+        onArrive: () {
+          if (arrived) return;
+          arrived = true;
+          if (mounted) setState(() => _avatarPulse++);
+        },
+      ),
+    );
+    Overlay.of(context, rootOverlay: true).insert(_heartFlight!);
+  }
+
   /// 撤回确认（对齐 Web confirmAction：'撤回这条悄悄话？'/'撤回后双方都不会再看到这条消息。'）
   Future<void> _confirmRecall(ChatRecord record) async {
     final ok = await showDialog<bool>(
@@ -223,7 +273,8 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
         content: const Text('撤回后双方都不会再看到这条消息。'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('再想想')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('确认')),
+          // 2.4.10 第 04 项：撤回（不可恢复删除类）确认改长按确认。
+          HoldToConfirmButton(onConfirm: () => Navigator.pop(ctx, true)),
         ],
       ),
     );
@@ -315,7 +366,11 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
                       style: TextStyle(
                           fontSize: 16,
                           color: Theme.of(context).colorScheme.onPrimaryContainer)))
-              : _ChatAvatar(user: partner, size: 36),
+              : _PulsingAvatar(
+                  key: _partnerAvatarKey,
+                  pulse: _avatarPulse,
+                  child: _ChatAvatar(user: partner, size: 36),
+                ),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
@@ -633,6 +688,7 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
                         if (rowCtx != null) _showActions(rowCtx, record, mine);
                       },
                       onJump: _jumpTo,
+                      onDoubleTapAt: (pos) => _onBubbleDoubleTap(record, pos),
                     ),
             ),
           _PendingItem(:final row) =>
@@ -762,6 +818,7 @@ class _BubbleRow extends ConsumerWidget {
     required this.flashTick,
     required this.onLongPress,
     required this.onJump,
+    required this.onDoubleTapAt,
   });
   final MeData me;
   final ChatRecord record;
@@ -772,6 +829,36 @@ class _BubbleRow extends ConsumerWidget {
   final int flashTick; // >0 表示本行正在闪烁（值变化触发动画）
   final VoidCallback onLongPress;
   final void Function(String id) onJump; // 引用块跳回原消息+高亮
+  final void Function(Offset globalPosition) onDoubleTapAt; // 2.4.10 双击爱心
+
+  // 2.4.10 第 09 项：消息下方爱心回应（我点赞过 → 小心形 + 计数）。
+  Widget _withHeartChip(BuildContext context, Widget bubble) {
+    final liked = record.likes.isNotEmpty;
+    if (!liked) return bubble;
+    return Column(mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment:
+            mine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+        children: [
+          bubble,
+          const SizedBox(height: 2),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 2),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              Icon(Icons.favorite_rounded,
+                  size: 12, color: Theme.of(context).colorScheme.primary),
+              if (record.likes.length > 1) ...[
+                const SizedBox(width: 2),
+                Text('${record.likes.length}',
+                    style: Theme.of(context)
+                        .textTheme
+                        .labelSmall
+                        ?.copyWith(
+                            color: Theme.of(context).colorScheme.primary)),
+              ],
+            ]),
+          ),
+        ]);
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -941,14 +1028,25 @@ class _BubbleRow extends ConsumerWidget {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
       child: GestureDetector(
         onLongPress: onLongPress,
+        // 2.4.10 第 09 项：双击爱心回应（与长按菜单共存，无 onTap 无延迟代价）
+        onDoubleTapDown: (d) => onDoubleTapAt(d.globalPosition),
+        onDoubleTap: () {},
         behavior: HitTestBehavior.opaque, // 整行热区，防内层透明区域吞长按
         child: Row(
           mainAxisAlignment:
               mine ? MainAxisAlignment.end : MainAxisAlignment.start,
           crossAxisAlignment: CrossAxisAlignment.end,
           children: mine
-              ? [Flexible(child: bubble), const SizedBox(width: 6), avatar]
-              : [avatar, const SizedBox(width: 6), Flexible(child: bubble)],
+              ? [
+                  Flexible(child: _withHeartChip(context, bubble)),
+                  const SizedBox(width: 6),
+                  avatar
+                ]
+              : [
+                  avatar,
+                  const SizedBox(width: 6),
+                  Flexible(child: _withHeartChip(context, bubble))
+                ],
         ),
       ),
     );
@@ -1185,4 +1283,148 @@ class _ChatAvatarState extends ConsumerState<_ChatAvatar> {
               color: theme.colorScheme.onPrimaryContainer),
         ),
       );
+}
+
+// ── 2.4.10 第 09 项：双击爱心回应（动画件）────────────────────────
+// 五颗大小不一的爱心从手指落点弹出，先交错散开，再沿同一条弧线
+// 一起拐向顶栏对方头像，越靠近越小，最后被头像吸入；全程路径连续
+// 无接点回跳。到达后 [onArrive] 触发头像缩放回弹。
+// 动画只动 transform/opacity；总时长 1.2s 为命名常量。
+const Duration kHeartFlightDuration = Duration(milliseconds: 1200);
+
+class _HeartFlight extends StatefulWidget {
+  const _HeartFlight({
+    required this.start,
+    required this.end,
+    required this.onArrive,
+  });
+
+  final Offset start;
+  final Offset end;
+  final VoidCallback onArrive;
+
+  @override
+  State<_HeartFlight> createState() => _HeartFlightState();
+}
+
+class _HeartFlightState extends State<_HeartFlight>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(
+      vsync: this, duration: kHeartFlightDuration)
+    ..addStatusListener((s) {
+      if (s == AnimationStatus.completed) widget.onArrive();
+      if (s == AnimationStatus.completed && mounted) {
+        // 动画完成后自摘（OverlayEntry 由页面持有引用统一清理）。
+        Future.microtask(() => widget.onArrive.call());
+      }
+    });
+
+  // 五颗：大小不一 + 错峰出发（提示词钦定交错散开）。
+  static const _hearts = <(double, double)>[
+    (20, 0.00), (13, 0.10), (17, 0.06), (11, 0.14), (15, 0.03),
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _c.forward();
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  // 同一条弧线：二次贝塞尔，控制点 = 起终点中点沿法线上抬。
+  Offset _bezier(Offset a, Offset b, double t) {
+    final mid = (a + b) / 2;
+    final d = b - a;
+    final n = Offset(-d.dy, d.dx);
+    final ctrl = mid + n * 0.35;
+    final q1 = a + (ctrl - a) * t;
+    final q2 = ctrl + (b - ctrl) * t;
+    return q1 + (q2 - q1) * t;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: Stack(children: [
+        for (final (size, delay) in _hearts)
+          AnimatedBuilder(
+            animation: _c,
+            builder: (context, _) {
+              final p = ((_c.value - delay) / (1 - delay)).clamp(0.0, 1.0);
+              // 前 18%：从落点交错散开（各颗方向不同的小位移）；
+              // 余下 82%：沿同一条弧线飞向头像，越靠近越小。
+              final scatter =
+                  Offset(math.cos(p * 6 + size) * 14, math.sin(p * 6 + size) * 10) *
+                      (1 - p / 0.18).clamp(0.0, 1.0);
+              final fp = Curves.easeIn.transform(((p - 0.18) / 0.82).clamp(0.0, 1.0));
+              final pos = _bezier(widget.start, widget.end, fp) + scatter;
+              final scale =
+                  1.0 - 0.65 * Curves.easeIn.transform(fp.clamp(0.0, 1.0));
+              final opacity =
+                  fp > 0.92 ? (1 - fp) / 0.08 : 1.0; // 吸入端淡出
+              return Positioned(
+                left: pos.dx - size / 2,
+                top: pos.dy - size / 2,
+                child: Transform.scale(
+                  scale: scale,
+                  child: Opacity(
+                    opacity: opacity.clamp(0.0, 1.0),
+                    child: Icon(Icons.favorite_rounded,
+                        size: size,
+                        color: Theme.of(context).colorScheme.primary),
+                  ),
+                ),
+              );
+            },
+          ),
+      ]),
+    );
+  }
+}
+
+/// 顶栏头像脉冲包装：爱心到达时缩一下再弹回原尺寸（tick 变化触发）。
+class _PulsingAvatar extends StatefulWidget {
+  const _PulsingAvatar({super.key, required this.pulse, required this.child});
+  final int pulse;
+  final Widget child;
+
+  @override
+  State<_PulsingAvatar> createState() => _PulsingAvatarState();
+}
+
+class _PulsingAvatarState extends State<_PulsingAvatar>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c =
+      AnimationController(vsync: this, duration: const Duration(milliseconds: 320));
+
+  @override
+  void didUpdateWidget(covariant _PulsingAvatar old) {
+    super.didUpdateWidget(old);
+    if (old.pulse != widget.pulse) _c.forward(from: 0);
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _c,
+      builder: (context, child) {
+        final t = _c.value;
+        // 缩一下（0.8）再弹回 1（easeOutBack 回弹）。
+        final scale = 1.0 - 0.2 * math.sin(math.pi * t.clamp(0.0, 1.0));
+        return Transform.scale(scale: scale, child: child);
+      },
+      child: widget.child,
+    );
+  }
 }
