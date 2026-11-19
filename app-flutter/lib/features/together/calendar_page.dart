@@ -108,67 +108,68 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, Spacing.pageBottom),
           children: [
-            // 月份导航
-            Row(children: [
-              Expanded(
-                child: Text(
-                  '$m 月 · $y 年'
-                  '${_activeDayCount > 0 ? ' · 记了 $_activeDayCount 天' : ' · 还空着'}',
-                  style: theme.textTheme.titleMedium),
-              ),
-              IconButton(
-                  tooltip: '上个月',
-                  onPressed: () => _shiftMonth(-1),
-                  icon: const Icon(Icons.chevron_left_rounded)),
-              TextButton(onPressed: _backToToday, child: const Text('今天')),
-              IconButton(
-                  tooltip: '下个月',
-                  onPressed: () => _shiftMonth(1),
-                  icon: const Icon(Icons.chevron_right_rounded)),
-            ]),
             if (_loading && _data.month.isEmpty)
               const Padding(
                   padding: EdgeInsets.all(32),
                   child: Center(child: CircularProgressIndicator())),
             if (!_loading || _data.month.isNotEmpty) ...[
-              const SizedBox(height: 4),
-              // 星期行
-              Row(children: [
-                for (final w in const ['日', '一', '二', '三', '四', '五', '六'])
-                  Expanded(
-                    child: Center(
-                        child: Text(w,
-                            style: theme.textTheme.labelSmall
-                                ?.copyWith(color: cs.outline))),
-                  ),
-              ]),
-              const SizedBox(height: 4),
-              // 日格（每行 7 格）
-              for (var row = 0;
-                  row < (firstWeekday + daysInMonth + 6) ~/ 7;
-                  row++)
-                Row(children: [
-                  for (var col = 0; col < 7; col++)
-                    _buildCell(theme, cs, row, col, firstWeekday, daysInMonth,
-                        todayDay, dotKinds, me),
-                ]),
-              const SizedBox(height: Spacing.gap),
-              // 图例
-              Wrap(spacing: 12, children: [
-                for (final (k, label) in dotKinds)
-                  Row(mainAxisSize: MainAxisSize.min, children: [
-                    Container(
-                        width: 8,
-                        height: 8,
-                        decoration:
-                            BoxDecoration(color: _dotColor(k, cs),
-                                shape: BoxShape.circle)),
-                    const SizedBox(width: 4),
-                    Text(label,
-                        style: theme.textTheme.labelSmall
-                            ?.copyWith(color: cs.outline)),
+              // 2.4.7 甲组：整月视图收进一张卡（标题行→星期行→日期网格→
+              // 发丝线→图例行）；点选/翻月交互语义零变化。
+              Card(
+                margin: EdgeInsets.zero,
+                child: Padding(
+                  padding: const EdgeInsets.all(Spacing.cardPad),
+                  child: Column(children: [
+                    _buildHeader(theme, cs),
+                    const SizedBox(height: 10),
+                    // 星期行
+                    Row(children: [
+                      for (final w in const [
+                        '日', '一', '二', '三', '四', '五', '六'
+                      ])
+                        Expanded(
+                          child: Center(
+                              child: Text(w,
+                                  style: theme.textTheme.labelSmall
+                                      ?.copyWith(color: cs.outline))),
+                        ),
+                    ]),
+                    const SizedBox(height: 2),
+                    // 日格（每行 7 格）
+                    for (var row = 0;
+                        row < (firstWeekday + daysInMonth + 6) ~/ 7;
+                        row++)
+                      Row(children: [
+                        for (var col = 0; col < 7; col++)
+                          _buildCell(theme, cs, row, col, firstWeekday,
+                              daysInMonth, todayDay, dotKinds, me),
+                      ]),
+                    const SizedBox(height: 12),
+                    // 发丝线 + 图例行（置卡内底部）
+                    Divider(height: 1, thickness: 1, color: cs.outlineVariant),
+                    const SizedBox(height: 12),
+                    Wrap(
+                        alignment: WrapAlignment.center,
+                        spacing: 14,
+                        runSpacing: 6,
+                        children: [
+                          for (final (k, label) in dotKinds)
+                            Row(mainAxisSize: MainAxisSize.min, children: [
+                              Container(
+                                  width: 8,
+                                  height: 8,
+                                  decoration: BoxDecoration(
+                                      color: _dotColor(k, cs),
+                                      shape: BoxShape.circle)),
+                              const SizedBox(width: 4),
+                              Text(label,
+                                  style: theme.textTheme.labelSmall
+                                      ?.copyWith(color: cs.outline)),
+                            ]),
+                        ]),
                   ]),
-              ]),
+                ),
+              ),
               const SizedBox(height: 12),
               _buildDetail(theme, cs, me),
             ],
@@ -184,9 +185,77 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
     );
   }
 
+  /// 标题行：「2026 年 11 月」单行不折行 + 「记了 N 天」主题色浅底胶囊
+  /// + 右侧 ‹（浅底圆钮）/ 今天（主题色文字钮）/ ›（2.4.7 甲组）；
+  /// 393 宽单行由标题 Flexible+ellipsis 保证。
+  Widget _buildHeader(ThemeData theme, ColorScheme cs) {
+    final y = int.parse(_month.substring(0, 4));
+    final m = int.parse(_month.substring(5, 7));
+    final countLabel =
+        _activeDayCount > 0 ? '记了 $_activeDayCount 天' : '还空着';
+    return Row(children: [
+      Expanded(
+        child: Row(children: [
+          Flexible(
+            child: Text('$y 年 $m 月',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.titleMedium
+                    ?.copyWith(fontWeight: FontWeight.w700)),
+          ),
+          const SizedBox(width: 6),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(
+                color: cs.primary.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(999)),
+            child: Text(countLabel,
+                maxLines: 1,
+                style:
+                    theme.textTheme.labelSmall?.copyWith(color: cs.primary)),
+          ),
+        ]),
+      ),
+      const SizedBox(width: 4),
+      _roundNavBtn(
+          theme, cs, Icons.chevron_left_rounded, '上个月', () => _shiftMonth(-1)),
+      TextButton(
+          onPressed: _backToToday,
+          child: Text('今天',
+              style: TextStyle(
+                  color: cs.primary, fontWeight: FontWeight.w600))),
+      _roundNavBtn(theme, cs, Icons.chevron_right_rounded, '下个月',
+          () => _shiftMonth(1)),
+    ]);
+  }
+
+  /// 浅底圆形导航小钮（约 28）。
+  Widget _roundNavBtn(ThemeData theme, ColorScheme cs, IconData icon,
+      String tooltip, VoidCallback onTap) {
+    return SizedBox(
+      width: 28,
+      height: 28,
+      child: IconButton(
+        tooltip: tooltip,
+        onPressed: onTap,
+        padding: EdgeInsets.zero,
+        iconSize: 20,
+        style: IconButton.styleFrom(
+          backgroundColor: cs.surfaceContainerHighest.withValues(alpha: 0.6),
+          shape: const CircleBorder(),
+        ),
+        icon: Icon(icon, color: cs.onSurface),
+      ),
+    );
+  }
+
   int get _activeDayCount =>
       _data.days.values.where((d) => d.hasEvents).length;
 
+  /// 四色点（2.4.7 甲组 token 化）：原 moods/checks 两处写死
+  /// 0xFF43A047/0xFFFFB300 退役，改取 colorScheme 令牌——纪念日=primary、
+  /// 动态=primary 60%、心情=tertiary、打卡=secondary；图例与格内圆点
+  /// 同源，深浅两色自动成立。
   Color _dotColor(String kind, ColorScheme cs) {
     switch (kind) {
       case 'anniversaries':
@@ -194,9 +263,9 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
       case 'posts':
         return cs.primary.withValues(alpha: 0.6);
       case 'moods':
-        return const Color(0xFF43A047); // 绿（Web --green 语义）
+        return cs.tertiary;
       case 'checks':
-        return const Color(0xFFFFB300); // 琥珀（Web --amber 语义）
+        return cs.secondary;
     }
     return cs.outline;
   }
@@ -241,25 +310,32 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
           borderRadius: BorderRadius.circular(8),
           onTap: () => setState(() => _selected = key),
           child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+            // 今天=主题色实心圆白字加粗；选中日=主题色描边圆（2.4.7 甲组）。
             Container(
-              padding: const EdgeInsets.all(2),
+              key: selected
+                  ? const Key('calendar-selected-ring')
+                  : isToday
+                      ? const Key('calendar-today-circle')
+                      : null,
+              width: 30,
+              height: 30,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: selected
-                    ? cs.primaryContainer
-                    : isToday
-                        ? cs.surfaceContainerHighest
-                        : Colors.transparent,
+                color: isToday ? cs.primary : Colors.transparent,
+                border: selected
+                    ? Border.all(color: cs.primary, width: 1.5)
+                    : null,
               ),
+              alignment: Alignment.center,
               child: Text(
                 '$day',
                 style: theme.textTheme.bodySmall?.copyWith(
-                  color: selected
-                      ? cs.onPrimaryContainer
+                  color: isToday
+                      ? cs.onPrimary
                       : isWeekend
                           ? cs.error.withValues(alpha: 0.7)
                           : cs.onSurface,
-                  fontWeight: isToday ? FontWeight.bold : null,
+                  fontWeight: isToday || selected ? FontWeight.bold : null,
                 ),
               ),
             ),
@@ -287,19 +363,30 @@ class _CalendarPageState extends ConsumerState<CalendarPage> {
   Widget _buildDetail(ThemeData theme, ColorScheme cs, MeData? me) {
     final selected = _selected;
     if (selected == null) {
-      return Card(
-        margin: EdgeInsets.zero,
-        child: Padding(
-          padding: const EdgeInsets.all(Spacing.cardPad),
-          child: Row(children: [
-            Icon(Icons.calendar_month_rounded, color: cs.outline),
-            const SizedBox(width: 10),
-            Expanded(
-                child: Text('点日历上的某一天，看看那天我们一起记下了什么。',
-                    style: theme.textTheme.bodySmall
-                        ?.copyWith(color: cs.outline))),
-          ]),
-        ),
+      // 提示卡：主题色浅底圆角卡 + 白底圆角方形图标底座（2.4.7 甲组）。
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(Spacing.cardPad),
+        decoration: BoxDecoration(
+            color: cs.primary.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(AppRadius.card)),
+        child: Row(children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+                color: cs.surface,
+                borderRadius: BorderRadius.circular(AppRadius.sm)),
+            alignment: Alignment.center,
+            child: Icon(Icons.calendar_month_rounded,
+                size: 22, color: cs.primary),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+              child: Text('点日历上的某一天，看看那天我们一起记下了什么。',
+                  style: theme.textTheme.bodySmall
+                      ?.copyWith(color: cs.onSurface.withValues(alpha: 0.8)))),
+        ]),
       );
     }
     final sel = _data.days[selected];

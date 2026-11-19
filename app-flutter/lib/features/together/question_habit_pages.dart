@@ -12,13 +12,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/together/together_data.dart';
+import '../../core/ui/empty_view.dart';
+import '../../core/ui/error_view.dart';
 import '../../core/ui/selection_sheet.dart';
 import '../auth/auth_state.dart';
 import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
 import '../settings/settings_widgets.dart'
     show filledFieldDecoration, showFormSheet;
 import 'together_controller.dart';
-import 'tool_pages.dart' show ToolTile;
+import 'tool_pages.dart' show ToolTile, toolFab;
 import '../../core/theme/tokens.dart';
 
 // ── 情侣问答 ──────────────────────────────────────────────────────
@@ -45,11 +47,11 @@ class _QuestionPageState extends ConsumerState<QuestionPage> {
     final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(title: const Text('情侣问答')),
-      floatingActionButton: FloatingActionButton.extended(
+      // 主题色实心胶囊悬浮钮（2.4.7 甲组，与 ToolScaffold 同源）。
+      floatingActionButton: toolFab(
+        context,
         tooltip: '提个问题',
         onPressed: () => _showAskForm(context, ref, null),
-        icon: const Icon(Icons.add_rounded),
-        label: const Text('提个问题'),
       ),
       body: RefreshIndicator(
         onRefresh: () => ref.read(togetherControllerProvider.notifier).load(),
@@ -61,20 +63,11 @@ class _QuestionPageState extends ConsumerState<QuestionPage> {
                     ?.copyWith(color: theme.colorScheme.outline)),
             const SizedBox(height: Spacing.gap),
             if (questions.isEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 48),
-                child: Column(children: [
-                  Icon(Icons.help_outline_rounded,
-                      size: 44, color: theme.colorScheme.outline),
-                  const SizedBox(height: 12),
-                  Text('给我们，多一点小小的仪式感',
-                      style: theme.textTheme.titleMedium),
-                  const SizedBox(height: Spacing.gap),
-                  Text('每天再多了解彼此一点。',
-                      textAlign: TextAlign.center,
-                      style: theme.textTheme.bodySmall
-                          ?.copyWith(color: theme.colorScheme.outline)),
-                ]),
+              // 空态共享语言（2.4.7 甲组）：AppEmptyView，文案逐字保留。
+              AppEmptyView(
+                icon: Icons.help_outline_rounded,
+                title: '给我们，多一点小小的仪式感',
+                hint: '每天再多了解彼此一点。',
               )
             else
               for (final r in questions)
@@ -104,9 +97,7 @@ class _QuestionPageState extends ConsumerState<QuestionPage> {
                 ),
             if (st.error != null) ...[
               const SizedBox(height: 10),
-              Text(st.error!,
-                  style: theme.textTheme.bodySmall
-                      ?.copyWith(color: theme.colorScheme.error)),
+              AppErrorText(st.error!),
             ],
           ],
         ),
@@ -348,11 +339,11 @@ class _HabitPageState extends ConsumerState<HabitPage> {
 
     return Scaffold(
       appBar: AppBar(title: const Text('共同打卡')),
-      floatingActionButton: FloatingActionButton.extended(
+      // 主题色实心胶囊悬浮钮（2.4.7 甲组，与 ToolScaffold 同源）。
+      floatingActionButton: toolFab(
+        context,
         tooltip: '立个目标',
         onPressed: () => _showHabitForm(context, ref, null),
-        icon: const Icon(Icons.add_rounded),
-        label: const Text('立个目标'),
       ),
       body: RefreshIndicator(
         onRefresh: () => ref.read(togetherControllerProvider.notifier).load(),
@@ -364,20 +355,11 @@ class _HabitPageState extends ConsumerState<HabitPage> {
                     ?.copyWith(color: theme.colorScheme.outline)),
             const SizedBox(height: Spacing.gap),
             if (habits.isEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 48),
-                child: Column(children: [
-                  Icon(Icons.eco_rounded,
-                      size: 44, color: theme.colorScheme.outline),
-                  const SizedBox(height: 12),
-                  Text('给我们，多一点小小的仪式感',
-                      style: theme.textTheme.titleMedium),
-                  const SizedBox(height: Spacing.gap),
-                  Text('立一个一起坚持的小目标。',
-                      textAlign: TextAlign.center,
-                      style: theme.textTheme.bodySmall
-                          ?.copyWith(color: theme.colorScheme.outline)),
-                ]),
+              // 空态共享语言（2.4.7 甲组）：AppEmptyView，文案逐字保留。
+              AppEmptyView(
+                icon: Icons.eco_rounded,
+                title: '给我们，多一点小小的仪式感',
+                hint: '立一个一起坚持的小目标。',
               )
             else
               for (final r in habits)
@@ -417,7 +399,8 @@ class _HabitPageState extends ConsumerState<HabitPage> {
                               ),
                         Padding(
                           padding: const EdgeInsets.only(top: 8),
-                          child: FilledButton.tonalIcon(
+                          child: FilledButton.icon(
+                            // 打卡主操作：主题色实心（2.4.7 甲组，tonal 退役）。
                             onPressed: () async {
                               // 同一天重复点：服务端 INSERT OR IGNORE 幂等，
                               // 不产生脏数据；状态以后端 reload 为准
@@ -444,9 +427,7 @@ class _HabitPageState extends ConsumerState<HabitPage> {
                 ),
             if (st.error != null) ...[
               const SizedBox(height: 10),
-              Text(st.error!,
-                  style: theme.textTheme.bodySmall
-                      ?.copyWith(color: theme.colorScheme.error)),
+              AppErrorText(st.error!),
             ],
           ],
         ),

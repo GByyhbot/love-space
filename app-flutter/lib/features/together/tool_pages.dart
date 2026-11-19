@@ -14,6 +14,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/together/together_data.dart';
+import '../../core/ui/avatar_media.dart';
 import '../../core/ui/empty_view.dart';
 import '../../core/ui/error_view.dart';
 import '../../core/ui/progress.dart';
@@ -31,6 +32,42 @@ String _createdLabel(double created) {
   final now = DateTime.now();
   final prefix = d.year == now.year ? '' : '${d.year}-';
   return '$prefix${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+}
+
+/// 主题色实心胶囊悬浮钮（2.4.7 甲组统一主操作语言）：cs.primary 实心 +
+/// onPrimary 白字 + 胶囊 + 主题色柔和阴影；退役 M3 默认 primaryContainer 观感。
+/// ToolScaffold / QuestionPage / HabitPage 三处同源。
+Widget toolFab(BuildContext context,
+    {required String tooltip, required VoidCallback onPressed}) {
+  final cs = Theme.of(context).colorScheme;
+  return FloatingActionButton.extended(
+    tooltip: tooltip,
+    onPressed: onPressed,
+    backgroundColor: cs.primary,
+    foregroundColor: cs.onPrimary,
+    elevation: 3,
+    icon: const Icon(Icons.add_rounded),
+    label: Text(tooltip),
+  );
+}
+
+/// 列表 meta 浅底胶囊 chip（2.4.7 甲组）；[emphasized] 用主题色浅底浅字，
+/// 其余中性浅底。
+Widget toolMetaChip(ThemeData theme, ColorScheme cs, String label,
+    {bool emphasized = false}) {
+  return Container(
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+    decoration: BoxDecoration(
+        color: emphasized
+            ? cs.primary.withValues(alpha: 0.12)
+            : cs.surfaceContainerHighest.withValues(alpha: 0.6),
+        borderRadius: BorderRadius.circular(999)),
+    child: Text(label,
+        style: theme.textTheme.labelSmall?.copyWith(
+            color: emphasized
+                ? cs.primary
+                : cs.onSurface.withValues(alpha: 0.7))),
+  );
 }
 
 /// 工具页骨架（通用件）：heading + 列表 + 空态 + FAB + 下拉刷新。
@@ -67,12 +104,8 @@ class ToolScaffold extends ConsumerWidget {
     final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(title: Text(title)),
-      floatingActionButton: FloatingActionButton.extended(
-        tooltip: fabTooltip,
-        onPressed: onFab,
-        icon: const Icon(Icons.add_rounded),
-        label: Text(fabTooltip),
-      ),
+      floatingActionButton:
+          toolFab(context, tooltip: fabTooltip, onPressed: onFab),
       body: RefreshIndicator(
         onRefresh: () => ref.read(togetherControllerProvider.notifier).load(),
         child: ListView(
@@ -129,7 +162,8 @@ class ToolTile extends ConsumerWidget {
     final theme = Theme.of(context);
     final me = ref.watch(authProvider.notifier).me;
     final own = me != null && me.user.id == record.author;
-    final authorName = me?.byId(record.author)?.name ?? '?';
+    final author = me?.byId(record.author);
+    final authorName = author?.name ?? '?';
     final dateLabel =
         record.date.isNotEmpty ? record.date : _createdLabel(record.created);
     return Card(
@@ -138,6 +172,23 @@ class ToolTile extends ConsumerWidget {
         padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [
+            // 作者行带头像（2.4.7 甲组）：头像圆 24（AvatarMedia 统一鉴权
+            // 缓存路径）；无头像走字母兜底。
+            if ((author?.avatar ?? '').isNotEmpty)
+              AvatarMedia(
+                  avatarId: author!.avatar, name: authorName, radius: 12)
+            else
+              CircleAvatar(
+                radius: 12,
+                backgroundColor: theme.colorScheme.primaryContainer,
+                child: Text(
+                  authorName.isEmpty ? '?' : authorName.characters.first,
+                  style: TextStyle(
+                      fontSize: 10,
+                      color: theme.colorScheme.onPrimaryContainer),
+                ),
+              ),
+            const SizedBox(width: 8),
             Expanded(
               child: Text('$authorName · $dateLabel',
                   style: theme.textTheme.labelSmall
@@ -218,6 +269,10 @@ class _MoodPageState extends ConsumerState<MoodPage> {
   Widget build(BuildContext context) {
     final st = ref.watch(togetherControllerProvider);
     final moods = ref.read(togetherControllerProvider.notifier).moods();
+    // 表情彩色浅底圆角方形底座（2.4.7 甲组）：46/圆角 14，柔和 tint 轮转
+    // （primary/secondary/tertiary 14% 浅底按序循环，写死色零新增）。
+    final cs = Theme.of(context).colorScheme;
+    final tints = [cs.primary, cs.secondary, cs.tertiary];
     return ToolScaffold(
       title: '心情手记',
       subtitle: '晴天雨天，都想陪着你。',
@@ -229,13 +284,21 @@ class _MoodPageState extends ConsumerState<MoodPage> {
       loading: st.loading,
       onFab: () => _showMoodForm(context, ref, null),
       tiles: [
-        for (final r in moods)
+        for (final (i, r) in moods.indexed)
           ToolTile(
             record: r,
             onEdit: () => _showMoodForm(context, ref, r),
             child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text((r.body['emoji'] ?? '☀️').toString(),
-                  style: const TextStyle(fontSize: 30)),
+              Container(
+                width: 46,
+                height: 46,
+                decoration: BoxDecoration(
+                    color: tints[i % tints.length].withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(14)),
+                alignment: Alignment.center,
+                child: Text((r.body['emoji'] ?? '☀️').toString(),
+                    style: const TextStyle(fontSize: 24)),
+              ),
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
@@ -532,13 +595,18 @@ class _WishPageState extends ConsumerState<WishPage> {
                     style: theme.textTheme.bodySmall),
               ],
               const SizedBox(height: 4),
-              Text(
-                '${(r.body['category'] ?? '小心愿')}'
-                '${(r.body['target'] ?? '').toString().isNotEmpty ? ' · 约定 ${(r.body['target'] ?? '')}' : ''}'
-                '${r.body['done'] == true ? ' · 已完成' : ''}',
-                style: theme.textTheme.labelSmall
-                    ?.copyWith(color: theme.colorScheme.outline),
-              ),
+              // 分类/约定/完成态改浅底胶囊 chips（2.4.7 甲组；文案逐字保留）。
+              Wrap(spacing: 6, runSpacing: 4, children: [
+                toolMetaChip(
+                    theme, theme.colorScheme,
+                    (r.body['category'] ?? '小心愿').toString()),
+                if ((r.body['target'] ?? '').toString().isNotEmpty)
+                  toolMetaChip(theme, theme.colorScheme,
+                      '约定 ${(r.body['target'] ?? '')}'),
+                if (r.body['done'] == true)
+                  toolMetaChip(theme, theme.colorScheme, '已完成',
+                      emphasized: true),
+              ]),
             ]),
           ),
       ],
