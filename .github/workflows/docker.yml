@@ -47,7 +47,10 @@ jobs:
             # 以前用 `git describe --tags --always` 会得到 1.2.4-3-gabc1234 这种
             # 带后缀的字符串，界面上难看不说，App 内「检查更新」拿它跟 APK 版本
             # 比对还会串味。构建身份改由 BUILD（sha-日期）表达，版本号保持纯数字。
-            V="$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//' || true)"
+            # 🔴 --match 'v*' 必须带：APK Release 工作流打的 Release tag 是
+            # app-v2.4.x 格式，describe 撞上它后 sed 's/^v//' 不匹配、
+            # V%%-* 砍尾巴只剩 "app" —— /api/status version 显示 "app"（2.4.6 实证）。
+            V="$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null | sed 's/^v//' || true)"
             [ -z "$V" ] && V="0.0.0"
           fi
           # 兜底：任何残留的 -rc1 / -3-gabc 后缀一并砍掉，只留纯版本号
