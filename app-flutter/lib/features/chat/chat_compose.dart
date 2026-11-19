@@ -693,6 +693,13 @@ class _ChatComposeState extends ConsumerState<ChatCompose>
             borderRadius: BorderRadius.circular(26),
           ),
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+          // 🔴 07 打回真根因（第三层）：ChatCompose 顶层 Column 交叉轴
+          // loose → 本 Row 收缩到内容宽 → Expanded 没有 flex 剩余空间
+          // 可分 → TextField 收缩到文本宽横向一路长、maxLines 折行从未
+          // 生效（hint 宽恰好≈容器宽把问题掩到 07 才暴露）。钉死全宽
+          // 让 Row 拿 tight 约束、Expanded 恢复 flex 分配。
+          child: SizedBox(
+          width: double.infinity,
           child: Row(children: [
             Expanded(
               // 2.4.10 第 07 项：换行高度轻微过冲再回弹（围栏内：只动
@@ -786,6 +793,7 @@ class _ChatComposeState extends ConsumerState<ChatCompose>
                   : Icons.add_circle_outline_rounded),
             ),
           ]),
+          ), // SizedBox(width:∞) 闭合（07：Row 钉全宽）
         ),
       ),
       // 底部槽位（键盘/⊕/坞互斥共用）：等高槽位——面板内容钉顶部、被槽位
@@ -1308,7 +1316,23 @@ class _OvershootGrowState extends State<_OvershootGrow>
 
   @override
   Widget build(BuildContext context) {
-    if (_target == null) return widget.child;
+    return LayoutBuilder(builder: (context, cons) {
+      // 🔴 07 打回第四层根因：首帧若直接 return child（无包装），
+      // Expanded(ParentDataWidget) 只在 mount 时对「当时最深 renderObject」
+      // 应用 flex parent data——后来才出现的 LayoutBuilder 永远拿不到
+      // flex 分配（收缩到内容宽，乙测实证）。首帧起就渲染同构
+      // LayoutBuilder 链，parent data 一次写对。
+      final w = cons.maxWidth;
+      if (_target == null) {
+        // 首帧：只钉宽（同构链保住 flex parent data），高度交 child 自然
+        // 布局（OverflowBox 在无界纵向会取 biggest 炸 infinite，首测实证）。
+        return SizedBox(width: w, child: widget.child);
+      }
+      return _morphBody(cons);
+    });
+  }
+
+  Widget _morphBody(BoxConstraints cons) {
     return AnimatedBuilder(
       animation: _c,
       builder: (context, child) {
@@ -1320,14 +1344,20 @@ class _OvershootGrowState extends State<_OvershootGrow>
         final display =
             (_from ?? _target!) + ((_target! - (_from ?? _target!)) * v);
         _display = display;
+        final w = cons.maxWidth;
         return SizedBox(
           height: display,
           child: OverflowBox(
-            // 宽度透传父约束（不设 min/max——设 Infinity 会强制子无限宽，
-            // 首测实证炸 RenderMouseRegion）；只钉高度=自然高、底对齐，
-            // 过冲期顶部露出容器底色。
-            minHeight: _target!,
-            maxHeight: _target!,
+            // 🔴 07 打回约束三定律（逐层实测）：
+            // ① 宽度必须显式=min=max=父宽——OverflowBox 未设维度对子的
+            //    默认约束是 0..∞ 非透传，无界宽=横向长永不折行；
+            // ② 高度必须显式放开 0..∞——SizedBox 的 tight 高会透传进
+            //    OverflowBox 把 child 钉死旧高，测量死锁（气泡永不长高）；
+            // ③ 容器自身高度才吃动画值（过冲>自然高时顶部露底色，回弹贴合）。
+            minWidth: w,
+            maxWidth: w,
+            minHeight: 0,
+            maxHeight: double.infinity,
             alignment: Alignment.bottomLeft,
             child: child,
           ),
