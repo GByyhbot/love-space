@@ -5,6 +5,8 @@
 /// （本人评论带删除入口）。段二 B 本卡原地更新：只替换列表里这一条 Record。
 library;
 
+import 'dart:ui' as ui;
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -49,19 +51,24 @@ class PostCard extends ConsumerWidget {
     final voices = media.where((m) => m.mime.startsWith('audio/')).toList();
     final liked = record.likes.contains(me.user.id);
 
-    // 2.3.4（推广段一重做）Web 卡片语言（数值出处 web-visual-plan.md 8.1）：
-    // 手机档 .card radius 17（style.css:1421）；kind-* 低饱和 tint 165° 渐变
-    // （tint→surface 72%，:1944-1956）；顶部 1px 内高光 hairline（浅 .72 /
-    // 夜 .05，:1937/:2017）。深浅双档由 WebSemanticColors/_kindTintAlpha 处理。
+    // 2.4.9（主人看图选定，2026-11-19）：动态卡背景换半透明磨砂（方案 A）
+    // ——卡内底层 BackdropFilter（blur 14 + saturate 1.3）+ 62% 不透明白填充
+    // （夜档 surface 60%）+ 1px 半透明白亮边 + 柔和双影；磨砂层长在卡片
+    // Stack 底层、由外层 ClipRRect(radius 17) 自裁剪（冻结教训：不许在
+    // 列表内容之上另铺覆盖层），点按/滚动手势不受影响。圆角/内边距/
+    // 排版/内容/交互零改动；页面底色不动（磨砂需要底色透出）。
     const cardRadius = 17.0;
     final brightness = theme.brightness;
-    final tint = _postKindTint(record.kind, theme.colorScheme, brightness);
+    final light = brightness == Brightness.light;
 
     Widget card = Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(cardRadius),
-        border: Border.all(color: theme.colorScheme.outlineVariant),
+        // 透明 border 占位：Container 的 decoration.padding 会给内容贡献
+        // 1px 内缩（几何口径不变，单图 334 断言依赖它）；可见亮边在
+        // foregroundDecoration（盖在内容之上）。
+        border: Border.all(color: Colors.transparent),
         boxShadow: <BoxShadow>[
           // Web --shadow：0 2px 10px .06 + 0 1px 2px .04（style.css:137）
           BoxShadow(
@@ -76,20 +83,34 @@ class PostCard extends ConsumerWidget {
           ),
         ],
       ),
+      // 1px 半透明白亮边（浅 .55 / 夜 .12）：foregroundDecoration 盖在
+      // 内容之上，保证亮边不被磨砂半透明填充压暗。
+      foregroundDecoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(cardRadius),
+        border: Border.all(
+          color: light
+              ? Colors.white.withValues(alpha: 0.55)
+              : Colors.white.withValues(alpha: 0.12),
+        ),
+      ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(cardRadius),
         child: Stack(
           children: [
-            // kind tint 165° 渐变：tint 首色 → surface 72%（165°≈垂直略偏，
-            // 以 topCenter→bottomCenter 近似；stops 0/0.72 对齐 Web）
+            // 2.4.9 半透明磨砂背景层（取代 kind tint 渐变）：
+            // BackdropFilter 按卡片自身圆角裁剪（外层 ClipRRect），
+            // blur 14 对齐效果图。⚠️ 效果图另有 saturate(1.3)，本 SDK
+            // （3.47.9 stable）ImageFilter 仅有 blur/dilate/erode/matrix
+            // 四工厂、无 color/compose，饱和度无法挂进 backdrop 链——
+            // 填充 62% 白本就弱化饱和差异，观感以主人截图判定（回执报备）。
             Positioned.fill(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: <Color>[tint, theme.colorScheme.surface],
-                    stops: const [0, 0.72],
+              child: BackdropFilter(
+                filter: ui.ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: light
+                        ? Colors.white.withValues(alpha: 0.62)
+                        : theme.colorScheme.surface.withValues(alpha: 0.60),
                   ),
                 ),
               ),
@@ -500,31 +521,4 @@ class _CardAvatar extends ConsumerWidget {
               color: theme.colorScheme.onPrimaryContainer),
         ),
       );
-}
-
-/// 2.3.4（推广段一重做）kind-* 低饱和 tint 映射（Web style.css:1930-1956，
-/// rgb 通道随主题/明暗——App 端等价映射为 colorScheme/语义色 withValues α）：
-/// mood=tint-rose(primary .055)；post/diary/draft/surprise/question/note/period
-/// 等默认 primary .04；anniversary=amber .06；wish/personal_wish/music=fertile
-/// .06；quest/habit=amber .055；ledger=green .06；album=info .05。
-Color _postKindTint(String kind, ColorScheme cs, Brightness brightness) {
-  switch (kind) {
-    case 'mood':
-      return cs.primary.withValues(alpha: 0.038); // tint-rose（:1930，2.4.1 降一档）
-    case 'anniversary':
-      return WebSemanticColors.amber(brightness).withValues(alpha: 0.042);
-    case 'wish':
-    case 'personal_wish':
-    case 'music':
-      return WebSemanticColors.fertile(brightness).withValues(alpha: 0.042);
-    case 'quest':
-    case 'habit':
-      return WebSemanticColors.amber(brightness).withValues(alpha: 0.038);
-    case 'ledger':
-      return WebSemanticColors.green(brightness).withValues(alpha: 0.042);
-    case 'album':
-      return WebSemanticColors.info(brightness).withValues(alpha: 0.035);
-    default: // post/diary/draft/surprise/question/note/period（:1955-1956）
-      return cs.primary.withValues(alpha: 0.04);
-  }
 }
