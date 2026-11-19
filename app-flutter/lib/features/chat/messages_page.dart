@@ -7,6 +7,7 @@
 library;
 
 import 'package:cached_network_image/cached_network_image.dart';
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -55,6 +56,10 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
   final GlobalKey _partnerAvatarKey = GlobalKey();
   int _avatarPulse = 0;
   OverlayEntry? _heartFlight;
+  // 2.4.10 第 08 项：对方正在输入（胶囊显隐以服务端信号为准，本地
+  // 6s 兜底熄灭——服务端 TTL 5s + 探针 5s 轮询，取上限防闪烁）。
+  bool _peerTyping = false;
+  Timer? _peerTypingFallback;
   final _searchCtrl = TextEditingController();
   bool _searchOpen = false;
   String _flashId = '';
@@ -307,6 +312,14 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
     // SSE chat 事件 → 对账重拉（按 id 原地合并，不整列表重建）。
     ref.listen(sseEventsProvider, (prev, next) {
       final ev = next.value;
+      // 2.4.10 第 08 项：正在输入胶囊——服务端信号驱动 + 6s 兜底熄灭。
+      if (ev?.typing == true) {
+        _peerTypingFallback?.cancel();
+        _peerTypingFallback = Timer(const Duration(seconds: 6), () {
+          if (mounted) setState(() => _peerTyping = false);
+        });
+        if (!_peerTyping) setState(() => _peerTyping = true);
+      }
       if (ev?.chat == true) {
         ref.read(chatControllerProvider.notifier).reconcile();
       } else if (ev?.other == true || ev?.refresh == true) {
@@ -380,14 +393,29 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
                 Text(partner?.name ?? '等待另一半加入',
                     maxLines: 1, overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.titleSmall),
-                Text('我们的悄悄话 · 仅彼此可见',
-                    style: Theme.of(context)
-                        .textTheme
-                        .bodySmall
-                        ?.copyWith(
-                            color: immersive
-                                ? Colors.white70
-                                : Theme.of(context).colorScheme.outline)),
+                // 2.4.10 第 08 项：正在输入胶囊滑入覆盖副标题区（标题行
+                // 完整露出，裁定口径）；三点依次错峰跳动，滑入/带回弹滑出。
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 220),
+                  switchInCurve: Curves.easeOut,
+                  switchOutCurve: Curves.easeIn,
+                  transitionBuilder: (child, anim) => SlideTransition(
+                    position: anim.drive(Tween(
+                        begin: const Offset(1, 0), end: Offset.zero)),
+                    child: FadeTransition(opacity: anim, child: child),
+                  ),
+                  child: _peerTyping
+                      ? const _TypingPill(key: ValueKey('typing-pill'))
+                      : Text('我们的悄悄话 · 仅彼此可见',
+                          key: const ValueKey('typing-idle'),
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodySmall
+                              ?.copyWith(
+                                  color: immersive
+                                      ? Colors.white70
+                                      : Theme.of(context).colorScheme.outline)),
+                ),
               ],
             ),
           ),
@@ -1426,5 +1454,76 @@ class _PulsingAvatarState extends State<_PulsingAvatar>
       },
       child: widget.child,
     );
+  }
+}
+
+// ── 2.4.10 第 08 项：正在输入胶囊 ────────────────────────────────
+/// 「正在输入」胶囊：从右侧滑入盖住副标题区（标题行完整露出，主人
+/// 裁定形态），三点依次错峰跳动；停止输入后带回弹滑出（由
+/// AnimatedSwitcher 反向 transition 承担）。显隐以服务端信号为准，
+/// 本地不自造假状态。
+class _TypingPill extends StatefulWidget {
+  const _TypingPill({super.key});
+
+  @override
+  State<_TypingPill> createState() => _TypingPillState();
+}
+
+class _TypingPillState extends State<_TypingPill>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c =
+      AnimationController(vsync: this, duration: const Duration(milliseconds: 900))
+        ..repeat();
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: cs.primary.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(99),
+      ),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Text('正在输入',
+            style: Theme.of(context)
+                .textTheme
+                .labelSmall
+                ?.copyWith(color: cs.primary, fontWeight: FontWeight.w600)),
+        const SizedBox(width: 4),
+        AnimatedBuilder(
+          animation: _c,
+          builder: (context, _) => Row(mainAxisSize: MainAxisSize.min, children: [
+            for (var i = 0; i < 3; i++)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 1.5),
+                child: Transform.translate(
+                  // 三点依次错峰跳动（相位差 0.33）。
+                  offset: Offset(
+                      0, -3 * _bounce((_c.value - i * 0.33) % 1.0)),
+                  child: Container(
+                    width: 4,
+                    height: 4,
+                    decoration:
+                        BoxDecoration(color: cs.primary, shape: BoxShape.circle),
+                  ),
+                ),
+              ),
+          ]),
+        ),
+      ]),
+    );
+  }
+
+  // 单点跳动曲线：0→1 内先升后落（sin 半周期）。
+  double _bounce(double t) {
+    final x = t.clamp(0.0, 1.0);
+    return x <= 0 ? 0 : math.sin(math.pi * x).clamp(0.0, 1.0);
   }
 }

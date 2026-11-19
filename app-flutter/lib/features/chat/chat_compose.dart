@@ -222,10 +222,35 @@ class _ChatComposeState extends ConsumerState<ChatCompose>
 
   // ── 发送入口 ───────────────────────────────────────────────────────
 
+  // ── 2.4.10 第 08 项：「正在输入」心跳上报 ──────────────────────
+  // 打字期间 ≥3s 节流一次；发送消息即显式停报（typing:false）；退出
+  // 聊天页 dispose 停报（服务端 TTL 5s 自动过期兜底）。旧后端无该
+  // 端点 → 404 静默，胶囊永不出现自然降级（硬顺序口径）。
+  DateTime? _lastTypingSent;
+
+  void _reportTyping() {
+    final now = DateTime.now();
+    final last = _lastTypingSent;
+    if (last != null && now.difference(last).inMilliseconds < 3000) return;
+    _lastTypingSent = now;
+    _postTyping(true);
+  }
+
+  Future<void> _postTyping(bool on) async {
+    try {
+      final dio = await ref.read(dioProvider.future);
+      await dio.post('/api/typing', data: {'typing': on});
+    } catch (_) {
+      // 静默：信号是锦上添花，任何失败都不打扰用户
+    }
+  }
+
   Future<void> _sendText() async {
     final text = _input.text.trim();
     if (text.isEmpty) return;
     _input.clear();
+    _lastTypingSent = null; // 发送即停报（显式清信号）
+    _postTyping(false);
     final reply = widget.replyNotifier?.value;
     widget.replyNotifier?.value = null;
     try {
@@ -680,6 +705,7 @@ class _ChatComposeState extends ConsumerState<ChatCompose>
                   key: _inputFieldKey,
                 controller: _input,
                 focusNode: _focus,
+                onChanged: (_) => _reportTyping(),
                 minLines: 1,
                 maxLines: 4, // 约 4 行封顶内部滚动（对齐 Web autoGrow）
                 maxLength: 20000,
