@@ -263,9 +263,9 @@ class _PeriodPageState extends ConsumerState<PeriodPage> {
 
   Widget _phaseBar(BuildContext context, List<PhaseSegment> segs,
       double cursor, String? current) {
-    // 2.3.9：阶段色走主题变量语义表（period_colors.dart，明暗两档，
-    // style.css :57-60/:61-63/:38/:40 浅 + :1510/:1511/:1506 夜），
+    // 2.3.9：阶段色走语义表（period_colors.dart，明暗两档），
     // 删除写死四色（原 0xFFEF3F68/0xFF81C784/0xFF9575CD/0xFFFFB74D）。
+    // 2.4.8：语义表换「方案 B · 清透柔和」（主人裁定，与 Web 分道）。
     final colors = <String, Color>{
       'period': periodStageColor(context),
       'follicular': follicularStageColor(context),
@@ -287,7 +287,9 @@ class _PeriodPageState extends ConsumerState<PeriodPage> {
                   margin: const EdgeInsets.symmetric(horizontal: 1),
                   decoration: BoxDecoration(
                     color: (colors[s.phase] ?? Colors.grey)
-                        .withValues(alpha: s.phase == current ? 0.95 : 0.45),
+                        // 2.4.8：非当前段 0.45→0.72——方案 B 浅色偏亮，
+                        // 0.45 下白字读不清（回执已注明）；当前段 0.95 不变。
+                        .withValues(alpha: s.phase == current ? 0.95 : 0.72),
                     borderRadius: BorderRadius.circular(5),
                   ),
                   alignment: Alignment.center,

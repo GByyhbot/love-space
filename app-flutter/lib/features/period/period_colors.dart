@@ -1,23 +1,21 @@
-/// 生理期阶段色语义表（2.3.9 视觉对齐 rollout 段）。
+/// 生理期阶段色语义表（2.4.8 方案 B 换色段）。
 ///
-/// Web 端这组色是**主题变量机制**：`--period` / `--fertile` / `--green` /
-/// `--amber` 定义在 `:root`（浅）与 `:root.dark`（夜）两处全局兜底层，
-/// **七套主题块（style.css:165-192 浅 / :1542-1569 夜）不覆盖本组变量**——
-/// 即阶段色只随明暗模式切换，不随主题色板变化（与 Web 行为逐位一致）。
-/// 本表即该机制的 App 端等价：按 `Brightness` 取明暗两档值，逐值实读：
+/// 🔴 2026-11-19 主人裁定：App 阶段色走「方案 B · 清透柔和」（主人看图
+/// 选定），**与 Web 分道**——勿按 Web style.css 的旧阶段色值回退（方案 A
+/// 的浅/夜八值已全部退役，本文件与 period 表面零残留）。本裁定推翻
+/// 2.3.9 的「阶段色与 Web 逐位一致」口径；Web 端保持旧色不动。
 ///
-/// 浅色（style.css）：
-///   --period:#C23F68 / --period-soft:#FBE3EC / --period-ink:#8A2445 /
-///   --period-rgb:194,63,104（:57-60）
-///   --fertile:#7B63A0 / --fertile-ink:#54407A / --fertile-rgb:123,99,160（:61-63）
-///   --green:#4B6B3F（:38）/ --green-rgb:75,107,63（:49）
-///   --amber:#8A5A22（:40）/ --amber-rgb:138,90,34（:50）
-/// 夜色（style.css:1506-1511）：
-///   --period:#EE7C9F / --period-soft:#3D1C28 / --period-ink:#FFC6D8 /
-///   --period-rgb:238,124,159（:1510）
-///   --fertile:#B49BD6 / --fertile-ink:#D8C8EE / --fertile-rgb:180,155,214（:1511）
-///   --green:#8FB27C / --green-rgb:143,178,124（:1506/:1508）
-///   --amber:#D2A472 / --amber-rgb:210,164,114（:1506/:1508）
+/// 取值口径（方案 B 定案表，2.4.8 提示词硬指标）：
+///
+/// 浅色（主人选定的原值）：
+///   月经期  #DE6B87 / 卵泡期 #84B96E / 排卵期 #9C7CC4 / 黄体期 #E3AC55
+///   派生：period-soft #FBE9EE / period-ink #96455C / fertile-ink #5F4A86
+/// 深色（同色相提亮档）：
+///   月经期  #F08CA6 / 卵泡期 #A3D191 / 排卵期 #BFA5E0 / 黄体期 #EFBE6E
+///   派生：period-soft #40222C / period-ink #FFC9D6 / fertile-ink #E2D4F5
+///
+/// 派生关系沿用 2.3.9 语义：soft = 主色极浅铺底（夜档压暗底）、
+/// ink = 浅底上的字（主色加深两档，夜档提亮）。
 ///
 /// 🔴 本文件只有色值常量与明暗取值，零计算、零日期逻辑（period parity
 /// 245/245 的数学在 period_engine.dart，与本文件无交集）。
@@ -27,30 +25,33 @@ import 'package:flutter/material.dart';
 
 bool _dark(BuildContext c) => Theme.of(c).brightness == Brightness.dark;
 
-/// `--period`（月经期：圆点 / 描边 / 环形进度，style.css:57/:1510）。
-/// 🔴 纯色——Web `cycle-ring .ring-fill` 为 `stroke:var(--period)`
-/// （style.css:1699），不存在渐变（plan 1.8:131 已复核）。
+/// 月经期主色（圆点 / 描边 / 环形进度 / 阶段条 / 日历格）。
+/// 🔴 纯色——Web `cycle-ring .ring-fill` 为纯色描边、无渐变（plan 1.8
+/// 已复核），App 端同口径。
 Color periodStageColor(BuildContext c) =>
-    _dark(c) ? const Color(0xFFEE7C9F) : const Color(0xFFC23F68);
+    _dark(c) ? const Color(0xFFF08CA6) : const Color(0xFFDE6B87);
 
-/// `--period-soft`（月经期铺底浅粉，style.css:58/:1510）。
+/// 月经期铺底（浅档极浅粉 / 夜档压暗底）。
 Color periodSoftColor(BuildContext c) =>
-    _dark(c) ? const Color(0xFF3D1C28) : const Color(0xFFFBE3EC);
+    _dark(c) ? const Color(0xFF40222C) : const Color(0xFFFBE9EE);
 
-/// `--period-ink`（浅粉底上的字，style.css:59/:1510）。
+/// 月经期 ink（浅底上的字，主色加深两档 / 夜档提亮）。
 Color periodInkColor(BuildContext c) =>
-    _dark(c) ? const Color(0xFFFFC6D8) : const Color(0xFF8A2445);
+    _dark(c) ? const Color(0xFFFFC9D6) : const Color(0xFF96455C);
 
-/// `--fertile`（排卵窗 / 排卵日圆点，style.css:61/:1511）。
+/// 排卵期主色（排卵窗 / 排卵日圆点 / 阶段条 / 日历格）。
 Color fertileStageColor(BuildContext c) =>
-    _dark(c) ? const Color(0xFFB49BD6) : const Color(0xFF7B63A0);
+    _dark(c) ? const Color(0xFFBFA5E0) : const Color(0xFF9C7CC4);
 
-/// 卵泡期 = `--green`（Web 卵泡期阶段色 `rgba(var(--green-rgb),.26)`
-/// 的实体色，style.css:38/:1506）。
+/// 排卵期 ink（浅底上的字，主色加深两档 / 夜档提亮）。2.4.8 新增派生档
+/// （2.3.9 表无此项，随方案 B 补齐完备）。
+Color fertileInkColor(BuildContext c) =>
+    _dark(c) ? const Color(0xFFE2D4F5) : const Color(0xFF5F4A86);
+
+/// 卵泡期主色（阶段条 / 日历格）。
 Color follicularStageColor(BuildContext c) =>
-    _dark(c) ? const Color(0xFF8FB27C) : const Color(0xFF4B6B3F);
+    _dark(c) ? const Color(0xFFA3D191) : const Color(0xFF84B96E);
 
-/// 黄体期 = `--amber`（Web 黄体期阶段色 `rgba(var(--amber-rgb),.28)`
-/// 的实体色，style.css:40/:1506）。
+/// 黄体期主色（阶段条 / 日历格）。
 Color lutealStageColor(BuildContext c) =>
-    _dark(c) ? const Color(0xFFD2A472) : const Color(0xFF8A5A22);
+    _dark(c) ? const Color(0xFFEFBE6E) : const Color(0xFFE3AC55);
