@@ -1562,6 +1562,26 @@ def pin_record(rid: str, user=Depends(current_user)):
     return {'ok': True, 'pinned': pinned}
 
 
+@app.post('/api/typing')
+async def set_typing(request: Request, user=Depends(current_user)):
+    """「正在输入」心跳上报（2.4.10 第 08 项）。
+
+    内存态：typing=true 刷新 TTL（5s 自动过期即停）；typing=false 显式停
+    （发送消息/退出聊天页时调用）。🔴 不落库、不写 records、不产生通知；
+    客户端 ≥3s 节流，服务端写入幂等不再加严格限流。
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    with _typing_lock:
+        if body.get('typing') is False:
+            _typing.pop(user['id'], None)
+        else:
+            _typing[user['id']] = time.time() + _TYPING_TTL
+    return {'ok': True}
+
+
 @app.post('/api/records/{rid}/like')
 def like(rid: str, user=Depends(current_user)):
     with connect() as c:
@@ -1570,7 +1590,10 @@ def like(rid: str, user=Depends(current_user)):
             c.execute('DELETE FROM likes WHERE record_id=? AND user_id=?', (rid, user['id']))
         else:
             c.execute('INSERT INTO likes VALUES (?,?)', (rid, user['id']))
-            if row['kind'] not in db.PRIVATE:
+            # 2.4.10 第 09 项（主人批准一行特化）：聊天点赞不发通知——
+            # 对方就在聊天页（爱心回应即时可见），「有人喜欢了你的记录」
+            # 文案对聊天场景违和；其余 kind 照旧。
+            if row['kind'] not in db.PRIVATE and row['kind'] != 'chat':
                 # 同一条记录的点赞只提醒一次：反复点赞/取消不再刷屏（dedupe 全局唯一）
                 db.notice(c, 'comment', '有人喜欢了你的记录', rid, user['id'], recipient=row['author'],
                           dedupe=f'like:{rid}')
@@ -1843,6 +1866,14 @@ MUSIC_MEDIA_SUFFIX = ('.apple.com', '.mzstatic.com', '.itunes.apple.com')
 _music_cache = {}
 _music_cache_lock = threading.Lock()
 
+# ── 2.4.10 第 08 项「正在输入」内存态信号（主人批准的后端小改）──────
+# 客户端打字期间 ≥3s 节流上报心跳；服务端只存内存、短 TTL 自动过期，
+# 经 SSE 载荷第 6 段带给对方端。🔴 不落库、不写 records、不产生通知；
+# 前台服务（notify_task）只消费 chat/unread 字段，对新信号天然忽略。
+_TYPING_TTL = 5.0
+_typing: dict[str, float] = {}
+_typing_lock = threading.Lock()
+
 
 def _music_host_ok(host):
     host = (host or '').lower()
@@ -2049,7 +2080,8 @@ def delete_read_notices(user=Depends(current_user)):
 def _sse_probe(token: str, user_id: str, check_session: bool):
     """SSE 心跳探针：同步 sqlite 查询，必须放到线程里执行。
 
-    返回 (revision, private_revision, unread, chat_revision, other_revision)；
+    返回 (revision, private_revision, unread, chat_revision, other_revision,
+    peer_typing)；
     会话失效返回 None。
     chat_revision / other_revision 是「刷新的颗粒度」：聊天变了只重拉聊天窗口，
     别为了一句话把 1000 条非聊天记录和整本相册都搬一遍。
@@ -2069,11 +2101,18 @@ def _sse_probe(token: str, user_id: str, check_session: bool):
             "       (SELECT value FROM app_state WHERE key='chat_revision'),"
             "       (SELECT value FROM app_state WHERE key='other_revision')",
             {'u': user_id}).fetchone()
-        return (row[0], row[1] or 0, row[2], row[3] or 0, row[4] or 0)
+        # 对方正在输入（内存态，TTL 过期顺手清理；单人单空间 → 其余任一
+        # 用户即对方）
+        with _typing_lock:
+            expired = [k for k, v in _typing.items() if v < time.time()]
+            for k in expired:
+                _typing.pop(k, None)
+            peer_typing = 1 if any(uid != user_id for uid in _typing) else 0
+        return (row[0], row[1] or 0, row[2], row[3] or 0, row[4] or 0, peer_typing)
 
 
 def _sse_payload(revision, private_revision, unread, previous,
-                 chat_revision=0, other_revision=0):
+                 chat_revision=0, other_revision=0, peer_typing=0):
     """这一轮 SSE 该推什么。
 
     refresh —— 整站数据变了（记录/聊天/照片），客户端要重拉一遍；
@@ -2098,8 +2137,12 @@ def _sse_payload(revision, private_revision, unread, previous,
     else:
         chat = chat_revision != prev(3)
         other = other_revision != prev(4)
+    # 第 6 段：对方正在输入（2.4.10）。typing 字段 = 当前状态（非变化
+    # 标志——变化检测由 6 段 signature 对比承担）；旧签名缺段时推送与
+    # 否由 signature 差异决定，这里只如实给状态。旧客户端只解析已知
+    # 字段，多余段/字段自然忽略（硬顺序双向兼容）。
     return {'refresh': changed, 'unread': unread,
-            'chat': chat, 'other': other}
+            'chat': chat, 'other': other, 'typing': bool(peer_typing)}
 
 
 @app.get('/api/events')
@@ -2119,9 +2162,10 @@ async def events(request: Request, user=Depends(current_user)):
             probe = await asyncio.to_thread(_sse_probe, token, user['id'], rounds % 10 == 0)
             if probe is None:
                 break
-            revision, private_revision, unread, chat_revision, other_revision = probe
+            revision, private_revision, unread, chat_revision, other_revision, \
+                peer_typing = probe
             signature = (f'{revision}:{private_revision}:{unread}'
-                         f':{chat_revision}:{other_revision}')
+                         f':{chat_revision}:{other_revision}:{peer_typing}')
             if previous is None:
                 # 首轮只建立基线，不推 data：EventSource 断线重连很常见（代理空闲超时、
                 # 切前后台），每建一次连接就推一条，客户端会当成「数据变了」整页重绘，
@@ -2131,7 +2175,8 @@ async def events(request: Request, user=Depends(current_user)):
                 yield ': ready\n\n'
             elif signature != previous:
                 payload = _sse_payload(revision, private_revision, unread,
-                                       previous, chat_revision, other_revision)
+                                       previous, chat_revision,
+                                       other_revision, peer_typing)
                 payload['rev'] = signature
                 yield 'data: ' + dumps(payload) + '\n\n'
                 previous = signature
