@@ -12,12 +12,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/together/together_data.dart';
+import '../../core/ui/avatar_media.dart';
+import '../../core/ui/empty_view.dart';
+import '../../core/ui/error_view.dart';
 import '../../core/ui/selection_sheet.dart';
 import '../auth/auth_state.dart';
 import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
 import '../settings/settings_widgets.dart'
     show filledFieldDecoration, showFormSheet;
 import 'together_controller.dart';
+import 'tool_pages.dart' show toolFab, toolMetaChip;
 import '../../core/theme/tokens.dart';
 
 /// annual 三态显示文案（逐字对齐 Web recordCard anniversary meta，app.js:857）
@@ -53,12 +57,9 @@ class _AnniversaryPageState extends ConsumerState<AnniversaryPage> {
 
     return Scaffold(
       appBar: AppBar(title: const Text('纪念日')),
-      floatingActionButton: FloatingActionButton.extended(
-        tooltip: '添加纪念日',
-        onPressed: () => _showForm(context, ref, null),
-        icon: const Icon(Icons.add_rounded),
-        label: const Text('添加纪念日'),
-      ),
+      // 主题色实心胶囊悬浮钮（2.4.7 乙组，与甲组同源）。
+      floatingActionButton:
+          toolFab(context, tooltip: '添加纪念日', onPressed: () => _showForm(context, ref, null)),
       body: RefreshIndicator(
         onRefresh: () => ref.read(togetherControllerProvider.notifier).load(),
         child: ListView(
@@ -69,28 +70,17 @@ class _AnniversaryPageState extends ConsumerState<AnniversaryPage> {
                     ?.copyWith(color: theme.colorScheme.outline)),
             const SizedBox(height: Spacing.gap),
             if (anns.isEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 48),
-                child: Column(children: [
-                  Icon(Icons.event_available_rounded,
-                      size: 44, color: theme.colorScheme.outline),
-                  const SizedBox(height: 12),
-                  Text('给我们，多一点小小的仪式感',
-                      style: theme.textTheme.titleMedium),
-                  const SizedBox(height: Spacing.gap),
-                  Text('把值得记住的日子放进来，到点就会提醒。',
-                      textAlign: TextAlign.center,
-                      style: theme.textTheme.bodySmall
-                          ?.copyWith(color: theme.colorScheme.outline)),
-                ]),
+              // 空态共享语言（2.4.7 乙组）：AppEmptyView，文案逐字保留。
+              AppEmptyView(
+                icon: Icons.event_available_rounded,
+                title: '给我们，多一点小小的仪式感',
+                hint: '把值得记住的日子放进来，到点就会提醒。',
               )
             else
               for (final r in anns) _buildTile(context, ref, r, me, today),
             if (st.error != null) ...[
               const SizedBox(height: 10),
-              Text(st.error!,
-                  style: theme.textTheme.bodySmall
-                      ?.copyWith(color: theme.colorScheme.error)),
+              AppErrorText(st.error!),
             ],
           ],
         ),
@@ -101,8 +91,10 @@ class _AnniversaryPageState extends ConsumerState<AnniversaryPage> {
   Widget _buildTile(BuildContext context, WidgetRef ref, TogetherRecord r,
       MeData? me, String today) {
     final theme = Theme.of(context);
+    final cs = theme.colorScheme;
     final own = me != null && me.user.id == r.author;
-    final authorName = me?.byId(r.author)?.name ?? '?';
+    final author = me?.byId(r.author);
+    final authorName = author?.name ?? '?';
     final due = anniversaryDue(r.body, today);
     final countLabel = due == null
         ? '已过去 · 留在回忆里'
@@ -115,10 +107,21 @@ class _AnniversaryPageState extends ConsumerState<AnniversaryPage> {
         padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [
+            // 作者行带头像（2.4.7 乙组）：与 ToolTile 同构；无头像字母兜底。
+            if ((author?.avatar ?? '').isNotEmpty)
+              AvatarMedia(avatarId: author!.avatar, name: authorName, radius: 12)
+            else
+              CircleAvatar(
+                radius: 12,
+                backgroundColor: cs.primaryContainer,
+                child: Text(authorName.isEmpty ? '?' : authorName.characters.first,
+                    style: TextStyle(fontSize: 10, color: cs.onPrimaryContainer)),
+              ),
+            const SizedBox(width: 8),
             Expanded(
               child: Text('$authorName · ${(r.body['date'] ?? '')}',
                   style: theme.textTheme.labelSmall
-                      ?.copyWith(color: theme.colorScheme.outline)),
+                      ?.copyWith(color: cs.outline)),
             ),
             if (own)
               PopupMenuButton<String>(
@@ -148,14 +151,12 @@ class _AnniversaryPageState extends ConsumerState<AnniversaryPage> {
                 '${annualLabel(r.body['annual'])}'
                 ' · 提前 ${r.body['remind_days'] ?? 1} 天提醒',
                 style: theme.textTheme.labelSmall
-                    ?.copyWith(color: theme.colorScheme.outline),
+                    ?.copyWith(color: cs.outline),
               ),
             ),
-            Text(countLabel,
-                style: theme.textTheme.labelMedium?.copyWith(
-                    color: due == null
-                        ? theme.colorScheme.outline
-                        : theme.colorScheme.primary)),
+            // 倒计时主题色浅底胶囊（2.4.7 乙组；文案逐字保留）。
+            toolMetaChip(theme, cs, countLabel,
+                emphasized: due != null),
           ]),
         ]),
       ),

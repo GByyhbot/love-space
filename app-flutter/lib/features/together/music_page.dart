@@ -36,7 +36,7 @@ import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
 import '../settings/settings_widgets.dart'
     show filledFieldDecoration, showFormSheet;
 import 'together_controller.dart';
-import 'tool_pages.dart' show ToolTile;
+import 'tool_pages.dart' show ToolTile, toolFab;
 
 /// 音乐上传允许的扩展名（对齐 Web musicForm：建议 mp3，≤20MB——Web 口径）
 const _musicUploadExts = ['mp3', 'm4a', 'wav', 'aac', 'ogg'];
@@ -203,11 +203,12 @@ class _MusicPageState extends ConsumerState<MusicPage> {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
+      // 主题色实心胶囊悬浮钮（2.4.7 乙组，与甲组同源；搜索图标）。
+      floatingActionButton: toolFab(
+        context,
         tooltip: '搜歌入单',
         onPressed: () => _showSearch(context, ref),
-        icon: const Icon(Icons.search_rounded),
-        label: const Text('搜歌入单'),
+        icon: Icons.search_rounded,
       ),
       // 底部播放条（App 内播放器）：试听开始出现，播完/停止/离页自动收起
       bottomNavigationBar:
@@ -265,11 +266,11 @@ class _MusicPageState extends ConsumerState<MusicPage> {
                 hint: '去放一首属于你们的第一首。',
               )
             else
-              for (final r in songs)
+              for (final (i, r) in songs.indexed)
                 ToolTile(
                   record: r,
                   onEdit: () => _showEditMeta(context, ref, r),
-                  child: _songBody(context, r, base, me),
+                  child: _songBody(context, r, base, me, i),
                 ),
             if (st.error != null && songs.isNotEmpty) ...[
               const SizedBox(height: 10),
@@ -283,7 +284,8 @@ class _MusicPageState extends ConsumerState<MusicPage> {
   }
 
   Widget _songBody(
-      BuildContext context, TogetherRecord r, String base, MeData? me) {
+      BuildContext context, TogetherRecord r, String base, MeData? me,
+      [int index = 0]) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     final song = (r.body['song'] ?? {}) as Map;
@@ -296,8 +298,23 @@ class _MusicPageState extends ConsumerState<MusicPage> {
     final loading = _loadingKey == key;
     final playing = _playingKey == key;
     final canPlay = online || mid.isNotEmpty;
+    // 歌曲音符底座（2.4.7 乙组）：46 浅底圆角方形，与心情底座同语言，
+    // tint 按记录索引轮转（primary/secondary/tertiary 14%）。
+    final tints = [cs.primary, cs.secondary, cs.tertiary];
+    final tint = tints[index % tints.length];
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Row(children: [
+        Container(
+          width: 46,
+          height: 46,
+          decoration: BoxDecoration(
+              color: tint.withValues(alpha: 0.14),
+              borderRadius: BorderRadius.circular(14)),
+          alignment: Alignment.center,
+          child: Icon(online ? Icons.queue_music_rounded : Icons.music_note_rounded,
+              size: 24, color: tint),
+        ),
+        const SizedBox(width: 12),
         Expanded(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text((r.body['title'] ?? '未命名').toString(),

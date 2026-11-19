@@ -36,9 +36,11 @@ String _createdLabel(double created) {
 
 /// 主题色实心胶囊悬浮钮（2.4.7 甲组统一主操作语言）：cs.primary 实心 +
 /// onPrimary 白字 + 胶囊 + 主题色柔和阴影；退役 M3 默认 primaryContainer 观感。
-/// ToolScaffold / QuestionPage / HabitPage 三处同源。
+/// ToolScaffold / QuestionPage / HabitPage / 乙组四页同源。
 Widget toolFab(BuildContext context,
-    {required String tooltip, required VoidCallback onPressed}) {
+    {required String tooltip,
+    required VoidCallback onPressed,
+    IconData icon = Icons.add_rounded}) {
   final cs = Theme.of(context).colorScheme;
   return FloatingActionButton.extended(
     tooltip: tooltip,
@@ -46,7 +48,7 @@ Widget toolFab(BuildContext context,
     backgroundColor: cs.primary,
     foregroundColor: cs.onPrimary,
     elevation: 3,
-    icon: const Icon(Icons.add_rounded),
+    icon: Icon(icon),
     label: Text(tooltip),
   );
 }

@@ -229,6 +229,11 @@ void main() {
       expect(find.textContaining('精选清单里挑'), findsOneWidget);
 
       // 精选一键添加：POST title+category+done:false
+      // （2.4.7 乙组 chips 化后卡片高度微差，chip 可能被推到视口边缘——先滚到可见再点）
+      await tester.scrollUntilVisible(
+          find.textContaining('＋ 一起看一次日出'), 100,
+          scrollable: find.byType(Scrollable).first);
+      await tester.pumpAndSettle();
       await tester.tap(find.textContaining('＋ 一起看一次日出'));
       await tester.pumpAndSettle();
       expect(postCount, 1);
@@ -240,7 +245,10 @@ void main() {
       expect(find.text('已加入清单'), findsOneWidget);
       await tester.pump(const Duration(seconds: 3));
 
-      // 完成勾选（双方可点）
+      // 完成勾选（双方可点）——精选 chip 点击前页面已下滚，先滚回顶部
+      await tester.fling(
+          find.byType(Scrollable).first, const Offset(0, 600), 1000);
+      await tester.pumpAndSettle();
       await tester.tap(find.byIcon(Icons.radio_button_unchecked_rounded));
       await tester.pumpAndSettle();
       final put = adapter.requests.firstWhere((r) => r.method == 'PUT');

@@ -21,7 +21,7 @@ import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
 import '../settings/settings_widgets.dart'
     show GlassActionBar, filledFieldDecoration;
 import 'together_controller.dart';
-import 'tool_pages.dart' show ToolTile;
+import 'tool_pages.dart' show ToolTile, toolFab;
 
 class LedgerPage extends ConsumerStatefulWidget {
   const LedgerPage({super.key});
@@ -73,12 +73,9 @@ class _LedgerPageState extends ConsumerState<LedgerPage> {
 
     return Scaffold(
       appBar: AppBar(title: const Text('共同账本')),
-      floatingActionButton: FloatingActionButton.extended(
-        tooltip: '记一笔',
-        onPressed: () => _showForm(context, ref, null),
-        icon: const Icon(Icons.add_rounded),
-        label: const Text('记一笔'),
-      ),
+      // 主题色实心胶囊悬浮钮（2.4.7 乙组，与甲组同源）。
+      floatingActionButton:
+          toolFab(context, tooltip: '记一笔', onPressed: () => _showForm(context, ref, null)),
       body: RefreshIndicator(
         onRefresh: () => ref.read(togetherControllerProvider.notifier).load(),
         child: ListView(
@@ -271,26 +268,24 @@ class _LedgerPageState extends ConsumerState<LedgerPage> {
     );
   }
 
-  /// 分类彩色字徽（第 15 项：首字 + 淡彩底圆角块，选择框与选择单行共用；
+  /// 分类彩色字徽（第 15 项：首字 + 淡彩底圆角块；2.4.7 乙组 token 化——
+  /// 原 8 处写死色值淡彩底退役，改 colorScheme 令牌按分类索引
+  /// 轮转（primary/secondary/tertiary 14% 浅底，深浅两色自动成立）；
   /// 分类集合/顺序以 ledgerCategories 为准，一增不减）。
-  static const _categoryTints = <String, Color>{
-    '餐饮': Color(0xFFFFF3E0),
-    '交通': Color(0xFFE3F2FD),
-    '旅行': Color(0xFFE0F7FA),
-    '礼物': Color(0xFFFCE4EC),
-    '生活': Color(0xFFE8F5E9),
-    '娱乐': Color(0xFFEDE7F6),
-    '其他': Color(0xFFF5F5F5),
-  };
-
-  Widget _categoryBadge(String c) {
-    final tint = _categoryTints[c] ?? const Color(0xFFF5F5F5);
+  Widget _categoryBadge(String c, [ColorScheme? scheme]) {
+    final cs = scheme ?? Theme.of(context).colorScheme;
+    final tints = [cs.primary, cs.secondary, cs.tertiary];
+    final idx = c.isEmpty
+        ? 0
+        : ledgerCategories.contains(c)
+            ? ledgerCategories.indexOf(c)
+            : ledgerCategories.length;
     return Container(
       width: 26,
       height: 26,
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: tint,
+        color: tints[idx % tints.length].withValues(alpha: 0.14),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Text(c.isEmpty ? '?' : c.substring(0, 1),
@@ -447,7 +442,7 @@ class _LedgerPageState extends ConsumerState<LedgerPage> {
                         SelectionOption(
                             value: c,
                             label: c,
-                            leading: _categoryBadge(c)),
+                            leading: _categoryBadge(c, Theme.of(dctx).colorScheme)),
                     ],
                   );
                   if (picked != null) {

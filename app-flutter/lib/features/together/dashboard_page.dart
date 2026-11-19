@@ -169,9 +169,12 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                 const SizedBox(height: 4),
                 Row(mainAxisAlignment: MainAxisAlignment.center,
                     crossAxisAlignment: CrossAxisAlignment.end, children: [
+                  // 数字美化（2.4.7 乙组）：headlineSmall + 主题色 + 加粗，
+                  // 文本内容/统计口径不变。
                   Text(value,
-                      style: theme.textTheme.titleLarge
-                          ?.copyWith(fontWeight: FontWeight.bold)),
+                      style: theme.textTheme.headlineSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          color: theme.colorScheme.primary)),
                   const SizedBox(width: 2),
                   Padding(
                     padding: const EdgeInsets.only(bottom: 2),
@@ -282,12 +285,22 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
 
   Widget _moodRows(ThemeData theme, List<(String, int)> rows) {
     final peak = rows.fold<int>(1, (s, r) => r.$2 > s ? r.$2 : s);
+    final cs = theme.colorScheme;
     return Column(children: [
       for (final (emoji, n) in rows)
         Padding(
           padding: const EdgeInsets.symmetric(vertical: 5),
           child: Row(children: [
-            Text(emoji, style: const TextStyle(fontSize: 18)),
+            // 心情表情浅底圆角方形底座 28（2.4.7 乙组，与甲组心情底座同语言）。
+            Container(
+              width: 28,
+              height: 28,
+              decoration: BoxDecoration(
+                  color: cs.tertiary.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(8)),
+              alignment: Alignment.center,
+              child: Text(emoji, style: const TextStyle(fontSize: 14)),
+            ),
             const SizedBox(width: 8),
             Expanded(child: _bar(theme, n / peak)),
             const SizedBox(width: 8),

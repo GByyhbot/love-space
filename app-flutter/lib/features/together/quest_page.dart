@@ -18,7 +18,7 @@ import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
 import '../settings/settings_widgets.dart'
     show filledFieldDecoration, showFormSheet;
 import 'together_controller.dart';
-import 'tool_pages.dart' show ToolTile;
+import 'tool_pages.dart' show ToolTile, toolFab, toolMetaChip;
 import '../../core/theme/tokens.dart';
 
 class QuestPage extends ConsumerStatefulWidget {
@@ -64,12 +64,9 @@ class _QuestPageState extends ConsumerState<QuestPage> {
 
     return Scaffold(
       appBar: AppBar(title: const Text('恋爱清单')),
-      floatingActionButton: FloatingActionButton.extended(
-        tooltip: '添加小事',
-        onPressed: () => _showForm(context, ref, null),
-        icon: const Icon(Icons.add_rounded),
-        label: const Text('添加小事'),
-      ),
+      // 主题色实心胶囊悬浮钮（2.4.7 乙组，与甲组同源）。
+      floatingActionButton:
+          toolFab(context, tooltip: '添加小事', onPressed: () => _showForm(context, ref, null)),
       body: RefreshIndicator(
         onRefresh: () => ref.read(togetherControllerProvider.notifier).load(),
         child: ListView(
@@ -90,7 +87,7 @@ class _QuestPageState extends ConsumerState<QuestPage> {
                             style: theme.textTheme.titleMedium),
                         const SizedBox(height: Spacing.gap),
                         ClipRRect(
-                          borderRadius: BorderRadius.circular(6),
+                          borderRadius: BorderRadius.circular(999),
                           child: LinearProgressIndicator(
                               value: pct / 100, minHeight: 10),
                         ),
@@ -146,6 +143,11 @@ class _QuestPageState extends ConsumerState<QuestPage> {
                     ),
                     IconButton(
                       tooltip: '加入清单',
+                      style: IconButton.styleFrom(
+                        backgroundColor: cs.primary,
+                        foregroundColor: cs.onPrimary,
+                        shape: const CircleBorder(),
+                      ),
                       onPressed: () async {
                         final title = _customCtrl.text.trim();
                         if (title.isEmpty) return;
@@ -221,6 +223,7 @@ class _QuestPageState extends ConsumerState<QuestPage> {
   Widget _buildTile(BuildContext context, WidgetRef ref, TogetherRecord r,
       MeData? me) {
     final theme = Theme.of(context);
+    final cs = theme.colorScheme;
     final isDone = r.body['done'] == true;
     return ToolTile(
       record: r,
@@ -262,13 +265,13 @@ class _QuestPageState extends ConsumerState<QuestPage> {
           ),
         ]),
         const SizedBox(height: 4),
-        Text(
-          '${(r.body['category'] ?? '日常')}'
-          '${(r.body['date'] ?? '').toString().isNotEmpty ? ' · 计划 ${(r.body['date'] ?? '')}' : ''}'
-          '${isDone ? ' · 已完成' : ''}',
-          style: theme.textTheme.labelSmall
-              ?.copyWith(color: theme.colorScheme.outline),
-        ),
+        // 分类/计划/完成态改浅底胶囊 chips（2.4.7 乙组；文案逐字保留）。
+        Wrap(spacing: 6, runSpacing: 4, children: [
+          toolMetaChip(theme, cs, (r.body['category'] ?? '日常').toString()),
+          if ((r.body['date'] ?? '').toString().isNotEmpty)
+            toolMetaChip(theme, cs, '计划 ${(r.body['date'] ?? '')}'),
+          if (isDone) toolMetaChip(theme, cs, '已完成', emphasized: true),
+        ]),
       ]),
     );
   }

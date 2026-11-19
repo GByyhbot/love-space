@@ -14,7 +14,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_client.dart' as api;
 import '../../core/together/together_data.dart';
+import '../../core/ui/error_view.dart';
 import '../chat/chat_toast.dart';
+import 'tool_pages.dart' show toolMetaChip;
 import '../../core/theme/tokens.dart';
 
 class WeeklyPage extends ConsumerStatefulWidget {
@@ -100,6 +102,11 @@ class _WeeklyPageState extends ConsumerState<WeeklyPage> {
             IconButton(
                 tooltip: '上一周',
                 onPressed: _loading ? null : () => _shift(-1),
+                style: IconButton.styleFrom(
+                  backgroundColor:
+                      cs.surfaceContainerHighest.withValues(alpha: 0.6),
+                  shape: const CircleBorder(),
+                ),
                 icon: const Icon(Icons.chevron_left_rounded)),
             Expanded(
               child: Text(
@@ -112,6 +119,11 @@ class _WeeklyPageState extends ConsumerState<WeeklyPage> {
               tooltip: '下一周',
               onPressed:
                   (_loading || _offset >= 0) ? null : () => _shift(1),
+              style: IconButton.styleFrom(
+                backgroundColor:
+                    cs.surfaceContainerHighest.withValues(alpha: 0.6),
+                shape: const CircleBorder(),
+              ),
               icon: Icon(Icons.chevron_right_rounded,
                   color: _offset >= 0
                       ? cs.outline.withValues(alpha: 0.4)
@@ -161,7 +173,8 @@ class _WeeklyPageState extends ConsumerState<WeeklyPage> {
                     for (final r in w.highlights) _highlightCard(theme, r),
                     const SizedBox(height: 12),
                   ],
-                  FilledButton.tonalIcon(
+                  FilledButton.icon(
+                    // 复制主操作：主题色实心（2.4.7 乙组，tonal 退役）。
                     onPressed: _copy,
                     icon: const Icon(Icons.copy_rounded, size: 18),
                     label: const Text('复制文字版'),
@@ -169,9 +182,7 @@ class _WeeklyPageState extends ConsumerState<WeeklyPage> {
                 ],
                 if (_error != null) ...[
                   const SizedBox(height: 10),
-                  Text(_error!,
-                      style: theme.textTheme.bodySmall
-                          ?.copyWith(color: cs.error)),
+                  AppErrorText(_error!),
                 ],
               ],
             ),
@@ -215,14 +226,8 @@ class _WeeklyPageState extends ConsumerState<WeeklyPage> {
         padding: const EdgeInsets.all(Spacing.cardPad),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                  color: cs.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(6)),
-              child: Text(kindLabel[r.kind] ?? r.kind,
-                  style: theme.textTheme.labelSmall),
-            ),
+            // kind 标签浅底胶囊（2.4.7 乙组；文案逐字保留）。
+            toolMetaChip(theme, cs, kindLabel[r.kind] ?? r.kind),
             const Spacer(),
             Text('❤️ ${r.likeCount} · 💬 ${r.commentCount}',
                 style: theme.textTheme.labelSmall
@@ -263,9 +268,12 @@ class _WeeklyPageState extends ConsumerState<WeeklyPage> {
                 const SizedBox(height: 4),
                 Row(mainAxisAlignment: MainAxisAlignment.center,
                     crossAxisAlignment: CrossAxisAlignment.end, children: [
+                  // 数字美化（2.4.7 乙组）：headlineSmall + 主题色 + 加粗，
+                  // 文本内容/统计口径不变。
                   Text(value,
-                      style: theme.textTheme.titleLarge
-                          ?.copyWith(fontWeight: FontWeight.bold)),
+                      style: theme.textTheme.headlineSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          color: theme.colorScheme.primary)),
                   const SizedBox(width: 2),
                   Padding(
                     padding: const EdgeInsets.only(bottom: 2),
@@ -330,12 +338,22 @@ class _WeeklyPageState extends ConsumerState<WeeklyPage> {
 
   Widget _moodRows(ThemeData theme, List<(String, int)> rows) {
     final peak = rows.fold<int>(1, (s, r) => r.$2 > s ? r.$2 : s);
+    final cs = theme.colorScheme;
     return Column(children: [
       for (final (emoji, n) in rows)
         Padding(
           padding: const EdgeInsets.symmetric(vertical: 5),
           child: Row(children: [
-            Text(emoji, style: const TextStyle(fontSize: 18)),
+            // 心情表情浅底圆角方形底座 28（2.4.7 乙组，与甲组心情底座同语言）。
+            Container(
+              width: 28,
+              height: 28,
+              decoration: BoxDecoration(
+                  color: cs.tertiary.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(8)),
+              alignment: Alignment.center,
+              child: Text(emoji, style: const TextStyle(fontSize: 14)),
+            ),
             const SizedBox(width: 8),
             Expanded(child: _bar(theme, n / peak)),
             const SizedBox(width: 8),
