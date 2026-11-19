@@ -290,7 +290,7 @@ class _QuestPageState extends ConsumerState<QuestPage> {
     final formKey = GlobalKey<FormState>();
     // 2.4.1 通则 A：底部表单 sheet；通则 B：分类下拉改底部选择单；
   // 计划日期改整行选择框。数据口径零变化。
-  final saved = await showFormSheet(
+  await showFormSheet(
     context,
     title: editing ? '编辑小事' : '添加小事',
     saveLabel: editing ? '保存' : '添加',
@@ -402,28 +402,30 @@ class _QuestPageState extends ConsumerState<QuestPage> {
         ]),
       ]),
     ),
-    onSave: (closeOk, _) {
-      if (formKey.currentState?.validate() ?? false) closeOk();
+    onSave: (closeOk, _) {},
+    // 2.4.10：保存走三连变。
+    asyncSave: () async {
+      if (!(formKey.currentState?.validate() ?? false)) return false;
+      final changes = <String, dynamic>{
+        'title': titleCtrl.text.trim(),
+        'category': category,
+        'date': dateCtrl.text.trim(),
+        'content': contentCtrl.text.trim(),
+        if (!editing) 'done': false,
+      };
+      final err = editing
+          ? await ref
+              .read(togetherControllerProvider.notifier)
+              .edit(record.id, 'quest', record.body, changes)
+          : await ref
+              .read(togetherControllerProvider.notifier)
+              .add('quest', changes);
+      if (!context.mounted) return false;
+      ref.read(chatToastProvider.notifier).show(
+          err == null ? (editing ? '已保存' : '已加入清单') : '保存失败：$err',
+          tone: err == null ? ChatToastTone.success : ChatToastTone.error);
+      return err == null;
     },
   );
-    if (saved != true) return;
-    final changes = <String, dynamic>{
-      'title': titleCtrl.text.trim(),
-      'category': category,
-      'date': dateCtrl.text.trim(),
-      'content': contentCtrl.text.trim(),
-      if (!editing) 'done': false,
-    };
-    final err = editing
-        ? await ref
-            .read(togetherControllerProvider.notifier)
-            .edit(record.id, 'quest', record.body, changes)
-        : await ref
-            .read(togetherControllerProvider.notifier)
-            .add('quest', changes);
-    if (!context.mounted) return;
-    ref.read(chatToastProvider.notifier).show(
-        err == null ? (editing ? '已保存' : '已加入清单') : '保存失败：$err',
-        tone: err == null ? ChatToastTone.success : ChatToastTone.error);
-  }
+}
 }

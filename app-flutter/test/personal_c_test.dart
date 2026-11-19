@@ -90,6 +90,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:love_space/core/api/api_client.dart' as api;
+import 'package:love_space/core/ui/submit_morph.dart';
 import 'package:love_space/core/chat/chat_media.dart'
     show chatBaseProvider, mediaCookieHeadersProvider;
 import 'package:love_space/core/together/together_data.dart';
@@ -939,17 +940,21 @@ void main() {
       await _tapUnlockEntry(tester);
       await tester.enterText(find.byType(TextField).first, '000000');
       await tester.tap(find.text('解锁心愿'));
-      await tester.pumpAndSettle();
+      // 2.4.10：morph 期 spinner 永动，挂起请求期用定量 pump（pumpAndSettle 会超时）。
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
 
       expect(store.unlockCalls, 1);
-      final btn = find.byType(FilledButton);
-      expect(tester.widget<FilledButton>(btn).onPressed, isNull,
-          reason: '请求中按钮禁用');
-      expect(find.text('解锁中…'), findsOneWidget);
+      // 2.4.10：解锁走三连变——请求中按钮形态换成收缩圆+spinner
+      //（原「解锁中…」文字态退役），morph busy 期天然防连点。
+      expect(find.byType(CircularProgressIndicator), findsOneWidget,
+          reason: '请求中=旋转加载环');
+      expect(find.byType(FilledButton), findsNothing,
+          reason: 'morph 期按钮本体被收缩圆替换');
 
-      // 连点第二下：禁用按钮不再回调
-      await tester.tap(btn);
-      await tester.pumpAndSettle();
+      // 连点第二下：morph busy 期不再回调
+      await tester.tap(find.byType(SubmitMorphButton));
+      await tester.pump(const Duration(milliseconds: 100));
       expect(store.unlockCalls, 1, reason: '不连点叠加请求');
 
       // 以 403 收尾：客户端不自动重试
@@ -958,8 +963,9 @@ void main() {
       expect(store.unlockCalls, 1, reason: '错密码不自动重试');
       expect(find.text('密码不正确，请向心愿本人确认').evaluate().length,
           greaterThanOrEqualTo(2));
-      expect(tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
-          isNotNull, reason: '结束后按钮恢复可用');
+      expect(find.byType(FilledButton), findsOneWidget,
+          reason: '结束后按钮恢复（morph 回 idle）');
+      expect(find.byType(CircularProgressIndicator), findsNothing);
       await _flush(tester);
     });
   });
@@ -1359,9 +1365,12 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(store.unlockCalls, 1);
+      // 2.4.10：成功 toast 在 morph 对勾驻留期（1s < toast 2.2s）仍可见；
+      // 驻留结束才 pop，pop 断言放驻留 pump 之后。
       expect(container.read(chatToastProvider)?.text, okMsg);
       expect(container.read(chatToastProvider)?.tone, ChatToastTone.success);
       expect(find.text(okMsg), findsOneWidget);
+      await tester.pumpAndSettle(const Duration(seconds: 2));
       expect(find.text('打开这份个人心愿'), findsNothing,
           reason: '成功后 pop 回列表');
       final wish = container

@@ -19,6 +19,8 @@ import '../../core/chat/chat_bubbles.dart';
 import '../../core/chat/chat_media.dart';
 import '../../core/chat/chat_state.dart';
 import '../auth/auth_state.dart';
+import '../../core/ui/jelly_switch.dart' show JellySwitch;
+import '../../core/ui/submit_morph.dart' show SubmitMorphButton;
 import 'chat_toast.dart' show ChatToastTone, chatToastProvider;
 import 'skin_bubble.dart';
 import '../../core/theme/tokens.dart';
@@ -130,10 +132,12 @@ class _BubbleSkinSheetState extends ConsumerState<BubbleSkinSheet> {
   /// 自己，X-Love-Space: 1 由 dio 拦截器统一附加）；name/avatar 必填取现值。
   /// [clear]=true：bubble_skin 传空串，服务端把三键整体清空（恢复未设置，
   /// 渲染回退空间级）；硬性护栏：不得再走 PUT /api/space 写空间字段。
-  Future<void> _save(ChatSkin skin, {bool clear = false}) async {
-    if (_saving) return;
+  // 2.4.10：改返 Future<bool> 供三连变驱动（pop 归 onSuccess；clear 路径
+  // 走普通按钮不经 morph——恢复未设置是低风险操作，无需三连）。
+  Future<bool> _save(ChatSkin skin, {bool clear = false}) async {
+    if (_saving) return false;
     final me = ref.read(authProvider.notifier).me;
-    if (me == null) return;
+    if (me == null) return false;
     setState(() => _saving = true);
     try {
       final dio = await ref.read(dioProvider.future);
@@ -156,16 +160,17 @@ class _BubbleSkinSheetState extends ConsumerState<BubbleSkinSheet> {
           ref.read(chatToastProvider.notifier).show(err,
               tone: ChatToastTone.error);
         }
-        return;
+        return false;
       }
       await ref.read(authProvider.notifier).reload();
       ref.read(chatUiTickProvider.notifier).state++;
-      if (mounted) Navigator.of(context).pop();
+      return true;
     } catch (e) {
       if (mounted) {
         ref.read(chatToastProvider.notifier).show(errorDetail(e),
             tone: ChatToastTone.error);
       }
+      return false;
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -255,7 +260,9 @@ class _BubbleSkinSheetState extends ConsumerState<BubbleSkinSheet> {
                       ?.copyWith(color: theme.colorScheme.outline))),
             ]),
             Row(children: [
-              Switch(value: _swap, onChanged: (v) => setState(() => _swap = v)),
+              // 2.4.10：开关换果冻开关（取值/保存零改动）。
+              JellySwitch(
+                  value: _swap, onChanged: (v) => setState(() => _swap = v)),
               const Text('左右互换'),
               const SizedBox(width: 8),
               Expanded(child: Text('气泡的装饰朝哪边，看着别扭就勾一下',
@@ -274,14 +281,13 @@ class _BubbleSkinSheetState extends ConsumerState<BubbleSkinSheet> {
               ),
               const SizedBox(width: 10),
               Expanded(
-                child: FilledButton(
-                  onPressed: _saving || _pick.isEmpty
-                      ? null
+                // 2.4.10：使用这个走三连变（对勾驻留后关弹层）。
+                child: SubmitMorphButton(
+                  label: '使用这个',
+                  onSubmit: _pick.isEmpty
+                      ? () async => false
                       : () => _save(ChatSkin(skin: _pick, fg: _fg, swap: _swap)),
-                  child: _saving
-                      ? const SizedBox(width: 16, height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                      : const Text('使用这个'),
+                  onSuccess: () => Navigator.of(context).pop(),
                 ),
               ),
             ]),

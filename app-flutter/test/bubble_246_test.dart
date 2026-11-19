@@ -183,6 +183,8 @@ void main() {
     final (auth, putPaths, putBodies) = await pumpSheet(tester);
     await tester.tap(find.text('使用这个'));
     await tester.pumpAndSettle();
+    // 2.4.10：保存走三连变——对勾驻留 1s 后才 pop，补足驻留再断关层。
+    await tester.pumpAndSettle(const Duration(seconds: 2));
     expect(putPaths, ['/api/profile'], reason: '只发按人端点一次');
     final body = jsonDecode(putBodies.first) as Map<String, dynamic>;
     expect(body['bubble_skin'], 'p1/a.png');

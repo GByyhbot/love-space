@@ -172,7 +172,7 @@ class _QuestionPageState extends ConsumerState<QuestionPage> {
     final formKey = GlobalKey<FormState>();
     // 2.4.1 通则 A：底部表单 sheet；通则 B：题库下拉改底部选择单
     // （行 = 「分组 · 题目」，点选即关并回填标题，与原下拉行为等价）。
-    final saved = await showFormSheet(
+    await showFormSheet(
       context,
       title: editing ? '编辑问题' : '提个问题',
       saveLabel: editing ? '保存' : '提问',
@@ -243,26 +243,28 @@ class _QuestionPageState extends ConsumerState<QuestionPage> {
           ]),
         ]),
       ),
-      onSave: (closeOk, _) {
-        if (formKey.currentState?.validate() ?? false) closeOk();
+      onSave: (closeOk, _) {},
+      // 2.4.10：保存走三连变。
+      asyncSave: () async {
+        if (!(formKey.currentState?.validate() ?? false)) return false;
+        final changes = <String, dynamic>{
+          'title': titleCtrl.text.trim(),
+          'content': contentCtrl.text.trim(),
+        };
+        final err = editing
+            ? await ref
+                .read(togetherControllerProvider.notifier)
+                .edit(record.id, 'question', record.body, changes)
+            : await ref
+                .read(togetherControllerProvider.notifier)
+                .add('question', changes);
+        if (!context.mounted) return false;
+        ref.read(chatToastProvider.notifier).show(
+            err == null ? (editing ? '已保存' : '问题已提出，等 TA 一起回答') : '保存失败：$err',
+            tone: err == null ? ChatToastTone.success : ChatToastTone.error);
+        return err == null;
       },
     );
-    if (saved != true) return; // 取消：不误写
-    final changes = <String, dynamic>{
-      'title': titleCtrl.text.trim(),
-      'content': contentCtrl.text.trim(),
-    };
-    final err = editing
-        ? await ref
-            .read(togetherControllerProvider.notifier)
-            .edit(record.id, 'question', record.body, changes)
-        : await ref
-            .read(togetherControllerProvider.notifier)
-            .add('question', changes);
-    if (!context.mounted) return;
-    ref.read(chatToastProvider.notifier).show(
-        err == null ? (editing ? '已保存' : '问题已提出，等 TA 一起回答') : '保存失败：$err',
-        tone: err == null ? ChatToastTone.success : ChatToastTone.error);
   }
 
   /// 回答表单（子资源 POST，非记录 PUT）：预填自己已存答案（可改，服务端
@@ -276,7 +278,7 @@ class _QuestionPageState extends ConsumerState<QuestionPage> {
         text: mine.isNotEmpty ? (mine.first['content'] ?? '') : '');
     final formKey = GlobalKey<FormState>();
     // 2.4.1 通则 A：底部表单 sheet。
-    final saved = await showFormSheet(
+    await showFormSheet(
       context,
       title: (r.body['title'] ?? '问答').toString(),
       saveLabel: mine.isEmpty ? '提交答案' : '更新答案',
@@ -297,18 +299,20 @@ class _QuestionPageState extends ConsumerState<QuestionPage> {
           ),
         ]),
       ),
-      onSave: (closeOk, _) {
-        if (formKey.currentState?.validate() ?? false) closeOk();
+      onSave: (closeOk, _) {},
+      // 2.4.10：保存走三连变。
+      asyncSave: () async {
+        if (!(formKey.currentState?.validate() ?? false)) return false;
+        final err = await ref
+            .read(togetherControllerProvider.notifier)
+            .answer(r.id, contentCtrl.text.trim());
+        if (!context.mounted) return false;
+        ref.read(chatToastProvider.notifier).show(
+            err == null ? (mine.isEmpty ? '已提交答案' : '答案已更新') : '提交失败：$err',
+            tone: err == null ? ChatToastTone.success : ChatToastTone.error);
+        return err == null;
       },
     );
-    if (saved != true) return;
-    final err = await ref
-        .read(togetherControllerProvider.notifier)
-        .answer(r.id, contentCtrl.text.trim());
-    if (!context.mounted) return;
-    ref.read(chatToastProvider.notifier).show(
-        err == null ? (mine.isEmpty ? '已提交答案' : '答案已更新') : '提交失败：$err',
-        tone: err == null ? ChatToastTone.success : ChatToastTone.error);
   }
 }
 
@@ -447,7 +451,7 @@ class _HabitPageState extends ConsumerState<HabitPage> {
     final contentCtrl = TextEditingController(text: (b['content'] ?? '').toString());
     final formKey = GlobalKey<FormState>();
     // 2.4.1 通则 A：底部表单 sheet。
-    final saved = await showFormSheet(
+    await showFormSheet(
       context,
       title: editing ? '编辑目标' : '立个目标',
       saveLabel: editing ? '保存' : '开始坚持',
@@ -481,25 +485,27 @@ class _HabitPageState extends ConsumerState<HabitPage> {
           ]),
         ]),
       ),
-      onSave: (closeOk, _) {
-        if (formKey.currentState?.validate() ?? false) closeOk();
+      onSave: (closeOk, _) {},
+      // 2.4.10：保存走三连变。
+      asyncSave: () async {
+        if (!(formKey.currentState?.validate() ?? false)) return false;
+        final changes = <String, dynamic>{
+          'title': titleCtrl.text.trim(),
+          'content': contentCtrl.text.trim(),
+        };
+        final err = editing
+            ? await ref
+                .read(togetherControllerProvider.notifier)
+                .edit(record.id, 'habit', record.body, changes)
+            : await ref
+                .read(togetherControllerProvider.notifier)
+                .add('habit', changes);
+        if (!context.mounted) return false;
+        ref.read(chatToastProvider.notifier).show(
+            err == null ? (editing ? '已保存' : '目标已立，今天就开始') : '保存失败：$err',
+            tone: err == null ? ChatToastTone.success : ChatToastTone.error);
+        return err == null;
       },
     );
-    if (saved != true) return;
-    final changes = <String, dynamic>{
-      'title': titleCtrl.text.trim(),
-      'content': contentCtrl.text.trim(),
-    };
-    final err = editing
-        ? await ref
-            .read(togetherControllerProvider.notifier)
-            .edit(record.id, 'habit', record.body, changes)
-        : await ref
-            .read(togetherControllerProvider.notifier)
-            .add('habit', changes);
-    if (!context.mounted) return;
-    ref.read(chatToastProvider.notifier).show(
-        err == null ? (editing ? '已保存' : '目标已立，今天就开始') : '保存失败：$err',
-        tone: err == null ? ChatToastTone.success : ChatToastTone.error);
   }
 }

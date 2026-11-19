@@ -24,8 +24,8 @@ void main() {
 
   test('① 保存成功走顶部通知 chatToastProvider(' "'已保存'" ')', () {
     // 成功分支里必须出现顶部通知调用
-    expect(src.contains("chatToastProvider.notifier).show(\n            '已保存'"),
-        isTrue,
+    // 2.4.10：语义断言（不锁缩进）——成功分支调用 show('已保存', success)。
+    expect(src.contains("'已保存', tone: ChatToastTone.success"), isTrue,
         reason: '保存成功统一补走顶部通知');
   });
 

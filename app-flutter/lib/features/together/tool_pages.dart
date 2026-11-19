@@ -332,7 +332,7 @@ Future<void> _showMoodForm(
   /// 2.4.1 通则 A：居中弹窗改底部表单 sheet（外壳同 composer：抓手 +
   /// 标题 + 关闭圆钮 + 玻璃栏）；字段圆角填充；日期改整行选择框。
   /// 数据口径（emoji 十选一 + date 必填 + content 可选）零变化。
-  final saved = await showFormSheet(
+  await showFormSheet(
     context,
     title: editing ? '编辑心情' : '今天的心情',
     saveLabel: editing ? '保存' : '记下今天',
@@ -410,28 +410,32 @@ Future<void> _showMoodForm(
         ]),
       ]),
     ),
-    onSave: (closeOk, _) {
-      // date 由整行选择框维护，不走 Form 校验
+    onSave: (closeOk, _) {},
+    // 2.4.10：保存走三连变（请求中弹层保持打开，成功对勾驻留后关）。
+    asyncSave: () async {
       if (dateCtrl.text.trim().length != 10) {
         ref.read(chatToastProvider.notifier).show('请选择心情日期',
             tone: ChatToastTone.error);
-        return;
+        return false;
       }
-      if (formKey.currentState?.validate() ?? false) closeOk();
+      if (!(formKey.currentState?.validate() ?? false)) return false;
+      final changes = <String, dynamic>{
+        'emoji': emoji,
+        'date': dateCtrl.text.trim(),
+        'content': contentCtrl.text.trim(),
+      };
+      final err = editing
+          ? await ref
+              .read(togetherControllerProvider.notifier)
+              .edit(record.id, 'mood', record.body, changes)
+          : await ref
+              .read(togetherControllerProvider.notifier)
+              .add('mood', changes);
+      if (!context.mounted) return false;
+      _toast(context, ref, err, okMsg: editing ? '已保存' : '已记下今天的心情');
+      return err == null;
     },
   );
-  if (saved != true) return; // 取消：不误写
-  final changes = <String, dynamic>{
-    'emoji': emoji,
-    'date': dateCtrl.text.trim(),
-    'content': contentCtrl.text.trim(),
-  };
-  final err = editing
-      ? await ref.read(togetherControllerProvider.notifier).edit(
-          record.id, 'mood', record.body, changes)
-      : await ref.read(togetherControllerProvider.notifier).add('mood', changes);
-  if (!context.mounted) return;
-  _toast(context, ref, err, okMsg: editing ? '已保存' : '已记下今天的心情');
 }
 
 // ── 悄悄留言 ──────────────────────────────────────────────────────
@@ -483,7 +487,7 @@ Future<void> _showNoteForm(
       TextEditingController(text: (record?.body['content'] ?? '').toString());
   final formKey = GlobalKey<FormState>();
   // 2.4.1 通则 A：底部表单 sheet（外壳同 composer），字段圆角填充。
-  final saved = await showFormSheet(
+  await showFormSheet(
     context,
     title: editing ? '编辑留言' : '悄悄留言',
     saveLabel: editing ? '保存' : '写下来',
@@ -504,19 +508,23 @@ Future<void> _showNoteForm(
         ),
       ]),
     ),
-    onSave: (closeOk, _) {
-      if (formKey.currentState?.validate() ?? false) closeOk();
+    onSave: (closeOk, _) {},
+    // 2.4.10：保存走三连变。
+    asyncSave: () async {
+      if (!(formKey.currentState?.validate() ?? false)) return false;
+      final changes = <String, dynamic>{'content': contentCtrl.text.trim()};
+      final err = editing
+          ? await ref
+              .read(togetherControllerProvider.notifier)
+              .edit(record.id, 'note', record.body, changes)
+          : await ref
+              .read(togetherControllerProvider.notifier)
+              .add('note', changes);
+      if (!context.mounted) return false;
+      _toast(context, ref, err, okMsg: editing ? '已保存' : '已写下这条留言');
+      return err == null;
     },
   );
-  if (saved != true) return;
-  final changes = <String, dynamic>{'content': contentCtrl.text.trim()};
-  final err = editing
-      ? await ref
-          .read(togetherControllerProvider.notifier)
-          .edit(record.id, 'note', record.body, changes)
-      : await ref.read(togetherControllerProvider.notifier).add('note', changes);
-  if (!context.mounted) return;
-  _toast(context, ref, err, okMsg: editing ? '已保存' : '已写下这条留言');
 }
 
 // ── 共同愿望 ──────────────────────────────────────────────────────
@@ -629,7 +637,7 @@ Future<void> _showWishForm(
   // 2.4.1 通则 A：底部表单 sheet；通则 B：分类下拉改底部选择单；
   // 约定日期改整行选择框。数据口径（title 必填 + category 五选 +
   // target 可选 + content 可选）零变化。
-  final saved = await showFormSheet(
+  await showFormSheet(
     context,
     title: editing ? '编辑愿望' : '许个心愿',
     saveLabel: editing ? '保存' : '许下心愿',
@@ -741,21 +749,26 @@ Future<void> _showWishForm(
         ]),
       ]),
     ),
-    onSave: (closeOk, _) {
-      if (formKey.currentState?.validate() ?? false) closeOk();
+    onSave: (closeOk, _) {},
+    // 2.4.10：保存走三连变。
+    asyncSave: () async {
+      if (!(formKey.currentState?.validate() ?? false)) return false;
+      final changes = <String, dynamic>{
+        'title': titleCtrl.text.trim(),
+        'category': category,
+        'target': targetCtrl.text.trim(),
+        'content': contentCtrl.text.trim(),
+      };
+      final err = editing
+          ? await ref
+              .read(togetherControllerProvider.notifier)
+              .edit(record.id, 'wish', record.body, changes)
+          : await ref
+              .read(togetherControllerProvider.notifier)
+              .add('wish', changes);
+      if (!context.mounted) return false;
+      _toast(context, ref, err, okMsg: editing ? '已保存' : '已许下这份心愿');
+      return err == null;
     },
   );
-  if (saved != true) return;
-  final changes = <String, dynamic>{
-    'title': titleCtrl.text.trim(),
-    'category': category,
-    'target': targetCtrl.text.trim(),
-    'content': contentCtrl.text.trim(),
-  };
-  final err = editing
-      ? await ref.read(togetherControllerProvider.notifier).edit(
-          record.id, 'wish', record.body, changes)
-      : await ref.read(togetherControllerProvider.notifier).add('wish', changes);
-  if (!context.mounted) return;
-  _toast(context, ref, err, okMsg: editing ? '已保存' : '已许下这份心愿');
 }

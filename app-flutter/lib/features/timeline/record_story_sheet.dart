@@ -23,6 +23,8 @@ import '../../core/timeline/timeline_data.dart';
 import '../../core/ui/avatar_media.dart';
 import '../auth/auth_state.dart';
 import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
+import '../../core/ui/like_burst.dart' show LikeBurstIcon, LikeCountLabel;
+import '../../core/ui/submit_morph.dart' show SubmitMorphButton;
 import '../chat/media_bubble_widgets.dart'
     show MediaImageView, VideoCardView, VoiceChipView;
 import 'image_viewer.dart';
@@ -96,13 +98,13 @@ class _RecordStorySheetState extends ConsumerState<_RecordStorySheet> {
     }
   }
 
-  /// 发评论：POST 返回真实 cid → 弹层内本地插入（与 addComment 同端点同校验）。
-  Future<void> _sendComment() async {
-    if (_sending) return;
+  // 2.4.10：改返 Future<bool> 供三连变驱动（成功 morph 驻留后 pop）。
+  Future<bool> _sendComment() async {
+    if (_sending) return false;
     final text = _input.text.trim();
     if (text.isEmpty || text.length > 5000) {
       _toast('评论内容需在 1–5000 字之间', ChatToastTone.warning);
-      return;
+      return false;
     }
     setState(() => _sending = true);
     try {
@@ -124,9 +126,11 @@ class _RecordStorySheetState extends ConsumerState<_RecordStorySheet> {
         _sending = false;
       });
       _input.clear();
+      return true;
     } catch (_) {
       setState(() => _sending = false);
       _toast('评论发送失败，稍后再试', ChatToastTone.error);
+      return false;
     }
   }
 
@@ -279,28 +283,23 @@ class _RecordStorySheetState extends ConsumerState<_RecordStorySheet> {
                 padding: const EdgeInsets.only(top: 6),
                 child: Text(content, style: theme.textTheme.bodyMedium),
               ),
-            // ④ 互动行（与时光卡同款图标与计数语义）
+            // ④ 互动行（与时光卡同款图标与计数语义；2.4.10 接入爆粒子）
             Row(children: [
-              InkWell(
-                key: const Key('story-like'),
-                borderRadius: BorderRadius.circular(AppRadius.card),
-                onTap: _toggleLike,
-                child: Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-                  child: Row(mainAxisSize: MainAxisSize.min, children: [
-                    Icon(Icons.favorite_rounded,
-                        size: 16,
-                        color: liked
-                            ? theme.colorScheme.primary
-                            : theme.colorScheme.outline),
-                    const SizedBox(width: 3),
-                    Text(cur.likes.isEmpty ? '喜欢' : '${cur.likes.length}',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.outline)),
-                  ]),
+              Row(mainAxisSize: MainAxisSize.min, children: [
+                LikeBurstIcon(
+                  key: const Key('story-like'),
+                  liked: liked,
+                  onTap: _toggleLike,
+                  size: 16,
                 ),
-              ),
+                const SizedBox(width: 2),
+                LikeCountLabel(
+                  liked: liked,
+                  count: cur.likes.length,
+                  style: theme.textTheme.bodySmall
+                      ?.copyWith(color: theme.colorScheme.outline),
+                ),
+              ]),
               const SizedBox(width: 6),
               InkWell(
                 borderRadius: BorderRadius.circular(AppRadius.card),
@@ -386,15 +385,13 @@ class _RecordStorySheetState extends ConsumerState<_RecordStorySheet> {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  FilledButton(
-                    key: const Key('story-comment-send'),
-                    onPressed: _sending ? null : _sendComment,
-                    child: _sending
-                        ? const SizedBox(
-                            width: 16, height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2))
-                        : const Text('发送'),
-                  ),
+                const SizedBox(height: 8),
+                // 2.4.10：发送走三连变。
+                SubmitMorphButton(
+                  key: const Key('story-comment-send'),
+                  label: '发送',
+                        onSubmit: _sendComment,
+                ),
                 ]),
               ]),
             ),

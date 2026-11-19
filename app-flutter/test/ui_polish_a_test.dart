@@ -466,7 +466,10 @@ void main() {
       await tester.tap(find.text('使用这个'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500)); // PUT + reload（宏任务）
-      await tester.pump(const Duration(milliseconds: 300)); // pop 退场动画走完
+      // 2.4.10：三连变对勾驻留 1s 后 pop——补足驻留 + pop 退场动画，
+      // 驻留 Timer 不留到树销毁（否则 !timersPending 断言炸）。
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump(const Duration(milliseconds: 300));
 
       expect(find.text('使用这个'), findsNothing, reason: '成功后 pop');
       expect(store.meGets, 2, reason: '成功后 reload（/api/me 再拉一次）');

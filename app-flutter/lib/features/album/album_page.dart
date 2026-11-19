@@ -386,20 +386,23 @@ class _AlbumPageState extends ConsumerState<AlbumPage> {
           ),
         ]),
       ),
-      onSave: (closeOk, _) {
-        if (formKey.currentState?.validate() ?? false) closeOk();
+      onSave: (closeOk, _) {},
+      // 2.4.10：保存走三连变。
+      asyncSave: () async {
+        if (!(formKey.currentState?.validate() ?? false)) return false;
+        final title = ctrl.text.trim();
+        if (title.isEmpty) return false;
+        final err = await ref
+            .read(albumControllerProvider.notifier)
+            .createAlbum(title);
+        if (!mounted) return false;
+        ref.read(chatToastProvider.notifier).show(
+            err == null ? '已新建相册' : '新建失败：$err',
+            tone: err == null ? ChatToastTone.success : ChatToastTone.error);
+        return err == null;
       },
     );
     if (submitted != true) return; // 取消/关闭：不动
-    final title = ctrl.text.trim();
-    if (title.isEmpty) return;
-    final err = await ref
-        .read(albumControllerProvider.notifier)
-        .createAlbum(title);
-    if (!mounted) return;
-    ref.read(chatToastProvider.notifier).show(
-        err == null ? '已新建相册' : '新建失败：$err',
-        tone: err == null ? ChatToastTone.success : ChatToastTone.error);
   }
 
   /// 相册改名弹层（可取消）：预填原标题，确认走 renameAlbum（回填铁律）。
@@ -427,20 +430,23 @@ class _AlbumPageState extends ConsumerState<AlbumPage> {
           ),
         ]),
       ),
-      onSave: (closeOk, _) {
-        if (formKey.currentState?.validate() ?? false) closeOk();
+      onSave: (closeOk, _) {},
+      // 2.4.10：保存走三连变。
+      asyncSave: () async {
+        if (!(formKey.currentState?.validate() ?? false)) return false;
+        final title = ctrl.text.trim();
+        if (title.isEmpty) return false;
+        final err = await ref
+            .read(albumControllerProvider.notifier)
+            .renameAlbum(album.id, title);
+        if (!mounted) return false;
+        ref.read(chatToastProvider.notifier).show(
+            err == null ? '已保存' : '改名失败：$err',
+            tone: err == null ? ChatToastTone.success : ChatToastTone.error);
+        return err == null;
       },
     );
     if (submitted != true) return;
-    final title = ctrl.text.trim();
-    if (title.isEmpty) return;
-    final err = await ref
-        .read(albumControllerProvider.notifier)
-        .renameAlbum(album.id, title);
-    if (!mounted) return;
-    ref.read(chatToastProvider.notifier).show(
-        err == null ? '已保存' : '改名失败：$err',
-        tone: err == null ? ChatToastTone.success : ChatToastTone.error);
   }
 
   /// 删除相册确认弹层（可取消，含 G5 口径）：软删，服务端自动清归属。

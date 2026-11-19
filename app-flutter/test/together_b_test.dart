@@ -264,6 +264,8 @@ void main() {
       await tester.enterText(find.byType(TextFormField).at(0), '领证纪念日快乐');
       await tester.tap(find.text('保存'));
       await tester.pumpAndSettle();
+      // 2.4.10：三连变对勾驻留 1s 后才 pop，补足驻留再操作菜单。
+      await tester.pumpAndSettle(const Duration(seconds: 2));
       expect(putCount, 1);
       final put = adapter.requests.firstWhere((r) => r.method == 'PUT');
       final body = put.data['body'] as Map;

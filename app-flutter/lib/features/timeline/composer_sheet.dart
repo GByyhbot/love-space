@@ -530,22 +530,22 @@ class _ComposerSheetState extends ConsumerState<ComposerSheet> {
     return ids;
   }
 
-  // ── 发布 ───────────────────────────────────────────────────
+  // ── 发布（2.4.10：改返 Future<bool> 供三连变真实请求驱动；
+  // 成功/失败 toast 与关弹层由本函数内部承担，morph 只看返回值）──
 
-  Future<void> _submit() async {
-    if (_submitting) return;
+  Future<bool> _submit() async {
+    if (_submitting) return false;
     final content = _content.text.trim();
     final title = _title.text.trim();
     if (content.isEmpty && _media.isEmpty) {
       setState(() => _error = '写点什么，或加一张照片吧');
-      return;
+      return false;
     }
     setState(() { _submitting = true; _error = null; });
     try {
       final ids = await _uploadLocals();
       if (widget.isEdit) {
-        await _submitEdit(title, content, ids);
-        return;
+        return await _submitEdit(title, content, ids);
       }
       final err = await ref.read(timelineControllerProvider.notifier).publish(
             content: content,
@@ -558,16 +558,14 @@ class _ComposerSheetState extends ConsumerState<ComposerSheet> {
       if (err != null) {
         setState(() { _error = err; _submitting = false; });
         _toast(err, tone: ChatToastTone.error);
-        return;
+        return false;
       }
       await clearComposerStore();
       await ref.read(timelineControllerProvider.notifier).resetAfterPublish();
-      // 发布成功走顶部通知（先发再关弹层：弹层内 host 即将卸载，
-      // 时光页顶部宿主接棒显示同一 provider 的通知）
+      // 发布成功走顶部通知（弹层由 onMorphSuccess 在对勾驻留后关，
+      // toast host 接棒链路不变）
       _toast('这一刻，已经好好收藏', tone: ChatToastTone.success);
-      if (mounted) {
-        Navigator.of(context).pop();
-      }
+      return true;
     } catch (e) {
       final msg = e is MediaValidationError ? e.message : errorDetail(e);
       setState(() {
@@ -575,13 +573,14 @@ class _ComposerSheetState extends ConsumerState<ComposerSheet> {
         _submitting = false;
       });
       _toast(msg, tone: ChatToastTone.error);
+      return false;
     }
   }
 
   /// C2 编辑提交：只把「用户实际改动」的字段放进 changes，交给控制器
   /// 以服务器原始 body 为底合并后 PUT；客户端不认识/不建模的字段（含
   /// permitted 集内未知字段）一律不碰，由原始 body 原样带回。
-  Future<void> _submitEdit(String title, String content, List<String> ids) async {
+  Future<bool> _submitEdit(String title, String content, List<String> ids) async {
     final changes = <String, dynamic>{};
     // 只覆盖「用户实际改动」的字段：与预填快照逐一比对，未改动的不进
     // changes，由控制器用原始 body 逐键复制时原样带回（含未知字段）。
@@ -603,10 +602,10 @@ class _ComposerSheetState extends ConsumerState<ComposerSheet> {
     if (err != null) {
       setState(() { _error = err; _submitting = false; });
       _toast(err, tone: ChatToastTone.error);
-      return;
+      return false;
     }
     _toast('已保存修改', tone: ChatToastTone.success);
-    if (mounted) Navigator.of(context).pop();
+    return true;
   }
 
   bool _sameList(List<String> a, List<String> b) {
@@ -896,9 +895,12 @@ class _ComposerSheetState extends ConsumerState<ComposerSheet> {
             cancelLabel: widget.isEdit ? null : '存草稿',
             onCancel: _draftSaving ? null : _saveDraft,
             saveLabel: widget.isEdit ? '保存修改' : '发布',
-            onSave: _submitting ? () {} : _submit,
-            saveEnabled: !_submitting,
-            busy: _submitting || _draftSaving,
+            // 2.4.10：发布/保存走三连变（对勾驻留 1s 后由
+            // onMorphSuccess 关弹层）；busy 只服务存草稿。
+            onSave: () {},
+            morphOnSave: _submit,
+            onMorphSuccess: () => Navigator.of(context).pop(),
+            busy: _draftSaving,
           ),
         ]),
       ),

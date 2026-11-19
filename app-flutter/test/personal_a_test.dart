@@ -315,6 +315,8 @@ void main() {
       await tester.enterText(find.byType(TextField), '改过的内容');
       await tester.tap(find.text('保存日记'));
       await tester.pumpAndSettle();
+      // 2.4.10：三连变成功对勾驻留 1s 后 pop，补足驻留再断返回路径。
+      await tester.pumpAndSettle(const Duration(seconds: 2));
 
       final put = _lastPut(adapter.requests);
       expect(put.uri.path, '/api/records/d1');
@@ -346,6 +348,8 @@ void main() {
       // 默认 post：直接确认发布
       await tester.tap(find.text('确认发布'));
       await tester.pumpAndSettle();
+      // 2.4.10：三连变对勾驻留 1s 后 pop，补足驻留再断列表态。
+      await tester.pumpAndSettle(const Duration(seconds: 2));
 
       final put = _lastPut(adapter.requests);
       expect(put.uri.path, '/api/records/dr1');
@@ -374,6 +378,8 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('确认发布'));
       await tester.pumpAndSettle();
+      // 2.4.10：对勾驻留 1s 后 pop，补足驻留再断列表态。
+      await tester.pumpAndSettle(const Duration(seconds: 2));
 
       final put = _lastPut(adapter.requests);
       expect((put.data as Map)['kind'], 'diary');

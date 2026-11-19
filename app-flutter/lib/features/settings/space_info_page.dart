@@ -16,6 +16,7 @@ import '../../core/api/api_client.dart' as api;
 import '../../core/theme/tokens.dart';
 import '../auth/auth_state.dart';
 import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
+import '../../core/ui/submit_morph.dart' show SubmitMorphButton;
 
 class SpaceInfoPage extends ConsumerStatefulWidget {
   const SpaceInfoPage({super.key});
@@ -52,32 +53,33 @@ class _SpaceInfoPageState extends ConsumerState<SpaceInfoPage> {
         name: me.spaceName, since: _fmtDate(picked));
   }
 
-  Future<void> _onSave() async {
-    if (_saving) return;
+  // 2.4.10：改返 Future<bool> 供三连变真实请求驱动（pop 归 onSuccess）。
+  Future<bool> _onSave() async {
+    if (_saving) return false;
     setState(() => _saving = true);
     try {
       final err = await _save();
-      if (!mounted) return;
+      if (!mounted) return false;
       if (err != null) {
         // 失败：留在本页、输入保留、toast 报原文。
         ref
             .read(chatToastProvider.notifier)
             .show('保存失败：$err', tone: ChatToastTone.error);
-        return;
+        return false;
       }
       // me（space 原样对象）与聚合数据全部失效重拉（与原弹窗一致）。
       await ref.read(authProvider.notifier).reload();
       ref.invalidate(api.recordsProvider);
       ref.invalidate(api.dashboardProvider);
       ref.read(chatToastProvider.notifier).show('空间信息保存好了');
-      // 成功：返回设置主页（push 进入的二级页，pop 即回）。
-      if (mounted) Navigator.of(context).pop();
+      return true;
     } catch (e) {
       if (mounted) {
         ref
             .read(chatToastProvider.notifier)
             .show('保存失败：${api.errorDetail(e)}', tone: ChatToastTone.error);
       }
+      return false;
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -151,16 +153,12 @@ class _SpaceInfoPageState extends ConsumerState<SpaceInfoPage> {
               ),
             ),
             const SizedBox(height: 16),
-            FilledButton(
+            // 2.4.10：保存走三连变（对勾驻留后 pop）。
+            SubmitMorphButton(
               key: const Key('space-info-save'),
-              onPressed: _saving || picked == null ? null : _onSave,
-              child: _saving
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Text('保存'),
+              label: '保存',
+                onSubmit: () async => picked != null && await _onSave(),
+              onSuccess: () => Navigator.of(context).pop(),
             ),
           ],
         ),

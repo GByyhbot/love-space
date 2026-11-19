@@ -214,7 +214,7 @@ Future<void> _showForm(
   final formKey = GlobalKey<FormState>();
   // 2.4.1 通则 A：底部表单 sheet；通则 B：重复方式下拉改底部选择单；
   // 日期改整行选择框。annual 三态与 remind_days 校验口径零变化。
-  final saved = await showFormSheet(
+  await showFormSheet(
     context,
     title: editing ? '编辑纪念日' : '添加纪念日',
     saveLabel: editing ? '保存' : '添加',
@@ -345,33 +345,35 @@ Future<void> _showForm(
         ]),
       ]),
     ),
-    onSave: (closeOk, _) {
+    onSave: (closeOk, _) {},
+    // 2.4.10：保存走三连变。
+    asyncSave: () async {
       // date 由整行选择框维护，不走 Form 校验
       if (dateCtrl.text.trim().length != 10) {
         ref.read(chatToastProvider.notifier).show('请选择日期',
             tone: ChatToastTone.error);
-        return;
+        return false;
       }
-      if (formKey.currentState?.validate() ?? false) closeOk();
+      if (!(formKey.currentState?.validate() ?? false)) return false;
+      final changes = <String, dynamic>{
+        'title': titleCtrl.text.trim(),
+        'date': dateCtrl.text.trim(),
+        'annual': annual == 'true' ? true : (annual == 'lunar' ? 'lunar' : false),
+        'remind_days': int.parse(remindCtrl.text.trim()),
+        'content': contentCtrl.text.trim(),
+      };
+      final err = editing
+          ? await ref
+              .read(togetherControllerProvider.notifier)
+              .edit(record.id, 'anniversary', record.body, changes)
+          : await ref
+              .read(togetherControllerProvider.notifier)
+              .add('anniversary', changes);
+      if (!context.mounted) return false;
+      ref.read(chatToastProvider.notifier).show(
+          err == null ? (editing ? '已保存' : '已添加纪念日') : '保存失败：$err',
+          tone: err == null ? ChatToastTone.success : ChatToastTone.error);
+      return err == null;
     },
   );
-  if (saved != true) return; // 取消：不误写
-  final changes = <String, dynamic>{
-    'title': titleCtrl.text.trim(),
-    'date': dateCtrl.text.trim(),
-    'annual': annual == 'true' ? true : (annual == 'lunar' ? 'lunar' : false),
-    'remind_days': int.parse(remindCtrl.text.trim()),
-    'content': contentCtrl.text.trim(),
-  };
-  final err = editing
-      ? await ref
-          .read(togetherControllerProvider.notifier)
-          .edit(record.id, 'anniversary', record.body, changes)
-      : await ref
-          .read(togetherControllerProvider.notifier)
-          .add('anniversary', changes);
-  if (!context.mounted) return;
-  ref.read(chatToastProvider.notifier).show(
-      err == null ? (editing ? '已保存' : '已添加纪念日') : '保存失败：$err',
-      tone: err == null ? ChatToastTone.success : ChatToastTone.error);
 }

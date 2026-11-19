@@ -19,6 +19,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api/api_client.dart' as api;
 import '../../core/theme/tokens.dart';
 import '../auth/auth_state.dart';
+import '../../core/ui/jelly_switch.dart' show JellySwitch;
 import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
 import 'settings_state.dart';
 import 'settings_widgets.dart';
@@ -138,8 +139,9 @@ class _AppearancePageState extends ConsumerState<AppearancePage> {
                 ),
                 const SizedBox(height: 12),
                 // 第 4 项：动效开关改卡片行（左标题+说明，右开关）。
+                // 2.4.10：开关换果冻开关（取值/预览/保存链路零改动）。
                 Card(
-                  child: SwitchListTile(
+                  child: ListTile(
                     key: const Key('settings-motion'),
                     contentPadding:
                         const EdgeInsets.symmetric(horizontal: 14),
@@ -149,11 +151,13 @@ class _AppearancePageState extends ConsumerState<AppearancePage> {
                             .textTheme
                             .labelSmall
                             ?.copyWith(color: cs.outline)),
-                    value: _motion,
-                    onChanged: (v) {
-                      setState(() => _motion = v);
-                      _previewTheme();
-                    },
+                    trailing: JellySwitch(
+                      value: _motion,
+                      onChanged: (v) {
+                        setState(() => _motion = v);
+                        _previewTheme();
+                      },
+                    ),
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -181,9 +185,10 @@ class _AppearancePageState extends ConsumerState<AppearancePage> {
               cancelLabel: '取消',
               onCancel: _themeBusy ? null : _cancelTheme,
               saveLabel: '保存',
-              onSave: _themeBusy ? () {} : _saveTheme,
+              // 2.4.10：保存走三连变（真实请求驱动）。
+              onSave: () {},
               saveEnabled: !_themeBusy,
-              busy: _themeBusy,
+              morphOnSave: _saveTheme,
             ),
           ),
         ],
@@ -406,10 +411,11 @@ class _AppearancePageState extends ConsumerState<AppearancePage> {
     });
   }
 
-  Future<void> _saveTheme() async {
+  // 2.4.10：改返 Future<bool> 供三连变真实请求驱动（失败不 pop 不重试口径不变）。
+  Future<bool> _saveTheme() async {
     if (_theme == 'custom' && !isValidCustomColor(_customColor)) {
       setState(() => _themeError = '自定义颜色要是 #RRGGBB');
-      return;
+      return false;
     }
     setState(() {
       _themeBusy = true;
@@ -430,7 +436,7 @@ class _AppearancePageState extends ConsumerState<AppearancePage> {
         if (mounted) setState(() => _themeError = err);
         ref.read(chatToastProvider.notifier).show('主题保存失败：$err',
             tone: ChatToastTone.error);
-        return; // 不发成功通知、不 pop、输入保留、不重试
+        return false; // 不发成功通知、不 pop、输入保留、不重试
       }
       // dark / font 只写本机，绝不进 PUT body
       await ref
@@ -442,13 +448,15 @@ class _AppearancePageState extends ConsumerState<AppearancePage> {
       _oldDark = _dark;
       _oldFont = _font;
       await ref.read(authProvider.notifier).reload();
-      if (!mounted) return;
+      if (!mounted) return false;
       ref.read(chatToastProvider.notifier).show('主题换好了，两个人都看得见');
+      return true;
     } catch (e) {
       if (mounted) setState(() => _themeError = api.errorDetail(e));
       ref.read(chatToastProvider.notifier).show(
           '主题保存失败：${api.errorDetail(e)}',
           tone: ChatToastTone.error);
+      return false;
     } finally {
       if (mounted) setState(() => _themeBusy = false);
     }

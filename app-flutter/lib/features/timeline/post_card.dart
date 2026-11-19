@@ -20,6 +20,7 @@ import '../../core/timeline/timeline_data.dart';
 import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
 import '../chat/media_bubble_widgets.dart' show MediaImageView, VideoCardView, VoiceChipView;
 import '../shell/web_chrome.dart' show WebSemanticColors;
+import '../../core/ui/like_burst.dart' show LikeBurstIcon, LikeCountLabel;
 import 'comment_sheet.dart';
 import 'composer_sheet.dart';
 import 'image_viewer.dart';
@@ -226,26 +227,25 @@ class PostCard extends ConsumerWidget {
                 style: theme.textTheme.bodySmall
                     ?.copyWith(color: theme.colorScheme.outline)),
             const Spacer(),
-            // 点赞 toggle：状态与计数同一处，点击走控制器乐观翻转 + 失败回滚
-            InkWell(
-              borderRadius: BorderRadius.circular(AppRadius.card),
-              onTap: () => ref
-                  .read(timelineControllerProvider.notifier)
-                  .toggleLike(record.id, me.user.id),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  Icon(Icons.favorite_rounded, size: 15,
-                      color: liked
-                          ? theme.colorScheme.primary
-                          : theme.colorScheme.outline),
-                  const SizedBox(width: 3),
-                  Text(record.likes.isEmpty ? '喜欢' : '${record.likes.length}',
-                      style: theme.textTheme.bodySmall
-                          ?.copyWith(color: theme.colorScheme.outline)),
-                ]),
+            // 点赞 toggle（2.4.10 第 01 项爆粒子）：状态与计数同一处，
+            // 点击走控制器乐观翻转 + 失败回滚；动画只跟随已确认状态
+            // 呈现（失败回滚 = 简洁反向，不引入假成功）。
+            Row(mainAxisSize: MainAxisSize.min, children: [
+              LikeBurstIcon(
+                liked: liked,
+                onTap: () => ref
+                    .read(timelineControllerProvider.notifier)
+                    .toggleLike(record.id, me.user.id),
+                size: 15,
               ),
-            ),
+              const SizedBox(width: 2),
+              LikeCountLabel(
+                liked: liked,
+                count: record.likes.length,
+                style: theme.textTheme.bodySmall
+                    ?.copyWith(color: theme.colorScheme.outline),
+              ),
+            ]),
             const SizedBox(width: 6),
             // 评论入口：原生 BottomSheet（按钮 + 下滑手势都能关）
             InkWell(

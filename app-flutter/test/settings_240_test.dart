@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:love_space/features/settings/appearance_page.dart';
+import 'package:love_space/core/ui/submit_morph.dart';
 import 'package:love_space/features/settings/cover_page.dart';
 import 'package:love_space/features/settings/links_page.dart';
 import 'package:love_space/features/settings/space_info_page.dart';
@@ -175,10 +176,15 @@ void main() {
     expect(find.text('空间名称'), findsOneWidget);
     expect(find.text('还没选择相恋日期'), findsOneWidget);
     expect(find.byKey(const Key('space-info-save')), findsOneWidget);
-    // me==null（无登录态夹具）→ picked null → 保存禁用，防空日期误存。
-    final btn = tester.widget<FilledButton>(
+    // 2.4.10：保存钮换三连变；picked==null 的拦截移入 onSubmit 闭包
+    //（tap 后不发 PUT、不 pop，防空日期误存语义不变）。
+    final btn = tester.widget<SubmitMorphButton>(
         find.byKey(const Key('space-info-save')));
-    expect(btn.onPressed, isNull, reason: 'picked==null 时保存禁用');
+    expect(btn.label, '保存');
+    await tester.tap(find.byKey(const Key('space-info-save')));
+    await tester.pumpAndSettle();
+    expect(find.text('还没选择相恋日期'), findsOneWidget,
+        reason: 'picked==null：不提交不离开');
   });
 
   test('🔴 退役护栏：全量设置页已删，无死路由死入口', () {

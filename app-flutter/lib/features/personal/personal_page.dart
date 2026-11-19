@@ -24,6 +24,7 @@ import '../../core/together/together_data.dart';
 import '../../core/ui/error_view.dart';
 import '../../core/ui/progress.dart';
 import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
+import '../../core/ui/submit_morph.dart' show SubmitMorphButton;
 import '../timeline/composer_sheet.dart';
 import 'personal_controller.dart';
 import '../../core/theme/tokens.dart';
@@ -494,12 +495,13 @@ class _DiaryFormPageState extends ConsumerState<DiaryFormPage> {
     super.dispose();
   }
 
-  Future<void> _save() async {
-    if (_saving) return;
+  // 2.4.10：改返 Future<bool> 供三连变真实请求驱动（pop 由 onMorphSuccess）。
+  Future<bool> _save() async {
+    if (_saving) return false;
     final text = _content.text.trim();
     if (text.isEmpty) {
       setState(() => _error = '写点什么吧');
-      return;
+      return false;
     }
     setState(() {
       _saving = true;
@@ -509,16 +511,16 @@ class _DiaryFormPageState extends ConsumerState<DiaryFormPage> {
     final err = widget.record == null
         ? await ctrl.addDiary(text)
         : await ctrl.editDiary(widget.record!, text);
-    if (!mounted) return;
+    if (!mounted) return false;
     if (err != null) {
       setState(() {
         _error = err;
         _saving = false;
       });
-      return;
+      return false;
     }
     _toast(ref, null, okMsg: widget.record == null ? '已记下' : '已保存修改');
-    Navigator.of(context).pop(); // push 的返回路径：按钮/手势同栈
+    return true;
   }
 
   @override
@@ -570,10 +572,11 @@ class _DiaryFormPageState extends ConsumerState<DiaryFormPage> {
             right: 0,
             bottom: 0,
             child: SettingsGlassBar(
-              saveLabel: _saving ? '保存中…' : '保存日记',
-              onSave: _saving ? () {} : _save,
-              saveEnabled: !_saving,
-              busy: _saving,
+              // 2.4.10：保存走三连变（对勾驻留后 pop，pop 归 onMorphSuccess）。
+              saveLabel: '保存日记',
+              onSave: () {},
+              morphOnSave: _save,
+              onMorphSuccess: () => Navigator.of(context).pop(),
             ),
           ),
         ],
@@ -723,11 +726,12 @@ class _DraftPublishPageState extends ConsumerState<DraftPublishPage> {
     });
   }
 
-  Future<void> _publish() async {
-    if (_saving) return;
+  // 2.4.10：改返 Future<bool>（pop 归 onSuccess）。
+  Future<bool> _publish() async {
+    if (_saving) return false;
     if (_target == 'surprise' && _publishAt == null) {
       setState(() => _error = '请选择未来的公开时间');
-      return;
+      return false;
     }
     setState(() {
       _saving = true;
@@ -738,13 +742,13 @@ class _DraftPublishPageState extends ConsumerState<DraftPublishPage> {
           _target,
           publishAt: _target == 'surprise' ? _publishAt : null,
         );
-    if (!mounted) return;
+    if (!mounted) return false;
     if (err != null) {
       setState(() {
         _error = err;
         _saving = false;
       });
-      return;
+      return false;
     }
     _toast(ref, null,
         okMsg: _target == 'post'
@@ -752,7 +756,7 @@ class _DraftPublishPageState extends ConsumerState<DraftPublishPage> {
             : _target == 'diary'
                 ? '已存为私密日记'
                 : '惊喜已藏好');
-    Navigator.of(context).pop(); // push 的返回路径
+    return true;
   }
 
   @override
@@ -805,9 +809,11 @@ class _DraftPublishPageState extends ConsumerState<DraftPublishPage> {
                       ?.copyWith(color: theme.colorScheme.error)),
             ),
           const SizedBox(height: 16),
-          FilledButton(
-            onPressed: _saving ? null : _publish,
-            child: Text(_saving ? '发布中…' : '确认发布'),
+          // 2.4.10：发布走三连变（对勾驻留后 pop）。
+          SubmitMorphButton(
+            label: '确认发布',
+            onSubmit: _publish,
+            onSuccess: () => Navigator.of(context).pop(),
           ),
         ],
       ),
@@ -966,17 +972,18 @@ class _SurpriseFormPageState extends ConsumerState<SurpriseFormPage> {
     });
   }
 
-  Future<void> _save() async {
-    if (_saving) return;
+  // 2.4.10：改返 Future<bool>（pop 归 onMorphSuccess）。
+  Future<bool> _save() async {
+    if (_saving) return false;
     final text = _content.text.trim();
     if (text.isEmpty) {
       setState(() => _error = '写点什么吧');
-      return;
+      return false;
     }
     final at = _publishAt;
     if (at == null || !at.isAfter(DateTime.now())) {
       setState(() => _error = '请选择未来的公开时间');
-      return;
+      return false;
     }
     setState(() {
       _saving = true;
@@ -986,7 +993,7 @@ class _SurpriseFormPageState extends ConsumerState<SurpriseFormPage> {
     final err = widget.record == null
         ? await ctrl.addSurprise(text, at)
         : await ctrl.editSurprise(widget.record!, text, at);
-    if (!mounted) return;
+    if (!mounted) return false;
     if (err != null) {
       setState(() {
         _error = err;
@@ -996,11 +1003,11 @@ class _SurpriseFormPageState extends ConsumerState<SurpriseFormPage> {
       // 与表单内错误态双呈现，绝不静默失败。
       ref.read(chatToastProvider.notifier).show(err,
           tone: ChatToastTone.error);
-      return;
+      return false;
     }
     _toast(ref, null,
         okMsg: widget.record == null ? '惊喜已藏好' : '已保存修改');
-    Navigator.of(context).pop(); // push 的返回路径：按钮/手势同栈
+    return true;
   }
 
   @override
@@ -1091,10 +1098,11 @@ class _SurpriseFormPageState extends ConsumerState<SurpriseFormPage> {
             right: 0,
             bottom: 0,
             child: SettingsGlassBar(
-              saveLabel: _saving ? '保存中…' : '保存惊喜',
-              onSave: _saving ? () {} : _save,
-              saveEnabled: !_saving,
-              busy: _saving,
+              // 2.4.10：保存走三连变（对勾驻留后 pop）。
+              saveLabel: '保存惊喜',
+              onSave: () {},
+              morphOnSave: _save,
+              onMorphSuccess: () => Navigator.of(context).pop(),
             ),
           ),
         ],
@@ -1340,8 +1348,9 @@ class _PersonalWishFormPageState
     super.dispose();
   }
 
-  Future<void> _save() async {
-    if (_saving) return; // 请求中按钮禁用，不连点叠加
+  // 2.4.10：改返 Future<bool>（pop 归 onSuccess）。
+  Future<bool> _save() async {
+    if (_saving) return false; // 请求中防连点（morph busy 期也会挡）
     setState(() {
       _saving = true;
       _error = null;
@@ -1350,7 +1359,7 @@ class _PersonalWishFormPageState
         .read(personalControllerProvider.notifier)
         .addPersonalWish(_title.text, _content.text, _password.text,
             clientId: _clientId);
-    if (!mounted) return;
+    if (!mounted) return false;
     if (err != null) {
       setState(() {
         _error = err;
@@ -1361,12 +1370,12 @@ class _PersonalWishFormPageState
       // 表单不 pop、密码框保留、按钮恢复可用 → 可原地重输重试（复用 _clientId）。
       ref.read(chatToastProvider.notifier).show(err,
           tone: ChatToastTone.error);
-      return;
+      return false;
     }
     // 🔴 只有控制器返回 null 才发成功通知；4xx 已被 writeResponseError 拦下，
     // 不会再出现「失败却弹已加密保存」的真机阻断级现象。
     _toast(ref, null, okMsg: '这份个人心愿已加密保存');
-    Navigator.of(context).pop(); // push 的返回路径：按钮/手势同栈
+    return true;
   }
 
   @override
@@ -1430,9 +1439,11 @@ class _PersonalWishFormPageState
                       ?.copyWith(color: theme.colorScheme.error)),
             ),
           const SizedBox(height: 16),
-          FilledButton(
-            onPressed: _saving ? null : _save,
-            child: Text(_saving ? '加密保存中…' : '加密保存'),
+          // 2.4.10：加密保存走三连变（对勾驻留后 pop）。
+          SubmitMorphButton(
+            label: '加密保存',
+            onSubmit: _save,
+            onSuccess: () => Navigator.of(context).pop(),
           ),
         ],
       ),
@@ -1472,11 +1483,12 @@ class _PersonalWishUnlockPageState
     super.dispose();
   }
 
-  Future<void> _unlock() async {
-    if (_unlocking) return; // 🔴 请求中直接丢弃后续点击，绝不叠加请求
+  // 2.4.10：改返 Future<bool>（pop 归 onSuccess；限流敏感不自动重试口径不变）。
+  Future<bool> _unlock() async {
+    if (_unlocking) return false; // 🔴 请求中直接丢弃后续点击，绝不叠加请求
     if (_password.text.isEmpty) {
       setState(() => _error = '请输入心愿密码');
-      return;
+      return false;
     }
     setState(() {
       _unlocking = true;
@@ -1485,7 +1497,7 @@ class _PersonalWishUnlockPageState
     final err = await ref
         .read(personalControllerProvider.notifier)
         .unlockPersonalWish(widget.rid, _password.text);
-    if (!mounted) return;
+    if (!mounted) return false;
     if (err != null) {
       setState(() {
         _error = err;
@@ -1498,14 +1510,14 @@ class _PersonalWishUnlockPageState
       // 密码框保留可原地重输；卡片保持锁定态。
       ref.read(chatToastProvider.notifier).show(err,
           tone: ChatToastTone.error);
-      return;
+      return false;
     }
     // 🔴 只有控制器双条件门控全通过才返回 null：
     //   ① 服务端确认成功（HTTP 2xx 且响应体含 content）；
     //   ② 重拉列表后该条 locked == false。
     // 任一不满足控制器已返回非 null，绝不会走到这里的成功通知（真机阻断级根修）。
     _toast(ref, null, okMsg: '已解锁，内容现在直接显示在心愿卡片里');
-    Navigator.of(context).pop(); // push 的返回路径：按钮/手势同栈
+    return true;
   }
 
   @override
@@ -1539,9 +1551,11 @@ class _PersonalWishUnlockPageState
                       ?.copyWith(color: theme.colorScheme.error)),
             ),
           const SizedBox(height: 16),
-          FilledButton(
-            onPressed: _unlocking ? null : _unlock,
-            child: Text(_unlocking ? '解锁中…' : '解锁心愿'),
+          // 2.4.10：解锁走三连变（对勾驻留后 pop）。
+          SubmitMorphButton(
+            label: '解锁心愿',
+            onSubmit: _unlock,
+            onSuccess: () => Navigator.of(context).pop(),
           ),
         ],
       ),

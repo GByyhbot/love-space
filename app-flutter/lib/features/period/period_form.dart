@@ -139,9 +139,10 @@ class _PeriodFormDialogState extends ConsumerState<PeriodFormDialog> {
     }
   }
 
-  Future<void> _submit() async {
-    if (_submitting) return;
-    if (!(_formKey.currentState?.validate() ?? false)) return;
+  // 2.4.10：改返 Future<bool> 供三连变真实请求驱动（失败双呈现纪律不变）。
+  Future<bool> _submit() async {
+    if (_submitting) return false;
+    if (!(_formKey.currentState?.validate() ?? false)) return false;
     setState(() {
       _submitting = true;
       _inlineError = null;
@@ -164,7 +165,7 @@ class _PeriodFormDialogState extends ConsumerState<PeriodFormDialog> {
     final err = await ref
         .read(periodControllerProvider.notifier)
         .executePlan(plan);
-    if (!mounted) return;
+    if (!mounted) return false;
 
     if (err != null) {
       // 🔴 失败：原文双呈现、不 pop、输入保留、不自动重试、不发成功通知。
@@ -175,10 +176,11 @@ class _PeriodFormDialogState extends ConsumerState<PeriodFormDialog> {
       ref
           .read(chatToastProvider.notifier)
           .show('保存失败：$err', tone: ChatToastTone.error);
-      return;
+      return false;
     }
     ref.read(chatToastProvider.notifier).show(plan.message);
-    Navigator.of(context).pop(true);
+    // 2.4.10：弹层由 onMorphSuccess 在对勾驻留后关。
+    return true;
   }
 
   /// 经量显示文案（0=不记，其余查 periodFlow）。
@@ -372,8 +374,10 @@ class _PeriodFormDialogState extends ConsumerState<PeriodFormDialog> {
                 ? null
                 : () => Navigator.of(context).pop(false),
             saveLabel: '保存',
-            onSave: _submit,
-            busy: _submitting,
+            // 2.4.10：保存走三连变（对勾驻留 1s 后关弹层）。
+            onSave: () {},
+            morphOnSave: _submit,
+            onMorphSuccess: () => Navigator.of(context).pop(true),
           ),
         ],
       ),

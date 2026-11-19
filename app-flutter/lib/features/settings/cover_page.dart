@@ -154,9 +154,10 @@ class _CoverPageState extends ConsumerState<CoverPage> {
             bottom: 0,
             child: SettingsGlassBar(
               saveLabel: '保存',
-              onSave: _saveCover,
+              // 2.4.10：保存走三连变（真实请求驱动）。
+              onSave: () {},
               saveEnabled: _picked != null,
-              busy: _coverBusy,
+              morphOnSave: _saveCover,
             ),
           ),
         ],
@@ -203,10 +204,11 @@ class _CoverPageState extends ConsumerState<CoverPage> {
     }
   }
 
-  Future<void> _saveCover() async {
+  // 2.4.10：改返 Future<bool> 供三连变真实请求驱动（页面停留不 pop）。
+  Future<bool> _saveCover() async {
     final x = _picked;
     final bytes = _pickedBytes;
-    if (x == null || bytes == null) return;
+    if (x == null || bytes == null) return false;
     setState(() {
       _coverBusy = true;
       _coverError = null;
@@ -223,23 +225,25 @@ class _CoverPageState extends ConsumerState<CoverPage> {
         if (mounted) setState(() => _coverError = err);
         ref.read(chatToastProvider.notifier).show('封面保存失败：$err',
             tone: ChatToastTone.error);
-        return;
+        return false;
       }
       if (merged != null) {
         ref.read(spaceAppearanceProvider.notifier).commit(merged);
       }
       await ref.read(authProvider.notifier).reload();
-      if (!mounted) return;
+      if (!mounted) return false;
       setState(() {
         _picked = null;
         _pickedBytes = null;
       });
       ref.read(chatToastProvider.notifier).show('主页封面换好了');
+      return true;
     } catch (e) {
       if (mounted) setState(() => _coverError = api.errorDetail(e));
       ref.read(chatToastProvider.notifier).show(
           '封面保存失败：${api.errorDetail(e)}',
           tone: ChatToastTone.error);
+      return false;
     } finally {
       if (mounted) setState(() => _coverBusy = false);
     }

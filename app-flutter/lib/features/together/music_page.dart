@@ -423,7 +423,7 @@ class _MusicPageState extends ConsumerState<MusicPage> {
     final contentCtrl = TextEditingController();
     final formKey = GlobalKey<FormState>();
     // 2.4.1 通则 A：底部表单 sheet。
-    final saved = await showFormSheet(
+    await showFormSheet(
       context,
       title: '上传本地歌曲',
       saveLabel: '上传并放入歌单',
@@ -459,15 +459,15 @@ class _MusicPageState extends ConsumerState<MusicPage> {
           ]),
         ]),
       ),
-      onSave: (closeOk, _) {
-        if (formKey.currentState?.validate() ?? false) closeOk();
+      onSave: (closeOk, _) {},
+      // 2.4.10：保存走三连变（上传中弹层保持打开）。
+      asyncSave: () async {
+        if (!(formKey.currentState?.validate() ?? false)) return false;
+        return await uploadMusicToPlaylist(ProviderScope.containerOf(context),
+            filename: filename, bytes: bytes, title: titleCtrl.text.trim(),
+            content: contentCtrl.text.trim());
       },
     );
-    if (saved != true) return;
-    if (!mounted) return;
-    await uploadMusicToPlaylist(ProviderScope.containerOf(context),
-        filename: filename, bytes: bytes, title: titleCtrl.text.trim(),
-        content: contentCtrl.text.trim());
   }
 
   /// 搜索入单：GET /api/music/search?q=&limit=20（服务端缓存 10 分钟，main.py:1780）。
@@ -632,7 +632,7 @@ class _MusicPageState extends ConsumerState<MusicPage> {
     final contentCtrl = TextEditingController(text: (b['content'] ?? '').toString());
     final formKey = GlobalKey<FormState>();
     // 2.4.1 通则 A：底部表单 sheet。
-    final saved = await showFormSheet(
+    await showFormSheet(
       context,
       title: '编辑这首歌',
       saveLabel: '保存',
@@ -664,21 +664,23 @@ class _MusicPageState extends ConsumerState<MusicPage> {
           ]),
         ]),
       ),
-      onSave: (closeOk, _) {
-        if (formKey.currentState?.validate() ?? false) closeOk();
+      onSave: (closeOk, _) {},
+      // 2.4.10：保存走三连变。
+      asyncSave: () async {
+        if (!(formKey.currentState?.validate() ?? false)) return false;
+        final err = await ref
+            .read(togetherControllerProvider.notifier)
+            .edit(record.id, 'music', record.body, {
+          'title': titleCtrl.text.trim(),
+          'content': contentCtrl.text.trim(),
+        });
+        if (!context.mounted) return false;
+        ref.read(chatToastProvider.notifier).show(
+            err == null ? '已保存' : '保存失败：$err',
+            tone: err == null ? ChatToastTone.success : ChatToastTone.error);
+        return err == null;
       },
     );
-    if (saved != true) return;
-    final err = await ref
-        .read(togetherControllerProvider.notifier)
-        .edit(record.id, 'music', record.body, {
-      'title': titleCtrl.text.trim(),
-      'content': contentCtrl.text.trim(),
-    });
-    if (!context.mounted) return;
-    ref.read(chatToastProvider.notifier).show(
-        err == null ? '已保存' : '保存失败：$err',
-        tone: err == null ? ChatToastTone.success : ChatToastTone.error);
   }
 }
 
@@ -688,7 +690,7 @@ class _MusicPageState extends ConsumerState<MusicPage> {
 /// 🔴 单测注意：Dio multipart POST 在 FakeAsync 测试环境会挂起（套件从未
 /// 测过该路径），测试须以 [upload] 桩替换真实管线；真实管线=uploadChatMedia
 /// （与聊天上传同构、真机已验证）。
-Future<void> uploadMusicToPlaylist(
+Future<bool> uploadMusicToPlaylist(
     ProviderContainer container,
     {required String filename,
     required List<int> bytes,
@@ -710,12 +712,14 @@ Future<void> uploadMusicToPlaylist(
     container.read(chatToastProvider.notifier).show(
         err == null ? '已经放进歌单了' : '添加失败：$err',
         tone: err == null ? ChatToastTone.success : ChatToastTone.error);
+    return err == null;
   } catch (e) {
     // 段 A：上传 4xx（detail 原文）以 MediaValidationError 抛出，直通呈现；
     // 其余（5xx / 网络层）走 errorDetail 兜底，不裸 `$e` 打印异常对象
     final msg = e is MediaValidationError ? e.message : api.errorDetail(e);
     container.read(chatToastProvider.notifier).show('上传失败：$msg',
         tone: ChatToastTone.error);
+    return false;
   }
 }
 

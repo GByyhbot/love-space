@@ -118,9 +118,10 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     }
   }
 
-  Future<void> _save() async {
+  // 2.4.10：改返 Future<bool> 供三连变真实请求驱动（RELOGIN 分支属成功路径）。
+  Future<bool> _save() async {
     final name = _name.text.trim();
-    if (name.isEmpty) { setState(() => _error = '昵称不能为空'); return; }
+    if (name.isEmpty) { setState(() => _error = '昵称不能为空'); return false; }
     setState(() { _busy = true; _error = null; });
     final err = await ref.read(authProvider.notifier).updateProfile(
           name: name,
@@ -128,7 +129,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
           oldPassword: _oldPw.text,
           newPassword: _newPw.text,
         );
-    if (!mounted) return;
+    if (!mounted) return false;
     setState(() => _busy = false);
     if (err == null) {
       setState(() {
@@ -138,21 +139,20 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
         _newPw.clear();
       });
       // 保存成功：统一走顶部通知（全局宿主），不再只显示在按钮下方行内
-      if (mounted) {
-        ref.read(chatToastProvider.notifier).show(
-            '已保存', tone: ChatToastTone.success);
-      }
+      ref.read(chatToastProvider.notifier).show(
+          '已保存', tone: ChatToastTone.success);
       if (_avatarId != null && _avatarId!.isNotEmpty) _loadAvatar();
+      return true;
     } else if (err == 'RELOGIN') {
       // 改密成功：会话已失效，路由 redirect 自动送回登录页（authed→out）
-      if (context.mounted) {
-        ref.read(chatToastProvider.notifier).show(
-            '密码已修改，请用新密码重新登录', tone: ChatToastTone.success);
-      }
+      ref.read(chatToastProvider.notifier).show(
+          '密码已修改，请用新密码重新登录', tone: ChatToastTone.success);
+      return true;
     } else {
       // 服务端失败：行内保留 + 顶部通知（字段级校验「昵称不能为空」只走行内，不在此分支）
       setState(() => _error = err);
       ref.read(chatToastProvider.notifier).show(err, tone: ChatToastTone.error);
+      return false;
     }
   }
 
@@ -511,9 +511,9 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
             bottom: 0,
             child: SettingsGlassBar(
               saveLabel: '保存',
-              onSave: _busy ? () {} : _save,
-              saveEnabled: !_busy,
-              busy: _busy,
+              // 2.4.10：保存走三连变（真实请求驱动）。
+              onSave: () {},
+              morphOnSave: _save,
             ),
           ),
         ],

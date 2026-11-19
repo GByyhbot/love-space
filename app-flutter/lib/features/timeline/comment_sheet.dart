@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../auth/auth_state.dart';
+import '../../core/ui/submit_morph.dart' show SubmitMorphButton;
 import 'timeline_controller.dart';
 import '../../core/theme/tokens.dart';
 
@@ -65,14 +66,15 @@ class _CommentSheetState extends ConsumerState<CommentSheet> {
         widget.rid, cid, widget.me.user.id);
   }
 
-  Future<void> _send() async {
-    if (_sending) return;
+  // 2.4.10：改返 Future<bool> 供三连变驱动（成功后 morph 对勾驻留再 pop）。
+  Future<bool> _send() async {
+    if (_sending) return false;
     setState(() => _sending = true);
     final ok = await ref.read(timelineControllerProvider.notifier).addComment(
         widget.rid, _input.text, widget.me.user.id);
-    if (!mounted) return;
+    if (!mounted) return false;
     setState(() => _sending = false);
-    if (ok) Navigator.of(context).pop(); // 成功后收起，卡片内联列表已即时上屏
+    return ok;
   }
 
   @override
@@ -155,13 +157,11 @@ class _CommentSheetState extends ConsumerState<CommentSheet> {
             ),
           ),
           const SizedBox(width: 8),
-          FilledButton(
-            onPressed: _sending ? null : _send,
-            child: _sending
-                ? const SizedBox(
-                    width: 16, height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2))
-                : const Text('发送'),
+          // 2.4.10：发送走三连变（成功对勾驻留后关弹层，内联列表已即时上屏）。
+          SubmitMorphButton(
+            label: '发送',
+            onSubmit: _send,
+            onSuccess: () => Navigator.of(context).pop(),
           ),
         ]),
       ]),

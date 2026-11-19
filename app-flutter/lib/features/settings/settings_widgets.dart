@@ -15,6 +15,7 @@ import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
 
+import '../../core/ui/submit_morph.dart';
 import '../../core/theme/tokens.dart';
 
 /// 表单底部 sheet 骨架（2.4.1 通则 A 共用外壳）：全仓录入类弹窗/表单
@@ -22,6 +23,10 @@ import '../../core/theme/tokens.dart';
 /// GlassActionBar（取消 1/3 描边 + 保存 2/3 实心；cancelLabel null =
 /// 整行保存）。返回 true=保存关闭 / false=取消 / null=点遮罩关闭。
 /// [onSave] 校验通过后调用 [closeOk] 关闭（不关即留在 sheet 继续编辑）。
+/// 2.4.10 第 02 项：[asyncSave] 传入时保存按钮走「提交三连变」——
+/// 请求中弹层保持打开（按钮收缩圆+旋转环），返回 true 才关弹层；
+/// false/异常 = 留在弹层，错误提示由调用方走既有通道（改掉旧
+/// 「先关后请求」时序，主人已裁定）。
 Future<bool?> showFormSheet(
   BuildContext context, {
   required String title,
@@ -29,6 +34,7 @@ Future<bool?> showFormSheet(
   String? cancelLabel,
   required Widget Function(StateSetter setState) builder,
   required void Function(void Function() closeOk, StateSetter setState) onSave,
+  Future<bool> Function()? asyncSave,
 }) {
   return showModalBottomSheet<bool>(
     context: context,
@@ -90,8 +96,10 @@ Future<bool?> showFormSheet(
               cancelLabel: cancelLabel,
               onCancel: () => Navigator.of(sheetCtx).pop(false),
               saveLabel: saveLabel,
-              onSave: () => onSave(
-                  () => Navigator.of(sheetCtx).pop(true), setSheetState),
+              onSave: () =>
+                  onSave(() => Navigator.of(sheetCtx).pop(true), setSheetState),
+              morphOnSave: asyncSave,
+              onMorphSuccess: () => Navigator.of(sheetCtx).pop(true),
             ),
           ],
         ),
@@ -229,6 +237,8 @@ class GlassActionBar extends StatelessWidget {
     this.saveEnabled = true,
     this.busy = false,
     this.safeAreaBottom = true,
+    this.morphOnSave,
+    this.onMorphSuccess,
   });
 
   final String? cancelLabel;
@@ -238,6 +248,12 @@ class GlassActionBar extends StatelessWidget {
   final bool saveEnabled;
   final bool busy;
   final bool safeAreaBottom;
+
+  /// 2.4.10 第 02 项：传入时保存按钮走「提交三连变」（真实请求驱动）。
+  final Future<bool> Function()? morphOnSave;
+
+  /// 三连变成功落点回调（B 类弹层：关 sheet；页面级：导航/刷新等）。
+  final VoidCallback? onMorphSuccess;
 
   @override
   Widget build(BuildContext context) {
@@ -271,6 +287,7 @@ class GlassActionBar extends StatelessWidget {
   }
 
   Widget _buttons(ColorScheme cs) {
+    final useMorph = morphOnSave != null;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
       child: Row(
@@ -290,22 +307,102 @@ class GlassActionBar extends StatelessWidget {
           ],
           Expanded(
             flex: cancelLabel != null ? 2 : 1,
-            child: FilledButton(
-              onPressed: saveEnabled && !busy ? onSave : null,
-              style: FilledButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 12),
-              ),
-              child: busy
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : Text(saveLabel),
-            ),
+            child: useMorph
+                ? _MorphSaveButton(
+                    label: saveLabel,
+                    enabled: saveEnabled && !busy,
+                    onSubmit: morphOnSave!,
+                    onSuccess: onMorphSuccess,
+                  )
+                : FilledButton(
+                    onPressed: saveEnabled && !busy ? onSave : null,
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                    child: busy
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : Text(saveLabel),
+                  ),
           ),
         ],
       ),
+    );
+  }
+}
+
+/// 三连变保存钮（GlassActionBar 内嵌形态）：状态机见
+/// submit_morph.dart；收缩圆在自身 Expanded 槽位居中。
+class _MorphSaveButton extends StatefulWidget {
+  const _MorphSaveButton({
+    required this.label,
+    required this.enabled,
+    required this.onSubmit,
+    this.onSuccess,
+  });
+
+  final String label;
+  final bool enabled;
+  final Future<bool> Function() onSubmit;
+  final VoidCallback? onSuccess;
+
+  @override
+  State<_MorphSaveButton> createState() => _MorphSaveButtonState();
+}
+
+class _MorphSaveButtonState extends State<_MorphSaveButton> {
+  final SubmitMorphController _c = SubmitMorphController();
+  final GlobalKey _key = GlobalKey();
+  double? _measured;
+  SubmitMorphPhase _phase = SubmitMorphPhase.idle;
+
+  @override
+  void initState() {
+    super.initState();
+    _c.addListener(_changed);
+  }
+
+  @override
+  void dispose() {
+    _c.removeListener(_changed);
+    _c.dispose();
+    super.dispose();
+  }
+
+  void _changed() {
+    if (!mounted) return;
+    final was = _phase;
+    _phase = _c.phase;
+    setState(() {});
+    if (was == SubmitMorphPhase.success &&
+        _c.phase == SubmitMorphPhase.idle) {
+      widget.onSuccess?.call();
+    }
+  }
+
+  Future<void> _tap() async {
+    if (_c.busy || !widget.enabled) return;
+    final box = _key.currentContext?.findRenderObject() as RenderBox?;
+    _measured = box?.size.width;
+    await _c.submit(widget.onSubmit);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_c.phase != SubmitMorphPhase.idle) {
+      return Center(
+        child: MorphArea(phase: _c.phase, measuredWidth: _measured),
+      );
+    }
+    return FilledButton(
+      onPressed: widget.enabled ? _tap : null,
+      style: FilledButton.styleFrom(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+      ),
+      child: Text(widget.label, key: _key),
     );
   }
 }
@@ -319,6 +416,8 @@ class SettingsGlassBar extends StatelessWidget {
     required this.onSave,
     this.saveEnabled = true,
     this.busy = false,
+    this.morphOnSave,
+    this.onMorphSuccess,
   });
 
   final String? cancelLabel;
@@ -327,6 +426,8 @@ class SettingsGlassBar extends StatelessWidget {
   final VoidCallback onSave;
   final bool saveEnabled;
   final bool busy;
+  final Future<bool> Function()? morphOnSave;
+  final VoidCallback? onMorphSuccess;
 
   /// 页面内容底部需预留的高度（栏体 + 底部安全区由页面自行叠加）。
   static const double barReserveHeight = 88;
@@ -340,6 +441,8 @@ class SettingsGlassBar extends StatelessWidget {
       onSave: onSave,
       saveEnabled: saveEnabled,
       busy: busy,
+      morphOnSave: morphOnSave,
+      onMorphSuccess: onMorphSuccess,
     );
   }
 }
