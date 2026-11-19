@@ -31,6 +31,7 @@ import '../../core/chat/chat_models.dart';
 import '../../core/chat/chat_state.dart';
 import '../../core/ui/selection_sheet.dart';
 import '../auth/auth_state.dart';
+import '../settings/settings_state.dart' show spaceAppearanceProvider;
 import 'album_picker_sheet.dart';
 import 'bubble_skin_sheet.dart' show showBubbleSkinSheet;
 import 'chat_toast.dart';
@@ -73,6 +74,7 @@ class ChatCompose extends ConsumerStatefulWidget {
 class _ChatComposeState extends ConsumerState<ChatCompose>
     with WidgetsBindingObserver {
   final _input = TextEditingController();
+  final GlobalKey _inputFieldKey = GlobalKey(); // 2.4.10 行数高度测量
   final _focus = FocusNode();
   final _slots = InputSlotMachine();
   final VoiceRecorder _recorder = VoiceRecorder();
@@ -668,7 +670,14 @@ class _ChatComposeState extends ConsumerState<ChatCompose>
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
           child: Row(children: [
             Expanded(
-              child: TextField(
+              // 2.4.10 第 07 项：换行高度轻微过冲再回弹（围栏内：只动
+              // 输入栏自身高度，槽位/键盘体系零碰）。
+              child: _OvershootGrow(
+                textKey: _inputFieldKey,
+                controller: _input,
+                motion: ref.watch(spaceAppearanceProvider).motion,
+                child: TextField(
+                  key: _inputFieldKey,
                 controller: _input,
                 focusNode: _focus,
                 minLines: 1,
@@ -696,6 +705,7 @@ class _ChatComposeState extends ConsumerState<ChatCompose>
                   ),
                 ),
               ),
+            ),
             ),
             const SizedBox(width: 8),
             // 有文字时语音位换发送钮（对齐 Web form.has-text）。
@@ -1190,6 +1200,114 @@ class _StickerDock extends ConsumerWidget {
           ),
         ]);
       },
+    );
+  }
+}
+
+// ── 2.4.10 第 07 项：气泡边打边长（Live Bubble）──────────────────
+// 每换一行，输入气泡整块往上长高，高度带轻微过冲再回弹（easeOutBack）；
+// 退格整块缩回。上方消息列表与气泡共用同一个高度值——本组件只改
+// 输入栏自身高度（Column 主轴），Expanded 反向列表与 Scaffold 压缩
+// 天然同步让位，不各走各的。
+// 🔴 围栏（红线零碰）：键盘/面板高度计算、追高、等高切换、kbHeight
+// 槽位逻辑（keyboard_metrics.dart 三件套 / 槽位 AnimatedContainer /
+// _windowKeyboardInsets）一律不动——本组件与槽位体系正交。
+class _OvershootGrow extends StatefulWidget {
+  const _OvershootGrow({
+    required this.textKey,
+    required this.controller,
+    required this.motion,
+    required this.child,
+  });
+
+  final GlobalKey textKey;
+  final TextEditingController controller;
+  final bool motion; // 动效总开关门控（关闭=直接跳变）
+  final Widget child;
+
+  @override
+  State<_OvershootGrow> createState() => _OvershootGrowState();
+}
+
+class _OvershootGrowState extends State<_OvershootGrow>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 220));
+  double? _target; // TextField 自然高
+  double? _from; // 动画起点
+  double? _display; // 当前显示高（build 内回写，供下次动画取起点）
+
+  @override
+  void initState() {
+    super.initState();
+    widget.controller.addListener(_scheduleMeasure);
+    _scheduleMeasure();
+  }
+
+  @override
+  void didUpdateWidget(covariant _OvershootGrow old) {
+    super.didUpdateWidget(old);
+    if (old.controller != widget.controller) {
+      old.controller.removeListener(_scheduleMeasure);
+      widget.controller.addListener(_scheduleMeasure);
+      _scheduleMeasure();
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_scheduleMeasure);
+    _c.dispose();
+    super.dispose();
+  }
+
+  void _scheduleMeasure() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final box =
+          widget.textKey.currentContext?.findRenderObject() as RenderBox?;
+      final h = box?.size.height;
+      if (h == null || h <= 0) return;
+      if (_target == h) return;
+      final first = _target == null;
+      setState(() {
+        _from = _display ?? _target ?? h;
+        _target = h;
+      });
+      if (!first && widget.motion && _from != h) {
+        _c.forward(from: 0);
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_target == null) return widget.child;
+    return AnimatedBuilder(
+      animation: _c,
+      builder: (context, child) {
+        final t = widget.motion ? _c.value : 1.0;
+        // easeOutBack：过冲超过目标高度再回弹（轻微，曲线自带）。
+        const c1 = 0.6, c3 = c1 + 1;
+        final x = t - 1;
+        final v = 1 + c3 * x * x * x + c1 * x * x;
+        final display =
+            (_from ?? _target!) + ((_target! - (_from ?? _target!)) * v);
+        _display = display;
+        return SizedBox(
+          height: display,
+          child: OverflowBox(
+            // 宽度透传父约束（不设 min/max——设 Infinity 会强制子无限宽，
+            // 首测实证炸 RenderMouseRegion）；只钉高度=自然高、底对齐，
+            // 过冲期顶部露出容器底色。
+            minHeight: _target!,
+            maxHeight: _target!,
+            alignment: Alignment.bottomLeft,
+            child: child,
+          ),
+        );
+      },
+      child: widget.child,
     );
   }
 }

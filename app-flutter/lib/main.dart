@@ -87,7 +87,29 @@ final routerProvider = Provider<GoRouter>((ref) {
       // 2.4.3 双卡二级页：首页历史卡/年报卡 context.push 进入；
       // AppBar 自动返回按钮 + 系统手势都能回上一页。
       GoRoute(
-          path: '/on-this-day', builder: (_, _) => const OnThisDayPage()),
+          // 2.4.10 第 06 项（裁定 c）：首页「历史上的今天」入口卡 → 本页
+          // 路由转场动画——打开 ease-out 0.72s（轻微上移+淡入）、收回
+          // 0.68s ease-in；首页 widget 树与现有结构零改动（硬约束）。
+          path: '/on-this-day',
+          pageBuilder: (context, state) => CustomTransitionPage(
+                key: state.pageKey,
+                child: const OnThisDayPage(),
+                transitionDuration: const Duration(milliseconds: 720),
+                reverseTransitionDuration: const Duration(milliseconds: 680),
+                transitionsBuilder: (context, anim, secondary, child) {
+                  final inCurve = Curves.easeOut.transform(anim.value);
+                  return FadeTransition(
+                    opacity: anim.drive(Tween(begin: 0.0, end: 1.0)
+                        .chain(CurveTween(curve: Curves.easeOut))),
+                    child: SlideTransition(
+                      position: anim.drive(Tween(
+                          begin: const Offset(0, 0.04),
+                          end: Offset.zero).chain(CurveTween(curve: Curves.easeOut))),
+                      child: Transform.scale(scale: 0.96 + 0.04 * inCurve, child: child),
+                    ),
+                  );
+                },
+              )),
       GoRoute(path: '/yearbook', builder: (_, _) => const YearbookPage()),
       // 聊天（悄悄话）：二级页，Shell AppBar 私聊图标 push 进入（对齐 Web 顶栏入口）
       GoRoute(path: '/messages', builder: (_, _) => const MessagesPage()),

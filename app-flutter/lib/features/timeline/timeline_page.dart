@@ -19,6 +19,8 @@ import '../auth/auth_state.dart';
 import 'post_card.dart';
 import 'timeline_controller.dart';
 import '../../core/theme/tokens.dart';
+import '../../core/ui/stagger_in.dart' show StaggerIn;
+import '../settings/settings_state.dart' show spaceAppearanceProvider;
 
 class TimelinePage extends ConsumerStatefulWidget {
   const TimelinePage({super.key, required this.active});
@@ -149,7 +151,28 @@ class _TimelinePageState extends ConsumerState<TimelinePage> {
         // 淡底、1px 边；当前生效的筛选胶囊带主题色描边。范围/类型点开底部
         // 选择单（通则 B 共享组件），筛选逻辑与选项集合不变；日期胶囊行为
         // 不变（系统日期选择器）。
-        Row(children: [
+        // 2.4.10 附录 B ③：指示底色滑动跟随——三槽等分，激活槽滑入浅主题
+        // 底色（AnimatedAlign 220ms ease-out），切换时平滑滑动。
+        Stack(children: [
+          if (_activeFilterSlot(f) >= 0)
+            Positioned.fill(
+              child: AnimatedAlign(
+                duration: const Duration(milliseconds: 220),
+                curve: Curves.easeOut,
+                alignment: Alignment(_activeFilterSlot(f) * 2.0 - 1.0, 0),
+                child: FractionallySizedBox(
+                  widthFactor: 1 / 3,
+                  child: Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 2),
+                    decoration: BoxDecoration(
+                      color: cs.primary.withValues(alpha: 0.10),
+                      borderRadius: BorderRadius.circular(99),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          Row(children: [
           Expanded(
             child: _filterCapsule(
               context,
@@ -229,6 +252,7 @@ class _TimelinePageState extends ConsumerState<TimelinePage> {
               },
             ),
           ),
+          ]),
         ]),
         if (f.isActive) ...[
           const SizedBox(height: Spacing.gap),
@@ -251,6 +275,15 @@ class _TimelinePageState extends ConsumerState<TimelinePage> {
         ],
       ]),
     );
+  }
+
+  /// 2.4.10 附录 B ③：当前激活筛选槽位（0 范围 / 1 类型 / 2 日期；
+  /// 多个同时激活取第一个，指示块跟随其滑动）。
+  int _activeFilterSlot(dynamic f) {
+    if (f.author.isNotEmpty) return 0;
+    if (f.media.isNotEmpty) return 1;
+    if (f.date.isNotEmpty) return 2;
+    return -1;
   }
 
   /// 2.4.1 第 7 项②：筛选胶囊（圆角 99、淡底、1px 边；生效筛选主题色描边）。
@@ -359,13 +392,23 @@ class _TimelinePageState extends ConsumerState<TimelinePage> {
             ((chat.hasMore || chat.posts.isNotEmpty) ? 1 : 0),
         itemBuilder: (context, i) {
           if (i < chat.posts.length) {
-            return PostCard(
+            // 2.4.10 附录 B ③：筛选结果错峰淡入——filtered 态行 key 带
+            // 筛选纪元，筛选变化时重新 mount 重放入场动画；常规滚动不动画。
+            final epoch = chat.filter.isActive
+                ? '\${chat.filter.author}|\${chat.filter.media}|\${chat.filter.date}|\${chat.filter.q}'
+                : '';
+            return StaggerIn(
+              key: ValueKey('stg-$epoch-${chat.posts[i].id}'),
+              index: i,
+              enable: chat.filter.isActive && ref.watch(spaceAppearanceProvider).motion,
+              child: PostCard(
               // ValueKey 保住 widget 身份：段二 B 本卡原地更新时，
               // 其它卡片不重建、列表不跳位、不闪烁
               key: ValueKey(chat.posts[i].id),
               record: chat.posts[i],
-              me: me,
-              revealDelayMs: _firstRevealDone ? 0 : (i * 40).clamp(0, 600),
+                me: me,
+                revealDelayMs: _firstRevealDone ? 0 : (i * 40).clamp(0, 600),
+              ),
             );
           }
           if (!chat.hasMore && chat.posts.isNotEmpty) {

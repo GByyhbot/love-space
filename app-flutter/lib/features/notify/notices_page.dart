@@ -35,6 +35,8 @@ import 'notify_api.dart';
 import 'notify_models.dart';
 import 'notify_widgets.dart';
 import '../../core/ui/hold_to_confirm.dart' show HoldToConfirmButton;
+import '../../core/ui/stagger_in.dart' show StaggerIn;
+import '../settings/settings_state.dart' show spaceAppearanceProvider;
 
 class NoticesPage extends ConsumerStatefulWidget {
   const NoticesPage({super.key});
@@ -316,7 +318,12 @@ class _NoticesPageState extends ConsumerState<NoticesPage> {
                 margin: EdgeInsets.zero,
                 child: Column(
                   children: <Widget>[
-                    for (final NoticeItem n in visible) _noticeRow(theme, n),
+                    // 2.4.10 附录 B ①：首屏错峰入场。
+                    for (final (i, n) in visible.indexed)
+                      StaggerIn(
+                          index: i,
+                          enable: ref.watch(spaceAppearanceProvider).motion,
+                          child: _noticeRow(theme, n)),
                   ],
                 ),
               ),

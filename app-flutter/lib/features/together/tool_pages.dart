@@ -14,6 +14,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/together/together_data.dart';
+import '../../core/ui/stagger_in.dart' show StaggerIn;
 import '../../core/ui/hold_to_confirm.dart' show HoldToConfirmButton;
 import '../../core/ui/avatar_media.dart';
 import '../../core/ui/empty_view.dart';
@@ -21,6 +22,7 @@ import '../../core/ui/error_view.dart';
 import '../../core/ui/progress.dart';
 import '../../core/ui/selection_sheet.dart';
 import '../auth/auth_state.dart';
+import '../settings/settings_state.dart' show spaceAppearanceProvider;
 import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
 import '../settings/settings_widgets.dart'
     show filledFieldDecoration, showFormSheet;
@@ -105,6 +107,8 @@ class ToolScaffold extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    // 2.4.10 附录 B ①：错峰入场受动效总开关门控。
+    final motionOn = ref.watch(spaceAppearanceProvider).motion;
     return Scaffold(
       appBar: AppBar(title: Text(title)),
       floatingActionButton:
@@ -136,7 +140,12 @@ class ToolScaffold extends ConsumerWidget {
                 title: emptyTitle,
                 hint: emptyHint,
               )
-            else ...tiles,
+            else ...[
+              // 2.4.10 附录 B ①：主要列表首屏错峰入场（步进 40ms 封顶
+              // 600ms，只动 transform/opacity；滚动后续批次不做）。
+              for (final (i, t) in tiles.indexed)
+                StaggerIn(index: i, enable: motionOn, child: t),
+            ],
             if (error != null && !isEmpty) ...[
               const SizedBox(height: 10),
               AppErrorText(error!),
@@ -557,6 +566,11 @@ class _WishPageState extends ConsumerState<WishPage> {
       loading: st.loading,
       onFab: () => _showWishForm(context, ref, null),
       tiles: [
+        // 2.4.10 附录 B ④：愿望进度底色——填充宽度=完成比例，勾选时
+        // 平滑前推（320ms），全部完成时轻微提亮。
+        if (wishes.isNotEmpty)
+          _WishProgressBar(done: wishes.where((r) => r.body['done'] == true).length,
+              total: wishes.length),
         for (final r in wishes)
           ToolTile(
             record: r,
@@ -769,4 +783,58 @@ Future<void> _showWishForm(
       return err == null;
     },
   );
+}
+
+
+// ── 2.4.10 附录 B ④：愿望进度底色 ────────────────────────────────
+/// 填充宽度 = 已完成/总数（AnimatedFractionallySizedBox 平滑前推）；
+/// 全部完成时轻微提亮（底座/填充转 primary 系亮色）。
+class _WishProgressBar extends StatelessWidget {
+  const _WishProgressBar({required this.done, required this.total});
+
+  final int done;
+  final int total;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final ratio = total == 0 ? 0.0 : (done / total).clamp(0.0, 1.0);
+    final complete = ratio >= 1.0;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        AnimatedContainer(
+          duration: const Duration(milliseconds: 320),
+          curve: Curves.easeOut,
+          height: 10,
+          decoration: BoxDecoration(
+            color: complete
+                ? cs.primary.withValues(alpha: 0.18)
+                : cs.surfaceContainerHighest.withValues(alpha: 0.6),
+            borderRadius: BorderRadius.circular(999),
+          ),
+          child: AnimatedFractionallySizedBox(
+            duration: const Duration(milliseconds: 320),
+            curve: Curves.easeOut,
+            alignment: Alignment.centerLeft,
+            widthFactor: ratio,
+            child: Container(
+              decoration: BoxDecoration(
+                color: complete ? cs.primary : cs.primary.withValues(alpha: 0.55),
+                borderRadius: BorderRadius.circular(999),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text('已完成 $done / $total',
+            style: Theme.of(context)
+                .textTheme
+                .labelSmall
+                ?.copyWith(
+                    color: complete ? cs.primary : cs.outline,
+                    fontWeight: complete ? FontWeight.w600 : null)),
+      ]),
+    );
+  }
 }

@@ -18,7 +18,9 @@ import '../../core/album/album_data.dart';
 import '../../core/chat/chat_media.dart';
 import '../../core/sse/sse_client.dart';
 import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
+import '../settings/settings_state.dart' show spaceAppearanceProvider;
 import '../../core/ui/hold_to_confirm.dart' show HoldToConfirmButton;
+import '../../core/ui/stagger_in.dart' show StaggerIn;
 import '../chat/video_player_page.dart';
 import 'album_controller.dart';
 import '../../core/ui/page_heading.dart';
@@ -532,11 +534,16 @@ class _AlbumPageState extends ConsumerState<AlbumPage> {
         itemCount: items.length,
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: 3, mainAxisSpacing: 8, crossAxisSpacing: 8),
-        itemBuilder: (_, i) => _Thumb(
-          item: items[i],
-          photoIndexOf: photoIndex[items[i]] ?? -1,
-          photosOnly: st.photos,
-          coverPicking: picking,
+        itemBuilder: (_, i) => StaggerIn(
+          // 2.4.10 附录 B ①：首屏错峰入场（步进 40ms 封顶 600ms）。
+          index: i,
+          enable: ref.watch(spaceAppearanceProvider).motion,
+          child: _Thumb(
+            item: items[i],
+            photoIndexOf: photoIndex[items[i]] ?? -1,
+            photosOnly: st.photos,
+            coverPicking: picking,
+          ),
         ),
       ),
     );

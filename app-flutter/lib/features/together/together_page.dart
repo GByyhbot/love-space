@@ -13,6 +13,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/sse/sse_client.dart';
+import '../../core/ui/pressable_scale.dart' show PressableScale;
 import '../../core/ui/page_heading.dart';
 import '../../core/together/together_data.dart';
 import '../period/period_colors.dart' show periodStageColor;
@@ -253,7 +254,10 @@ class _TogetherPageState extends ConsumerState<TogetherPage> {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     final tint = _toolTints[title] ?? (cs.surfaceContainerHighest, cs.onSurface);
-    return InkWell(
+    // 2.4.10 附录 B ②：按压四段——按下即微缩 0.97，松手回弹。
+    return PressableScale(
+      onTap: onTap,
+      child: InkWell(
       key: cardKey,
       borderRadius: BorderRadius.circular(20),
       onTap: onTap,
@@ -289,6 +293,7 @@ class _TogetherPageState extends ConsumerState<TogetherPage> {
                     color: cs.outline)), // p fs-sm muted
           ],
         ),
+      ),
       ),
     );
   }
