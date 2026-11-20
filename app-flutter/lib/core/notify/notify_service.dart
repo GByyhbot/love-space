@@ -29,6 +29,7 @@ import '../../features/auth/auth_state.dart' show MeData, authProvider;
 import '../chat/chat_state.dart' show chatPageActiveProvider;
 import 'local_notifications.dart';
 import 'notify_decision.dart' show NotifyItem;
+import 'notify_status.dart' show NotifyDiag, notifyStatusProvider;
 import 'notify_task.dart';
 
 /// 常驻通知渠道（flutter_foreground_task 专用，与消息渠道严格分开）
@@ -36,6 +37,10 @@ const String kOngoingChannelId = 'love_ongoing';
 
 /// 通知点击路由回调（LoveApp build 注入：router.push）
 void Function(String route)? notifyRouteHandler;
+
+/// 2.5.9 条目二：回前台必刷回调（shell_page 注入 authProvider.reload）——
+/// 主 isolate onResume 时重拉 /api/me 对账两角标（服务端为准，不本地推算）。
+void Function()? onAppResumedReload;
 
 /// 通知装配器（shell_page enter/leave 钩子调用）
 class NotifyCoordinator {
@@ -108,7 +113,11 @@ class NotifyCoordinator {
     }
     // ④ 生命周期上报（前后台判定；未收到上报时服务按后台——宁可弹）
     _lifecycle ??= AppLifecycleListener(
-      onResume: () => sendToTask({'type': 'foreground', 'value': true}),
+      onResume: () {
+        sendToTask({'type': 'foreground', 'value': true});
+        // 2.5.9 条目二时机①：回前台必刷——重拉 /api/me 两角标对账
+        onAppResumedReload?.call();
+      },
       onPause: () => sendToTask({'type': 'foreground', 'value': false}),
     );
     // ⑤ 线路跟随：baseProvider 变化 → 服务重连新线路
@@ -126,6 +135,8 @@ class NotifyCoordinator {
     handleColdLaunch();
     // ⑧ 消费服务判定结果
     FlutterForegroundTask.addTaskDataCallback(onTaskData);
+    // ⑨ 2.5.9 裁定⑥：查询一次服务状态快照（设置页「通知服务状态」行首帧
+    //    即有值）；container 由 main 在创建时注入 notifyStatusContainer
   }
 
   /// 离开主框架（shell_page dispose：登出/会话失效）。停服务 + 停上报。
@@ -181,12 +192,19 @@ class NotifyCoordinator {
         for (final item in items) {
           showNotifyItem(item);
         }
+      case 'status':
+        // 2.5.9 裁定⑥：服务诊断快照 → 设置页「通知服务状态」行
+        notifyStatusContainer?.read(notifyStatusProvider.notifier).state =
+            NotifyDiag.fromJson(msg);
       case 'log':
         if (kDebugMode) {
           debugPrint('[notify-task] ${msg['text']}');
         }
     }
   }
+
+  /// 2.5.9：ProviderContainer 引用（onTaskData 是 static 回调，经此写 provider）
+  static ProviderContainer? notifyStatusContainer;
 
   /// 通知点击（运行期 onDidReceiveNotificationResponse / 冷启动 launch）
   void handleTap(NotifyItem item) {

@@ -17,6 +17,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:love_space/core/audio/audio_init_status.dart' show audioInitStatusProvider;
+import 'package:love_space/core/notify/notify_status.dart' show NotifyDiag, notifyStatusProvider;
 import 'package:go_router/go_router.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
@@ -292,6 +293,36 @@ class _SettingsHomePageState extends ConsumerState<SettingsHomePage> {
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ),
+            // 2.5.9 裁定⑥：通知服务状态行（服务运行/SSE 最近事件/最近判定/错误）
+            Builder(builder: (context) {
+              final NotifyDiag d = ref.read(notifyStatusProvider);
+              final ok = d.running && d.connected;
+              final ts = d.lastEventAtMs > 0
+                  ? DateTime.fromMillisecondsSinceEpoch(d.lastEventAtMs)
+                  : null;
+              final tsText = ts == null
+                  ? '尚无事件'
+                  : '${ts.month}/${ts.day} ${ts.hour}:${ts.minute.toString().padLeft(2, '0')}';
+              final lines = <String>[
+                ok ? '服务运行中 · SSE 已连接' : '服务未连接（${d.running ? '服务在跑，SSE 未连' : '服务未运行'}）',
+                '最近 SSE 事件：$tsText',
+                if (d.decision.isNotEmpty) d.decision,
+                if (d.error.isNotEmpty) '最近错误：${_shortErr(d.error)}',
+              ];
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Icon(ok ? Icons.check_circle_rounded : Icons.info_outline_rounded,
+                      size: 16, color: ok ? cs.primary : cs.outline),
+                  const SizedBox(width: 6),
+                  Expanded(child: Text(
+                    '通知服务状态：${lines.join('；')}',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: ok ? cs.outline : cs.outline),
+                  )),
+                ]),
+              );
+            }),
             // 2.4.15：系统媒体播放器（通知栏/锁屏）init 结果可见——
             // 失败时带错误摘要，供真机验收截图与定位。
             Builder(builder: (context) {

@@ -11,7 +11,6 @@ import 'package:go_router/go_router.dart';
 import 'core/album/album_data.dart' show PhotoItem;
 import 'core/theme/tokens.dart';
 import 'core/together/together_data.dart' show TogetherRecord;
-import 'core/notify/notify_service.dart' show NotifyCoordinator, notifyRouteHandler;
 import 'features/account/profile_page.dart';
 import 'features/settings/appearance_page.dart';
 import 'features/settings/backups_page.dart';
@@ -49,6 +48,8 @@ import 'features/together/tool_pages.dart';
 import 'features/together/weekly_page.dart';
 import 'core/audio/audio_init_status.dart' show AudioInitStatus, audioInitStatusProvider;
 import 'core/audio/song_playback.dart' show songPlaybackProvider;
+import 'core/notify/notify_service.dart'
+    show NotifyCoordinator, notifyRouteHandler;
 import 'features/chat/voice_playback.dart' show voiceInterruptHook;
 
 /// 2.4.5 甲组：通知/前台服务全局初始化先于首帧（Android only；失败不影响主链）。
@@ -89,6 +90,8 @@ Future<void> main() async {
         AudioInitStatus(error: e.toString());
   }
   voiceInterruptHook = () => container.read(songPlaybackProvider.notifier).stop();
+  // 2.5.9 裁定⑥：static 回调（onTaskData）写 provider 用
+  NotifyCoordinator.notifyStatusContainer = container;
   runApp(UncontrolledProviderScope(container: container, child: const LoveApp()));
 }
 /// 认证驱动的路由重定向：checking → splash；out → /login；authed → 主框架。

@@ -295,7 +295,7 @@ void main() {
           const Size(42, 42),
           reason: '顶栏圆钮 42×42（style.css:279）');
       // 角标：系统未读 3 / 私聊 2（surface 外圈由 WebBadge 2px border 呈现）
-      expect(find.text('3'), findsWidgets);
+      expect(find.text('1'), findsWidgets);
       expect(find.text('2'), findsWidgets);
       // 头像钮 44×44（style.css:431）
       final avatar = find.byType(WebAvatarButton);

@@ -739,15 +739,26 @@ void main() {
 
   // ── 铃铛角标：系统未读 vs 聊天未读严格区分 ─────────────────────
   group('AppBar 铃铛角标（验收点 ⑤）', () {
-    test('角标播种：me.unread → systemUnreadProvider，chat_unread → 私聊',
+    test('角标播种（2.5.9 裁定④）：铃铛=max(0, unread−chat_unread)，私聊=chat_unread',
         () async {
       final _Store store = _Store()
         ..unread = 7
         ..chatUnread = 2;
       final ProviderContainer c = _container(store);
       await c.read(authProvider.notifier).reload();
-      expect(c.read(systemUnreadProvider), 7);
+      expect(c.read(systemUnreadProvider), 5,
+          reason: '铃铛只含非私聊未读（7−2）');
       expect(c.read(chatUnreadProvider), 2);
+    });
+
+    test('角标播种钳 0：chat_unread 大于 unread 时铃铛不出负数', () async {
+      final _Store store = _Store()
+        ..unread = 2
+        ..chatUnread = 5;
+      final ProviderContainer c = _container(store);
+      await c.read(authProvider.notifier).reload();
+      expect(c.read(systemUnreadProvider), 0, reason: '下限钳 0');
+      expect(c.read(chatUnreadProvider), 5);
     });
 
     test('shell 源码：铃铛在私聊之前、用 systemUnread、push /notices', () {
@@ -832,16 +843,29 @@ void main() {
         isFalse,
       );
 
-      // 全部已读：空参数
+      // 全部已读（2.5.9 裁定④）：按事件逐个 ?event=，不有空参全清；
+      // chat 不进事件集合（私聊未读只能进聊天页清）
       await tester.tap(find.byKey(const Key('notices-read-all')));
       await tester.pumpAndSettle();
       final List<RequestOptions> allReads = store.requests
           .where((RequestOptions r) =>
-              r.method == 'POST' &&
-              r.uri.path == '/api/notices/read' &&
-              r.uri.queryParameters.isEmpty)
+              r.method == 'POST' && r.uri.path == '/api/notices/read')
           .toList();
-      expect(allReads, hasLength(1));
+      final Set<String> events = allReads
+          .map((RequestOptions r) => r.uri.queryParameters['event'] ?? '')
+          .toSet();
+      final bool bareClear = allReads.any((RequestOptions r) =>
+          (r.uri.queryParameters['event'] ?? '').isEmpty &&
+          (r.uri.queryParameters['record_id'] ?? '').isEmpty);
+      expect(bareClear, isFalse, reason: '不许有空参全清调用（单条 record_id 调用除外）');
+      expect(events.contains('chat'), isFalse, reason: 'chat 不在事件集合');
+      // 覆盖剩余未读非 chat 事件（单条已读过的 activity 不再进事件集合）
+      final Set<String> expectedEvents = store.notices
+          .map((Map<String, dynamic> n) => n['event'].toString())
+          .where((String e) => e != 'chat')
+          .toSet();
+      expect(events.containsAll(expectedEvents), isTrue,
+          reason: '列表涉及的未读非 chat 事件逐个调用');
       expect(c.read(systemUnreadProvider), 0,
           reason: '全部已读后重拉 me，角标以服务端为准');
     });

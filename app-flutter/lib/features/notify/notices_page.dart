@@ -111,6 +111,7 @@ class _NoticesPageState extends ConsumerState<NoticesPage> {
   Future<void> _runWrite(
     Future<String?> Function(NotifyApi svc) action, {
     required String successText,
+    bool silent = false,
   }) async {
     if (_busy) return;
     setState(() {
@@ -132,16 +133,53 @@ class _NoticesPageState extends ConsumerState<NoticesPage> {
       return;
     }
     setState(() => _actionError = null);
-    _toast(successText, tone: ChatToastTone.success);
+    // 2.5.9：silent=true 供多事件循环（markAllRead 逐事件调用），
+    // 成功 toast 与刷新由调用方收尾统一做一次。
+    if (!silent) {
+      _toast(successText, tone: ChatToastTone.success);
+      await _refreshBadge();
+      await _load();
+    }
+  }
+
+  /// 2.5.9 条目三裁定④：全部已读只清非 chat 事件——按当前列表涉及的
+  /// 未读事件逐个调 `POST /api/notices/read?event=<e>`；私聊未读只能由
+  /// 进入聊天页清除（chat 不进此循环）。单条已读（record_id）行为不变。
+  Future<void> _markAllRead() async {
+    final events = _notices
+        .where((n) => !n.seen && n.event != 'chat')
+        .map((n) => n.event)
+        .toSet();
+    if (events.isEmpty) {
+      _toast('没有可标记的未读提醒');
+      return;
+    }
+    setState(() {
+      _busy = true;
+      _actionError = null;
+    });
+    String? err;
+    try {
+      final NotifyApi svc = await _service();
+      for (final e in events) {
+        err = await svc.markNoticesRead(event: e);
+        if (err != null) break;
+      }
+    } catch (e) {
+      err = api.errorDetail(e);
+    }
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (err != null) {
+      setState(() => _actionError = err);
+      _toast(err, tone: ChatToastTone.error);
+      return;
+    }
+    setState(() => _actionError = null);
+    _toast('已全部标记为已读', tone: ChatToastTone.success);
     await _refreshBadge();
     await _load();
   }
-
-  /// 全部已读：`POST /api/notices/read`（空参数，`app.js:2571`）。
-  Future<void> _markAllRead() => _runWrite(
-        (NotifyApi svc) => svc.markNoticesRead(),
-        successText: '已全部标记为已读',
-      );
 
   /// 删除已读：确认文案逐字对齐 `app.js:2572`。
   Future<void> _deleteRead() async {

@@ -16,7 +16,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 
 import '../auth/auth_state.dart';
 import '../../core/chat/chat_state.dart';
-import '../../core/notify/notify_service.dart' show NotifyCoordinator;
+import '../../core/notify/notify_service.dart' show NotifyCoordinator, onAppResumedReload;
 import '../../core/sse/sse_client.dart';
 import '../album/album_page.dart';
 import '../home/home_page.dart';
@@ -43,6 +43,8 @@ class _ShellPageState extends ConsumerState<ShellPage> {
 
   @override
   void initState() {
+    // 2.5.9 条目二时机①：回前台必刷回调注入（NotifyCoordinator 生命周期上报处调用）
+    onAppResumedReload = () => ref.read(authProvider.notifier).reload();
     super.initState();
     // 认证后启动 SSE（脚手架打底；聊天页阶段直接复用 events 流）
     Future.microtask(() => ref.read(sseProvider.notifier).start());
@@ -82,6 +84,21 @@ class _ShellPageState extends ConsumerState<ShellPage> {
     // 页面已打开时由聊天页自己对账 + 清未读，不需要动角标
     ref.listen(sseEventsProvider, (prev, next) {
       if (next.value?.chat == true && !ref.read(chatPageActiveProvider)) {
+        ref.read(authProvider.notifier).reload();
+      }
+    });
+    // 2.5.9 条目二时机②：SSE 每次（重）连接成功 → 补一次 reload，
+    // 堵断线期间漏掉的事件（回前台 resume 由 NotifyCoordinator 上报 + reload）
+    ref.listen(sseProvider, (prev, next) {
+      if (next.phase == SsePhase.connected &&
+          prev?.phase != SsePhase.connected) {
+        ref.read(authProvider.notifier).reload();
+      }
+    });
+    // 2.5.9 条目二时机③：退出聊天页 → reload 一次（页内新消息已在页内呈现，
+    // 角标回到服务端真实值）
+    ref.listen(chatPageActiveProvider, (prev, next) {
+      if (prev == true && next == false) {
         ref.read(authProvider.notifier).reload();
       }
     });

@@ -130,10 +130,13 @@ class AuthNotifier extends Notifier<AuthPhase> {
         // 聊天未读角标播种（/api/me 的 chat_unread 字段名已在 app/main.py 实读确认）：
         // 角标挂独立 Notifier（chat_state），变化不必打断 authed 态
         ref.read(chatUnreadProvider.notifier).set(me!.chatUnread);
-        // 段 A：铃铛角标播种 /api/me 的 unread（未读总数，main.py:723），
-        // 与聊天未读 chat_unread 严格区分。通知中心进页 / 写成功后
-        // reload() 会重新播种，角标始终以服务端为准，不本地推算。
-        ref.read(systemUnreadProvider.notifier).state = me!.unread;
+        // 段 A → 2.5.9 条目三裁定④：铃铛角标 = unread − chat_unread
+        // （私聊只归私聊角标，铃铛不含 chat），下限钳 0。两字段名照抄
+        // /api/me（me.unread / me.chatUnread），别写反——护栏测试钉死。
+        // 通知中心进页 / 写成功后 reload() 会重新播种，角标始终以服务端
+        // 为准，不本地推算。
+        ref.read(systemUnreadProvider.notifier).state =
+            (me!.unread - me!.chatUnread).clamp(0, 1 << 30);
         // 段 D：`/api/me` 的 space 播种主题外观（冷启动 / 对象端刷新 / reload
         // 都会走到这里），MaterialApp 因此按 space.theme/custom_color 生成
         // ThemeData；空间设置保存后另有 commit() 立刻生效，不必等重拉。

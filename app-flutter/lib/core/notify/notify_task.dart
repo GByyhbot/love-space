@@ -142,7 +142,29 @@ class NotifyTaskHandler extends TaskHandler {
       case 'partner':
         final name = (msg['name'] ?? '').toString();
         if (name.isNotEmpty) _partnerName = name;
+      case 'statusQuery':
+        // 裁定⑥：主 isolate 查询时回推一次快照（设置页「通知服务状态」行）
+        _setStatus(_lastDecision);
     }
+  }
+
+  // ── 诊断状态（裁定⑥）：紧凑快照，变化时 + statusQuery 时推主 isolate ──
+  String _lastDecision = '尚无判定';
+  String _lastError = '';
+
+  void _setStatus(String decision, {String? error}) {
+    _lastDecision = decision;
+    if (error != null) _lastError = error;
+    try {
+      FlutterForegroundTask.sendDataToMain({
+        'type': 'status',
+        'running': _running,
+        'connected': _sseSub != null,
+        'lastEventAt': _lastEventAt.millisecondsSinceEpoch,
+        'decision': _lastDecision,
+        'error': _lastError,
+      });
+    } catch (_) {}
   }
 
   // ── SSE 连接 ─────────────────────────────────────────────────────────
@@ -154,6 +176,11 @@ class NotifyTaskHandler extends TaskHandler {
       // 流式响应的 chunk 间隔超时＝死链检测：心跳 5s 一次，30s 没数据即断
       receiveTimeout: const Duration(seconds: 30),
       validateStatus: (s) => s != null && s < 500,
+      // 🔴 2.5.9 断点#1 修复：会话 Cookie 注入 BaseOptions——此前只有 SSE
+      // 请求手动带 Cookie，补拉 GET /api/records、GET /api/notices 全部 401
+      // 且被 `statusCode>=400 return` 静默吞掉 → 后台通知永不弹、零报错
+      // （真机「常驻通知在、服务活着、完全不弹」的根因）。
+      headers: {'Cookie': '${AppConfig.sessionCookieName}=$_token'},
     ));
     final adapter = IOHttpClientAdapter();
     adapter.createHttpClient = () {
@@ -179,6 +206,7 @@ class NotifyTaskHandler extends TaskHandler {
         ),
       );
       if ((rsp.statusCode ?? 0) >= 300) {
+        _setStatus('SSE HTTP ${rsp.statusCode}', error: 'SSE HTTP ${rsp.statusCode}');
         _log('SSE HTTP ${rsp.statusCode}');
         _scheduleRetry();
         return;
@@ -186,6 +214,7 @@ class NotifyTaskHandler extends TaskHandler {
       _attempt = 0;
       _lastEventAt = DateTime.now();
       _log('SSE 已连接');
+      _setStatus('SSE 已连接');
       _sseSub = rsp.data!.stream.listen(_onChunk, onDone: () {
         _log('SSE 流结束');
         _scheduleRetry();
@@ -193,12 +222,18 @@ class NotifyTaskHandler extends TaskHandler {
         _log('SSE 错误 $e');
         _scheduleRetry();
       });
+      // 🔴 2.5.9 断点#2 修复：服务端 SSE 首轮连接只建基线不发 data 帧
+      // （main.py:2266-2272）——断线期间的 chat/notices 变化在重连后永不推送。
+      // 连接成功即主动对账一次（seen 集合持久化防重弹），补上裁定⑤缺口。
+      unawaited(_reconcileAfterConnect());
     } on DioException catch (e) {
       // 401 = 会话失效：不退避重连（等主 isolate 下发新会话）
       if (e.response?.statusCode == 401) {
+        _setStatus('SSE 401，等待会话刷新', error: 'SSE 401（会话失效，等主 isolate 下发新会话）');
         _log('SSE 401，等待会话刷新');
         return;
       }
+      _setStatus('SSE 连接失败', error: e.toString());
       _scheduleRetry();
     } catch (e) {
       _log('SSE 连接异常 $e');
@@ -248,14 +283,26 @@ class NotifyTaskHandler extends TaskHandler {
     if (unread != null) _lastUnread = unread;
   }
 
-  Future<void> _handleChatSignal() async {
+  /// 重连/启动后主动对账（断点#2）：走与信号相同补拉路径，seen 集合防重。
+  Future<void> _reconcileAfterConnect() async {
+    await _handleChatSignal(reason: '重连对账');
+    await _handleUnreadSignal(reason: '重连对账');
+  }
+
+  Future<void> _handleChatSignal({String reason = 'chat 信号'}) async {
     try {
       final r = await _dioFor().get('/api/records', queryParameters: {
         'kind': 'chat',
         'limit': 200,
       });
       if (_destroyed) return;
-      if (r.statusCode != null && r.statusCode! >= 400) return;
+      if (r.statusCode != null && r.statusCode! >= 400) {
+        // 🔴 2.5.9：不再静默吞 4xx（断点#1 的 401 曾在这里无痕消失）
+        _setStatus('补拉失败 HTTP ${r.statusCode}', error: '补拉 /api/records HTTP ${r.statusCode}');
+        _log('补拉失败 HTTP ${r.statusCode}');
+        return;
+      }
+      _setStatus('$reason：拉到 ${((r.data ?? const []) as List).length} 条');
       final records = <ChatRecord>[];
       for (final e in ((r.data ?? const []) as List)) {
         if (e is Map) {
@@ -274,18 +321,26 @@ class NotifyTaskHandler extends TaskHandler {
         await _store!.save();
       }
       if (decision.items.isNotEmpty) {
+        _setStatus('已弹 ${decision.items.length} 条聊天通知');
         _sendItems(decision.items);
+      } else {
+        _setStatus('$reason：无待弹（${records.length} 条已决定/前台压下）');
       }
     } catch (e) {
+      _setStatus('补拉异常', error: e.toString());
       _log('聊天补拉失败 $e');
     }
   }
 
-  Future<void> _handleUnreadSignal() async {
+  Future<void> _handleUnreadSignal({String reason = 'unread 信号'}) async {
     try {
       final r = await _dioFor().get('/api/notices');
       if (_destroyed) return;
-      if (r.statusCode != null && r.statusCode! >= 400) return;
+      if (r.statusCode != null && r.statusCode! >= 400) {
+        _setStatus('通知拉取失败 HTTP ${r.statusCode}', error: '拉取 /api/notices HTTP ${r.statusCode}');
+        _log('通知拉取失败 HTTP ${r.statusCode}');
+        return;
+      }
       final notices = <NoticeItem>[];
       for (final e in ((r.data ?? const []) as List)) {
         if (e is Map) {
@@ -302,9 +357,13 @@ class NotifyTaskHandler extends TaskHandler {
         await _store!.save();
       }
       if (decision.items.isNotEmpty) {
+        _setStatus('已弹 ${decision.items.length} 条事件通知');
         _sendItems(decision.items);
+      } else {
+        _setStatus('$reason：无待弹（notices 已决定/前台压下）');
       }
     } catch (e) {
+      _setStatus('通知拉取异常', error: e.toString());
       _log('通知拉取失败 $e');
     }
   }

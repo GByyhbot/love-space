@@ -108,12 +108,15 @@ class NotifyApi {
   /// ⑤ `POST /api/notices/read`（`main.py:1961-1972`）：
   /// 空参数＝全部已读；`record_id` 查询参数＝单条已读
   /// （对齐 `app.js:2613` `post('/notices/read?record_id='+id)`）。
-  Future<String?> markNoticesRead({String? recordId}) => _write(
+  /// 2.5.9 条目三：record_id=单条已读（不变）；event=按事件批量已读
+  /// （裁定④「全部已读」只清非 chat 事件的既有后端接口，main.py:1961）。
+  Future<String?> markNoticesRead({String? recordId, String? event}) => _write(
         (Dio dio) => dio.post(
           '/api/notices/read',
-          queryParameters: (recordId == null || recordId.isEmpty)
-              ? null
-              : <String, dynamic>{'record_id': recordId},
+          queryParameters: <String, dynamic>{
+            if (recordId != null && recordId.isNotEmpty) 'record_id': recordId,
+            if (event != null && event.isNotEmpty) 'event': event,
+          },
         ),
       );
 
