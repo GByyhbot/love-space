@@ -60,6 +60,19 @@ async def lifespan(app):
     except Exception:
         # 迁不动就退回到主库读取（接口两头都查），不能因为搬库失败让健康数据"消失"
         logging.getLogger('love').exception('生理期迁库失败，暂时仍从主库读取')
+    # 2.4.11 媒体库隔离：存量 zone='' 的行定区搬家（必须在 worker 启动前，
+    # 否则转码线程可能按旧路径找文件）。失败不阻断启动，但要留下原因。
+    try:
+        report = db.migrate_media_zones()
+        logging.getLogger('love').info(
+            '媒体 zone 迁移：%s，缺失跳过 %d 个，manifest %s（%d 条），文件数 %d→%d（对账%s）',
+            {k: v for k, v in report['moved_by_zone'].items() if v},
+            report['missing'], report['manifest'], report['manifest_entries'],
+            report['total_before'], report['total_after'], '平' if report['balanced'] else '不平！停报')
+        if not report['balanced']:
+            logging.getLogger('love').error('媒体 zone 迁移前后文件总数不平——停手核对 manifest，勿回滚镜像')
+    except Exception:
+        logging.getLogger('love').exception('媒体 zone 迁移失败，未归类的附件仍在 inbox')
     stop = threading.Event()
     from .worker import run
     worker = None
@@ -628,6 +641,9 @@ def pose_ai_history_put(body: PoseAiHistory, user=Depends(current_user)):
             if mid:
                 mids.append(mid)
     with connect() as c:
+        # 裁定2：pose_ai_media 归 space（与封面/聊天背景同族），首次绑定定区 space
+        if mids:
+            db.mark_attached(c, mids, zone='space')
         c.execute('INSERT INTO settings(key,value) VALUES(?,?) '
                   'ON CONFLICT(key) DO UPDATE SET value=excluded.value',
                   (_POSE_AI_MEDIA_KEY, json.dumps(sorted(set(mids)))))
@@ -795,7 +811,9 @@ def validate_owned_image(c, mid, user_id):
         row = c.execute('SELECT * FROM media WHERE id=? AND owner=?', (mid, user_id)).fetchone()
         if not row or not row['mime'].startswith('image/'):
             raise HTTPException(422, '请选择自己上传的照片')
-        db.mark_attached(c, [mid])
+        # 头像 / 封面 / 背景 / pose_ai 同族：首次绑定定区 space；
+        # 拿已有媒体当封面是引用，zone 已有值时 classify_media 直接跳过。
+        db.mark_attached(c, [mid], zone='space')
 
 
 # 首页封面（hero 卡）的显示区域：x/y 是 object-position 的百分比，z 是放大倍数。
@@ -1175,7 +1193,8 @@ def clean_body(c, kind, data, user_id, previous=None):
     if mids:
         # 附件随记录保存，脱离"未使用"状态，不再被孤儿清理
         # （原来靠 AFTER UPDATE ON media 触发器顺带推进共享 revision，已改为显式调用）
-        db.mark_attached(c, mids)
+        # 2.4.11：按记录 kind 首次定区（album 按 timeline 引用计——裁定1）
+        db.mark_attached(c, mids, zone=db.zone_for_kind(kind))
     if body.get('album'):
         album = c.execute('SELECT * FROM records WHERE id=? AND kind=\'album\' AND deleted IS NULL', (body['album'],)).fetchone()
         if not album:
@@ -1514,6 +1533,64 @@ def restore_record(rid: str, user=Depends(current_user)):
     return {'ok': True}
 
 
+def _other_refs_excluding(c, rid, mid):
+    """除记录 rid 外，mid 是否还被别人引用（精确判定，含 song.mid 与各设置）。"""
+    ph = ','.join('?' * len(db.PRIVATE))
+    for row in c.execute(f'SELECT id,body FROM records WHERE kind NOT IN ({ph}) AND id!=?', (*db.PRIVATE, rid)):
+        parsed = json.loads(row['body'])
+        if mid in parsed.get('media', []):
+            return True
+        song = parsed.get('song')
+        if isinstance(song, dict) and song.get('mid') == mid:
+            return True
+    for row in c.execute(f'SELECT id,kind,body FROM records WHERE kind IN ({ph}) AND id!=?', (*db.PRIVATE, rid)):
+        body = db.body_decode(row)
+        if mid in body.get('media', []):
+            return True
+        song = body.get('song')
+        if isinstance(song, dict) and song.get('mid') == mid:
+            return True
+    space = db.setting(c, 'space', {})
+    if mid in ([space.get('cover'), space.get('chat_bg_media')] + db.chat_bg_media_ids(space)
+               + list(db.pose_ai_media_ids(c))):
+        return True
+    if c.execute('SELECT 1 FROM users WHERE avatar=?', (mid,)).fetchone():
+        return True
+    if c.execute('SELECT 1 FROM import_messages WHERE media_id=?', (mid,)).fetchone():
+        return True
+    return False
+
+
+@app.post('/api/records/{rid}/purge')
+def purge_record(rid: str, user=Depends(current_user)):
+    """手动彻底删除（2.4.11）：仅作者本人、仅已在回收站（两步制，活记录 4xx）。
+
+    · 主库裸 DELETE 让 SQLite 按 FK 级联 likes/comments/answers/checks——与旧
+      cleanup 30 天自动 purge 的级联语义完全一致（不碰 notices / media）；
+    · 独占媒体（除待删记录外无任何引用）同步删行 + 删文件（原图/preview/poster），
+      共享媒体一律保留；
+    · period 按作者 + deleted 校验硬删单条（无子表、无媒体引用）。
+    """
+    prow = period.get(rid, include_deleted=True)
+    if prow:
+        if prow['author'] != user['id'] or not prow['deleted']:
+            raise HTTPException(404, '记录不存在')
+        if not period.purge_one(rid, user['id']):
+            raise HTTPException(404, '记录不存在')
+        return {'ok': True}
+    with connect() as c:
+        c.execute('BEGIN IMMEDIATE')
+        row = c.execute('SELECT * FROM records WHERE id=?', (rid,)).fetchone()
+        if not row or row['author'] != user['id'] or not row['deleted']:
+            raise HTTPException(404, '记录不存在')
+        own = set(db.media_ids(db.body_decode(row)))
+        for mid in own:
+            if not _other_refs_excluding(c, rid, mid):
+                db.purge_media_files(c, mid)
+        c.execute('DELETE FROM records WHERE id=?', (rid,))  # FK 级联四张关联表
+    return {'ok': True}
+
+
 @app.post('/api/records/{rid}/recall')
 def recall_record(rid: str, user=Depends(current_user)):
     """撤回聊天消息：仅作者本人、2 分钟内；内容与附件清空，保留一条系统提示供双方渲染。"""
@@ -1690,7 +1767,7 @@ def upload(request: Request, file: UploadFile = File(...), user=Depends(current_
         raise HTTPException(422, '暂不支持这种文件，请使用照片、音频或视频')
     mid = uid()
     ext = MIME_EXT[mime]
-    folder = db.media_dir(mime, now())
+    folder = db.media_dir('', mime, now())   # 未归类上传落 inbox
     folder.mkdir(parents=True, exist_ok=True)
     path = folder / (mid + ext)
     size = 0
@@ -1738,7 +1815,7 @@ def media(mid: str, request: Request, preview: bool = False, poster: bool = Fals
         filename = mid + '.preview.jpg'
     else:
         filename = row['preview'] if preview and row['preview'] else mid + row['ext']
-    path = db.media_dir(row['mime'], row['created']) / filename
+    path = db.media_dir(row['zone'], row['mime'], row['created']) / filename
     if not path.is_file():
         raise HTTPException(404, '附件文件不存在，请检查存储')
     if filename.endswith('.preview.jpg'):
@@ -2829,18 +2906,21 @@ def storage_usage(user=Depends(current_user)):
     if not user['admin']:
         raise HTTPException(403, '需要管理员账号')
     usage = shutil.disk_usage(db.DATA)
-    media_root = db.DATA / 'media'
+    # 2.4.11 裁定4：by_kind 口径不变（仍按 media 行的 MIME 分 image/video/audio），
+    # 文件大小改走新解析（zone 感知）；另加 by_zone（zone 名为键，空 zone 计 inbox）。
+    # 加法不破坏消费方：老 App 只读 media_by_kind/media_by_month，字段仍在。
     by_kind = {'image': 0, 'video': 0, 'audio': 0}
+    by_zone = {z: 0 for z in db.ZONES}
     by_month = {}
-    if media_root.is_dir():
-        for path in media_root.rglob('*'):
-            if path.is_file():
-                size = path.stat().st_size
-                kind = path.parent.parent.name if path.parent.parent.name in by_kind else 'other'
-                if kind in by_kind:
-                    by_kind[kind] += size
-                month = path.parent.name
-                by_month[month] = by_month.get(month, 0) + size
+    with connect() as c:
+        for row in c.execute('SELECT mime,size,created,zone FROM media'):
+            size = row['size']
+            mime = row['mime']
+            kind = 'image' if mime.startswith('image/') else ('video' if mime.startswith('video/') else 'audio')
+            by_kind[kind] += size
+            by_zone[row['zone'] if row['zone'] in db.ZONES else 'inbox'] += size
+            month = db.media_month(row['created'])
+            by_month[month] = by_month.get(month, 0) + size
     db_size = (db.DATA / 'love.db').stat().st_size if (db.DATA / 'love.db').is_file() else 0
     wal_size = (db.DATA / 'love.db-wal').stat().st_size if (db.DATA / 'love.db-wal').is_file() else 0
     # 生理期是独立文件，磁盘占用和记录条数都要算进来，否则看板上的数字对不上
@@ -2851,7 +2931,8 @@ def storage_usage(user=Depends(current_user)):
         record_count = c.execute('SELECT count(*) FROM records WHERE deleted IS NULL').fetchone()[0] + period.count_active()
         media_count = c.execute('SELECT count(*) FROM media').fetchone()[0]
     return {'total': sum(by_kind.values()) + db_size + wal_size + pdb_size + pwal_size + backups_size,
-            'media_by_kind': by_kind, 'media_by_month': dict(sorted(by_month.items())[-12:]),
+            'media_by_kind': by_kind, 'media_by_zone': by_zone,
+            'media_by_month': dict(sorted(by_month.items())[-12:]),
             'db': db_size + wal_size + pdb_size + pwal_size, 'backups': backups_size,
             'disk_free': usage.free, 'disk_total': usage.total,
             'record_count': record_count, 'media_count': media_count}
@@ -2936,12 +3017,12 @@ def save_import_media(user_id, name, data: bytes):
     except Exception:
         return None
     mid = uid()
-    folder = db.media_dir(mime, now())
+    folder = db.media_dir('chat', mime, now())   # 导入聊天媒体定区 chat
     folder.mkdir(parents=True, exist_ok=True)
     (folder / (mid + suffix)).write_bytes(data)
     with connect() as c:
-        c.execute('INSERT INTO media(id,owner,name,mime,size,ext,created,attached) VALUES (?,?,?,?,?,?,?,1)',
-                  (mid, user_id, Path(name).name[:200], mime, len(data), suffix, now()))
+        c.execute('INSERT INTO media(id,owner,name,mime,size,ext,created,attached,zone) VALUES (?,?,?,?,?,?,?,?,?)',
+                  (mid, user_id, Path(name).name[:200], mime, len(data), suffix, now(), 1, 'chat'))
         # 共享 revision 不用在这里推：imports 的 INSERT 触发器已经推过了
         # （见 db.py 的 revision_imports_insert），对端会收到 refresh 并拉到这些图
     return mid

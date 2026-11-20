@@ -47,7 +47,7 @@ def add_media(owner, mime='image/jpeg', ext='.jpg', *, attached=1, status='pendi
               created=None, payload=None):
     mid = db.uid()
     created = now() if created is None else created
-    folder = db.media_dir(mime, created)
+    folder = db.media_dir('', mime, created)   # 未归类 = inbox
     folder.mkdir(parents=True, exist_ok=True)
     if payload is None:
         buf = io.BytesIO()
@@ -109,7 +109,7 @@ def test_finish_media_after_row_vanished_leaves_no_orphan(owner):
     """行被删了还写成功 = 静默数据丢失。必须返回 False，并且清掉已生成的 preview。"""
     mid = add_media(owner)
     row = force_processing(mid)
-    folder = db.media_dir(row['mime'], row['created'])
+    folder = db.media_dir(row['zone'], row['mime'], row['created'])
     (folder / 'preview.jpg').write_bytes(b'x')
     with connect() as c:
         c.execute('DELETE FROM media WHERE id=?', (mid,))
@@ -123,7 +123,7 @@ def test_process_media_image_becomes_ready(owner):
     row = media_row(mid)
     assert row['status'] == 'ready', row['error']
     assert row['preview'] == mid + '.preview.jpg'
-    assert (db.media_dir(row['mime'], row['created']) / row['preview']).is_file()
+    assert (db.media_dir(row['zone'], row['mime'], row['created']) / row['preview']).is_file()
 
 
 def test_process_media_corrupt_file_falls_back_to_original(owner):

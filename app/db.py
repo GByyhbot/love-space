@@ -16,20 +16,57 @@ def uid():
     return uuid.uuid4().hex
 
 
-def media_dir(mime, created):
-    """媒体文件按「类型/年-月」分目录存放：media/image/2026-10/…"""
+# ── 媒体库隔离（2.4.11）────────────────────────────────────────────
+# 顶层按来源分区（zone），里层保留类型/月份。六个 zone 逐字来自主人定版目录树。
+ZONES = ('chat', 'timeline', 'music', 'private', 'space', 'inbox')
+# 三个「按类型再分目录」的区：音频子目录统一叫 voice（不再用 audio）。
+TYPED_ZONES = ('chat', 'timeline', 'private')
+
+
+def media_dir(zone, mime, created):
+    """媒体物理路径**唯一事实源**：data/media/<zone>/[type/]<YYYY-MM>。
+
+    zone 为空（未归类/上传残留）落 inbox；zone 逐字来自 ZONES，未知值一律
+    回落 inbox（宁可放临时区，也不写到可能不属于它的分区）。
+    旧签名 media_dir(mime, created) 的两参数调用形态必须为零——护栏测试钉死。
+    """
+    z = zone if zone in ZONES else 'inbox'
+    month = dt.datetime.fromtimestamp(created, dt.timezone.utc).strftime('%Y-%m')
+    folder = DATA / 'media' / z
+    if z in TYPED_ZONES:
+        kind = 'image' if mime.startswith('image/') else ('video' if mime.startswith('video/') else 'voice')
+        return folder / kind / month
+    return folder / month
+
+
+def media_dir_legacy(mime, created):
+    """旧布局路径（media/<image|video|audio>/<YYYY-MM>），只供存量迁移找源。"""
     kind = 'image' if mime.startswith('image/') else ('video' if mime.startswith('video/') else 'audio')
     month = dt.datetime.fromtimestamp(created, dt.timezone.utc).strftime('%Y-%m')
     return DATA / 'media' / kind / month
 
 
+def media_month(created):
+    return dt.datetime.fromtimestamp(created, dt.timezone.utc).strftime('%Y-%m')
+
+
+def legacy_media_paths(row, name):
+    """一个文件在旧布局里可能的落点（现行类型/月 + 更早的平铺根）。"""
+    folder = media_dir_legacy(row['mime'], row['created'])
+    return (folder / name, DATA / 'media' / name)
+
+
 def migrate_media_layout():
-    """旧版本把所有媒体平铺在 media/ 根目录；启动时按类型与月份归位。"""
+    """旧版本把所有媒体平铺在 media/ 根目录；启动时按类型与月份归位。
+
+    2.4.11 起本函数只做「平铺根 → 旧类型/月」这一段；zone 归类由
+    migrate_media_zones() 在其后接手（main.py 启动顺序）。
+    """
     moved = 0
     with connect() as c:
         rows = c.execute('SELECT id,ext,preview,mime,created FROM media').fetchall()
     for r in rows:
-        folder = media_dir(r['mime'], r['created'])
+        folder = media_dir_legacy(r['mime'], r['created'])
         for name in (r['id'] + r['ext'], r['preview']):
             if not name:
                 continue
@@ -86,7 +123,7 @@ def init():
         CREATE TABLE IF NOT EXISTS media(id TEXT PRIMARY KEY, owner TEXT NOT NULL REFERENCES users(id),
           name TEXT NOT NULL, mime TEXT NOT NULL, size INTEGER NOT NULL, ext TEXT NOT NULL,
           status TEXT NOT NULL DEFAULT 'pending', preview TEXT, error TEXT, created REAL NOT NULL,
-          attached INTEGER NOT NULL DEFAULT 0);
+          attached INTEGER NOT NULL DEFAULT 0, zone TEXT NOT NULL DEFAULT '');
         CREATE TABLE IF NOT EXISTS likes(record_id TEXT NOT NULL REFERENCES records(id) ON DELETE CASCADE,
           user_id TEXT NOT NULL REFERENCES users(id), PRIMARY KEY(record_id,user_id));
         CREATE TABLE IF NOT EXISTS comments(id TEXT PRIMARY KEY, record_id TEXT NOT NULL REFERENCES records(id) ON DELETE CASCADE,
@@ -151,6 +188,9 @@ def init():
         c.execute('CREATE INDEX IF NOT EXISTS import_messages_media ON import_messages(media_id)')
         if 'attached' not in {r[1] for r in c.execute('PRAGMA table_info(media)')}:
             c.execute('ALTER TABLE media ADD COLUMN attached INTEGER NOT NULL DEFAULT 0')
+        # 2.4.11 媒体库隔离：存量库幂等加 zone（'' = 未归类，启动迁移会给它们定区）
+        if 'zone' not in {r[1] for r in c.execute('PRAGMA table_info(media)')}:
+            c.execute("ALTER TABLE media ADD COLUMN zone TEXT NOT NULL DEFAULT ''")
         # 2.4.6 气泡各发各的：users 侧按人三键（skin/fg/swap）。存量库幂等 ALTER，
         # 与上面 media 的两列同一惯例；bubble_swap 不给 NOT NULL —— NULL = 未设置，
         # 渲染回退空间级 chat_bubble_swap。
@@ -384,6 +424,200 @@ def body_decode(row):
     return body
 
 
+# ── 2.4.11 媒体归类映射（主人定版 + 第 0 步裁定）──────────────────
+# kind → zone。album 按引用定性（裁定1）：封面 mid 只是对 post 媒体的引用，
+# 不产生新媒体、不独立定区——按其引用的 post 归 timeline。
+KIND_ZONE = {
+    'chat': 'chat', 'post': 'timeline', 'album': 'timeline', 'music': 'music',
+    'diary': 'private', 'draft': 'private', 'surprise': 'private',
+    'question': 'timeline', 'mood': 'timeline', 'note': 'timeline',
+    'anniversary': 'timeline', 'wish': 'timeline', 'personal_wish': 'timeline',
+    'habit': 'timeline', 'quest': 'timeline', 'ledger': 'timeline',
+}
+# 多 kind 引用同一媒体时的定区优先级（裁定：private > chat > timeline > music）
+ZONE_PRIORITY = {'private': 0, 'chat': 1, 'timeline': 2, 'music': 3, 'space': 4}
+
+
+def zone_for_kind(kind):
+    return KIND_ZONE.get(kind, 'timeline')
+
+
+def _media_file_names(row):
+    """一个媒体行可能拥有的全部文件名：原图 + preview + 视频 poster。
+
+    poster 没有独立 DB 字段，靠 <id>.preview.jpg 约定（worker.py:161 /
+    main.py:1738），图片 preview 也可能是这个名字——用 set 去重即可。
+    """
+    names = {row['id'] + row['ext']}
+    if row['preview']:
+        names.add(row['preview'])
+    names.add(row['id'] + '.preview.jpg')     # 图片 preview / 视频 poster
+    names.add(row['id'] + '.preview.mp4')     # 视频 preview
+    names.add(row['id'] + '.preview.m4a')     # 音频 preview
+    return names
+
+
+def move_media_files(c, mid, zone, *, collect_manifest=None):
+    """把一个媒体行的已落盘文件搬到 zone 目录。返回 (moved, missing)。
+
+    · 只处理 zone 为空的行；zone 已有值直接返回 (0, 0)——永不二次搬家；
+    · 逐文件 is_file() 检查，目标已存在不覆盖（照 migrate_media_layout 先例）；
+    · 磁盘上缺失的文件跳过搬家、照样写 zone，计数 missing（生产确有手动删过的文件）；
+    · manifest 收集 (mid, from, to)（相对 data 根的 POSIX 路径）。
+    """
+    row = c.execute('SELECT * FROM media WHERE id=?', (mid,)).fetchone()
+    if not row or row['zone']:
+        return (0, 0)
+    target = media_dir(zone, row['mime'], row['created'])
+    moved = missing = 0
+    for name in _media_file_names(row):
+        # 源可能是旧布局（类型/月、平铺根）或 inbox（新上传）
+        candidates = (
+            *legacy_media_paths(row, name),
+            DATA / 'media' / 'inbox' / media_month(row['created']) / name,
+        )
+        src = next((p for p in candidates if p.is_file()), None)
+        if src is None:
+            missing += 1
+            continue
+        dst = target / name
+        if dst.exists():
+            continue
+        target.mkdir(parents=True, exist_ok=True)
+        src.rename(dst)
+        moved += 1
+        if collect_manifest is not None:
+            collect_manifest.append({
+                'id': mid, 'name': name,
+                'from': src.relative_to(DATA).as_posix(),
+                'to': dst.relative_to(DATA).as_posix(),
+            })
+    c.execute('UPDATE media SET zone=? WHERE id=? AND zone=?', (zone, mid, ''))
+    return (moved, missing)
+
+
+def classify_media(c, mid, zone):
+    """首次绑定定区：仅 zone='' 时搬家并写 zone；已有值直接返回 False。
+
+    调用点必须排在 attached=1（worker claim 视野）之前或同链路内——
+    由 mark_attached(zone=...) 统一保证。多处引用以第一次归类为准，永不二次搬家。
+    """
+    if not mid or not zone:
+        return False
+    row = c.execute('SELECT zone FROM media WHERE id=?', (mid,)).fetchone()
+    if not row or row['zone']:
+        return False
+    move_media_files(c, mid, zone)
+    return True
+
+
+def media_zone_evidence(c, mid):
+    """存量行的定区证据链（按优先级取一，返回 zone；无引用返回 'inbox'）。
+
+    优先级：私密记录引用（解密判定）> 其它记录引用（按 kind 映射，多引用
+    private>chat>timeline>music）> import_messages → chat > space 设置/头像/
+    pose_ai_media → space > 无引用 → inbox。
+
+    裁定补充：album 的 body.media[0] 是对 post 媒体的引用（不独立定区），
+    KIND_ZONE['album']='timeline' 即按 timeline 引用计；body.song.mid 不纳入
+    定区（歌曲由所属 music 记录定区），但纳入 cleanup 在用集合。
+    """
+    zones = set()
+    # ①/② 记录引用。私密记录 body 密封，手握 secret.key 的服务端可解密判定。
+    placeholders = ','.join('?' * len(PRIVATE))
+    for row in c.execute(f"SELECT id,kind,body FROM records WHERE kind NOT IN ({placeholders})", tuple(PRIVATE)):
+        try:
+            if mid in json.loads(row['body']).get('media', []):
+                zones.add(zone_for_kind(row['kind']))
+        except (ValueError, TypeError):
+            continue
+    for row in c.execute(f"SELECT id,kind,body FROM records WHERE kind IN ({placeholders})", tuple(PRIVATE)):
+        try:
+            if mid in media_ids(body_decode(row)):
+                zones.add(zone_for_kind(row['kind']))
+        except Exception:
+            continue
+    if zones:
+        return min(zones, key=lambda z: ZONE_PRIORITY.get(z, 99))
+    # ③ 导入聊天媒体
+    if c.execute('SELECT 1 FROM import_messages WHERE media_id=? LIMIT 1', (mid,)).fetchone():
+        return 'chat'
+    # ④ space 设置 / 头像 / pose_ai_media（裁定2：pose_ai 归 space）
+    space = setting(c, 'space', {})
+    if mid in ([space.get('cover'), space.get('chat_bg_media')]
+               + chat_bg_media_ids(space)
+               + [v for v in (space.get('pose_ai_media') or []) if v]):
+        return 'space'
+    if c.execute('SELECT 1 FROM users WHERE avatar=?', (mid,)).fetchone():
+        return 'space'
+    if mid in pose_ai_media_ids(c):
+        return 'space'
+    # ⑤ 无引用
+    return 'inbox'
+
+
+def media_zone_counts(c):
+    return {z: c.execute('SELECT count(*) FROM media WHERE zone=?', (z,)).fetchone()[0] for z in ZONES}
+
+
+def migrate_media_zones():
+    """启动时把 zone='' 的存量行定区并搬家（幂等可重入，中断可续跑）。
+
+    返回统计字典：各 zone 搬家文件数、缺失跳过数、manifest 条目数。
+    manifest 落 data/media-zone-migration-<YYYYMMDD>.json（追加合并同日多次运行）。
+    """
+    manifest_path = DATA / ('media-zone-migration-' + dt.datetime.now().strftime('%Y%m%d') + '.json')
+    manifest = []
+    if manifest_path.is_file():
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
+            if not isinstance(manifest, list):
+                manifest = []
+        except (OSError, ValueError):
+            manifest = []
+    media_root = DATA / 'media'
+    def _file_count():
+        return sum(1 for p in media_root.rglob('*') if p.is_file()) if media_root.is_dir() else 0
+    total_before = _file_count()
+    moved_by_zone = {z: 0 for z in ZONES}
+    missing = 0
+    with connect() as c:
+        for row in c.execute("SELECT id FROM media WHERE zone='' OR zone IS NULL ORDER BY created").fetchall():
+            mid = row['id']
+            zone = media_zone_evidence(c, mid)
+            before = len(manifest)
+            mv, miss = move_media_files(c, mid, zone, collect_manifest=manifest)
+            moved_by_zone[zone] += mv
+            missing += miss
+            if len(manifest) > before:
+                manifest_path.write_text(dumps(manifest), encoding='utf-8')
+    total_after = _file_count()
+    # 旧类型目录（image/video/audio）搬空后删掉；只删空目录，不碰任何文件
+    for kind in ('image', 'video', 'audio'):
+        kind_root = media_root / kind
+        if kind_root.is_dir():
+            try:
+                kind_root.rmdir()   # 非空会抛 OSError——说明还有残留，保留不删
+            except OSError:
+                pass
+    # 对账：搬家只 rename 不复制不删除，前后总数必须相等；差一即停报（由调用方 log.error）
+    balanced = total_before == total_after
+    return {'moved_by_zone': moved_by_zone, 'missing': missing,
+            'manifest': str(manifest_path), 'manifest_entries': len(manifest),
+            'total_before': total_before, 'total_after': total_after, 'balanced': balanced}
+
+
+def purge_media_files(c, mid):
+    """彻底删除：删媒体行与其全部物理文件（原图 + preview + poster），按 zone 解析。"""
+    row = c.execute('SELECT * FROM media WHERE id=?', (mid,)).fetchone()
+    if not row:
+        return
+    folder = media_dir(row['zone'], row['mime'], row['created'])
+    for name in _media_file_names(row):
+        (folder / name).unlink(missing_ok=True)
+    c.execute('DELETE FROM media WHERE id=?', (mid,))
+
+
 def visible(row, user_id):
     if row['deleted']:
         return False
@@ -426,19 +660,23 @@ def media_shared_visible(c, mid):
         " AND j.value=? LIMIT 1", (mid,)).fetchone())
 
 
-def mark_attached(c, mids):
+def mark_attached(c, mids, zone=None):
     """把附件标记为「已被引用」，不再被孤儿清理回收。
 
     取代了已删除的 AFTER UPDATE ON media 触发器里 "UPDATE media SET attached=1" 的
     那一半职责。这里**不推进共享 revision**：引用它的那条记录 / 头像 / 设置本身就有
     自己的触发器会推，再推一次等于把私密内容的存在泄漏成对端的 refresh。
 
-    写入点只有三处：保存记录、设头像、导入 zip 附件。新增写入点时记得也调这里，
-    否则附件会被 cleanup 当成孤儿删掉。
+    2.4.11：zone 非空时先对每个附件首次定区（classify_media），再标记 attached——
+    保证归类搬家在 attached=1 进入 worker claim 视野之前完成。zone 已有值的附件
+    二次引用（含拿 post 照片当封面）直接跳过搬家。
     """
     mids = [m for m in mids if m]
     if not mids:
         return
+    if zone:
+        for mid in mids:
+            classify_media(c, mid, zone)
     c.execute('UPDATE media SET attached=1 WHERE id IN (%s)' % ','.join('?' * len(mids)), mids)
 
 

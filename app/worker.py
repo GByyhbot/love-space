@@ -114,7 +114,7 @@ def finish_media(row, status, preview=None, error=None):
         if cur.rowcount == 0:
             log.warning('附件 %s 在转码期间已不存在，结果丢弃（status=%s）', row['id'], status)
             if preview:
-                (db.media_dir(row['mime'], row['created']) / preview).unlink(missing_ok=True)
+                (db.media_dir(row['zone'], row['mime'], row['created']) / preview).unlink(missing_ok=True)
             return False
         # 这是被删掉的 AFTER UPDATE ON media 触发器里真正有用的那一次 bump：
         # 转码完成后 preview 才存在，对方的客户端得重新拉一次才能看到成品缩略图，
@@ -129,7 +129,7 @@ def process_media(stop=None):
         row = claim_pending_media(c)
     if not row:
         return
-    folder = db.media_dir(row['mime'], row['created'])
+    folder = db.media_dir(row['zone'], row['mime'], row['created'])
     path = folder / (row['id'] + row['ext'])
     preview = None
     try:
@@ -455,7 +455,7 @@ def deliver_webpushes():
 
 
 def remove_media(c, media):
-    folder = db.media_dir(media['mime'], media['created'])
+    folder = db.media_dir(media['zone'], media['mime'], media['created'])
     for name in (media['id'] + media['ext'], media['preview']):
         if name:
             (folder / name).unlink(missing_ok=True)
@@ -463,30 +463,38 @@ def remove_media(c, media):
 
 
 def cleanup():
+    """定时清理。
+
+    2.4.11 裁定：回收站永不自动删除——records 的 30 天硬删与 period.purge_deleted
+    调用均已移除。彻底删除只能由作者本人走 purge 接口手动触发。
+    """
     with storage_lock, connect() as c:
-        c.execute('DELETE FROM records WHERE deleted IS NOT NULL AND deleted<?', (now() - 30 * 86400,))
-        # 生理期在独立的 period.db 里，回收站期限与主库保持一致
-        try:
-            period.purge_deleted(now() - 30 * 86400)
-        except Exception:
-            logging.getLogger('love').exception('清理生理期回收站失败')
         # 已读通知保留 90 天后回收；三张投递队列表对 notice 外键级联删除，一并清理
         c.execute('DELETE FROM notices WHERE seen=1 AND created<?', (now() - 90 * 86400,))
-        # 「在用」的附件集合。注意**不能**只挑 deleted IS NULL 的记录：软删除后
-        # 30 天内还能恢复，它们的附件必须继续算在用，否则恢复出来是一片空白。
-        # 这里只优化代价：非私密记录的 body 是明文 JSON，直接解析即可；
-        # 私密记录整体密封，才需要 body_decode（读 secret.key + AES-GCM）。
+        # 「在用」的附件集合。**含软删记录**（回收站里的附件永不回收——护栏测试钉死）。
+        # 非私密记录 body 是明文 JSON 直接解析；私密记录整体密封才需 body_decode。
         placeholders = ','.join('?' * len(db.PRIVATE))
-        private = tuple(db.PRIVATE)  # sqlite3 只吃序列，不吃 set
+        private = tuple(db.PRIVATE)
         used = set()
         for (body,) in c.execute(f'SELECT body FROM records WHERE kind NOT IN ({placeholders})', private):
-            used.update(json.loads(body).get('media', []))
+            parsed = json.loads(body)
+            used.update(parsed.get('media', []))
+            # 裁定3：body.song.mid 纳入在用集合（引用即在用）——避免手动 purge 掉
+            # 歌曲记录后，聊天里的歌曲分享被孤儿清理误删。定区不纳入（由 music 记录定）。
+            song = parsed.get('song')
+            if isinstance(song, dict) and song.get('mid'):
+                used.add(song['mid'])
         for row in c.execute(f'SELECT id,kind,body FROM records WHERE kind IN ({placeholders})', private):
-            used.update(db.body_decode(row).get('media', []))
+            body = db.body_decode(row)
+            used.update(body.get('media', []))
+            song = body.get('song')
+            if isinstance(song, dict) and song.get('mid'):
+                used.add(song['mid'])
         space = db.setting(c, 'space', {})
         used.add(space.get('cover', ''))
         used.update(db.chat_bg_media_ids(space))
         used.update(row[0] for row in c.execute('SELECT avatar FROM users'))
+        used.update(db.pose_ai_media_ids(c))
         # 未关联进任何记录/头像/封面的孤儿附件（上传后放弃发布）：24 小时后回收
         # status='processing' 的正在被转码线程持有，删了就会让它白干一场并把结果写进空气
         for media in c.execute("SELECT * FROM media WHERE attached=0 AND status!='processing' AND created<?", (now() - 86400,)).fetchall():

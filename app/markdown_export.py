@@ -252,10 +252,10 @@ def build_markdown_archive(user_id):
         records.sort(key=lambda item: item['created'])
         authors = {u['id']: u['name'] for u in c.execute('SELECT id,name FROM users')}
         space = db.setting(c, 'space') or {}
-        media_rows = {m['id']: dict(m) for m in c.execute('SELECT id,ext,mime,created,name FROM media')}
+        media_rows = {m['id']: dict(m) for m in c.execute('SELECT id,ext,mime,created,name,zone FROM media')}
         media_sources = {}
         for mid, m in media_rows.items():
-            source = db.media_dir(m['mime'], m['created']) / (mid + m['ext'])
+            source = db.media_dir(m['zone'], m['mime'], m['created']) / (mid + m['ext'])
             if source.is_file():
                 media_sources[mid] = source
 

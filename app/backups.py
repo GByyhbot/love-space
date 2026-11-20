@@ -253,13 +253,14 @@ def create_backup():
                                      encrypt_bytes((db.DATA / 'secret.key').read_bytes(), password))
                     archive.writestr('manifest.json', dumps({'version': MANIFEST_VERSION, 'created': now()}))
                     reader = sqlite3.connect(snapshot)
+                    reader.row_factory = sqlite3.Row   # 下面按列名取 zone/mime
                     try:
-                        media_rows = reader.execute('SELECT id,ext,preview,mime,created FROM media').fetchall()
+                        media_rows = reader.execute('SELECT id,ext,preview,mime,created,zone FROM media').fetchall()
                     finally:
                         reader.close()
-                    for mid, ext, preview, mime, created in media_rows:
-                        folder = db.media_dir(mime, created)
-                        for filename in (mid + ext, preview):
+                    for m in media_rows:
+                        folder = db.media_dir(m['zone'], m['mime'], m['created'])
+                        for filename in (m['id'] + m['ext'], m['preview']):
                             if filename and (folder / filename).is_file():
                                 archive.write(folder / filename, 'media/' + filename)
                 # 口令已在入口校验过，这里必然走加密分支：产物永远是 .zip.enc
@@ -319,7 +320,7 @@ def user_export(user_id):
                 media = c.execute('SELECT * FROM media WHERE id=?', (mid,)).fetchone()
                 if not media:
                     continue
-                source = db.media_dir(media['mime'], media['created']) / (mid + media['ext'])
+                source = db.media_dir(media['zone'], media['mime'], media['created']) / (mid + media['ext'])
                 if source.is_file():
                     archive.write(source, 'media/' + mid + media['ext'])
     return path

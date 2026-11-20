@@ -236,6 +236,21 @@ def purge_deleted(cutoff):
                          (cutoff,)).rowcount
 
 
+def purge_one(rid, author):
+    """手动彻底删除单条回收站记录（2.4.11）：仅作者本人、必须已在回收站。
+
+    返回 True 表示删掉；活记录 / 他人记录一律返回 False，由路由转成 4xx。
+    period.db 无子表、无媒体引用（period.serialize 恒 media=[]），裸 DELETE 即可。
+    """
+    with connect() as c:
+        c.execute('BEGIN IMMEDIATE')
+        row = c.execute('SELECT author,deleted FROM period WHERE id=?', (rid,)).fetchone()
+        if not row or row['author'] != author or not row['deleted']:
+            return False
+        c.execute('DELETE FROM period WHERE id=?', (rid,))
+        return True
+
+
 def count_active():
     if not db_path().is_file():
         return 0

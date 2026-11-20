@@ -417,11 +417,11 @@ def test_orphan_media_auto_cleanup(client_a, client_b):
     # 模拟这两个文件是 25 小时前上传的（created 变了，分目录位置随之变化，需同步挪文件）
     with connect() as c:
         row = c.execute('SELECT * FROM media WHERE id=?', (orphan,)).fetchone()
-        old = media_dir(row['mime'], row['created'])
+        old = media_dir(row['zone'], row['mime'], row['created'])
         c.execute('UPDATE media SET created=? WHERE id IN (?,?)', (now() - 25 * 3600, orphan, kept))
         for mid in (orphan, kept):
             m = c.execute('SELECT * FROM media WHERE id=?', (mid,)).fetchone()
-            new = media_dir(m['mime'], m['created'])
+            new = media_dir(m['zone'], m['mime'], m['created'])
             new.mkdir(parents=True, exist_ok=True)
             if (old / (mid + m['ext'])).is_file():
                 (old / (mid + m['ext'])).rename(new / (mid + m['ext']))
@@ -431,7 +431,7 @@ def test_orphan_media_auto_cleanup(client_a, client_b):
     with connect() as c:
         m = c.execute('SELECT * FROM media WHERE id=?', (orphan,)).fetchone()
     if m:
-        assert not (media_dir(m['mime'], m['created']) / (orphan + '.png')).exists()
+        assert not (media_dir(m['zone'], m['mime'], m['created']) / (orphan + '.png')).exists()
     with connect() as c:
         assert c.execute('SELECT 1 FROM media WHERE id=?', (orphan,)).fetchone() is None
         assert c.execute('SELECT attached FROM media WHERE id=?', (kept,)).fetchone()[0] == 1
@@ -447,7 +447,7 @@ def test_media_categorized_storage(client_a, monkeypatch):
     mid = upload(client_a, 'categorized.png')
     with connect() as c:
         m = c.execute('SELECT * FROM media WHERE id=?', (mid,)).fetchone()
-    folder = media_dir(m['mime'], m['created'])
+    folder = media_dir(m['zone'], m['mime'], m['created'])
     assert folder != DATA / 'media' and folder.parent.parent == DATA / 'media'
     assert folder.name == __import__('datetime').datetime.now(__import__('datetime').timezone.utc).strftime('%Y-%m')
     assert (folder / (mid + '.png')).is_file()
