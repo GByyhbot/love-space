@@ -168,7 +168,7 @@ class _MusicPageState extends ConsumerState<MusicPage> {
       bottomNavigationBar:
           (_previewMeta != null && ref.watch(songPlaybackProvider).current != null)
               ? _PreviewBar(
-                  player: ref.read(songPlaybackProvider.notifier).player!,
+                  player: ref.read(songPlaybackProvider.notifier).handlerPlayer!,
                   meta: _previewMeta!,
                   paused: !ref.watch(songPlaybackProvider).playing,
                   onTogglePlay: () async {

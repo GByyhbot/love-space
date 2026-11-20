@@ -1,4 +1,4 @@
-/// 2.4.13 根因回归护栏：just_audio_background 的 customLoad 对每个 AudioSource
+/// 2.4.13 根因回归护栏：桥接层 customLoad 对每个 AudioSource
 /// 做 `source.tag as MediaItem` 硬转型——无 tag 必抛 TypeError（真机加载即死）。
 /// 锁死：① 构造出的每个叶子源 tag is MediaItem；② lib 内零裸 setFilePath/setUrl
 /// 加载调用（白名单=构造 helper + 语音抽象签名）；③ 队列每子源各自带 tag。
@@ -101,13 +101,16 @@ void main() {
         isTrue, reason: '必须与 runApp 用同一个 container');
   });
 
-  test('删除死 handler：引擎不再手工推 playbackState/mediaItem/queue', () {
+  test('通知广播单一事实源：handler 广播，引擎零手工推（2.4.14 定位）', () {
     final engine = src('lib/core/audio/song_playback.dart');
-    expect(engine.contains('attachHandler'), isFalse);
     expect(engine.contains('playbackState.add('), isFalse);
     expect(engine.contains('mediaItem.add('), isFalse);
     expect(engine.contains('queue.add('), isFalse);
-    expect(engine.contains('自带 handler'), isTrue,
-        reason: '注释写明单一事实源');
+    expect(engine.contains('MediaControl.'), isFalse,
+        reason: '引擎不含通知按钮语义');
+    final handler = src('lib/core/audio/song_audio_handler.dart');
+    expect(handler.contains('playbackState.add('), isTrue,
+        reason: '广播集中在 SongAudioHandler');
+    expect(handler.contains('自带 handler'), isFalse);
   });
 }

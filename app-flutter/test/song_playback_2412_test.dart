@@ -12,8 +12,8 @@ void main() {
   test('引擎单例：三处播放器入口全部收敛到 songPlaybackProvider', () {
     final engine = src('lib/core/audio/song_playback.dart');
     expect(engine.contains('final songPlaybackProvider ='), isTrue);
-    expect(engine.contains('AudioPlayer? _player'), isTrue,
-        reason: '引擎是唯一持 player 的地方');
+    expect(engine.contains('AudioPlayer('), isFalse,
+        reason: '2.4.14 起 player 由 SongAudioHandler 持有，引擎是薄包装');
 
     // 聊天歌曲卡：不再 new AudioPlayer、读引擎状态
     final chatCard = src('lib/features/chat/media_bubble_widgets.dart');
@@ -32,14 +32,14 @@ void main() {
     final engine = src('lib/core/audio/song_playback.dart');
     expect(engine.contains('Future<String?> playQueue('), isTrue);
     expect(engine.contains('Future<String?> playSong('), isTrue);
-    expect(engine.contains('bool get canSkip => queueMode'), isTrue,
-        reason: '单曲模式无 next/prev');
     expect(engine.contains('Future<void> next()'), isTrue);
     expect(engine.contains('Future<void> previous()'), isTrue);
-    expect(engine.contains('await next();'), isTrue,
+    // 2.4.14：队列游标与播完自动下一首语义在 handler（SongQueue.nextIndex）
+    final handler = src('lib/core/audio/song_audio_handler.dart');
+    expect(handler.contains('int? nextIndex()'), isTrue);
+    expect(handler.contains('int? previousIndex()'), isTrue);
+    expect(handler.contains('_queue.nextIndex()'), isTrue,
         reason: '播完自动下一首');
-    expect(engine.contains('queueLength: queue.length, queueMode: queueMode'),
-        isTrue);
   });
 
   test('与语音互斥：双向钩子齐备', () {
@@ -52,16 +52,23 @@ void main() {
     expect(voice.contains('await voiceInterruptHook?.call()'), isTrue);
   });
 
-  test('通知/锁屏：以 just_audio_background handler + tag 队列为单一事实源', () {
+  test('通知/锁屏：audio_service 原生 handler 为单一事实源（2.4.14）', () {
     final engine = src('lib/core/audio/song_playback.dart');
-    expect(engine.contains('自带 handler'), isTrue);
-    expect(engine.contains('attachHandler'), isFalse,
-        reason: '2.4.13 不再手工推 handler');
-    expect(engine.contains('MediaControl.'), isFalse,
-        reason: '2.4.13 不再手工推 controls——由 just_audio_background 自带 handler + tag 队列提供上一首/下一首/关闭');
+    expect(engine.contains('attachHandler'), isTrue,
+        reason: 'main 把 AudioService.init 的 handler 注入引擎');
+    expect(engine.contains('handlerPlayer'), isTrue,
+        reason: 'UI 进度流从 handler 暴露的只读 player 取');
+    final handler = src('lib/core/audio/song_audio_handler.dart');
+    expect(handler.contains('playbackState.add('), isTrue,
+        reason: 'handler 广播播放态（单一事实源）');
+    expect(handler.contains('mediaItem.add('), isTrue);
+    expect(handler.contains('queue.add('), isTrue);
 
     final main = src('lib/main.dart');
-    expect(main.contains('JustAudioBackground.init('), isTrue);
+    expect(main.contains('AudioService.init('), isTrue);
+    expect(main.contains('builder: () => SongAudioHandler()'), isTrue);
+    expect(main.contains('androidStopForegroundOnPause: false'), isTrue);
+    expect(main.contains('androidResumeOnClick: true'), isTrue);
 
     // 裁定6：两服务并存、不合并
     final manifest =
@@ -74,12 +81,14 @@ void main() {
   });
 
   test('后台续播：download-first 本地文件（带 tag 的 AudioSource）', () {
+    final handler = src('lib/core/audio/song_audio_handler.dart');
     final engine = src('lib/core/audio/song_playback.dart');
     expect(engine.contains('downloadAudioToCache('), isTrue);
-    expect(engine.contains('taggedFileSource(file, item.toMediaItem())'), isTrue,
-        reason: '2.4.13 加载必须带 MediaItem tag');
-    expect(engine.contains('setUrl('), isFalse,
+    expect(handler.contains('taggedFileSource('), isTrue,
+        reason: '2.4.13 加载必须带 MediaItem tag（helper 是唯一构造点）');
+    expect(handler.contains('setUrl('), isFalse,
         reason: '不用 setUrl 直接拉远程流（既定家法）');
+    expect(handler.contains('await player.setAudioSource('), isTrue);
   });
 
   test('回填铁律 song 维度：不编辑音乐时 song 不进 changes', () {
@@ -111,13 +120,15 @@ void main() {
         reason: 'OTD 精简卡音符角标');
   });
 
-  test('依赖纪律：audio_service + just_audio_background 同源 lockfile', () {
+  test('依赖纪律：仅 audio_service（旧桥接包彻底移除）+ 同源 lockfile', () {
     final pubspec = src('pubspec.yaml');
     expect(pubspec.contains('audio_service:'), isTrue);
-    expect(pubspec.contains('just_audio_background:'), isTrue);
+    expect(pubspec.contains('just_audio_background'), isFalse,
+        reason: '2.4.14：单实例桥接包彻底移除');
     final lock = src('pubspec.lock');
     expect(lock.contains('audio_service:'), isTrue);
-    expect(lock.contains('just_audio_background:'), isTrue);
+    expect(lock.contains('just_audio_background'), isFalse,
+        reason: 'lockfile 只减不漂移');
     expect(lock.contains('https://pub.dev'), isFalse,
         reason: 'lockfile 必须同源 pub.flutter-io.cn');
   });

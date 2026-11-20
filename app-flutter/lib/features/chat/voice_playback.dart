@@ -74,7 +74,7 @@ class VoiceAudioStatus {
 /// 只播本地文件（setFilePath），不再直接拉远程流（setUrl）。
 abstract class VoiceAudioPlayer {
   Stream<VoiceAudioStatus> get statusStream;
-  /// 2.4.13：必须传语音 mid 作为 tag id——just_audio_background 的
+  /// 2.4.13：必须传语音 mid 作为 tag id——桥接层的
   /// customLoad 对无 tag 的源硬转型会抛 TypeError（真机加载即死）。
   Future<Duration?> setFilePath(String path, {required String tagId});
   Future<void> play();

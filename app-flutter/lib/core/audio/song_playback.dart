@@ -1,63 +1,31 @@
-/// 2.4.12 条目五：全局单一歌曲播放引擎 + 通知栏/锁屏媒体控制。
+/// 2.4.12 条目五 → 2.4.14 重构：全局单一歌曲播放引擎（薄包装层）。
 ///
-/// 架构口径（主人裁定）：
-/// · 歌单页 / 动态歌曲卡 / 聊天歌曲卡三处共用本引擎，同一时刻只有一首歌在播
-///   （「歌曲卡自持 player」旧口径作废）；
-/// · 与语音互斥：播歌先停语音、播语音先停歌（voicePlaybackProvider.stop()）；
-/// · 队列：从歌单点播 = 当前列表顺序（next/prev/播完自动下一首）；
-///   从动态/聊天歌曲卡点播 = 单曲模式（无队列，next/prev 置灰，播完即止）；
-///   在线 30 秒试听同样走引擎，播完即止不自动连播；
-/// · 通知栏/锁屏走 audio_service + just_audio_background（MediaSession/MediaStyle）。
-///   🔴 2.4.13 定案：通知状态以 just_audio_background 自带 handler + 带 tag 的
-///   AudioSource 队列为**单一事实源**——不再另接 handler、不再手工推 playbackState；
-///   每个叶子源必须带 MediaItem tag（否则 customLoad 的 `tag as MediaItem` 硬转型抛错）；
-/// · 后台续播限完整音频（本地上传 + 投放入库的 mid）——download-first 家法：
-///   Dio 全量 GET → song_cache → setFilePath，不依赖网络。
+/// 架构口径（主人裁定，2.4.13/2.4.14 两轮修订）：
+/// · 歌单页 / 动态歌曲卡 / 聊天歌曲卡三处共用本引擎，同一时刻只有一首歌在播；
+/// · 🔴 播放本体与通知广播都在 [SongAudioHandler]（App 内唯一持歌曲
+///   AudioPlayer 的地方）；本控制器只做：与语音互斥（voiceInterruptHook 反向
+///   由语音控制器钩子触发）、错误文案透出、Riverpod state 供 UI 读；
+/// · 队列：从歌单点播 = 当前列表顺序（skipToNext/Previous/播完自动下一首）；
+///   从动态/聊天歌曲卡点播 = 单曲模式（播完即止）；在线 30 秒试听播完即止；
+/// · 后台续播限完整音频（本地上传 + 投放入库的 mid）——download-first 家法；
+/// · 通知栏/锁屏走 audio_service（AudioService.init 于 main 注入本 handler）；
+///   旧桥接包已彻底移除（单实例模型与本 App 不兼容）。
 library;
 
 import 'dart:async';
 
-import 'package:audio_service/audio_service.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:just_audio/just_audio.dart';
+import 'package:just_audio/just_audio.dart' show AudioPlayer;
 
-import 'tagged_sources.dart' show taggedFileSource, taggedQueueSource;
 import '../api/api_client.dart' as api;
 import '../chat/chat_media.dart' show downloadAudioToCache;
 import '../chat/chat_models.dart' show ChatSong;
 import '../../features/chat/voice_playback.dart' show voicePlaybackProvider;
+import 'song_audio_handler.dart' show SongAudioHandler, SongItem;
 
-/// 播放项：媒体 id（本地完整音频）或在线试听 src（30 秒）。
-class SongItem {
-  const SongItem({
-    required this.title,
-    required this.artist,
-    this.mid = '',
-    this.src = '',
-    this.art = '',
-    this.duration = Duration.zero,
-  });
+export 'song_audio_handler.dart' show SongItem;
 
-  final String title;
-  final String artist;
-  final String mid;
-  final String src;
-  final String art;
-  final Duration duration;
-
-  bool get isOnline => mid.isEmpty && src.isNotEmpty;
-
-  MediaItem toMediaItem() => MediaItem(
-        id: mid.isNotEmpty ? 'mid:$mid' : 'src:$src',
-        title: title,
-        artist: artist,
-        artUri: art.isEmpty ? null : Uri.parse(art),
-        duration: duration == Duration.zero ? null : duration,
-        playable: true,
-      );
-}
-
-/// 引擎状态（UI 只读这个，不各自持 player）。
+/// 引擎状态（UI 只读这个）。
 class SongPlaybackState {
   const SongPlaybackState({
     this.current,
@@ -78,163 +46,133 @@ class SongPlaybackState {
   bool get canSkip => queueMode && queueLength > 1;
 }
 
-/// 全局引擎：单例（由 [songPlaybackProvider] 持有），底层一个 AudioPlayer。
-/// 通知栏由 audio_service 的 JustAudioBackground handler 驱动（见 entrypoint 注入）。
+/// 全局引擎：薄包装，播控全落 handler。
 class SongPlaybackController extends Notifier<SongPlaybackState> {
-  AudioPlayer? _player;
-  StreamSubscription<PlayerState>? _stateSub;
-  StreamSubscription<Duration?>? _doneSub;
-  List<SongItem> _queue = const [];
-  bool _queueMode = false;
-  bool _busy = false;
+  SongAudioHandler? _handler;
 
   @override
   SongPlaybackState build() {
-    ref.onDispose(_teardown);
+    ref.onDispose(() {
+      // handler 的 player 由 AudioService 生命周期管理；这里只断引用
+      _handler = null;
+    });
     return const SongPlaybackState();
   }
 
-  /// UI 只读访问引擎持有的唯一 player（进度条 StreamBuilder 用），
-  /// 严禁外部加载/play——所有播控必须走本引擎方法（加载统一带 tag）。
-  AudioPlayer? get player => _player;
-
-  Future<void> _teardown() async {
-    await _stateSub?.cancel();
-    await _doneSub?.cancel();
-    await _player?.dispose();
-    _player = null;
-  }
-
-  AudioPlayer get _ensurePlayer {
-    final p = _player ??= AudioPlayer();
-    _stateSub ??= p.playerStateStream.listen((st) {
-      if (st.processingState == ProcessingState.completed) {
-        unawaited(_onCompleted());
-        return;
-      }
-      _sync(playing: st.playing);
+  /// main 启动时注入（AudioService.init 的产物）。
+  void attachHandler(SongAudioHandler handler) {
+    _handler = handler;
+    handler.observe((item) async {
+      final dio = await ref.read(api.dioProvider.future);
+      return item.mid.isNotEmpty
+          ? downloadAudioToCache(dio, cacheKey: 'mid_${item.mid}',
+              urlPath: '/media/${item.mid}', query: const {'preview': 'true'})
+          : downloadAudioToCache(dio, cacheKey: 'src_${item.src.hashCode}',
+              urlPath: '/api/music/stream', query: {'u': item.src});
     });
-    return p;
+    _syncFromHandler();
   }
 
-  void _sync({bool? playing}) {
-    final cur = state.current;
-    final actual = playing ?? state.playing;
+  /// UI 只读访问 handler 持有的歌曲 player（进度条 StreamBuilder 用）；
+  /// 播控仍必须走引擎/handler 方法。
+  AudioPlayer? get handlerPlayer => _handler?.player;
+
+  SongAudioHandler get _requireHandler {
+    // 懒创建：main 里 AudioService.init 的真 handler 会经 attachHandler 注入
+    // （接管通知/锁屏）；测试等无平台环境自动落到本地 handler——player 仍由
+    // SongAudioHandler 唯一持有，引擎永不自建。
+    final h = _handler ??= _createLocalHandler();
+    return h;
+  }
+
+  SongAudioHandler _createLocalHandler() {
+    final h = SongAudioHandler();
+    h.observe((item) async {
+      final dio = await ref.read(api.dioProvider.future);
+      return item.mid.isNotEmpty
+          ? downloadAudioToCache(dio, cacheKey: 'mid_${item.mid}',
+              urlPath: '/media/${item.mid}', query: const {'preview': 'true'})
+          : downloadAudioToCache(dio, cacheKey: 'src_${item.src.hashCode}',
+              urlPath: '/api/music/stream', query: {'u': item.src});
+    });
+    return h;
+  }
+
+  void _syncFromHandler() {
+    final h = _handler;
+    if (h == null) return;
+    final (items, queueMode, index) = h.snapshot;
     state = SongPlaybackState(
-      current: cur,
-      playing: actual,
-      index: state.index,
-      queueLength: _queue.length,
-      queueMode: _queueMode,
+      current: h.current,
+      playing: h.playing,
+      loading: h.loading,
+      index: index,
+      queueLength: items.length,
+      queueMode: queueMode,
     );
-    // 2.4.13：通知栏/锁屏不再手工推 handler——以 just_audio_background 自带
-    // handler + 带 tag 的 AudioSource 队列为单一事实源（见 tagged_sources.dart）。
   }
 
-  /// 统一入口：播单曲（动态/聊天歌曲卡）——单曲模式、不与语音同播。
-  Future<String?> playSong(ChatSong song) => _play(
-        SongItem(title: song.title, artist: song.artist, mid: song.mid,
-                 src: song.src, art: song.art),
-        queue: const [], queueMode: false,
-      );
+  /// 统一入口：播单曲（动态/聊天歌曲卡）——单曲模式。
+  Future<String?> playSong(ChatSong song) {
+    final item = SongItem(title: song.title, artist: song.artist,
+        mid: song.mid, src: song.src, art: song.art);
+    return _play(item, items: [item], index: 0, queueMode: false);
+  }
 
-  /// 统一入口：从歌单列表点播——队列=列表顺序，next/prev/自动下一首可用。
+  /// 统一入口：从歌单列表点播——队列=列表顺序。
   Future<String?> playQueue(List<SongItem> queue, int index) =>
-      _play(queue[index], queue: queue, index: index, queueMode: true);
+      _play(queue[index], items: queue, index: index, queueMode: true);
 
   /// 播/暂停（各处按钮共用）：同一首切换播放态。
   Future<void> toggle() async {
-    final p = _player;
-    if (p == null || state.current == null) return;
-    if (state.playing) {
-      await p.pause();
+    final h = _requireHandler;
+    if (h.current == null) return;
+    if (h.playing) {
+      await h.pause();
     } else {
-      unawaited(p.play());
+      unawaited(h.resume());
     }
+    _syncFromHandler();
   }
 
   Future<void> stop() async {
-    await _player?.stop();
-    await _player?.seek(Duration.zero);
-    _sync(playing: false);
+    await _requireHandler.stopPlayback();
+    _syncFromHandler();
   }
 
-  Future<void> next() async {
-    if (!state.canSkip) return;
-    final i = state.index + 1;
-    if (i >= _queue.length) {
-      await stop();
-      return;
-    }
-    await _play(_queue[i], queue: _queue, index: i, queueMode: true);
+  Future<void> next() => _skip(_requireHandler.skipToNext);
+
+  Future<void> previous() => _skip(_requireHandler.skipToPrevious);
+
+  Future<void> _skip(Future<void> Function() action) async {
+    await action();
+    _syncFromHandler();
   }
 
-  Future<void> previous() async {
-    if (!state.canSkip || state.index <= 0) return;
-    final i = state.index - 1;
-    await _play(_queue[i], queue: _queue, index: i, queueMode: true);
-  }
-
-  Future<void> _onCompleted() async {
-    if (state.canSkip && state.index + 1 < _queue.length) {
-      await next();
-    } else {
-      await stop();
-    }
-  }
-
-  Future<String?> _play(SongItem item, {required List<SongItem> queue,
-      int index = 0, required bool queueMode}) async {
-    if (_busy) return null;
-    final same = state.current?.mid == item.mid && state.current?.src == item.src;
+  Future<String?> _play(SongItem item, {required List<SongItem> items,
+      required int index, required bool queueMode}) async {
+    final h = _requireHandler;
+    final same = state.current?.sameAs(item) ?? false;
     if (same) {
       await toggle();
       return null;
     }
-    _busy = true;
-    state = SongPlaybackState(loading: true, index: index,
-        queueLength: queue.length, queueMode: queueMode);
+    // 🔴 与语音互斥：播歌先停语音（反向由语音控制器 voiceInterruptHook 停歌）
     try {
-      // 🔴 与语音互斥：播歌先停语音（反向由语音控制器 toggle 里停歌）
       await ref.read(voicePlaybackProvider.notifier).stop();
-      final dio = await ref.read(api.dioProvider.future);
-      final file = item.mid.isNotEmpty
-          ? await downloadAudioToCache(dio, cacheKey: 'mid_${item.mid}',
-              urlPath: '/media/${item.mid}', query: const {'preview': 'true'})
-          : await downloadAudioToCache(dio, cacheKey: 'src_${item.src.hashCode}',
-              urlPath: '/api/music/stream', query: {'u': item.src});
-      final player = _ensurePlayer;
-      // 2.4.13：每个叶子源必须带 MediaItem tag（customLoad 硬转型前提）；
-      // 队列用 ConcatenatingAudioSource，每个子源各自 tag。
-      if (queueMode && queue.length > 1) {
-        final sources = <(String, MediaItem)>[];
-        for (final q in queue) {
-          final qFile = q.mid.isNotEmpty
-              ? await downloadAudioToCache(dio, cacheKey: 'mid_${q.mid}',
-                  urlPath: '/media/${q.mid}', query: const {'preview': 'true'})
-              : await downloadAudioToCache(dio, cacheKey: 'src_${q.src.hashCode}',
-                  urlPath: '/api/music/stream', query: {'u': q.src});
-          sources.add((qFile, q.toMediaItem()));
-        }
-        await player.setAudioSources(taggedQueueSource(sources),
-            initialIndex: index).timeout(const Duration(seconds: 30));
-      } else {
-        await player.setAudioSource(taggedFileSource(file, item.toMediaItem()))
-            .timeout(const Duration(seconds: 15));
-      }
-      _queue = queue;
-      _queueMode = queueMode;
-      state = SongPlaybackState(current: item, index: index,
-          queueLength: queue.length, queueMode: queueMode);
-      unawaited(player.play());
-      _sync(playing: true);
+    } catch (_) {
+      // 语音停失败不阻断播歌
+    }
+    state = SongPlaybackState(loading: true, index: index,
+        queueLength: items.length, queueMode: queueMode);
+    try {
+      await h.load(item, items: items, index: index, queueMode: queueMode);
+      _syncFromHandler();
       return null;
     } catch (e) {
       state = const SongPlaybackState();
-      // 2.4.13：透出真实异常，不再吞成无信息通用文案（2.4.11 旧口径）
+      // 2.4.13 定案：透出真实异常，不吞成无信息通用文案
       return '试听失败：$e';
-    } finally {
-      _busy = false;
     }
   }
 }

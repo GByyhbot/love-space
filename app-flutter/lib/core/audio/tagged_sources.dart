@@ -1,4 +1,4 @@
-/// 2.4.13 根因修复：just_audio_background 的 _PlayerAudioHandler.customLoad
+/// 2.4.13 根因修复：桥接层的 _PlayerAudioHandler.customLoad
 /// 对每次加载的 AudioSource 做 `source.tag as MediaItem` 硬转型——无 tag 的
 /// AudioSource 必抛 TypeError（真机「下载成功、load 即死」）。
 ///

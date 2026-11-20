@@ -2,7 +2,8 @@
 library;
 
 import 'package:flutter/material.dart';
-import 'package:just_audio_background/just_audio_background.dart';
+import 'package:audio_service/audio_service.dart' show AudioService, AudioServiceConfig;
+import 'core/audio/song_audio_handler.dart' show SongAudioHandler;
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -56,22 +57,27 @@ Future<void> main() async {
   try {
     await NotifyCoordinator.platformInit();
   } catch (_) {}
-  // 2.4.12 条目五：通知栏/锁屏媒体控制 + 后台续播。
-  // JustAudioBackground 替换 just_audio 的 platform 实现，所有 AudioPlayer
-  // （全局歌曲引擎）自动接入 MediaSession/MediaStyle；失败不影响主链。
-  try {
-    await JustAudioBackground.init(
-      androidNotificationChannelId: 'cn.iepose.lovespace.audio',
-      androidNotificationChannelName: '音乐播放',
-      androidNotificationChannelDescription: '正在播放的歌曲与播放控制',
-      androidNotificationOngoing: true,
-      androidStopForegroundOnPause: false,  // 暂停时保留通知（条目五：关闭按钮才撤下）
-      androidResumeOnClick: true,           // 点通知回 App
-    );
-  } catch (_) {}
-  // 2.4.13：显式 container + UncontrolledProviderScope——用同一个容器给
-  // voiceInterruptHook 接线（播语音先停歌），保证广播/读的是同一引擎实例。
+  // 2.4.14：audio_service 原生架构（旧桥接包已移除——其
+  // 「接管全局 platform + 只许单 AudioPlayer」模型与本 App 多 player 不兼容）。
+  // 歌曲专用 handler 持全 App 唯一歌曲 player，通知/锁屏广播为单一事实源；
+  // 语音家族/选歌试听回归普通 just_audio，互不相干；失败不影响主链。
   final container = ProviderContainer();
+  try {
+    final songHandler = await AudioService.init(
+      builder: () => SongAudioHandler(),
+      config: AudioServiceConfig(
+        androidNotificationChannelId: 'cn.iepose.lovespace.audio',
+        androidNotificationChannelName: '音乐播放',
+        androidNotificationChannelDescription: '正在播放的歌曲与播放控制',
+        androidNotificationOngoing: true,
+        // 暂停时保留前台服务（裁定⑥并存口径 + 避免后台重启限制）
+        androidStopForegroundOnPause: false,
+        androidResumeOnClick: true,  // 点通知回 App
+      ),
+    );
+    // 引擎接线（container 同源）：handler 注入 + 播语音停歌钩子
+    container.read(songPlaybackProvider.notifier).attachHandler(songHandler);
+  } catch (_) {}
   voiceInterruptHook = () => container.read(songPlaybackProvider.notifier).stop();
   runApp(UncontrolledProviderScope(container: container, child: const LoveApp()));
 }

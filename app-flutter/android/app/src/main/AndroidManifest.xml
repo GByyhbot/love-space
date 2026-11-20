@@ -21,12 +21,14 @@
          mediaPlayback 类型前台服务由 audio_service 插件声明，播放时才有；
          SSE 保活的 specialUse 服务原样不动。 -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"/>
+    <!-- 2.4.14 audio_service 官方要求：媒体播放唤醒锁 -->
+    <uses-permission android:name="android.permission.WAKE_LOCK"/>
     <application
         android:label="love_space"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
-            android:name=".MainActivity"
+            android:name="com.ryanheise.audioservice.AudioServiceActivity"
             android:exported="true"
             android:launchMode="singleTop"
             android:taskAffinity=""
@@ -77,6 +79,26 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
+    <!-- 2.4.14 audio_service 官方要求（通知栏播放器）：mediaPlayback 前台
+         服务 + MediaButtonReceiver（锁屏/耳机媒体键）。与上方 specialUse
+         SSE 保活服务并存不合并（裁定⑥）。 -->
+    <service
+        android:name="com.ryanheise.audioservice.AudioService"
+        android:foregroundServiceType="mediaPlayback"
+        android:exported="true"
+        tools:ignore="Instantiatable">
+      <intent-filter>
+        <action android:name="android.media.browse.MediaBrowserService"/>
+      </intent-filter>
+    </service>
+    <receiver
+        android:name="com.ryanheise.audioservice.MediaButtonReceiver"
+        android:exported="true"
+        tools:ignore="Instantiatable">
+      <intent-filter>
+        <action android:name="android.intent.action.MEDIA_BUTTON"/>
+      </intent-filter>
+    </receiver>
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and
