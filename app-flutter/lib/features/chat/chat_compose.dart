@@ -692,20 +692,63 @@ class _ChatComposeState extends ConsumerState<ChatCompose>
                 immersive: widget.immersive, dark: widget.dark),
             borderRadius: BorderRadius.circular(26),
           ),
-          padding: const EdgeInsets.fromLTRB(6, 4, 6, 4),
+          padding: const EdgeInsets.fromLTRB(6, 6, 6, 6),
           // 🔴 07 打回真根因（第三层）：ChatCompose 顶层 Column 交叉轴
           // loose → 本 Row 收缩到内容宽 → Expanded 没有 flex 剩余空间
           // 可分 → TextField 收缩到文本宽横向一路长、maxLines 折行从未
           // 生效（hint 宽恰好≈容器宽把问题掩到 07 才暴露）。钉死全宽
           // 让 Row 拿 tight 约束、Expanded 恢复 flex 分配。
-          // 🔴 07 第二轮打回（宽度口径）：常驻三按钮原本与输入框同行，
-          // 占 152px 把文本区挤到气泡内宽 58%、折行点钉死在 60%（真机
-          // 截图 + 本地几何量法双实证）。收敛为右对齐细行小圆钮上移，
-          // 输入框独占整行 —— 气泡内宽（扣本层 padding）就是文本可用
-          // 宽的唯一来源，折行点回落到内宽 90% 以后。
-          child: Column(children: [
-            // 常驻按钮细行（右对齐）：发送/录音 + 表情 + ⊕。
-            Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+          // 🔴 07 第二轮：常驻三按钮原占 152px 把文本区挤到 58%、折行
+          // 点钉死在 60%——按钮收敛 30px 小圆钮。
+          // 🔴 07 第三轮打回：第二轮的「细行+独立输入行」两层形态被
+          // 判读为重复渲染（TextField 实际全树唯一，结构断言钉死），
+          // 细行右对齐空底贴胶囊 26px 圆弧顶产生「左裁切/圆角被切」
+          // 观感。回归单条形态：气泡（Expanded）+ 发送/表情/＋ 同一行；
+          // 气泡内宽即文本可用宽的唯一来源，折行点落在气泡内宽 90%
+          // 以后；键盘开合/面板互换输入区始终单条不错位。
+          child: SizedBox(
+            width: double.infinity,
+            child: Row(children: [
+              Expanded(
+                // 2.4.10 第 07 项：换行高度轻微过冲再回弹（围栏内：只动
+                // 输入栏自身高度，槽位/键盘体系零碰）。
+                child: _OvershootGrow(
+                  textKey: _inputFieldKey,
+                  controller: _input,
+                  motion: ref.watch(spaceAppearanceProvider).motion,
+                  child: TextField(
+                    key: _inputFieldKey,
+                    controller: _input,
+                    focusNode: _focus,
+                    onChanged: (_) => _reportTyping(),
+                    minLines: 1,
+                    maxLines: 4, // 约 4 行封顶内部滚动（对齐 Web autoGrow）
+                    maxLength: 20000,
+                    textInputAction: TextInputAction.send,
+                    onSubmitted: (_) => _sendText(),
+                    style: TextStyle(color: onDark ? Colors.white : null),
+                    cursorColor: onDark ? Colors.white70 : null,
+                    decoration: InputDecoration(
+                      hintText: '发消息或按住说话…',
+                      hintStyle:
+                          TextStyle(color: onDark ? Colors.white60 : null),
+                      isDense: true,
+                      filled: true,
+                      fillColor: onDark
+                          ? Colors.white.withValues(alpha: 0.14)
+                          : null,
+                      counterText: '',
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 10),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(20),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
               // 有文字时语音位换发送钮（对齐 Web form.has-text）。
               // 无文字时长按麦克风录音：松开发送 / 滑到左上取消 / 滑到右上转文字。
               // 不再有「再点一次结束」，底部提示也不会挡住这个按钮。
@@ -733,7 +776,7 @@ class _ChatComposeState extends ConsumerState<ChatCompose>
                     button: true,
                     label: '长按录音',
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 5),
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
                       child: Icon(Icons.mic_rounded,
                           size: 20, color: onDark ? Colors.white : null),
                     ),
@@ -759,7 +802,7 @@ class _ChatComposeState extends ConsumerState<ChatCompose>
                 style: IconButton.styleFrom(
                     tapTargetSize: MaterialTapTargetSize.shrinkWrap),
                 color: onDark ? Colors.white : null,
-                icon: const Icon(Icons.emoji_emotions_rounded, size: 20),
+                icon: const Icon(Icons.emoji_emotions_rounded, size: 18),
               ),
               IconButton(
                 tooltip: '更多',
@@ -775,53 +818,7 @@ class _ChatComposeState extends ConsumerState<ChatCompose>
                     : Icons.add_circle_outline_rounded),
               ),
             ]),
-            const SizedBox(height: 2),
-            // 输入行独占整行：Expanded 拿满 flex，气泡全宽纯输入。
-            SizedBox(
-              width: double.infinity,
-              child: Row(children: [
-                Expanded(
-                  // 2.4.10 第 07 项：换行高度轻微过冲再回弹（围栏内：只动
-                  // 输入栏自身高度，槽位/键盘体系零碰）。
-                  child: _OvershootGrow(
-                    textKey: _inputFieldKey,
-                    controller: _input,
-                    motion: ref.watch(spaceAppearanceProvider).motion,
-                    child: TextField(
-                      key: _inputFieldKey,
-                      controller: _input,
-                      focusNode: _focus,
-                      onChanged: (_) => _reportTyping(),
-                      minLines: 1,
-                      maxLines: 4, // 约 4 行封顶内部滚动（对齐 Web autoGrow）
-                      maxLength: 20000,
-                      textInputAction: TextInputAction.send,
-                      onSubmitted: (_) => _sendText(),
-                      style: TextStyle(color: onDark ? Colors.white : null),
-                      cursorColor: onDark ? Colors.white70 : null,
-                      decoration: InputDecoration(
-                        hintText: '发消息或按住说话…',
-                        hintStyle:
-                            TextStyle(color: onDark ? Colors.white60 : null),
-                        isDense: true,
-                        filled: true,
-                        fillColor: onDark
-                            ? Colors.white.withValues(alpha: 0.14)
-                            : null,
-                        counterText: '',
-                        contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 14, vertical: 10),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(20),
-                          borderSide: BorderSide.none,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ]),
-            ),
-          ]),
+          ),
         ),
       ),
       // 底部槽位（键盘/⊕/坞互斥共用）：等高槽位——面板内容钉顶部、被槽位

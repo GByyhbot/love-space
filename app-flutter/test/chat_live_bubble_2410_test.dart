@@ -108,7 +108,7 @@ void main() {
         reason: 'TextField 处于有界宽内（无界宽=横向一路长不折行，打回根因）');
   });
 
-  testWidgets('07 第二轮宽度口径：输入框独占气泡整行，中长文本不提前折行',
+  testWidgets('07 宽度口径：按钮收敛小圆钮同行，文字折行点 ≥ 气泡内宽 90%',
       (tester) async {
     tester.view.physicalSize = const Size(393, 800);
     tester.view.devicePixelRatio = 1.0;
@@ -130,40 +130,112 @@ void main() {
     ));
     await tester.pump();
 
-    // 断言①：常驻按钮细行上移后，输入框宽 ≥ 气泡内宽 90%。
-    // 气泡内宽单一来源：393 - 胶囊外 margin(10×2) - 胶囊内 padding(6×2)。
+    // 断言①：按钮收敛 30px×3 同行后，气泡（TextField）占胶囊内宽 ~71%；
+    // 钉住下限防回涨——23:37 缺陷时三枚标准钮占 152px 把气泡挤到 58%。
+    // 气泡内宽基准：393 - 胶囊外 margin(10×2) - 胶囊内 padding(6×2) = 361。
     final field =
         tester.renderObject<RenderBox>(find.byType(TextField)).size.width;
     const capsuleInner = 393.0 - 20 - 12;
-    expect(field, greaterThanOrEqualTo(capsuleInner * 0.9),
-        reason: '常驻按钮必须让出文本区：输入框宽 ≥ 气泡内宽 90%'
-            '（07 第二轮打回：按钮区占 42% 把折行点钉死在 60%）');
+    expect(field, greaterThanOrEqualTo(capsuleInner * 0.65),
+        reason: '常驻按钮必须收敛：气泡宽 ≥ 胶囊内宽 65%'
+            '（原三枚标准钮 152px 曾把气泡挤到 58% → 折行点 60%）');
 
-    // 断言②：长度介于「内宽 60% 折行点」与「满宽」之间的文本必须单行。
-    // 用 TextPainter 按实际字宽取 0.8×可用宽的字符数，保证介于两界之间。
-    final charTp = TextPainter(
-      text: const TextSpan(text: '长', style: TextStyle(fontSize: 16)),
-      textDirection: TextDirection.ltr,
-    )..layout();
-    final textAvail = field - 28; // contentPadding horizontal 14×2
-    final n = ((textAvail * 0.8) / charTp.width).floor();
-    expect(n * charTp.width, greaterThan(capsuleInner * 0.58),
+    // 断言②：长度介于「旧 60% 折行点」与「气泡满宽」之间的文本必须单行，
+    // 且折行点 ≥ 文本可用宽 90%。🔴 文本可用宽单一事实源 = RenderEditable
+    // 实际宽度；🔴 单字 advance 也用渲染实测（裸 TextPainter 量不含主题
+    // letterSpacing，实测 16.53 vs 裸量 16.0——曾因此选字数全部失准）。
+    final editableRoot =
+        tester.renderObject<RenderObject>(find.byType(EditableText));
+    final editable = _findEditable(editableRoot);
+    final editableW = editable.size.width;
+    await tester.enterText(find.byType(TextField), '长');
+    await tester.pump();
+    await tester.pumpAndSettle();
+    final charW = _findEditable(
+            tester.renderObject<RenderObject>(find.byType(EditableText)))
+        .getBoxesForSelection(const TextSelection(baseOffset: 0, extentOffset: 1))
+        .first
+        .right;
+    final n = ((editableW * 0.985) / charW).floor();
+    expect(n * charW, greaterThan(capsuleInner * 0.58),
         reason: '测试文本长度必须超过旧 60% 折行点（实测 209px ≈ 内宽 58%，'
             '否则断言无区分度）');
     await tester.enterText(find.byType(TextField), '长' * n);
     await tester.pump();
     await tester.pumpAndSettle();
 
-    final editableRoot =
-        tester.renderObject<RenderObject>(find.byType(EditableText));
-    final editable = _findEditable(editableRoot);
     final boxes = editable.getBoxesForSelection(TextSelection(
       baseOffset: 0,
       extentOffset: n,
     ));
     final lineTops = boxes.map((b) => b.top).toSet();
     expect(lineTops.length, 1,
-        reason: '长度介于内宽 60% 与满宽之间的文本必须单行放下'
-            '（折行点必须落在内宽 90% 以后，右侧不许成段空白）');
+        reason: '长度介于旧 60% 折行点与气泡满宽之间的文本必须单行放下');
+    // 折行点（文本行右端）≥ 文本可用宽 90%：右侧不许成段空白
+    final foldPoint =
+        boxes.map((b) => b.right).reduce((a, b) => a > b ? a : b);
+    expect(foldPoint, greaterThanOrEqualTo(editableW * 0.9),
+        reason: '折行点必须落在气泡内宽 90% 以后'
+            '（07 第二轮打回口径，气泡自身坐标系）');
+  });
+
+  testWidgets('07 第三轮结构断言：输入区单条——TextField 全树唯一且'
+      '渲染矩形完整落在屏幕宽度内（常态 + 键盘态）', (tester) async {
+    tester.view.physicalSize = const Size(393, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        chatBaseProvider.overrideWith((ref) => _hang().future),
+      ],
+      child: MaterialApp(
+        home: Scaffold(
+          body: Column(children: [
+            const Spacer(),
+            ChatCompose(),
+          ]),
+        ),
+      ),
+    ));
+    await tester.pump();
+
+    void assertSingleInScreen(String phase) {
+      // ① 树里 TextField 只许一个（真机「重复渲染/两份输入框」防线）
+      expect(tester.widgetList(find.byType(TextField)).length, 1,
+          reason: '输入区有且只有一条：TextField 全树唯一（$phase）');
+      // ② 渲染矩形左右不越屏（真机「左裁切/圆角被切」防线）
+      final box = tester.renderObject<RenderBox>(find.byType(TextField));
+      final topLeft = box.localToGlobal(Offset.zero);
+      final bottomRight =
+          box.localToGlobal(box.size.bottomRight(Offset.zero));
+      expect(topLeft.dx, greaterThanOrEqualTo(0),
+          reason: '输入区左缘不许越出屏幕（$phase）');
+      expect(bottomRight.dx, lessThanOrEqualTo(393),
+          reason: '输入区右缘不许越出屏幕（$phase）');
+    }
+
+    // 常态
+    assertSingleInScreen('常态');
+    final widthBefore = tester
+        .renderObject<RenderBox>(find.byType(TextField))
+        .size
+        .width;
+
+    // 键盘打开态：viewInsets 注入 300px，Scaffold resize 压缩 body
+    tester.view.viewInsets = const FakeViewPadding(bottom: 300);
+    await tester.pump();
+    assertSingleInScreen('键盘打开态');
+    // 形态不错位：键盘开合气泡宽度恒定（单条不换行不重排）
+    final widthAfter = tester
+        .renderObject<RenderBox>(find.byType(TextField))
+        .size
+        .width;
+    expect(widthAfter, widthBefore,
+        reason: '键盘开合输入区形态恒定：气泡宽度不许变化（单条纪律）');
+
+    // 键盘收起再验一轮（开/合各一轮）
+    tester.view.viewInsets = FakeViewPadding.zero;
+    await tester.pump();
+    assertSingleInScreen('键盘收起态');
   });
 }
