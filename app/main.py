@@ -79,6 +79,14 @@ async def lifespan(app):
     if os.getenv('RUN_WORKER', 'true') == 'true':
         worker = threading.Thread(target=run, args=(stop,), daemon=True)
         worker.start()
+    # 2.4.12 投放夹：启动时扫一次（worker 未启用时也要扫，故不挂在 worker 线程里）
+    try:
+        from .music_drop import scan_once
+        report = scan_once()
+        if report['imported']:
+            logging.getLogger('love').info('启动投放夹入库 %d 首', report['imported'])
+    except Exception:
+        logging.getLogger('love').exception('启动投放夹扫描失败')
     yield
     stop.set()
     if worker:
@@ -994,8 +1002,20 @@ def clean_body(c, kind, data, user_id, previous=None):
                  'category', 'done', 'emoji', 'target', 'completion_post', 'sticker', 'amount',
                  'start', 'cycle', 'length', 'flow', 'symptoms',
                  'color', 'pain', 'sex', 'mood', 'weight', 'discharge', 'temp',
-                 'reply_to', 'pinned', 'location', 'song', 'album_only'}
+                 'reply_to', 'pinned', 'location', 'song', 'album_only', 'dur'}
     body = {k: v for k, v in data.items() if k in permitted}
+    # 2.4.12 裁定1：顶层 dur（秒）= 投放文件夹入库的本地歌曲时长。
+    # 非负数校验、非法直接丢弃（不报错——手造请求的脏值不该毁掉整条记录）。
+    if 'dur' in body:
+        dur_val = body['dur']
+        try:
+            dur_val = int(dur_val)
+        except (TypeError, ValueError):
+            dur_val = -1
+        if dur_val < 0:
+            body.pop('dur', None)
+        else:
+            body['dur'] = min(dur_val, 86400)
     if 'album_only' in body:
         # 传照片专属动态的显式标记（2.4.2）：只有 body 里带这个键的 post 才
         # 会被动态列表收口过滤（见 GET /api/records）；禁止按"正文为空"之类
@@ -2898,6 +2918,17 @@ def backup(request: Request, user=Depends(current_user)):
         log.exception('手动备份失败')
         raise HTTPException(500, '备份失败（%s），请检查存储空间和备份目录权限' % type(exc).__name__)
     return {'name': path.name}
+
+
+@app.post('/api/music-drop/scan')
+def music_drop_scan(user=Depends(current_user)):
+    """手动扫投放夹（2.4.12 条目四）：登录态任一方可调。"""
+    from .music_drop import scan_once
+    try:
+        return scan_once()
+    except Exception:
+        logging.getLogger('love').exception('手动投放夹扫描失败')
+        raise HTTPException(500, '扫描失败，请检查投放文件夹权限')
 
 
 @app.get('/api/storage')

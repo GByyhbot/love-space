@@ -602,6 +602,13 @@ def run(stop):
                 # dedupe 保证同一天同一个人只提醒一次，重复跑没有副作用
                 if counter % 6 == 1:
                     habit_reminders()
+                # 2.4.12 投放入库：counter%60 × 5s = 5 分钟一轮（≤5 分钟口径）
+                if counter % 60 == 0:
+                    from .music_drop import scan_once
+                    result = scan_once()
+                    if result['imported']:
+                        log.info('投放夹入库 %d 首，跳过 %d，失败 %d',
+                                 result['imported'], result['skipped'], result['failed'])
                 deliver()
                 deliver_pushes()
                 deliver_webpushes()
