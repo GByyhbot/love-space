@@ -5,7 +5,7 @@
    ③ 编辑 PUT body 含原字段（回填铁律 mergeRecordBody）
    ④ 发布三选一：post→时光 / diary→日记 / 草稿箱消失；PUT merge 后完整 body；
       选 surprise 带未来 publish_at
-   ⑤ 删除弹层文案：7-B 起统一标准口径「删除后会进入回收站，30 天内可以恢复。」
+   ⑤ 删除弹层文案：2.4.11 起统一口径「删除后会进入回收站，回收站不会自动删除，可随时恢复。」
       （与共享类一致；7-A 的「不进回收站、不可恢复」临时口径已作废）
    ⑥ tab 切换不丢状态（滚动位置 + 选中态）
    ⑦ 无死卡（7-A 2 tab → 7-B 4 tab → 7-C 5 tab；7-C 已落地 personal_wish，
@@ -449,7 +449,7 @@ void main() {
 
   // ── ⑤ 删除弹层文案（7-B 起标准口径） ────────────────────────────
   group('⑤ 三类统一标准删除文案', () {
-    testWidgets('弹层写明进回收站 30 天可恢复；取消不删、确认才 DELETE',
+    testWidgets('弹层写明进回收站不自动删除可随时恢复；取消不删、确认才 DELETE',
         (tester) async {
       final adapter = _adapter(records: _baseRecords);
       final container = await _setup(adapter);
@@ -458,8 +458,8 @@ void main() {
       await tester.tap(find.byTooltip('删除日记'));
       await tester.pumpAndSettle();
       expect(find.text(privateDeleteText), findsOneWidget);
-      expect(find.textContaining('30 天'), findsWidgets);
-      expect(find.text('删除后会进入回收站，30 天内可以恢复。'), findsOneWidget);
+      expect(find.textContaining('不会自动删除'), findsWidgets);
+      expect(find.text('删除后会进入回收站，回收站不会自动删除，可随时恢复。'), findsOneWidget);
       expect(find.textContaining('不进回收站'), findsNothing);
       expect(find.textContaining('不可恢复'), findsNothing);
       // 可取消

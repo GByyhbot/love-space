@@ -264,7 +264,7 @@ class PeriodController extends Notifier<PeriodState> {
 
   /// 删除（软删）：`DELETE /api/records/{rid}` → `main.py:1424-1428`
   /// → `delete_period_record :1263-1267`（零作者校验，谁都能删）。
-  /// 删除后进个人角落 · 回收站（`trashKinds` 含 period），30 天内可恢复。
+  /// 删除后进个人角落 · 回收站（`trashKinds` 含 period），回收站不自动删除、可随时恢复。
   /// 🔴 D6：本层**不加** `author == uid` 判断。返回 null=成功。
   Future<String?> delete(String rid) async {
     if (_disposed) return null;

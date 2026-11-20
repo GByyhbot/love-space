@@ -157,7 +157,7 @@ class TogetherController extends Notifier<TogetherState> {
     return edit(record.id, 'quest', record.body, {'done': !done});
   }
 
-  /// 删除（服务端软删，回收站 30 天）。仅本人（非本人服务端 403 → 错误文案）。
+  /// 删除（服务端软删，回收站不自动删除）。仅本人（非本人服务端 403 → 错误文案）。
   /// 成功后整列表 reload。返回 null=成功。4xx 同 [add]：原文返回、不 reload。
   Future<String?> delete(String rid) async {
     if (_disposed) return null;

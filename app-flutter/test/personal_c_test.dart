@@ -1083,7 +1083,7 @@ void main() {
       await tester.tap(del);
       await tester.pumpAndSettle();
       expect(find.text(privateDeleteText), findsOneWidget);
-      expect(find.text('删除后会进入回收站，30 天内可以恢复。'), findsOneWidget);
+      expect(find.text('删除后会进入回收站，回收站不会自动删除，可随时恢复。'), findsOneWidget);
       expect(find.textContaining('不进回收站'), findsNothing);
       expect(find.textContaining('不可恢复'), findsNothing);
 

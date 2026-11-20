@@ -34,7 +34,7 @@ import '../../core/theme/tokens.dart';
 /// hint 逐字对齐 Web app.js:1489 / :1302：
 /// · diary / draft 同句「这个角落只有你能看见。草稿主动发布后，才会进入共同空间。」
 /// · surprise 用「到约定的时间，惊喜才会被另一半看见。」
-/// · trash 用 app.js:1488「删除的内容保留三十天，你可以恢复自己的记录。」
+/// · trash 用 app.js:1488「回收站里的内容不会自动删除，你可以随时恢复自己的记录。」
 /// · personal_wish 用 app.js:1302 personalWishPage 的 hint（逐字）。
 const List<({String id, String label, String hint})> personalTabs = [
   (
@@ -55,7 +55,7 @@ const List<({String id, String label, String hint})> personalTabs = [
   (
     id: 'trash',
     label: '回收站',
-    hint: '删除的内容保留三十天，你可以恢复自己的记录。'
+    hint: '回收站里的内容不会自动删除，你可以随时恢复自己的记录。'
   ),
   (
     id: 'personal_wish',
@@ -72,9 +72,9 @@ const String personalWishSubtitle =
 
 /// 🔴 7-B 搭载修正：删除文案统一标准口径（主人 2026-11-14「甲·对齐 Web」定案）。
 /// 三类（日记 / 草稿 / 惊喜）与共享类 post_card.dart:271 完全一致：
-/// 服务端 DELETE 是软删（main.py:1424），确实进回收站且 30 天内可 restore。
+/// 服务端 DELETE 是软删，确实进回收站且可随时 restore（回收站不再自动删除）。
 /// 7-A 的「不进回收站、不可恢复」临时口径作废。
-const String privateDeleteText = '删除后会进入回收站，30 天内可以恢复。';
+const String privateDeleteText = '删除后会进入回收站，回收站不会自动删除，可随时恢复。';
 
 class PersonalPage extends ConsumerStatefulWidget {
   const PersonalPage({super.key});
@@ -1132,7 +1132,8 @@ class _TrashTabState extends ConsumerState<_TrashTab> {
     final items = ref.read(personalControllerProvider).trash;
     return _TabFrame(
       hint: personalTabs[3].hint, // app.js:1488 逐字
-      // 🔴 Web 回收站只有「恢复」，没有「彻底删除」；App 不自创入口。
+      // 2.4.11：回收站「恢复」+「彻底删除」双入口（period 合并同一列表，
+      // 按记录 kind 由服务端统一分发 records / period purge）。
       emptyTitle: '回收站是空的',
       emptyHint: '你的回忆都在好好保存。',
       items: items,
@@ -1166,19 +1167,54 @@ class _TrashTile extends ConsumerWidget {
           const SizedBox(height: Spacing.gap),
           Align(
             alignment: Alignment.centerLeft,
-            child: OutlinedButton.icon(
-              // Web app.js:1488 按钮文案「恢复这份回忆」逐字
-              onPressed: () async {
-                final err = await ref
-                    .read(personalControllerProvider.notifier)
-                    .restore(record.id, kind: record.kind);
-                if (context.mounted) {
-                  _toast(ref, err, okMsg: '回忆已恢复');
-                }
-              },
-              icon: const Icon(Icons.restore_rounded, size: 18),
-              label: const Text('恢复这份回忆'),
-            ),
+            child: Wrap(spacing: Spacing.gap, crossAxisAlignment: WrapCrossAlignment.center, children: [
+              OutlinedButton.icon(
+                // Web app.js:1488 按钮文案「恢复这份回忆」逐字
+                onPressed: () async {
+                  final err = await ref
+                      .read(personalControllerProvider.notifier)
+                      .restore(record.id, kind: record.kind);
+                  if (context.mounted) {
+                    _toast(ref, err, okMsg: '回忆已恢复');
+                  }
+                },
+                icon: const Icon(Icons.restore_rounded, size: 18),
+                label: const Text('恢复这份回忆'),
+              ),
+              // 2.4.11 裁定6：一处回收站入口，长按确认防误触；
+              // 服务端按 kind 分发 records / period purge。
+              TextButton.icon(
+                onPressed: () async {
+                  final confirmed = await showDialog<bool>(
+                    context: context,
+                    builder: (dctx) => AlertDialog(
+                      title: const Text('彻底删除'),
+                      content: const Text(
+                          '彻底删除后无法恢复，这条记录及其独占的附件会被永久删除。'),
+                      actions: [
+                        TextButton(
+                            onPressed: () => Navigator.of(dctx).pop(false),
+                            child: const Text('取消')),
+                        HoldToConfirmButton(
+                          label: '已彻底删除',
+                          onConfirm: () => Navigator.of(dctx).pop(true),
+                        ),
+                      ],
+                    ),
+                  );
+                  if (confirmed != true || !context.mounted) return;
+                  final err = await ref
+                      .read(personalControllerProvider.notifier)
+                      .purgeTrash(record.id, kind: record.kind);
+                  if (context.mounted) {
+                    _toast(ref, err, okMsg: '已彻底删除');
+                  }
+                },
+                icon: const Icon(Icons.delete_forever_rounded, size: 18),
+                label: const Text('彻底删除'),
+                style: TextButton.styleFrom(foregroundColor: cs.error),
+              ),
+            ]),
           ),
         ]),
       ),

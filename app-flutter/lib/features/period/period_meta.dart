@@ -185,7 +185,7 @@ const String periodFormNote =
 const String periodDeleteEpisodeTitle = '删掉这次经期？';
 
 String periodDeleteEpisodeText(int count) =>
-    '这次经期被拆成了 $count 段记录，会一起进回收站，三十天内可以恢复。';
+    '这次经期被拆成了 $count 段记录，会一起进回收站，回收站不会自动删除，可随时恢复。';
 
 // ── JS 语义辅助 ───────────────────────────────────────────────────────
 

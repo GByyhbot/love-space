@@ -150,7 +150,7 @@ void main() {
       expect(deleteEpisodeIds(d.episodes.last), ['f4', 'f5']);
       expect(periodDeleteEpisodeTitle, '删掉这次经期？');
       expect(periodDeleteEpisodeText(3),
-          '这次经期被拆成了 3 段记录，会一起进回收站，三十天内可以恢复。');
+          '这次经期被拆成了 3 段记录，会一起进回收站，回收站不会自动删除，可随时恢复。');
     });
   });
 

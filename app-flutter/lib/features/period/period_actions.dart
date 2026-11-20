@@ -252,6 +252,6 @@ PeriodWritePlan planSaveEpisodeForm({
 }
 
 /// `app.js:2507-2510` 删整次：对该 episode 的**全部碎片** id 逐个 DELETE。
-/// 30 天内可恢复，恢复接已有通用 `PersonalController.restore`。
+/// 回收站不会自动删除、可随时恢复，恢复接已有通用 `PersonalController.restore`。
 List<String> deleteEpisodeIds(PeriodEpisode ep) =>
     ep.frags.map((r) => r.id).toList();

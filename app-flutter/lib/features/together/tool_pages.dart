@@ -2,7 +2,7 @@
 /// 共用 togetherControllerProvider 一次全量数据；行卡片/表单按 kind 差异化，
 /// 横切口径统一：
 /// · 编辑一律回填铁律（打开表单时持有原始 body，PUT 只盖改动键）；
-/// · 删除确认弹层可取消 → DELETE（服务端软删，回收站 30 天；非本人 403）；
+/// · 删除确认弹层可取消 → DELETE（服务端软删，回收站不自动删除；非本人 403）；
 /// · 结果提示一律顶部通知（全局 ChatToastHost）；
 /// · 表单字段逐字对齐 Web recordForm（app.js:1833）：
 ///   mood = emoji(十选一) + date 必填 + content 可选；
@@ -232,7 +232,7 @@ class ToolTile extends ConsumerWidget {
       context: context,
       builder: (dctx) => AlertDialog(
         title: const Text('删除这条记录'),
-        content: const Text('删除后可在网页端「我的小角落 → 回收站」里保留 30 天，可恢复。'),
+        content: const Text('删除后可在网页端「我的小角落 → 回收站」里恢复，回收站不会自动删除。'),
         actions: [
           TextButton(
               onPressed: () => Navigator.of(dctx).pop(false),

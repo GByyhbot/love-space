@@ -362,7 +362,7 @@ class TimelineController extends Notifier<TimelineState> {
   }
 
   /// C3 删除：确认弹层由 UI 承担 → DELETE /api/records/{rid}（软删，
-  /// 进作者回收站 30 天可恢复；回收站 UI 归条目 7 本段不做）。
+  /// 进作者回收站、不自动删除可随时恢复；回收站 UI 归条目 7 本段不做）。
   /// 成功后本卡原地移除（沿用 B 段 _patchRecord 机制，不整列表重建）。
   Future<String?> deleteRecord(String rid) async {
     if (_disposed) return null;

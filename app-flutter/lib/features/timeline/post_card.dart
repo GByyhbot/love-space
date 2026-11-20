@@ -350,7 +350,7 @@ class _OwnMenu extends ConsumerWidget {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('删除这一刻？'),
-        content: const Text('删除后会进入回收站，30 天内可以恢复。'),
+        content: const Text('删除后会进入回收站，回收站不会自动删除，可随时恢复。'),
         actions: [
           TextButton(
               onPressed: () => Navigator.of(ctx).pop(false),
@@ -366,7 +366,7 @@ class _OwnMenu extends ConsumerWidget {
         .read(timelineControllerProvider.notifier)
         .deleteRecord(record.id);
     ref.read(chatToastProvider.notifier).show(
-        err ?? '已删除（30 天内可在回收站恢复）',
+        err ?? '已删除（可在回收站恢复，回收站不会自动删除）',
         tone: err == null
             ? ChatToastTone.success
             : ChatToastTone.error);

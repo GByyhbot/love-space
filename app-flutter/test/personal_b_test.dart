@@ -6,10 +6,10 @@
    ⑤ 编辑惊喜（含改期）走回填铁律 merge 完整 body、kind 保持 surprise
    ⑥ 回收站：trash=true + 全 kind 串、仅本人；删时光/日记都进回收站；
       恢复走 POST /restore 且回到原列表；对象账号回收站无我的条目
-   ⑦ 三类删除文案统一标准口径（进回收站、30 天可恢复）
-   ⑧ 返回路径（按钮 + 系统手势）；无「彻底删除」（Web 没有，不自创）
+   ⑦ 三类删除文案统一标准口径（进回收站、不自动删除可随时恢复）
+   ⑧ 返回路径（按钮 + 系统手势）；2.4.11 起回收站有「彻底删除」长按入口
    ⑨ 无死卡（7-A 2 tab → 7-B 4 tab → 7-C 5 tab；7-C 已落地 personal_wish，
-      之后无 7-D；Web 无「彻底删除」，App 不自创）
+      之后无 7-D；2.4.11 补「彻底删除」后双端齐）
 
    夹具存量形状来源（2026-11-14 SSH 直查 NAS 容器 /data/love.db，
    app.db.body_decode 解密 PRIVATE body 后导出，脱敏）：
@@ -23,6 +23,7 @@
      已在本文件与 docs/personal-corner-plan.md 双处注明来源（同 7-A 的 diary
      例外，主人已接受），非凭空造、不写生产库。 */
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
@@ -508,10 +509,10 @@ void main() {
           reason: '服务端强制 author=自己；客户端二次过滤，绝不混入他人条目');
       expect(container.read(personalControllerProvider).trash,
           everyElement(predicate<TogetherRecord>((r) => r.author == 'u1')));
-      expect(find.text('删除的内容保留三十天，你可以恢复自己的记录。'),
+      expect(find.text('回收站里的内容不会自动删除，你可以随时恢复自己的记录。'),
           findsOneWidget);
-      // 🔴 Web 没有「彻底删除」，App 不自创
-      expect(find.textContaining('彻底删除'), findsNothing);
+      // 2.4.11：回收站「彻底删除」入口（长按确认防误触），records/period 同页
+      expect(find.textContaining('彻底删除'), findsWidgets);
     });
 
     test('删除时光 + 日记后都进回收站；恢复各一条回原列表', () async {
@@ -595,7 +596,7 @@ void main() {
         await tester.tap(btn.first);
         await tester.pumpAndSettle();
         expect(find.text(privateDeleteText), findsOneWidget);
-        expect(find.text('删除后会进入回收站，30 天内可以恢复。'), findsOneWidget);
+        expect(find.text('删除后会进入回收站，回收站不会自动删除，可随时恢复。'), findsOneWidget);
         expect(find.textContaining('不进回收站'), findsNothing);
         expect(find.textContaining('不可恢复'), findsNothing);
         await tester.tap(find.text('取消'));
@@ -651,6 +652,27 @@ void main() {
       expect(find.text('恢复这份回忆'), findsWidgets);
       expect(find.text('准备惊喜'), findsNothing);
       await _flush(tester);
+    });
+
+    test('2.4.11 回收站彻底删除：长按确认 + purge 接口 + 双端文案', () {
+      // 源码级护栏：确认形态必须是 HoldToConfirmButton（防误触），
+      // 接口统一走 /purge（服务端按 kind 分发 records/period）。
+      final page = File('lib/features/personal/personal_page.dart')
+          .readAsStringSync();
+      expect(page.contains("HoldToConfirmButton("), isTrue,
+          reason: '彻底删除必须长按确认');
+      expect(page.contains("label: '已彻底删除'"), isTrue,
+          reason: '长按走满后文案');
+      final ctrl = File('lib/features/personal/personal_controller.dart')
+          .readAsStringSync();
+      expect(ctrl.contains("dio.post('/api/records/\$rid/purge')"), isTrue,
+          reason: 'purge 走统一接口，服务端按 kind 分发 records/period');
+      // 文案口径：回收站不自动删除（旧「30 天」口径作废）
+      expect(page.contains('回收站里的内容不会自动删除'), isTrue);
+      final web = File('../static/app.js').readAsStringSync();
+      expect(web.contains("action==='purge'"), isTrue,
+          reason: 'Web 回收站同步补彻底删除按钮');
+      expect(web.contains('回收站里的内容不会自动删除'), isTrue);
     });
   });
 }

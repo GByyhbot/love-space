@@ -601,6 +601,28 @@ class PersonalController extends Notifier<PersonalState> {
     return null;
   }
 
+  /// 回收站彻底删除（2.4.11）：POST /api/records/{rid}/purge。
+  /// 服务端对 period 分库自动分流（main.py 内 period.get → purge_one），
+  /// 客户端统一调用即可；仅作者本人、仅回收站记录（活记录 4xx）。
+  /// 成功后本地移除该条 + 重拉主列表与回收站。返回 null=成功。
+  Future<String?> purgeTrash(String rid, {String? kind}) async {
+    if (_disposed) return null;
+    final failure = await _writeResponse(
+        (dio) => dio.post('/api/records/$rid/purge'));
+    if (failure != null) return failure;
+    state = state.copyWith(
+        trash: state.trash.where((r) => r.id != rid).toList());
+    await load();
+    if (_disposed) return null;
+    await loadTrash();
+    if (kind == 'post') {
+      await ref
+          .read(timelineControllerProvider.notifier)
+          .resetAfterPublish();
+    }
+    return null;
+  }
+
   /// 新建私密日记：POST {kind:'diary', body, client_id}。
   /// content 必填（main.py:1107 的必填集合是 {post,diary,surprise,note,chat}，
   /// **不含 draft**——草稿空内容服务端允许，本方法只管 diary，不给草稿加校验）；
@@ -704,7 +726,7 @@ class PersonalController extends Notifier<PersonalState> {
   }
 
   /// 删除（DELETE 服务端软删，main.py:1424）。删除后进回收站（标准口径：
-  /// 「删除后会进入回收站，30 天内可以恢复。」），成功后本地移除并重拉回收站。
+  /// 「删除后会进入回收站，回收站不会自动删除，可随时恢复。」），成功后本地移除并重拉回收站。
   /// 返回 null=成功。
   Future<String?> delete(String rid) async {
     if (_disposed) return null;

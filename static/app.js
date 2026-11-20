@@ -1485,7 +1485,7 @@ function personalPage() {
  const tab=state.tab||'diary',tabs=[['diary','私密日记'],['draft','草稿箱'],['surprise','定时惊喜'],['trash','回收站']];
  let content='';
  if(tab==='settings')return settingsPage();
- if(tab==='trash')content=`<p class="hint">删除的内容保留三十天，你可以恢复自己的记录。</p>${(state.trash||[]).length?state.trash.map(r=>`<article class="card"><h3>${esc(r.body.title||r.body.content||kindLabel[r.kind])}</h3><p class="meta">${kindLabel[r.kind]} · ${dateLabel(r.deleted)} 删除</p><div class="inline-actions">${button('恢复这份回忆','restore','soft small','clock',`data-id="${r.id}"`)}</div></article>`).join(''):empty('回收站是空的','你的回忆都在好好保存。')}`;
+ if(tab==='trash')content=`<p class="hint">回收站里的内容不会自动删除，你可以随时恢复自己的记录。</p>${(state.trash||[]).length?state.trash.map(r=>`<article class="card"><h3>${esc(r.body.title||r.body.content||kindLabel[r.kind])}</h3><p class="meta">${kindLabel[r.kind]} · ${dateLabel(r.deleted)} 删除</p><div class="inline-actions">${button('恢复这份回忆','restore','soft small','clock',`data-id="${r.id}"`)}${button('彻底删除','purge','danger small','trash',`data-id="${r.id}"`)}</div></article>`).join(''):empty('回收站是空的','你的回忆都在好好保存。')}`;
  else content=`<p class="hint">${icon('lock')} ${tab==='surprise'?'到约定的时间，惊喜才会被另一半看见。':'这个角落只有你能看见。草稿主动发布后，才会进入共同空间。'}</p>${recordsOf(tab).length?recordsOf(tab).map(recordCard).join(''):empty(tab==='diary'?'给自己，留一点心里话':tab==='draft'?'还没写完的故事，在这里等你':'提前准备一份温柔的惊喜','慢慢写，不着急。',tab==='draft'?'compose':'new-'+tab,tab==='draft'?'写一份草稿':'开始记录')}`;
  return `${heading('我的小角落','有些心事留给自己，有些惊喜留给未来。',['diary','surprise'].includes(tab)?'new-'+tab:'',tab==='surprise'?'准备惊喜':'写日记')}<div class="tabs">${tabs.map(([id,label])=>`<button data-action="personal-tab" data-id="${id}" class="${tab===id?'active':''}">${label}</button>`).join('')}</div>${content}`;
 }
@@ -2506,7 +2506,7 @@ async function act(action,id,el) {
  if(action==='period-back')return navigate('together','period');
  if(action==='period-del-episode'){
   const ids=String(el.dataset.ids||'').split(',').filter(Boolean);
-  return confirmAction('删掉这次经期？',`这次经期被拆成了 ${ids.length} 段记录，会一起进回收站，三十天内可以恢复。`,async()=>{for(const one of ids)await del('/records/'+one);await refresh();});
+  return confirmAction('删掉这次经期？',`这次经期被拆成了 ${ids.length} 段记录，会一起进回收站，回收站不会自动删除，可随时恢复。`,async()=>{for(const one of ids)await del('/records/'+one);await refresh();});
  }
  if(action.startsWith('new-')){const kind=action.slice(4);return kind==='channel'?channelForm():kind==='personal-wish'?personalWishForm():recordForm(kind);}
  if(action==='unlock-personal-wish')return unlockPersonalWish(id);
@@ -2520,8 +2520,9 @@ async function act(action,id,el) {
  if(action==='album-filter'){state.album=id;return renderPage();}
  if(action==='album-view'){state.albumView=el.dataset.view==='date'?'date':'album';return renderPage();}
  if(action==='edit-record')return recordForm(r.kind,r);
- if(action==='delete-record')return confirmAction('暂时收起这份回忆？',r.kind==='album'?'只删除相册分类，里面的照片仍会保留在全部照片中。':'记录会进入作者的回收站，三十天内可以恢复。',async()=>{await del('/records/'+id);if(state.album===id)state.album='';});
+ if(action==='delete-record')return confirmAction('暂时收起这份回忆？',r.kind==='album'?'只删除相册分类，里面的照片仍会保留在全部照片中。':'记录会进入作者的回收站，回收站不会自动删除，可随时恢复。',async()=>{await del('/records/'+id);if(state.album===id)state.album='';});
  if(action==='restore'){await post('/records/'+id+'/restore');await refresh();return toast('回忆已恢复');}
+ if(action==='purge')return confirmAction('彻底删除这份回忆？','删除后无法恢复，这条记录及其独占的附件会被永久删除。',async()=>{await post('/records/'+id+'/purge');await refresh();return toast('已彻底删除');});
  if(action==='like'){
   const liked=r&&r.likes.includes(state.me.user.id);
   await post('/records/'+id+'/like');

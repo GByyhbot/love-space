@@ -171,7 +171,7 @@ class _AnniversaryPageState extends ConsumerState<AnniversaryPage> {
       builder: (dctx) => AlertDialog(
         title: const Text('删除这条纪念日'),
         content: Text(
-            '确定删除「${(record.body['title'] ?? '纪念日')}」吗？\n\n删除后保留在回收站 30 天，可恢复。'),
+            '确定删除「${(record.body['title'] ?? '纪念日')}」吗？\n\n删除后进入回收站，回收站不会自动删除，可随时恢复。'),
         actions: [
           TextButton(
               onPressed: () => Navigator.of(dctx).pop(false),
