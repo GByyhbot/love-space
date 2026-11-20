@@ -16,6 +16,7 @@ import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:love_space/core/audio/audio_init_status.dart' show audioInitStatusProvider;
 import 'package:go_router/go_router.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
@@ -262,6 +263,12 @@ class _SettingsHomePageState extends ConsumerState<SettingsHomePage> {
         ),
       );
 
+  /// 2.4.15：init 错误原文压成一行摘要（去换行，截 90 字符）。
+  String _shortErr(String raw) {
+    final oneLine = raw.replaceAll(RegExp(r'\s+'), ' ').trim();
+    return oneLine.length > 90 ? '${oneLine.substring(0, 90)}…' : oneLine;
+  }
+
   // ── 关于（原全量页 _aboutCard 原样搬入；app.js:2593-2612 / :2569） ──
   Widget _aboutCard(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
@@ -285,6 +292,29 @@ class _SettingsHomePageState extends ConsumerState<SettingsHomePage> {
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ),
+            // 2.4.15：系统媒体播放器（通知栏/锁屏）init 结果可见——
+            // 失败时带错误摘要，供真机验收截图与定位。
+            Builder(builder: (context) {
+              final st = ref.read(audioInitStatusProvider);
+              final ok = st.ready;
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Row(children: [
+                  Icon(ok ? Icons.check_circle_rounded : Icons.error_outline_rounded,
+                      size: 16,
+                      color: ok ? cs.primary : cs.error),
+                  const SizedBox(width: 6),
+                  Expanded(child: Text(
+                    ok
+                        ? '系统媒体播放器：已就绪'
+                        : '系统媒体播放器：未就绪（${_shortErr(st.error ?? '初始化未完成')}）',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: ok ? cs.outline : cs.error),
+                    maxLines: 2, overflow: TextOverflow.ellipsis),
+                  ),
+                ]),
+              );
+            }),
             if (s != null)
               Padding(
                 padding: const EdgeInsets.only(bottom: 8),

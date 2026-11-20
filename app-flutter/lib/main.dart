@@ -47,6 +47,7 @@ import 'features/together/question_habit_pages.dart';
 import 'features/together/quest_page.dart';
 import 'features/together/tool_pages.dart';
 import 'features/together/weekly_page.dart';
+import 'core/audio/audio_init_status.dart' show AudioInitStatus, audioInitStatusProvider;
 import 'core/audio/song_playback.dart' show songPlaybackProvider;
 import 'features/chat/voice_playback.dart' show voiceInterruptHook;
 
@@ -62,6 +63,8 @@ Future<void> main() async {
   // 歌曲专用 handler 持全 App 唯一歌曲 player，通知/锁屏广播为单一事实源；
   // 语音家族/选歌试听回归普通 just_audio，互不相干；失败不影响主链。
   final container = ProviderContainer();
+  // 2.4.15：init 成败与错误原文必须落盘可见（设置页「关于」区渲染），
+  // 禁止裸 catch 吞错——2.4.14 真机「零媒体会话零报错」即吞错所致。
   try {
     final songHandler = await AudioService.init(
       builder: () => SongAudioHandler(),
@@ -77,7 +80,14 @@ Future<void> main() async {
     );
     // 引擎接线（container 同源）：handler 注入 + 播语音停歌钩子
     container.read(songPlaybackProvider.notifier).attachHandler(songHandler);
-  } catch (_) {}
+    container.read(audioInitStatusProvider.notifier).state =
+        const AudioInitStatus(ready: true);
+  } catch (e) {
+    // ignore: avoid_print
+    print('AudioService.init failed: $e');
+    container.read(audioInitStatusProvider.notifier).state =
+        AudioInitStatus(error: e.toString());
+  }
   voiceInterruptHook = () => container.read(songPlaybackProvider.notifier).stop();
   runApp(UncontrolledProviderScope(container: container, child: const LoveApp()));
 }

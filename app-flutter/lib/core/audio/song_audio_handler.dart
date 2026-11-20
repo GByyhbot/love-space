@@ -120,6 +120,8 @@ class SongAudioHandler extends BaseAudioHandler {
         unawaited(_onCompleted());
         return;
       }
+      // 🔴 2.4.15：processingState 永远不发 idle——idle 在插件里触发
+      // AudioService._stop()（杀前台服务+撤通知）。只有 stopPlayback 显式撤。
       _broadcast(playing: st.playing);
     });
   }
@@ -168,11 +170,12 @@ class SongAudioHandler extends BaseAudioHandler {
   @override
   Future<void> stop() => stopPlayback();
 
-  /// 停止并复位（离页/互斥/手动停止/通知关闭）。
+  /// 停止并复位（离页/互斥/手动停止/通知关闭/播完末曲）。
+  /// 🔴 2.4.15：显式 stopped=true 发 idle → 插件 stopService 撤通知。
   Future<void> stopPlayback() async {
     await _player.stop();
     await _player.seek(Duration.zero);
-    _broadcast(playing: false);
+    _broadcast(playing: false, stopped: true);
   }
 
   /// 通知/锁屏拖动进度回调。
@@ -210,16 +213,23 @@ class SongAudioHandler extends BaseAudioHandler {
   }
 
   /// 广播播放态（audio_service 转成通知/锁屏按钮态）。
-  void _broadcast({required bool playing}) {
+  /// 🔴 2.4.15 根因修复：processingState 只有 [stopped=true]（真正停播撤
+  /// 通知）才发 idle；暂停=ready+playing:false（通知保留，与
+  /// androidStopForegroundOnPause:false 口径一致）——此前把暂停/未播标成
+  /// idle，每次 player.stop() 都触发插件 AudioService._stop() 杀前台服务，
+  /// 媒体通知从未有机会出现（真机「零通知栏播放器」根因）。
+  void _broadcast({required bool playing, bool stopped = false}) {
     playbackState.add(PlaybackState(
       playing: playing,
-      processingState: _loading
-          ? AudioProcessingState.buffering
-          : (playing ? AudioProcessingState.ready : AudioProcessingState.idle),
+      processingState: stopped
+          ? AudioProcessingState.idle
+          : (_loading
+              ? AudioProcessingState.buffering
+              : AudioProcessingState.ready),
       controls: [
         if (canSkip) MediaControl.skipToPrevious,
         if (playing) MediaControl.pause else MediaControl.play,
-        MediaControl.stop,
+        if (stopped) MediaControl.stop,
         if (canSkip) MediaControl.skipToNext,
       ],
       systemActions: const {MediaAction.seek},

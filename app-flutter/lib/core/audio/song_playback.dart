@@ -21,6 +21,7 @@ import '../api/api_client.dart' as api;
 import '../chat/chat_media.dart' show downloadAudioToCache;
 import '../chat/chat_models.dart' show ChatSong;
 import '../../features/chat/voice_playback.dart' show voicePlaybackProvider;
+import 'audio_init_status.dart' show audioInitStatusProvider;
 import 'song_audio_handler.dart' show SongAudioHandler, SongItem;
 
 export 'song_audio_handler.dart' show SongItem;
@@ -50,6 +51,10 @@ class SongPlaybackState {
 class SongPlaybackController extends Notifier<SongPlaybackState> {
   SongAudioHandler? _handler;
 
+  /// 2.4.15：懒创建本地 handler **只允许测试环境**（测试里置 true）；
+  /// 生产为 false——AudioService.init 失败时点播走报错通道，绝不本地播放。
+  static bool lazyHandlerForTest = false;
+
   @override
   SongPlaybackState build() {
     ref.onDispose(() {
@@ -78,11 +83,14 @@ class SongPlaybackController extends Notifier<SongPlaybackState> {
   AudioPlayer? get handlerPlayer => _handler?.player;
 
   SongAudioHandler get _requireHandler {
-    // 懒创建：main 里 AudioService.init 的真 handler 会经 attachHandler 注入
-    // （接管通知/锁屏）；测试等无平台环境自动落到本地 handler——player 仍由
-    // SongAudioHandler 唯一持有，引擎永不自建。
-    final h = _handler ??= _createLocalHandler();
-    return h;
+    // main 里 AudioService.init 的真 handler 会经 attachHandler 注入（接管
+    // 通知/锁屏）。2.4.15：懒创建仅测试环境——生产未就绪时点播必须走报错
+    // 通道（真实原因），不得静默本地播放（2.4.14 真机「零媒体会话」教训）。
+    final h = _handler;
+    if (h != null) return h;
+    if (lazyHandlerForTest) return _handler ??= _createLocalHandler();
+    throw StateError(
+        '系统播放器未就绪：${ref.read(audioInitStatusProvider).error ?? "媒体系统初始化未完成"}');
   }
 
   SongAudioHandler _createLocalHandler() {

@@ -17,6 +17,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:love_space/core/api/api_client.dart' as api;
+import 'package:love_space/core/audio/song_playback.dart' show SongPlaybackController;
 import 'package:love_space/core/chat/chat_media.dart'
     show chatBaseProvider, mediaCookieHeadersProvider;
 import 'package:love_space/core/together/together_data.dart';
@@ -97,6 +98,8 @@ Future<ProviderContainer> _setup(_FakeAdapter adapter) async {
 }
 
 void main() {
+  // 2.4.15：懒创建 handler 仅测试环境（生产走报错通道）
+  SongPlaybackController.lazyHandlerForTest = true;
   group('① 纯函数', () {
     test('questIdeas：五组 40 条', () {
       expect(questIdeas.values.fold<int>(0, (s, l) => s + l.length), 40);
