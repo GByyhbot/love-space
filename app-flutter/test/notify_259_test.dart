@@ -117,6 +117,24 @@ void main() {
     });
   });
 
+  group('2.5.10：SSE 流 receiveTimeout 误杀修复（机主诊断行截图实锤）', () {
+    test('服务 isolate：SSE 请求显式 Duration.zero（null=继承 30s 不是禁用）', () {
+      final task = src('lib/core/notify/notify_task.dart');
+      expect(task.contains('receiveTimeout: Duration.zero'), isTrue);
+      expect(task.contains('receiveTimeout: null'), isFalse,
+          reason: 'null 会继承 BaseOptions 30s，中转缓冲即断连死循环');
+    });
+
+    test('主 isolate：SSE 同款 Duration.zero + 死链 watchdog', () {
+      final sse = src('lib/core/sse/sse_client.dart');
+      expect(sse.contains('receiveTimeout: Duration.zero'), isTrue);
+      expect(sse.contains('_probe'), isTrue, reason: '25s 无数据轻探测重连');
+      expect(sse.contains('_touch()'), isTrue, reason: '数据到达即刷新计时');
+      expect(sse.contains("Timer.periodic(const Duration(seconds: 10), (_) => _probe())"),
+          isTrue, reason: '10s 周期 watchdog');
+    });
+  });
+
   test('判定矩阵回归：2.4.5 语义不被本段破坏（纯函数直测）', () {
     // seen 语义：前台不弹也记 seen（防回后台重弹）
     final r1 = const NotifyDecision(items: [], seenDelta: {'chat:a'});

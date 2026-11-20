@@ -201,7 +201,12 @@ class NotifyTaskHandler extends TaskHandler {
         '/api/events',
         options: Options(
           responseType: ResponseType.stream,
-          receiveTimeout: null, // 流式：间隔超时交给 chunk 超时
+          // 🔴 2.5.10 真机诊断修复：Options.receiveTimeout=null 在 dio 里是
+          // 「继承 BaseOptions」不是禁用——服务 isolate 继承 30s，当前线路对
+          // SSE 流有缓冲时 30s 无 chunk 即被杀，死循环重连（机主 2.5.9 诊断行
+          // 截图实锤）。显式 Duration.zero 禁用；死链检测交给 10s 周期
+          // _probe（25s 无事件即探 /api/status，成功即重连）。
+          receiveTimeout: Duration.zero,
           headers: {'Cookie': '${AppConfig.sessionCookieName}=$_token'},
         ),
       );

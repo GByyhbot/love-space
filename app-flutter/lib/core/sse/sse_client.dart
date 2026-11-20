@@ -42,6 +42,8 @@ class SseClient extends Notifier<SseState> {
   bool _foreground = true;
   int _attempt = 0;
   Timer? _backoff;
+  Timer? _watchdog;
+  DateTime _lastDataAt = DateTime.now();
   AppLifecycleListener? _lifecycle;
   StreamSubscription<List<int>>? _streamSub;
   final _eventsController = StreamController<SseEvent>.broadcast();
@@ -63,7 +65,29 @@ class SseClient extends Notifier<SseState> {
     _disposed = false;
     _foreground = true;
     _attempt = 0;
+    // 2.5.10：10s 周期死链探测——25s 无任何数据（心跳 5s 应恒有）即轻探
+    // /api/status，成功则掐掉当前悬挂流重连（中转线缓冲 SSE 的兜底）。
+    _watchdog ??= Timer.periodic(const Duration(seconds: 10), (_) => _probe());
     _connect();
+  }
+
+  /// 死链轻探测：流悬挂（缓冲型中转收不到任何块）时 5s 内探 /api/status，
+  /// 探测成功说明服务器活着而流死了 → 掐流重连。
+  Future<void> _probe() async {
+    if (_disposed || !_running || !_foreground) return;
+    if (DateTime.now().difference(_lastDataAt) <
+        const Duration(seconds: 25)) {
+      return; // 流活着
+    }
+    _log('[sse] 25s 无数据，探测重连');
+    _streamSub?.cancel();
+    _streamSub = null;
+    _attempt = 0;
+    await _connect();
+  }
+
+  void _log(String text) {
+    if (kDebugMode) debugPrint(text);
   }
 
   void stop() {
@@ -85,7 +109,14 @@ class SseClient extends Notifier<SseState> {
     try {
       final rsp = await sse.get<ResponseBody>(
         AppConfig.ssePath,
-        options: Options(responseType: ResponseType.stream, receiveTimeout: null),
+        // 🔴 2.5.10 真机诊断修复：null 是「继承 BaseOptions 6s」不是禁用——
+        // 心跳 5s 贴着 6s 上限，中转线一缓冲就断，前台 SSE 频繁断连
+        // （机主「角标经常迟到、必须下拉刷新」根因）。显式禁用；死链检测
+        // 交给下方 _watchdog 轻探测。
+        options: Options(
+          responseType: ResponseType.stream,
+          receiveTimeout: Duration.zero,
+        ),
       );
       if ((rsp.statusCode ?? 0) >= 300) {
         state = SseState(phase: SsePhase.stopped, lastError: 'HTTP ${rsp.statusCode}');
@@ -97,6 +128,7 @@ class SseClient extends Notifier<SseState> {
       StreamSubscription<List<int>>? sub;
       sub = rsp.data!.stream.listen((chunk) {
         if (_disposed || !_running || !_foreground) { sub?.cancel(); return; }
+        _touch();
         carry += utf8.decode(chunk, allowMalformed: true);
         final parts = carry.split('\n');
         carry = parts.removeLast(); // 最后一行可能不完整，留回缓冲
@@ -149,6 +181,8 @@ class SseClient extends Notifier<SseState> {
     state = const SseState(phase: SsePhase.stopped);
   }
 
+  void _touch() => _lastDataAt = DateTime.now();
+
   void _resume() {
     _foreground = true;
     _attempt = 0;
@@ -159,6 +193,8 @@ class SseClient extends Notifier<SseState> {
     _disposed = true;
     _running = false;
     _backoff?.cancel();
+    _watchdog?.cancel();
+    _watchdog = null;
     _streamSub?.cancel();
     _lifecycle?.dispose();
     _eventsController.close();
