@@ -34,6 +34,11 @@ import 'chat_toast.dart' show ChatToastTone, chatToastProvider;
 import 'voice_diag.dart';
 import 'voice_recorder.dart' show voiceDbg;
 
+/// 2.4.12 条目五：播语音前的跨家族互斥钩子（停歌曲引擎）。
+/// 用顶层可注入函数避免 voice_playback ↔ song_playback 的 import 循环；
+/// 由 App 启动时 wiring（main.dart）：`voiceInterruptHook = () => ref.read(songPlaybackProvider.notifier).stop()`。
+Future<void> Function()? voiceInterruptHook;
+
 /// 网络步（resolve/下载/setFilePath/play/stop/seek）统一超时：
 /// 任一步挂起都会让 toggle 的 await 卡住 → finally 永不执行 →
 /// _busy 永久为 true，之后所有点击被静默挡掉（真机现象「点击没有反应」）。
@@ -296,6 +301,12 @@ class VoicePlaybackController extends Notifier<VoicePlaybackState> {
   }
 
   Future<void> _playFromStart(String mid) async {
+    // 2.4.12 条目五：播语音先停歌曲（与歌曲引擎互斥，反向由 song 引擎停语音）
+    try {
+      await voiceInterruptHook?.call();
+    } catch (_) {
+      // 互斥钩子失败不应阻断语音播放
+    }
     // 抬到 try 外：catch 里记录诊断需要 url
     String? url;
     try {

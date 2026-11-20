@@ -17,6 +17,10 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE"/>
+    <!-- 2.4.12 条目五：通知栏播放器（裁定6：两服务并存、不合并）。
+         mediaPlayback 类型前台服务由 audio_service 插件声明，播放时才有；
+         SSE 保活的 specialUse 服务原样不动。 -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"/>
     <application
         android:label="love_space"
         android:name="${applicationName}"

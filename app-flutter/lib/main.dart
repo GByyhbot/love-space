@@ -2,6 +2,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:just_audio_background/just_audio_background.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -52,6 +53,19 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   try {
     await NotifyCoordinator.platformInit();
+  } catch (_) {}
+  // 2.4.12 条目五：通知栏/锁屏媒体控制 + 后台续播。
+  // JustAudioBackground 替换 just_audio 的 platform 实现，所有 AudioPlayer
+  // （全局歌曲引擎）自动接入 MediaSession/MediaStyle；失败不影响主链。
+  try {
+    await JustAudioBackground.init(
+      androidNotificationChannelId: 'cn.iepose.lovespace.audio',
+      androidNotificationChannelName: '音乐播放',
+      androidNotificationChannelDescription: '正在播放的歌曲与播放控制',
+      androidNotificationOngoing: true,
+      androidStopForegroundOnPause: false,  // 暂停时保留通知（条目五：关闭按钮才撤下）
+      androidResumeOnClick: true,           // 点通知回 App
+    );
   } catch (_) {}
   runApp(const ProviderScope(child: LoveApp()));
 }

@@ -22,6 +22,7 @@ import '../chat/media_bubble_widgets.dart' show MediaImageView, VideoCardView, V
 import '../shell/web_chrome.dart' show WebSemanticColors;
 import '../../core/ui/hold_to_confirm.dart' show HoldToConfirmButton;
 import '../../core/ui/like_burst.dart' show LikeBurstIcon, LikeCountLabel;
+import '../chat/media_bubble_widgets.dart' show SongCardView;
 import 'comment_sheet.dart';
 import 'composer_sheet.dart';
 import 'image_viewer.dart';
@@ -216,6 +217,21 @@ class PostCard extends ConsumerWidget {
             child: Wrap(spacing: 4, children: [
               for (final v in voices) VoiceChipView(mid: v.id)
             ]),
+          ),
+        // 2.4.12 条目二：动态挂歌 → 歌曲卡（复用聊天 SongCardView，
+        // 宽度铺满卡片内容宽）；mid/src 皆空 = 歌已不可用占位（裁定3）。
+        if (b['song'] is Map)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: LayoutBuilder(builder: (context, c) {
+              final song = ChatSong.fromJson((b['song'] as Map).cast<String, dynamic>());
+              final unavailable = song.mid.isEmpty && song.src.isEmpty;
+              return SongCardView(
+                song: song,
+                width: c.maxWidth,
+                unavailable: unavailable,
+              );
+            }),
           ),
         // footer：时间戳 + 点赞/评论按钮（段二 B：本地翻转 + 评论 Sheet）
         Padding(

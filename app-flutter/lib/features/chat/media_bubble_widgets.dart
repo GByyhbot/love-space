@@ -15,10 +15,9 @@ import 'dart:math' as math;
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:just_audio/just_audio.dart';
+import '../../core/audio/song_playback.dart' show songPlaybackProvider;
 import 'package:video_player/video_player.dart';
 
-import '../../core/api/api_client.dart' as api;
 import '../../core/chat/chat_media.dart';
 import '../../core/chat/chat_models.dart';
 import 'chat_toast.dart' show ChatToastTone, chatToastProvider;
@@ -416,67 +415,39 @@ class _StickerVideoState extends ConsumerState<StickerVideoView> {
 /// 30 秒试听（同源 /api/music/stream 转发，just_audio 带 Cookie 头）。
 /// 点击卡片除按钮区外不触发播放（对齐 Web：试听只走右侧小按钮）。
 class SongCardView extends ConsumerStatefulWidget {
-  const SongCardView({super.key, required this.song});
+  const SongCardView({
+    super.key,
+    required this.song,
+    this.width = 230,
+    this.unavailable = false,
+  });
   final ChatSong song;
+  /// 2.4.12：PostCard 等宽容器可传更宽的卡片宽度（默认 230 聊天不变）。
+  final double width;
+  /// 2.4.12 裁定3：动态三呈现面的「歌曲已不可用」占位（聊天不传=false）。
+  final bool unavailable;
 
   @override
   ConsumerState<SongCardView> createState() => _SongCardViewState();
 }
 
 class _SongCardViewState extends ConsumerState<SongCardView> {
-  AudioPlayer? _player;
-  bool _playing = false;
-  bool _loading = false;
-
-  @override
-  void dispose() {
-    _player?.dispose();
-    super.dispose();
+  /// 2.4.12 条目五：不再自持 player——全局引擎是唯一播放源，
+  /// 从 songPlaybackProvider 读 playing/loading，通知栏与锁屏同步由引擎负责。
+  bool get _isCurrent {
+    final cur = ref.watch(songPlaybackProvider).current;
+    return cur != null && cur.mid == widget.song.mid && cur.src == widget.song.src &&
+        (cur.mid.isNotEmpty || cur.src.isNotEmpty);
   }
 
   Future<void> _toggle() async {
-    // Web 口径：mid（歌单本地音频）优先于 src（在线 30s 试听）
-    final hasMid = widget.song.mid.isNotEmpty;
-    final hasSrc = widget.song.src.isNotEmpty;
-    if ((!hasMid && !hasSrc) || _loading) return;
-    var player = _player;
-    if (player == null) {
-      setState(() => _loading = true);
-      try {
-        // 🔴 下载优先（与语音/歌单/选歌卡同款）：Dio 全量 GET（无 Range）→
-        // 本地缓存 → setFilePath——中转线对原生播放器 Range 请求有缺陷，
-        // setUrl 直拉远程流在该线不可靠。
-        final dio = await ref.read(api.dioProvider.future);
-        final file = hasMid
-            ? await downloadAudioToCache(dio,
-                cacheKey: 'mid_${widget.song.mid}',
-                urlPath: '/media/${widget.song.mid}',
-                query: const {'preview': 'true'})
-            : await downloadAudioToCache(dio,
-                cacheKey: 'src_${widget.song.src.hashCode}',
-                urlPath: '/api/music/stream',
-                query: {'u': widget.song.src});
-        player = AudioPlayer();
-        await player.setFilePath(file).timeout(const Duration(seconds: 15));
-        player.playerStateStream.listen((st) {
-          if (mounted) setState(() => _playing = st.playing);
-        });
-        _player = player;
-      } catch (_) {
-        if (mounted) {
-          ref.read(chatToastProvider.notifier).show('试听加载失败，稍后再试',
-              tone: ChatToastTone.error);
-        }
-        return;
-      } finally {
-        if (mounted) setState(() => _loading = false);
-      }
+    if (_isCurrent) {
+      await ref.read(songPlaybackProvider.notifier).toggle();
+      return;
     }
-    if (_playing) {
-      await player.pause();
-    } else {
-      // 🔴 不 await：just_audio 的 play() Future 在播完才完成（假失败根因）
-      unawaited(player.play());
+    final err = await ref.read(songPlaybackProvider.notifier).playSong(widget.song);
+    if (err != null && mounted) {
+      ref.read(chatToastProvider.notifier).show(err, tone: ChatToastTone.error);
     }
   }
 
@@ -485,8 +456,11 @@ class _SongCardViewState extends ConsumerState<SongCardView> {
     final theme = Theme.of(context);
     final base = ref.watch(chatBaseProvider).valueOrNull;
     final headers = ref.watch(mediaCookieHeadersProvider).valueOrNull;
+    final engine = ref.watch(songPlaybackProvider);
+    final playing = _isCurrent && engine.playing;
+    final loading = _isCurrent && engine.loading;
     return Container(
-      width: 230,
+      width: widget.width,
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: theme.colorScheme.surface.withValues(alpha: 0.75),
@@ -519,12 +493,14 @@ class _SongCardViewState extends ConsumerState<SongCardView> {
           ]),
         ),
         IconButton(
-          tooltip: '试听',
-          onPressed: _toggle,
-          icon: Icon(_loading
-              ? Icons.hourglass_top_rounded
-              : (_playing ? Icons.pause_rounded : Icons.play_arrow_rounded),
-              color: theme.colorScheme.primary),
+          tooltip: widget.unavailable ? '歌曲已不可用' : '试听',
+          onPressed: widget.unavailable ? null : _toggle,
+          icon: Icon(widget.unavailable
+              ? Icons.broken_image_outlined
+              : (loading
+                  ? Icons.hourglass_top_rounded
+                  : (playing ? Icons.pause_rounded : Icons.play_arrow_rounded)),
+              color: widget.unavailable ? theme.colorScheme.outline : theme.colorScheme.primary),
         ),
       ]),
     );

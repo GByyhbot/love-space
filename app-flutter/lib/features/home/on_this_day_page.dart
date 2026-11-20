@@ -161,6 +161,11 @@ class _OtdEntry extends StatelessWidget {
                   child: MediaImageView(mid: images.first.id),
                 ),
               ),
+            ] else if (record.body['song'] is Map) ...[
+              // 2.4.12 条目二：OTD 精简卡只给音符角标；点开故事弹层看完整歌曲卡
+              const SizedBox(width: 10),
+              Icon(Icons.music_note_rounded, size: 32,
+                  color: theme.colorScheme.primary),
             ],
           ]),
         ),

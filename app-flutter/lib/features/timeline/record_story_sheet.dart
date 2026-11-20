@@ -14,6 +14,8 @@ library;
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import '../../core/chat/chat_models.dart' show ChatSong;
+import '../chat/media_bubble_widgets.dart' show SongCardView;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_client.dart';
@@ -240,6 +242,19 @@ class _RecordStorySheetState extends ConsumerState<_RecordStorySheet> {
               Padding(
                 padding: const EdgeInsets.only(bottom: 12),
                 child: VoiceChipView(mid: voices.first.id),
+              )
+            else if (cur.body['song'] is Map)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: LayoutBuilder(builder: (context, c) {
+                  final song = ChatSong.fromJson(
+                      (cur.body['song'] as Map).cast<String, dynamic>());
+                  return SongCardView(
+                    song: song,
+                    width: c.maxWidth,
+                    unavailable: song.mid.isEmpty && song.src.isEmpty,
+                  );
+                }),
               ),
             // ② 作者行：头像 + 昵称 + 完整日期 +「N 年前的今天」标签
             Row(children: [

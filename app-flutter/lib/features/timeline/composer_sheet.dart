@@ -12,6 +12,7 @@ import 'dart:io';
 
 import 'package:dio/dio.dart' show Dio;
 import 'package:flutter/material.dart';
+import 'composer_song_sheet.dart' show showComposerSongSheet;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
@@ -148,6 +149,8 @@ class _ComposerSheetState extends ConsumerState<ComposerSheet> {
   final _content = TextEditingController();
   DateTime _date = DateTime.now();
   final _media = <ComposerMedia>[];
+  /// 2.4.12：一条动态最多一首歌（body.song 形态），null=未选。
+  Map<String, dynamic>? _song;
   bool _submitting = false;
   bool _draftSaving = false;
   String? _error;
@@ -221,6 +224,8 @@ class _ComposerSheetState extends ConsumerState<ComposerSheet> {
     _album = (r.body['album'] ?? '').toString().isEmpty
         ? null
         : r.body['album'].toString();
+    final rawSong = r.body['song'];
+    if (rawSong is Map) _song = Map<String, dynamic>.from(rawSong);
     final mids = (r.body['media'] as List?) ?? const [];
     for (final mid in mids) {
       final id = mid.toString();
@@ -348,6 +353,12 @@ class _ComposerSheetState extends ConsumerState<ComposerSheet> {
     final picked = await pickImageVideoFiles();
     if (picked.isEmpty) return;
     await _addMedia(picked);
+  }
+
+  /// 2.4.12：选歌（库音乐/在线两页签），选中写草稿态 _song。
+  Future<void> _pickSong() async {
+    final picked = await showComposerSongSheet(context);
+    if (picked != null && mounted) setState(() => _song = picked);
   }
 
   Future<void> _pickFromLibrary() async {
@@ -554,6 +565,7 @@ class _ComposerSheetState extends ConsumerState<ComposerSheet> {
             title: title.isEmpty ? null : title,
             album: _album,
             clientId: _postClientId,
+            song: _song,
           );
       if (err != null) {
         setState(() { _error = err; _submitting = false; });
@@ -595,6 +607,13 @@ class _ComposerSheetState extends ConsumerState<ComposerSheet> {
     if (!_sameList(initialMedia, ids)) changes['media'] = ids;
     final newAlbum = _album ?? '';
     if (newAlbum != _editInitial['album']) changes['album'] = newAlbum;
+    // 2.4.12 回填铁律 song 维度：不编辑音乐时 song 不进 changes，
+    // 由 originalBody 原样带回；换歌/移除才写 changes['song']（null=移除需显式空 Map 标记）
+    final initialSong = _originalBody['song'];
+    final songChanged = _song != null
+        ? _song.toString() != (initialSong?.toString() ?? '')
+        : initialSong != null;
+    if (songChanged) changes['song'] = _song;
 
     final err = await ref.read(timelineControllerProvider.notifier).editRecord(
         widget.editRecord!.id, changes,
@@ -763,18 +782,47 @@ class _ComposerSheetState extends ConsumerState<ComposerSheet> {
             ),
           ),
           const SizedBox(height: 8),
-          // 2.4.1 第 12 项④：媒体三入口一行三块等宽 tile（图标上文字下、
-          // 淡紫底 + 紫描边）；录音块点击开始录音，状态行保留原交互。
-          Row(children: [
-            Expanded(child: _mediaTile(theme, Icons.image_rounded, '图/视频',
-                onTap: _pickImageVideo)),
-            const SizedBox(width: 8),
-            Expanded(child: _mediaTile(theme, Icons.audiotrack_rounded, '音频',
-                onTap: _pickFromLibrary)),
-            const SizedBox(width: 8),
-            Expanded(child: _mediaTile(theme, Icons.mic_rounded, '录音',
-                onTap: _recState == _recIdle ? _startRecord : null)),
+          // 2.4.1 第 12 项④：媒体入口 tile（图标上文字下、淡紫底 + 紫描边）；
+          // 2.4.12 加「音乐」第四入口——Wrap 防 393 宽挤压（历史溢出教训）。
+          Wrap(spacing: 8, runSpacing: 8, children: [
+            SizedBox(
+              width: (MediaQuery.sizeOf(context).width - 32 - 24) / 4,
+              child: _mediaTile(theme, Icons.image_rounded, '图/视频',
+                  onTap: _pickImageVideo),
+            ),
+            SizedBox(
+              width: (MediaQuery.sizeOf(context).width - 32 - 24) / 4,
+              child: _mediaTile(theme, Icons.audiotrack_rounded, '音频',
+                  onTap: _pickFromLibrary),
+            ),
+            SizedBox(
+              width: (MediaQuery.sizeOf(context).width - 32 - 24) / 4,
+              child: _mediaTile(theme, Icons.mic_rounded, '录音',
+                  onTap: _recState == _recIdle ? _startRecord : null),
+            ),
+            SizedBox(
+              width: (MediaQuery.sizeOf(context).width - 32 - 24) / 4,
+              child: _mediaTile(theme, Icons.music_note_rounded,
+                  _song == null ? '音乐' : '已选歌', onTap: _pickSong),
+            ),
           ]),
+          if (_song != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Row(children: [
+                Icon(Icons.music_note_rounded, size: 16,
+                    color: theme.colorScheme.primary),
+                const SizedBox(width: 6),
+                Expanded(child: Text(
+                    '${_song!['title'] ?? ''} · ${_song!['artist'] ?? ''}',
+                    maxLines: 1, overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.labelSmall)),
+                IconButton(
+                    tooltip: '移除歌曲', iconSize: 18,
+                    onPressed: () => setState(() => _song = null),
+                    icon: const Icon(Icons.close_rounded)),
+              ]),
+            ),
           // 录音状态行（录制中=暂停/完成/取消，暂停中=继续/完成/取消；
           // 入口已由上方「录音」tile 承担——2.4.1 第 12 项④只换容器）。
           if (_recState != _recIdle)

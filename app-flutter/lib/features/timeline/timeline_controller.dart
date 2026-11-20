@@ -396,6 +396,7 @@ class TimelineController extends Notifier<TimelineState> {
     String? title,
     String? album,
     String? clientId,
+    Map<String, dynamic>? song,
   }) async {
     final cid = clientId ?? _activePostClientId ?? newChatClientId();
     _activePostClientId = cid; // 会话态同步（失败重试复用）
@@ -405,6 +406,7 @@ class TimelineController extends Notifier<TimelineState> {
       'media': mediaIds,
       if (title != null && title.isNotEmpty) 'title': title,
       if (album != null && album.isNotEmpty) 'album': album,
+      'song': ?song,
     };
     try {
       final dio = await ref.read(api.dioProvider.future);

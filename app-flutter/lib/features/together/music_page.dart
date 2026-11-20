@@ -17,13 +17,14 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:just_audio/just_audio.dart';
+import '../../core/audio/song_playback.dart' show SongItem, songPlaybackProvider;
+import '../../core/chat/chat_models.dart' show ChatSong;
 
 import '../../core/api/api_client.dart' as api;
 import '../../core/chat/chat_media.dart'
     show
         MediaValidationError,
         chatBaseProvider,
-        downloadAudioToCache,
         uploadChatMedia,
         validateUploadFile;
 import '../../core/together/together_data.dart';
@@ -57,8 +58,6 @@ class MusicPage extends ConsumerStatefulWidget {
 }
 
 class _MusicPageState extends ConsumerState<MusicPage> {
-  AudioPlayer? _player;
-  StreamSubscription<PlayerState>? _playerSub;
   /// 当前试听（key + 展示信息）——底部播放条据此渲染；null=无播放
   _PreviewMeta? _previewMeta;
   String? _playingKey;
@@ -74,44 +73,11 @@ class _MusicPageState extends ConsumerState<MusicPage> {
 
   @override
   void dispose() {
-    _playerSub?.cancel();
-    try {
-      _player?.dispose().timeout(const Duration(seconds: 3));
-    } catch (_) {// 插件不可用（测试环境）时直接忽略
-    }
     super.dispose();
   }
 
-  /// 🔴 play() 的 Future **在整段音频播完才完成**（just_audio 契约），绝不能
-  /// 当「开始播放」的完成信号 await——2.1.3 真机假失败的根因（8s 守卫误杀
-  /// 30 秒试听，声音在播却弹「试听失败」）。播放/暂停一律不 await，状态以
-  /// playerStateStream 为准；超时守卫只留真正会完成的加载步骤。
-  void _startPlay(AudioPlayer player) {
-    unawaited(player.play());
-  }
-
-  /// 订阅播放状态：播完（processingState==completed）自动归位收条。
-  void _listenPlayer(AudioPlayer player) {
-    _playerSub?.cancel();
-    _playerSub = player.playerStateStream.listen((st) {
-      if (!mounted) return;
-      setState(() => _paused = !st.playing);
-      if (st.processingState == ProcessingState.completed) {
-        _stopPlayer();
-        if (mounted) {
-          setState(() {
-            _playingKey = null;
-            _previewMeta = null;
-            _paused = false;
-          });
-        }
-      }
-    });
-  }
-
-  /// 试听入口：先下载到本地缓存（全量 GET，无 Range），再 setFilePath 播本地。
-  /// [urlPath] / [query]：在线歌 = /api/music/stream + {u: src}；
-  /// 本地音频 = /media/{mid} + {preview: true}（与语音下载同口径）。
+  /// 2.4.12 条目五：试听入口收敛到全局歌曲引擎。
+  /// 从歌单列表点播 → 队列 = recordsOf('music') 顺序，next/prev/自动下一首可用。
   Future<void> _preview({
     required String key,
     required String urlPath,
@@ -119,67 +85,58 @@ class _MusicPageState extends ConsumerState<MusicPage> {
     required String title,
     required String artist,
   }) async {
-    if (_loadingKey != null) return; // 一次一个，防连点
-    // 再点正在播的 → 播放/暂停切换（不 stop，保进度）
-    if (_playingKey == key && _player != null) {
-      if (_paused) {
-        _startPlay(_player!);
-        setState(() => _paused = false);
-      } else {
-        unawaited(_player!.pause().timeout(_playerTimeout)
-            .catchError((_) {}));
-        setState(() => _paused = true);
-      }
+    final engine = ref.read(songPlaybackProvider.notifier);
+    final st = ref.read(songPlaybackProvider);
+    // 同一首 → 播放/暂停切换（引擎判同曲 toggle，保进度）
+    final mid = key.startsWith('mid:') ? key.substring(4) : '';
+    final src = key.startsWith('src:') ? key.substring(4) : '';
+    if (st.current != null && st.current!.mid == mid && st.current!.src == src) {
+      await engine.toggle();
+      if (mounted) setState(() => _paused = !st.playing);
       return;
     }
-    // 切歌：先停旧的
-    await _stopPlayer();
-    setState(() {
-      _loadingKey = key;
-      _previewMeta = _PreviewMeta(key: key, title: title, artist: artist);
-    });
-    try {
-      final dio = await ref.read(api.dioProvider.future);
-      final filePath = await downloadAudioToCache(dio,
-          cacheKey: key, urlPath: urlPath, query: query);
-      final player = _player ??= AudioPlayer();
-      // 会完成的加载步骤才上超时守卫
-      await player.stop().timeout(_stopTimeout);
-      await player.setFilePath(filePath).timeout(_loadTimeout);
-      await player.seek(Duration.zero).timeout(_stopTimeout);
-      _listenPlayer(player);
+    // 构造队列（歌单列表顺序）
+    final records = ref.read(togetherControllerProvider.notifier).recordsOf('music');
+    final items = <SongItem>[];
+    int index = 0;
+    for (final r in records) {
+      final song = (r.body['song'] ?? {}) as Map;
+      final online = (song['src'] ?? '').toString().isNotEmpty;
+      final rmid = online ? '' : r.audioMid;
+      final rsrc = online ? (song['src'] ?? '').toString() : '';
+      final rart = online ? (song['art'] ?? '').toString() : '';
+      final artistOf = online ? (song['artist'] ?? '').toString()
+          : (r.body['content'] ?? '').toString();
+      final rkey = '${online ? 'src' : 'mid'}:${online ? rsrc : rmid}';
+      items.add(SongItem(title: (r.body['title'] ?? '未命名').toString(),
+          artist: artistOf, mid: rmid, src: rsrc, art: rart));
+      if (rkey == key) index = items.length - 1;
+    }
+    setState(() => _loadingKey = key);
+    final err = items.isEmpty
+        ? await engine.playSong((await _songOf(key, title, artist, mid, src)))
+        : await engine.playQueue(items, index);
+    if (mounted) {
       setState(() {
-        _playingKey = key;
+        _loadingKey = null;
+        _previewMeta = err == null
+            ? _PreviewMeta(key: key, title: title, artist: artist) : null;
+        _playingKey = err == null ? key : null;
         _paused = false;
       });
-      _startPlay(player);
-    } catch (e) {
-      if (mounted) {
-        ref.read(chatToastProvider.notifier).show('试听失败：$e',
-            tone: ChatToastTone.error);
-        setState(() {
-          _playingKey = null;
-          _previewMeta = null;
-        });
-      }
-    } finally {
-      if (mounted) setState(() => _loadingKey = null);
+    }
+    if (err != null && mounted) {
+      ref.read(chatToastProvider.notifier).show(err, tone: ChatToastTone.error);
     }
   }
+
+  Future<ChatSong> _songOf(String key, String title, String artist,
+      String mid, String src) async =>
+      ChatSong(title: title, artist: artist, mid: mid, src: src);
 
   Future<void> _stopPlayer() async {
-    _playerSub?.cancel();
-    try {
-      await _player?.stop().timeout(_stopTimeout);
-      await _player?.seek(Duration.zero).timeout(_stopTimeout);
-    } catch (_) {// 停止失败不阻断 UI
-    }
+    await ref.read(songPlaybackProvider.notifier).stop();
   }
-
-  /// stop/seek：秒级会完成；setFilePath：本地读文件+解码，放宽到 15s
-  static const _stopTimeout = Duration(seconds: 3);
-  static const _loadTimeout = Duration(seconds: 15);
-  static const _playerTimeout = Duration(seconds: 8);
 
   @override
   Widget build(BuildContext context) {
@@ -212,20 +169,13 @@ class _MusicPageState extends ConsumerState<MusicPage> {
       ),
       // 底部播放条（App 内播放器）：试听开始出现，播完/停止/离页自动收起
       bottomNavigationBar:
-          (_previewMeta != null && _player != null)
+          (_previewMeta != null && ref.watch(songPlaybackProvider).current != null)
               ? _PreviewBar(
-                  player: _player!,
+                  player: ref.read(songPlaybackProvider.notifier).player!,
                   meta: _previewMeta!,
-                  paused: _paused,
-                  onTogglePlay: () {
-                    if (_paused) {
-                      if (_player != null) _startPlay(_player!);
-                      setState(() => _paused = false);
-                    } else {
-                      unawaited(_player!.pause()
-                          .timeout(_playerTimeout).catchError((_) {}));
-                      setState(() => _paused = true);
-                    }
+                  paused: !ref.watch(songPlaybackProvider).playing,
+                  onTogglePlay: () async {
+                    await ref.read(songPlaybackProvider.notifier).toggle();
                   },
                   onStop: () async {
                     await _stopPlayer();
