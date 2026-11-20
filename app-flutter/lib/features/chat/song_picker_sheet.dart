@@ -13,8 +13,10 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:audio_service/audio_service.dart' show MediaItem;
 import 'package:just_audio/just_audio.dart';
 
+import '../../core/audio/tagged_sources.dart' show taggedFileSource;
 import '../../core/chat/chat_models.dart';
 
 import '../../core/api/api_client.dart';
@@ -172,14 +174,16 @@ class _SongSheetState extends ConsumerState<_SongSheet> {
           query: const {'preview': 'true'});
       final player = _previewPlayer ?? AudioPlayer();
       await player.stop().timeout(const Duration(seconds: 3));
-      await player.setFilePath(file).timeout(const Duration(seconds: 15));
+      await player.setAudioSource(taggedFileSource(file, MediaItem(
+          id: 'mid:${m.id}', title: (r.body.song?.title ?? r.body.title).toString(), artist: (r.body.song?.artist ?? '').toString())))
+          .timeout(const Duration(seconds: 15));
       _listenPreviewEnd(player);
       _previewPlayer = player;
       setState(() => _previewingIdx = i);
       unawaited(player.play());
-    } catch (_) {
+    } catch (e) {
       if (mounted) {
-        ref.read(chatToastProvider.notifier).show('试听加载失败，稍后再试',
+        ref.read(chatToastProvider.notifier).show('试听失败：$e',
             tone: ChatToastTone.error);
       }
     }
@@ -216,14 +220,16 @@ class _SongSheetState extends ConsumerState<_SongSheet> {
           query: {'u': it.preview});
       final player = _previewPlayer ?? AudioPlayer();
       await player.stop().timeout(const Duration(seconds: 3));
-      await player.setFilePath(file).timeout(const Duration(seconds: 15));
+      await player.setAudioSource(taggedFileSource(file, MediaItem(
+          id: 'src:${it.preview.hashCode}', title: it.title, artist: it.artist)))
+          .timeout(const Duration(seconds: 15));
       _listenPreviewEnd(player);
       _previewPlayer = player;
       setState(() => _previewingIdx = i);
       unawaited(player.play());
-    } catch (_) {
+    } catch (e) {
       if (mounted) {
-        ref.read(chatToastProvider.notifier).show('试听加载失败，稍后再试',
+        ref.read(chatToastProvider.notifier).show('试听失败：$e',
             tone: ChatToastTone.error);
       }
     }

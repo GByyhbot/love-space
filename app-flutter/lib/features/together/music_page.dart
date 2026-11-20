@@ -61,6 +61,7 @@ class _MusicPageState extends ConsumerState<MusicPage> {
   /// 当前试听（key + 展示信息）——底部播放条据此渲染；null=无播放
   _PreviewMeta? _previewMeta;
   String? _playingKey;
+  String? _playingRecordId;
   String? _loadingKey;
   bool _paused = false; // 播放/暂停按钮态（playerStateStream 驱动）
 
@@ -84,21 +85,20 @@ class _MusicPageState extends ConsumerState<MusicPage> {
     required Map<String, String> query,
     required String title,
     required String artist,
+    required int index,
+    required String recordId,
   }) async {
     final engine = ref.read(songPlaybackProvider.notifier);
     final st = ref.read(songPlaybackProvider);
-    // 同一首 → 播放/暂停切换（引擎判同曲 toggle，保进度）
-    final mid = key.startsWith('mid:') ? key.substring(4) : '';
-    final src = key.startsWith('src:') ? key.substring(4) : '';
-    if (st.current != null && st.current!.mid == mid && st.current!.src == src) {
+    // 同一首 → 播放/暂停切换（页面级用记录 id 对照，不再用 key 字符串反推）
+    if (_playingRecordId == recordId && st.current != null) {
       await engine.toggle();
       if (mounted) setState(() => _paused = !st.playing);
       return;
     }
-    // 构造队列（歌单列表顺序）
+    // 构造队列（歌单列表顺序）；index 由 _songBody 的列表下标直接透传
     final records = ref.read(togetherControllerProvider.notifier).recordsOf('music');
     final items = <SongItem>[];
-    int index = 0;
     for (final r in records) {
       final song = (r.body['song'] ?? {}) as Map;
       final online = (song['src'] ?? '').toString().isNotEmpty;
@@ -107,14 +107,14 @@ class _MusicPageState extends ConsumerState<MusicPage> {
       final rart = online ? (song['art'] ?? '').toString() : '';
       final artistOf = online ? (song['artist'] ?? '').toString()
           : (r.body['content'] ?? '').toString();
-      final rkey = '${online ? 'src' : 'mid'}:${online ? rsrc : rmid}';
       items.add(SongItem(title: (r.body['title'] ?? '未命名').toString(),
           artist: artistOf, mid: rmid, src: rsrc, art: rart));
-      if (rkey == key) index = items.length - 1;
     }
     setState(() => _loadingKey = key);
     final err = items.isEmpty
-        ? await engine.playSong((await _songOf(key, title, artist, mid, src)))
+        ? await engine.playSong(ChatSong(title: title, artist: artist,
+            mid: urlPath.startsWith('/media/') ? urlPath.substring(7) : '',
+            src: (query['u'] ?? ''), art: ''))
         : await engine.playQueue(items, index);
     if (mounted) {
       setState(() {
@@ -122,6 +122,7 @@ class _MusicPageState extends ConsumerState<MusicPage> {
         _previewMeta = err == null
             ? _PreviewMeta(key: key, title: title, artist: artist) : null;
         _playingKey = err == null ? key : null;
+        _playingRecordId = err == null ? recordId : null;
         _paused = false;
       });
     }
@@ -129,10 +130,6 @@ class _MusicPageState extends ConsumerState<MusicPage> {
       ref.read(chatToastProvider.notifier).show(err, tone: ChatToastTone.error);
     }
   }
-
-  Future<ChatSong> _songOf(String key, String title, String artist,
-      String mid, String src) async =>
-      ChatSong(title: title, artist: artist, mid: mid, src: src);
 
   Future<void> _stopPlayer() async {
     await ref.read(songPlaybackProvider.notifier).stop();
@@ -292,6 +289,8 @@ class _MusicPageState extends ConsumerState<MusicPage> {
                         query: {'u': (song['src'] ?? '').toString()},
                         title: (r.body['title'] ?? '未命名').toString(),
                         artist: artist,
+                        index: index,
+                        recordId: r.id,
                       )
                     : _preview(
                         key: key,
@@ -299,6 +298,8 @@ class _MusicPageState extends ConsumerState<MusicPage> {
                         query: const {'preview': 'true'},
                         title: (r.body['title'] ?? '未命名').toString(),
                         artist: artist,
+                        index: index,
+                        recordId: r.id,
                       ),
             icon: loading
                 ? const SizedBox(

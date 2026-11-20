@@ -46,6 +46,8 @@ import 'features/together/question_habit_pages.dart';
 import 'features/together/quest_page.dart';
 import 'features/together/tool_pages.dart';
 import 'features/together/weekly_page.dart';
+import 'core/audio/song_playback.dart' show songPlaybackProvider;
+import 'features/chat/voice_playback.dart' show voiceInterruptHook;
 
 /// 2.4.5 甲组：通知/前台服务全局初始化先于首帧（Android only；失败不影响主链）。
 /// 冷启动点击通知的 launch 详情只有在 initialize 完成后才可恢复。
@@ -67,7 +69,11 @@ Future<void> main() async {
       androidResumeOnClick: true,           // 点通知回 App
     );
   } catch (_) {}
-  runApp(const ProviderScope(child: LoveApp()));
+  // 2.4.13：显式 container + UncontrolledProviderScope——用同一个容器给
+  // voiceInterruptHook 接线（播语音先停歌），保证广播/读的是同一引擎实例。
+  final container = ProviderContainer();
+  voiceInterruptHook = () => container.read(songPlaybackProvider.notifier).stop();
+  runApp(UncontrolledProviderScope(container: container, child: const LoveApp()));
 }
 /// 认证驱动的路由重定向：checking → splash；out → /login；authed → 主框架。
 final routerProvider = Provider<GoRouter>((ref) {

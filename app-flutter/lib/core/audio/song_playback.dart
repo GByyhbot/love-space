@@ -7,8 +7,10 @@
 /// · 队列：从歌单点播 = 当前列表顺序（next/prev/播完自动下一首）；
 ///   从动态/聊天歌曲卡点播 = 单曲模式（无队列，next/prev 置灰，播完即止）；
 ///   在线 30 秒试听同样走引擎，播完即止不自动连播；
-/// · 通知栏/锁屏走 audio_service + just_audio_background（MediaSession/MediaStyle），
-///   引擎是播放状态单一事实源，通知按钮与 App 内播放按钮双向同步；
+/// · 通知栏/锁屏走 audio_service + just_audio_background（MediaSession/MediaStyle）。
+///   🔴 2.4.13 定案：通知状态以 just_audio_background 自带 handler + 带 tag 的
+///   AudioSource 队列为**单一事实源**——不再另接 handler、不再手工推 playbackState；
+///   每个叶子源必须带 MediaItem tag（否则 customLoad 的 `tag as MediaItem` 硬转型抛错）；
 /// · 后台续播限完整音频（本地上传 + 投放入库的 mid）——download-first 家法：
 ///   Dio 全量 GET → song_cache → setFilePath，不依赖网络。
 library;
@@ -19,6 +21,7 @@ import 'package:audio_service/audio_service.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:just_audio/just_audio.dart';
 
+import 'tagged_sources.dart' show taggedFileSource, taggedQueueSource;
 import '../api/api_client.dart' as api;
 import '../chat/chat_media.dart' show downloadAudioToCache;
 import '../chat/chat_models.dart' show ChatSong;
@@ -84,7 +87,6 @@ class SongPlaybackController extends Notifier<SongPlaybackState> {
   List<SongItem> _queue = const [];
   bool _queueMode = false;
   bool _busy = false;
-  BaseAudioHandler? _handler;
 
   @override
   SongPlaybackState build() {
@@ -92,11 +94,8 @@ class SongPlaybackController extends Notifier<SongPlaybackState> {
     return const SongPlaybackState();
   }
 
-  /// 注入 audio_service handler（由 main 启动后调用一次），用于通知状态同步。
-  void attachHandler(BaseAudioHandler handler) => _handler = handler;
-
   /// UI 只读访问引擎持有的唯一 player（进度条 StreamBuilder 用），
-  /// 严禁外部 setFilePath/play——所有播控必须走本引擎方法。
+  /// 严禁外部加载/play——所有播控必须走本引擎方法（加载统一带 tag）。
   AudioPlayer? get player => _player;
 
   Future<void> _teardown() async {
@@ -128,24 +127,8 @@ class SongPlaybackController extends Notifier<SongPlaybackState> {
       queueLength: _queue.length,
       queueMode: _queueMode,
     );
-    // 通知栏/锁屏与 App 内播放按钮双向同步（引擎是单一事实源）
-    final h = _handler;
-    if (h != null && cur != null) {
-      h.playbackState.add(PlaybackState(
-        playing: actual,
-        processingState: actual ? AudioProcessingState.buffering : AudioProcessingState.ready,
-        controls: const [
-          MediaControl.skipToPrevious,
-          MediaControl.play,
-          MediaControl.pause,
-          MediaControl.stop,
-          MediaControl.skipToNext,
-        ],
-        systemActions: const {MediaAction.seek, MediaAction.skipToNext, MediaAction.skipToPrevious},
-      ));
-      h.mediaItem.add(cur.toMediaItem());
-      h.queue.add(_queue.map((e) => e.toMediaItem()).toList());
-    }
+    // 2.4.13：通知栏/锁屏不再手工推 handler——以 just_audio_background 自带
+    // handler + 带 tag 的 AudioSource 队列为单一事实源（见 tagged_sources.dart）。
   }
 
   /// 统一入口：播单曲（动态/聊天歌曲卡）——单曲模式、不与语音同播。
@@ -221,7 +204,24 @@ class SongPlaybackController extends Notifier<SongPlaybackState> {
           : await downloadAudioToCache(dio, cacheKey: 'src_${item.src.hashCode}',
               urlPath: '/api/music/stream', query: {'u': item.src});
       final player = _ensurePlayer;
-      await player.setFilePath(file).timeout(const Duration(seconds: 15));
+      // 2.4.13：每个叶子源必须带 MediaItem tag（customLoad 硬转型前提）；
+      // 队列用 ConcatenatingAudioSource，每个子源各自 tag。
+      if (queueMode && queue.length > 1) {
+        final sources = <(String, MediaItem)>[];
+        for (final q in queue) {
+          final qFile = q.mid.isNotEmpty
+              ? await downloadAudioToCache(dio, cacheKey: 'mid_${q.mid}',
+                  urlPath: '/media/${q.mid}', query: const {'preview': 'true'})
+              : await downloadAudioToCache(dio, cacheKey: 'src_${q.src.hashCode}',
+                  urlPath: '/api/music/stream', query: {'u': q.src});
+          sources.add((qFile, q.toMediaItem()));
+        }
+        await player.setAudioSources(taggedQueueSource(sources),
+            initialIndex: index).timeout(const Duration(seconds: 30));
+      } else {
+        await player.setAudioSource(taggedFileSource(file, item.toMediaItem()))
+            .timeout(const Duration(seconds: 15));
+      }
       _queue = queue;
       _queueMode = queueMode;
       state = SongPlaybackState(current: item, index: index,
@@ -231,7 +231,8 @@ class SongPlaybackController extends Notifier<SongPlaybackState> {
       return null;
     } catch (e) {
       state = const SongPlaybackState();
-      return '试听加载失败，稍后再试';
+      // 2.4.13：透出真实异常，不再吞成无信息通用文案（2.4.11 旧口径）
+      return '试听失败：$e';
     } finally {
       _busy = false;
     }

@@ -27,7 +27,7 @@ class FakeVoicePlayer implements VoiceAudioPlayer {
   Stream<VoiceAudioStatus> get statusStream => _ctrl.stream;
 
   @override
-  Future<Duration?> setFilePath(String path) async {
+  Future<Duration?> setFilePath(String path, {required String tagId}) async {
     calls.add('$tag.setFilePath:$path');
     return const Duration(seconds: 7);
   }

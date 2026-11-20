@@ -23,6 +23,8 @@ library;
 import 'dart:async';
 import 'dart:io';
 
+import '../../core/audio/tagged_sources.dart' show taggedFileSource, voiceMediaItem;
+
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:just_audio/just_audio.dart';
@@ -72,7 +74,9 @@ class VoiceAudioStatus {
 /// 只播本地文件（setFilePath），不再直接拉远程流（setUrl）。
 abstract class VoiceAudioPlayer {
   Stream<VoiceAudioStatus> get statusStream;
-  Future<Duration?> setFilePath(String path);
+  /// 2.4.13：必须传语音 mid 作为 tag id——just_audio_background 的
+  /// customLoad 对无 tag 的源硬转型会抛 TypeError（真机加载即死）。
+  Future<Duration?> setFilePath(String path, {required String tagId});
   Future<void> play();
   Future<void> stop();
   Future<void> seek(Duration position);
@@ -91,7 +95,8 @@ class JustAudioVoicePlayer implements VoiceAudioPlayer {
           ));
 
   @override
-  Future<Duration?> setFilePath(String path) => _player.setFilePath(path);
+  Future<Duration?> setFilePath(String path, {required String tagId}) =>
+      _player.setAudioSource(taggedFileSource(path, voiceMediaItem(tagId)));
 
   @override
   Future<void> play() => _player.play();
@@ -322,7 +327,7 @@ class VoicePlaybackController extends Notifier<VoicePlaybackState> {
         return;
       }
       final p = _ensurePlayer();
-      final d = await p.setFilePath(file).timeout(_netTimeout);
+      final d = await p.setFilePath(file, tagId: mid).timeout(_netTimeout);
       await p.seek(Duration.zero).timeout(_netTimeout);
       // 状态先行置为播放（图标/波形即时切换），再驱动真实播放
       state = VoicePlaybackState(
@@ -392,7 +397,7 @@ class VoicePlaybackController extends Notifier<VoicePlaybackState> {
       }
       final prober = _ensureProber();
       voiceDbg('vp prefetch begin mid=$mid file=$file');
-      final d = await prober.setFilePath(file).timeout(_netTimeout);
+      final d = await prober.setFilePath(file, tagId: mid).timeout(_netTimeout);
       final sec = d?.inSeconds ?? 0;
       _durationCache[mid] = sec;
       voiceDbg('vp prefetch done mid=$mid sec=$sec');

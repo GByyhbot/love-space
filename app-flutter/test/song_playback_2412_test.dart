@@ -1,5 +1,6 @@
 /// 2.4.12 条目五：全局歌曲播放引擎护栏。
 /// 锁死：引擎单例、队列口径、与语音互斥、通知状态同步、后台续播 download-first。
+library;
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -51,15 +52,13 @@ void main() {
     expect(voice.contains('await voiceInterruptHook?.call()'), isTrue);
   });
 
-  test('通知/锁屏：通知栏是引擎状态的镜像（单一事实源）', () {
+  test('通知/锁屏：以 just_audio_background handler + tag 队列为单一事实源', () {
     final engine = src('lib/core/audio/song_playback.dart');
-    for (final key in ['playbackState.add(', 'mediaItem.add(', 'queue.add(']) {
-      expect(engine.contains(key), isTrue, reason: '通知状态同步缺 $key');
-    }
-    expect(engine.contains('MediaControl.skipToPrevious'), isTrue);
-    expect(engine.contains('MediaControl.skipToNext'), isTrue);
-    expect(engine.contains('MediaControl.stop'), isTrue,
-        reason: '关闭按钮停播撤通知');
+    expect(engine.contains('自带 handler'), isTrue);
+    expect(engine.contains('attachHandler'), isFalse,
+        reason: '2.4.13 不再手工推 handler');
+    expect(engine.contains('MediaControl.'), isFalse,
+        reason: '2.4.13 不再手工推 controls——由 just_audio_background 自带 handler + tag 队列提供上一首/下一首/关闭');
 
     final main = src('lib/main.dart');
     expect(main.contains('JustAudioBackground.init('), isTrue);
@@ -74,10 +73,11 @@ void main() {
     expect(plist.contains('<string>audio</string>'), isTrue);
   });
 
-  test('后台续播：download-first 本地文件（setFilePath）', () {
+  test('后台续播：download-first 本地文件（带 tag 的 AudioSource）', () {
     final engine = src('lib/core/audio/song_playback.dart');
     expect(engine.contains('downloadAudioToCache('), isTrue);
-    expect(engine.contains('await player.setFilePath(file)'), isTrue);
+    expect(engine.contains('taggedFileSource(file, item.toMediaItem())'), isTrue,
+        reason: '2.4.13 加载必须带 MediaItem tag');
     expect(engine.contains('setUrl('), isFalse,
         reason: '不用 setUrl 直接拉远程流（既定家法）');
   });
