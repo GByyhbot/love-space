@@ -23,6 +23,7 @@ import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:record/record.dart' show Amplitude;
 
+import 'package:dio/dio.dart' show DioMediaType, FormData, MultipartFile, Options;
 import '../../core/api/api_client.dart';
 import '../../core/chat/chat_chrome.dart';
 import '../../core/chat/chat_media.dart';
@@ -380,6 +381,28 @@ class _ChatComposeState extends ConsumerState<ChatCompose>
     voiceDbg('compose _stopVolumeStream exit');
   }
 
+  /// 2.7.0 第③项：multipart 上传 /api/asr 转写录音文件。
+  /// receiveTimeout 45s 仅本请求（Options 层覆盖，不动全局 BaseOptions）；
+  /// Cookie 由共享 dio 的 CookieJar 自动带上，X-Love-Space 由拦截器注入。
+  Future<String> _asrTranscribeFile(String path) async {
+    final dio = await ref.read(dioProvider.future);
+    final form = FormData.fromMap({
+      'file': await MultipartFile.fromFile(path,
+          filename: 'voice.m4a', contentType: DioMediaType('audio', 'mp4')),
+    });
+    final r = await dio.post('/api/asr',
+        data: form,
+        options: Options(
+          receiveTimeout: const Duration(seconds: 45),
+          headers: {'Accept': 'application/json'},
+        ));
+    final data = r.data;
+    if (data is Map && data['text'] != null) {
+      return data['text'].toString();
+    }
+    throw StateError('ASR 响应缺少 text 字段');
+  }
+
   /// 2.7.0 第①项①-1：权限预请求（麦克风图标 tap 路径，未在手势中，
   /// 系统弹窗在此处合规）。结果缓存进 VoiceRecorder 会话级标志。
   /// 弹窗等待用户操作属合法阻塞（不在录音启动链内，无超时要求）。
@@ -505,16 +528,50 @@ class _ChatComposeState extends ConsumerState<ChatCompose>
         voiceDbg('compose _finish cancel done');
         _snack('已取消录音');
       case RecordIntent.toText:
-        // 🔴 后端零改动红线下无 ASR 接口（服务端与 Web 端都没有语音识别），
-        // 不做假交互：按取消收尾并明确告知（遮罩气泡内也已即时提示）。
+        // 2.7.0 第③项：转文字实装——按 send 同路径先 stop() 取文件，太短不进
+        // 识别；multipart 上传 /api/asr（该请求单独 receiveTimeout 45s，不动
+        // 全局 BaseOptions）；成功文本写入输入框（不自动发送，光标文末）；
+        // 失败按取消路径清理，绝不静默改发语音。
         voiceDbg('compose _finish toText pre stop(ending)');
         ref.read(chatRecordProvider.notifier).stop(ending: RecordEnding.cancel);
-        voiceDbg('compose _finish toText pre recorder.cancel');
-        await _recorder.cancel();
-        voiceDbg('compose _finish toText pre recorder.recycle');
+        voiceDbg('compose _finish toText pre recorder stop');
+        final toTextFile = await _recorder.stop();
+        voiceDbg('compose _finish toText pre recorder.recycle',
+            'hasFile=${toTextFile != null}');
         await _recorder.recycle();
         voiceDbg('compose _finish toText done');
-        _snack('语音识别暂未开放，本次录音未发送', tone: ChatToastTone.warning);
+        // 录音 < 1 秒同样提示「说话时间太短」不进入识别（与 send 同口径）
+        if (toTextFile == null || elapsed < const Duration(seconds: 1)) {
+          _snack('说话时间太短', tone: ChatToastTone.warning);
+          break;
+        }
+        ref.read(chatAsrLoadingProvider.notifier).state = true;
+        String? text;
+        String? errText;
+        try {
+          text = await _asrTranscribeFile(toTextFile.path);
+        } catch (e) {
+          errText = errorDetail(e);
+          voiceDbg('compose _finish toText error', 'e=${e.toString()}');
+        } finally {
+          ref.read(chatAsrLoadingProvider.notifier).state = false;
+        }
+        if (!mounted) break;
+        if (text != null && text.isNotEmpty) {
+          // 成功：文本写入输入框（不自动发送），光标置于文末供编辑
+          _input.value = TextEditingValue(
+              text: text,
+              selection: TextSelection.collapsed(offset: text.length));
+        } else {
+          // 失败/超时：临时文件按取消路径清理（已录文件删除，不静默改发）
+          try {
+            await File(toTextFile.path).delete();
+          } catch (_) {}
+          _snack(errText != null && errText.isNotEmpty
+                  ? '识别失败，本次录音未发送'
+                  : '识别失败，本次录音未发送',
+              tone: ChatToastTone.error);
+        }
       case RecordIntent.send:
         // 通则：短于 1 秒提示「说话时间太短」不发送
         if (elapsed < const Duration(seconds: 1)) {

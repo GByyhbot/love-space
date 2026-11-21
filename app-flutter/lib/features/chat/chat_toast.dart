@@ -32,6 +32,11 @@ const double recordSlideThreshold = 64.0;
 /// 录音手势中手指的全局坐标（真圆环跟随用；松手/取消时置空）
 final recordFingerProvider = StateProvider<Offset?>((_) => null);
 
+/// 2.7.0 第③项：语音转文字识别中标志（true=遮罩文字卡切换加载态）。
+/// 录音态已 stop（遮罩录音气泡收起），识别期间由 [AsrLoadingOverlay]
+/// 以同风格文字卡呈现「识别中…」；完成/失败置 false。
+final chatAsrLoadingProvider = StateProvider<bool>((_) => false);
+
 /// 胶囊行判定带（2.7.0 第②项机主口径：取消 30% / 转文字 70%，发送区扩为
 /// 屏宽 40%）；迟滞双带：
 /// · [hysteresis]（18dp）：已在某区时退出回发送区的防闪烁带（保留不变）；
@@ -488,7 +493,7 @@ class _RecordBubbleState extends ConsumerState<_RecordBubble> {
                       // 段 C 字阶收编：15px 语义文本 → bodyLarge（16，±1px
                       // 收敛固有）；w600 既有档保留；色板为语音面板微信语义
                       // 色白名单（G13），不动。
-                      Text('语音识别暂未开放',
+                      Text('松手转文字',
                           style: Theme.of(context).textTheme.bodyLarge
                               ?.copyWith(
                               color: const Color(0xFF1E4620),
@@ -848,6 +853,70 @@ class _FingerRing extends ConsumerWidget {
               color: Colors.white.withValues(alpha: 0.6), width: 2),
         ),
       ),
+    );
+  }
+}
+
+/// 2.7.0 第③项：语音转文字「识别中…」加载遮罩（录音松手后、结果回来前）。
+/// 与录音遮罩同风格文字卡（绿条 + 文本 + 转圈），风格统一口径取转圈。
+class AsrLoadingOverlay extends ConsumerWidget {
+  const AsrLoadingOverlay({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final loading = ref.watch(chatAsrLoadingProvider);
+    if (!loading) return const SizedBox.shrink();
+    return IgnorePointer(
+      child: LayoutBuilder(builder: (context, box) {
+        final h = box.maxHeight;
+        final screenH = MediaQuery.sizeOf(context).height;
+        final centerY = (screenH * 0.585).clamp(h * 0.2, h * 0.9);
+        final alignY = (centerY / h) * 2 - 1;
+        return Stack(children: [
+          Positioned.fill(
+            child: ColoredBox(color: Colors.black.withValues(alpha: 0.6)),
+          ),
+          Align(
+            alignment: Alignment(0, alignY),
+            child: Container(
+              width: MediaQuery.sizeOf(context).width * 0.89,
+              height: 104,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              decoration: BoxDecoration(
+                color: const Color(0xFFE9F7EE),
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: const [
+                  BoxShadow(
+                      blurRadius: 22,
+                      offset: Offset(0, 8),
+                      color: Colors.black38)
+                ],
+              ),
+              child: Row(children: [
+                Container(
+                    width: 2.5,
+                    height: 30,
+                    decoration: BoxDecoration(
+                        color: const Color(0xFF2E9E52),
+                        borderRadius: BorderRadius.circular(1.5))),
+                const SizedBox(width: 10),
+                Text('识别中…',
+                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                        color: const Color(0xFF1E4620),
+                        fontWeight: FontWeight.w600)),
+                const SizedBox(width: 12),
+                const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2.2,
+                        valueColor:
+                            AlwaysStoppedAnimation(Color(0xFF2E9E52)))),
+              ]),
+            ),
+          ),
+        ]);
+      }),
     );
   }
 }

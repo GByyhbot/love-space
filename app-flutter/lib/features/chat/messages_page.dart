@@ -7,6 +7,7 @@
 library;
 
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:dio/dio.dart' show Options;
 import 'dart:async';
 import 'dart:math' as math;
 
@@ -181,6 +182,9 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.lg)),
       items: [
         item('copy', Icons.copy_rounded, '复制'),
+        // 2.7.0 第③项：语音气泡长按「转文字」（media_id 路径，双方语音均可转）
+        if (chatVisualOf(record).voiceMids.isNotEmpty)
+          item('totext', Icons.graphic_eq_rounded, '转文字'),
         item('reply', Icons.reply_rounded, '引用'),
         item('pin', Icons.push_pin_rounded, record.body.pinned ? '取消置顶' : '置顶'),
         item('moment', Icons.auto_stories_rounded, '记入时光'),
@@ -213,7 +217,24 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
         await _sendToMoment(record);
       case 'recall':
         await _confirmRecall(record);
+      case 'totext':
+        await _showAsrSheet(record);
     }
+  }
+
+  /// 2.7.0 第③项：语音转文字底部 sheet（media_id 路径；已缓存秒开；
+  /// 识别中 sheet 内加载态；失败显示错误与「重试」；全文可长按复制）。
+  Future<void> _showAsrSheet(ChatRecord record) async {
+    final theme = Theme.of(context);
+    await showModalBottomSheet<void>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (sheetCtx) => _AsrTextSheet(
+        mediaId: chatVisualOf(record).voiceMids.first,
+        theme: theme,
+      ),
+    );
   }
 
   /// C4 记入时光（主人定版=正式 composer）：段三最小发布弹窗已替换——
@@ -494,9 +515,15 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
         // 微信式语音输入全屏遮罩（录音态显示，盖住输入栏与消息列表）：
         // topInset = 状态栏 + AppBar 高，供屏高 58.5% 锚点换算到 body 坐标。
         Positioned.fill(
-          child: VoiceRecordOverlay(
-            topInset: MediaQuery.paddingOf(context).top + kToolbarHeight,
-          ),
+          child: Stack(children: [
+            // 2.7.0 第③项：语音转文字「识别中…」加载遮罩（录音遮罩收起后接力）
+            const AsrLoadingOverlay(),
+            // 微信式语音输入全屏遮罩（录音态显示，盖住输入栏与消息列表）：
+            // topInset = 状态栏 + AppBar 高，供屏高 58.5% 锚点换算到 body 坐标。
+            VoiceRecordOverlay(
+              topInset: MediaQuery.paddingOf(context).top + kToolbarHeight,
+            ),
+          ]),
         ),
       ]),
     );
@@ -1525,5 +1552,108 @@ class _TypingPillState extends State<_TypingPill>
   double _bounce(double t) {
     final x = t.clamp(0.0, 1.0);
     return x <= 0 ? 0 : math.sin(math.pi * x).clamp(0.0, 1.0);
+  }
+}
+
+/// 2.7.0 第③项：语音转文字结果 sheet。
+/// 状态机：加载中（转圈）→ 成功（全文 SelectableText，可长按复制）→
+/// 失败（错误原文 + 「重试」按钮）。已缓存的媒体二跑直接返回（秒开）。
+class _AsrTextSheet extends ConsumerStatefulWidget {
+  const _AsrTextSheet({required this.mediaId, required this.theme});
+  final String mediaId;
+  final ThemeData theme;
+
+  @override
+  ConsumerState<_AsrTextSheet> createState() => _AsrTextSheetState();
+}
+
+class _AsrTextSheetState extends ConsumerState<_AsrTextSheet> {
+  String? _text;
+  String? _error;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _run();
+  }
+
+  Future<void> _run() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final dio = await ref.read(dioProvider.future);
+      final r = await dio.post('/api/asr',
+          data: {'media_id': widget.mediaId},
+          options: Options(receiveTimeout: const Duration(seconds: 45)));
+      final data = r.data;
+      if (mounted) {
+        setState(() {
+          _text = (data is Map ? data['text'] : '')?.toString() ?? '';
+          _loading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = errorDetail(e);
+          _loading = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = widget.theme.colorScheme;
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Row(children: [
+            Icon(Icons.graphic_eq_rounded, size: 18, color: cs.primary),
+            const SizedBox(width: 10),
+            Text('语音转文字',
+                style: widget.theme.textTheme.titleMedium),
+          ]),
+          const SizedBox(height: 16),
+          if (_loading)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 28),
+              child: SizedBox(
+                  width: 28,
+                  height: 28,
+                  child: CircularProgressIndicator(strokeWidth: 2.4)),
+            )
+          else if (_error != null) ...[
+            Text('识别失败，本次录音未发送',
+                style: widget.theme.textTheme.bodyMedium
+                    ?.copyWith(color: cs.error)),
+            const SizedBox(height: 4),
+            Text(_error!,
+                style: widget.theme.textTheme.bodySmall
+                    ?.copyWith(color: cs.outline)),
+            const SizedBox(height: 16),
+            FilledButton.icon(
+              onPressed: _run,
+              icon: const Icon(Icons.refresh_rounded, size: 18),
+              label: const Text('重试'),
+            ),
+          ] else ...[
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 320),
+              child: SingleChildScrollView(
+                child: SelectableText(
+                  _text!.isEmpty ? '（未识别到内容）' : _text!,
+                  style: widget.theme.textTheme.bodyLarge,
+                ),
+              ),
+            ),
+          ],
+        ]),
+      ),
+    );
   }
 }
