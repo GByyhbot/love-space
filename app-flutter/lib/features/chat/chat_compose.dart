@@ -78,6 +78,9 @@ class _ChatComposeState extends ConsumerState<ChatCompose>
   final _focus = FocusNode();
   final _slots = InputSlotMachine();
   final VoiceRecorder _recorder = VoiceRecorder();
+  // 2.7.0 第①项①-4 防幽灵录音：手势置位/清零与录音启动异步链同步竞速，
+  // _startRecording 每个 await 之后校验，已清零则放弃启动。
+  bool _pressActive = false;
   bool _hasText = false;
 
   /// 长按录音起点（全局坐标）；为空表示当前不在录音手势中，
@@ -377,26 +380,63 @@ class _ChatComposeState extends ConsumerState<ChatCompose>
     voiceDbg('compose _stopVolumeStream exit');
   }
 
+  /// 2.7.0 第①项①-1：权限预请求（麦克风图标 tap 路径，未在手势中，
+  /// 系统弹窗在此处合规）。结果缓存进 VoiceRecorder 会话级标志。
+  /// 弹窗等待用户操作属合法阻塞（不在录音启动链内，无超时要求）。
+  Future<void> _preflightPermission() async {
+    try {
+      final ok = await _recorder.ensurePermission();
+      voiceDbg('compose _preflightPermission', 'ok=$ok');
+    } catch (e) {
+      // 预请求失败不打断 tap 交互；长按时按未授权缓存走提示路径
+      voiceDbg('compose _preflightPermission error', 'e=$e');
+    }
+  }
+
   Future<void> _startRecording(Offset globalOrigin) async {
     voiceDbg('compose _startRecording enter');
+    // 2.7.0 第①项①-1：手势内只读授权缓存，未授权不拉弹窗、不进录音链
+    // （预请求在麦克风图标 tap 上完成，见 _preflightPermission）。
+    if (!_recorder.permissionGranted) {
+      voiceDbg('compose _startRecording no-perm-cache');
+      _snack('需要麦克风权限，请点麦克风图标开启后重试',
+          tone: ChatToastTone.error);
+      return;
+    }
     try {
-      final ok = await _recorder.hasPermission();
-      voiceDbg('compose _startRecording hasPermission', 'ok=$ok');
-      if (!ok) {
-        _snack('需要麦克风权限，请到系统设置开启后重试',
-            tone: ChatToastTone.error);
+      // 2.7.0 第①项①-3：启动 3 秒超时兜底（TimeoutException 走既有 catch
+      // 路径：recycle 收尾 + 「录音失败」提示）；录音启动链内不许有无超时 await。
+      await _recorder.start().timeout(const Duration(seconds: 3));
+      // ①-4 防幽灵录音：手势已在启动期间松开 → 放弃启动（recycle 收尾，
+      // 不置录音态、不起音量流与计时器）
+      if (!_pressActive) {
+        voiceDbg('compose _startRecording ghost-abort (post-start)');
+        await _recorder.recycle();
         return;
       }
-      await _recorder.start();
       // 开始录音前停掉在播语音（全局播放互斥：录音与试听不同时进行）
       // ignore: unawaited_futures
       ref.read(voicePlaybackProvider.notifier).stop();
+      // ①-4：再次校验（stop() 同步返回，但保持逐 await 校验的纪律）
+      if (!_pressActive) {
+        voiceDbg('compose _startRecording ghost-abort (post-playback-stop)');
+        await _recorder.recycle();
+        return;
+      }
       voiceDbg('compose _startRecording recorder-start-ok');
       _recordOrigin = globalOrigin;
       _lastIntent = RecordIntent.send;
       ref.read(recordFingerProvider.notifier).state = globalOrigin;
       ref.read(chatRecordProvider.notifier).start();
       _startVolumeStream();
+      // ①-4：进入录音态前最后校验
+      if (!_pressActive) {
+        voiceDbg('compose _startRecording ghost-abort (pre-state)');
+        _stopVolumeStream();
+        ref.read(chatRecordProvider.notifier).stop();
+        await _recorder.recycle();
+        return;
+      }
       // 60s 上限：到时自动按发送收尾（微信同款）
       _maxTimer = Timer(const Duration(seconds: 60), () {
         if (mounted && _recordOrigin != null) _finishRecording();
@@ -758,20 +798,27 @@ class _ChatComposeState extends ConsumerState<ChatCompose>
                   onLongPressStart: (d) {
                     voiceDbg('compose gesture longPressStart',
                         'x=${d.globalPosition.dx} y=${d.globalPosition.dy}');
+                    _pressActive = true; // ①-4：同步置位，先于一切异步
                     _startRecording(d.globalPosition);
                   },
                   onLongPressMoveUpdate: (d) =>
                       _onRecordMove(d.globalPosition),
                   onLongPressEnd: (_) {
                     voiceDbg('compose gesture longPressEnd');
+                    _pressActive = false; // ①-4：同步清零
                     _finishRecording();
                   },
                   onLongPressCancel: () {
                     voiceDbg('compose gesture longPressCancel');
+                    _pressActive = false; // ①-4：同步清零
                     _finishRecording();
                   },
-                  onTap: () =>
-                      _snack('长按录音，松开发送；滑到左上取消、右上转文字'),
+                  onTap: () {
+                    // 2.7.0 第①项①-1：权限预请求挂在这类 tap 上（未在手势中，
+                    // 弹窗合规）；结果缓存为会话级标志，长按内只读。
+                    _preflightPermission();
+                    _snack('长按录音，松开发送；滑到左上取消、右上转文字');
+                  },
                   child: Semantics(
                     button: true,
                     label: '长按录音',

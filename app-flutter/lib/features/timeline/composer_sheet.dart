@@ -456,14 +456,17 @@ class _ComposerSheetState extends ConsumerState<ComposerSheet> {
 
   Future<void> _startRecord() async {
     // record 5.x：hasPermission() 首次调用即在 Android 触发系统授权弹窗，
-    // 无独立 requestPermission API；返回 false 视为已拒绝
+    // 无独立 requestPermission API；返回 false 视为已拒绝。
+    // （时光线入口为按钮点击路径，弹窗合规——既有交互形态不动，2.7.0 ①-5）
     if (!await _rec.hasPermission()) {
       _toast('没有录音权限，请到系统设置里给 App 开启麦克风权限',
           tone: ChatToastTone.warning);
       return;
     }
     try {
-      await _rec.start();
+      // 2.7.0 第①项①-5：启动 3 秒超时兜底（授权后重建由 VoiceRecorder.start
+      // 内部自动处理，与本文件无关）；超时走既有 catch 收尾。
+      await _rec.start().timeout(const Duration(seconds: 3));
       _recTicks = 0;
       if (mounted) {
         setState(() { _recState = _recRecording; _recElapsed = Duration.zero; });

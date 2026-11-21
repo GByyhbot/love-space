@@ -23,6 +23,16 @@ class VoiceRecorder {
   AudioRecorder _rec = AudioRecorder();
   String? _path;
 
+  // ── 2.7.0 第①项：权限会话级缓存与首次授权标志 ──
+  // 权限预请求移出长按路径（提示词①-1）：hasPermission 只在麦克风图标 tap
+  // 上调用（该处弹窗合规），结果缓存在会话级标志里；长按手势内只读缓存。
+  bool _permChecked = false;
+  bool _permOk = false;
+  // 会话内从未授权过 → 首次授权成功置位；start() 前若置位先 recycle()
+  // 换全新实例，避开授权前创建的半初始化实例（提示词①-2）。
+  bool _justGranted = false;
+  bool _everGranted = false;
+
   /// 上一次录音收尾（dispose + 重建）的完成信号。
   ///
   /// 🔴 根因（连录第二条报「录音失败」）：record 库的 `stop()`/`cancel()`
@@ -45,6 +55,29 @@ class VoiceRecorder {
     return ok;
   }
 
+  /// 权限预请求（2.7.0 第①项①-1）：麦克风图标 tap 上调用，结果缓存为
+  /// 会话级标志。幂等：已缓存直接返回，不再触发系统弹窗。
+  /// 未授权不缓存（用户可能随后在系统设置开启，允许下次重试）。
+  /// 注意：此处无超时——弹窗等待用户操作是合法阻塞，不属于录音启动链。
+  Future<bool> ensurePermission() async {
+    if (_permChecked) {
+      voiceDbg('recorder ensurePermission cached', 'ok=$_permOk');
+      return _permOk;
+    }
+    final ok = await hasPermission();
+    _permChecked = true;
+    _permOk = ok;
+    if (ok && !_everGranted) {
+      _everGranted = true;
+      _justGranted = true;
+      voiceDbg('recorder ensurePermission first-grant', 'justGranted=true');
+    }
+    return ok;
+  }
+
+  /// 长按手势内只读的授权缓存标志（提示词①-1：手势内不许拉弹窗）。
+  bool get permissionGranted => _permChecked && _permOk;
+
   /// 录音实时音量流（dBFS，约 -160..0，越大越响）。
   /// 供气泡真波形使用；仅在 start() 成功后调用。
   Stream<Amplitude> amplitudeStream(Duration interval) =>
@@ -59,7 +92,15 @@ class VoiceRecorder {
   }
 
   Future<void> start() async {
-    voiceDbg('recorder start enter');
+    voiceDbg('recorder start enter',
+        'justGranted=$_justGranted');
+    // 2.7.0 第①项①-2：本会话刚完成首次授权的，第一次 start() 前先重建
+    // 全新实例（recycle 内部完成 dispose+重建+串行化），避开授权前创建的
+    // 半初始化实例（授权弹窗打断手势时的闩锁悬挂根因）。
+    if (_justGranted) {
+      _justGranted = false;
+      await recycle();
+    }
     await _awaitRecycled();
     final dir = await getApplicationDocumentsDirectory();
     _path =
