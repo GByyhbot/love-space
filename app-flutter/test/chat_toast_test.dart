@@ -2,6 +2,8 @@
    ① 长按录音手势意图（松开发送 / 左上取消 / 右上转文字）；
    ② 顶部提示层取代底部 SnackBar：自动收起；录音态改全屏遮罩、不占底部；
    ③ 聊天背景层在 body 被键盘压缩后仍保持完整视口高度与顶部位置。 */
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -9,29 +11,39 @@ import 'package:love_space/features/chat/chat_toast.dart';
 import 'package:love_space/features/chat/chat_wallpaper_frame.dart';
 
 void main() {
-  group('① 长按录音手势意图（纯函数：胶囊行横带 x 判定）', () {
+  group('① 长按录音手势意图（2.7.0：判定带 30%/70% + 进入迟滞 12dp）', () {
     const w = 393.0; // 实测规格屏宽
-    final cancelEdge = w * 0.44;   // 172.9
-    final textEdge = w * 0.56;     // 220.1
+    final cancelEdge = w * 0.30;   // 117.9（2.7.0：0.44 → 0.30，有意变更）
+    final textEdge = w * 0.70;     // 275.1（2.7.0：0.56 → 0.70，有意变更）
 
-    test('中间带 → 发送（默认态中心与 ±边缘内）', () {
+    test('中间带（屏宽 40%）→ 发送', () {
       expect(recordIntentFor(x: w / 2, screenWidth: w), RecordIntent.send);
-      expect(recordIntentFor(x: cancelEdge + 1, screenWidth: w),
-          RecordIntent.send);
-      expect(recordIntentFor(x: textEdge - 1, screenWidth: w),
-          RecordIntent.send);
+      // 发送区内紧贴边界（越界 1px 未过进入迟滞）→ 保持发送
+      expect(recordIntentFor(x: cancelEdge - 1, screenWidth: w),
+          RecordIntent.send, reason: '越界 1px 不翻转（进入迟滞）');
+      expect(recordIntentFor(x: textEdge + 1, screenWidth: w),
+          RecordIntent.send, reason: '越界 1px 不翻转（进入迟滞）');
     });
 
-    test('x < 44% → 取消；x > 56% → 转文字', () {
-      expect(recordIntentFor(x: cancelEdge - 1, screenWidth: w),
-          RecordIntent.cancel);
+    test('x < 30%−12 → 取消；x > 70%+12 → 转文字（深区）', () {
       expect(recordIntentFor(x: 20, screenWidth: w), RecordIntent.cancel);
-      expect(recordIntentFor(x: textEdge + 1, screenWidth: w),
-          RecordIntent.toText);
       expect(recordIntentFor(x: w - 20, screenWidth: w), RecordIntent.toText);
     });
 
-    test('迟滞防抖 18dp：边界来回滑动不闪烁', () {
+    test('2.7.0 新增：进入迟滞 12dp——越界 11dp 不翻转、13dp 翻转', () {
+      // send 态进入取消需 x < cancelEdge−12
+      expect(recordIntentFor(x: cancelEdge - 11, screenWidth: w),
+          RecordIntent.send, reason: '越界 11dp 不翻转');
+      expect(recordIntentFor(x: cancelEdge - 13, screenWidth: w),
+          RecordIntent.cancel, reason: '越界 13dp 翻转');
+      // send 态进入转文字需 x > textEdge+12
+      expect(recordIntentFor(x: textEdge + 11, screenWidth: w),
+          RecordIntent.send, reason: '越界 11dp 不翻转');
+      expect(recordIntentFor(x: textEdge + 13, screenWidth: w),
+          RecordIntent.toText, reason: '越界 13dp 翻转');
+    });
+
+    test('退出回发送区的 18dp 迟滞保留（既有语义适配新边界）', () {
       // 已在取消区：x 回到 cancelEdge+10（< cancelEdge+18）→ 保持取消
       expect(
           recordIntentFor(
@@ -60,13 +72,48 @@ void main() {
               screenWidth: w,
               currentIntent: RecordIntent.toText),
           RecordIntent.send);
-      // 取消区直接滑过中缝到转文字区 → 转文字
+    });
+
+    test('取消 ↔ 转文字直接跳转需越过目标区边界 ± 12dp', () {
+      // 取消区：x 越过 textEdge+2（未过 +12）→ 保持取消
       expect(
           recordIntentFor(
               x: textEdge + 2,
               screenWidth: w,
               currentIntent: RecordIntent.cancel),
+          RecordIntent.cancel, reason: '越过 2dp 不翻转（进入迟滞）');
+      // 越过 textEdge+13 → 转文字
+      expect(
+          recordIntentFor(
+              x: textEdge + 13,
+              screenWidth: w,
+              currentIntent: RecordIntent.cancel),
           RecordIntent.toText);
+      // 转文字区：x 低于 cancelEdge-11（未过 −12 进取消门槛）→ 保持转文字
+      // （未过门槛不翻转；回发送带只覆盖靠近发送区一侧，对称口径）
+      expect(
+          recordIntentFor(
+              x: cancelEdge - 11,
+              screenWidth: w,
+              currentIntent: RecordIntent.toText),
+          RecordIntent.toText, reason: '越过 11dp 不翻转');
+      // 低于 cancelEdge-13 → 取消（进取消门槛优先于发送带判定）
+      expect(
+          recordIntentFor(
+              x: cancelEdge - 13,
+              screenWidth: w,
+              currentIntent: RecordIntent.toText),
+          RecordIntent.cancel);
+    });
+
+    test('2.7.0 动画口径：胶囊选中态 Motion.base（220ms）、气泡 easeOutCubic', () {
+      final src = File('lib/features/chat/chat_toast.dart').readAsStringSync();
+      // 气泡 AnimatedContainer：easeOutBack → easeOutCubic（时长 220 保持）
+      expect(src.contains('curve: Curves.easeOutCubic'), isTrue,
+          reason: '气泡 AnimatedContainer 曲线');
+      // 胶囊选中态：Motion.fast → Motion.base（220ms）
+      expect(src.contains('duration: Motion.base,\n      curve: Curves.easeOut,'),
+          isTrue, reason: '胶囊选中态 220ms');
     });
   });
 

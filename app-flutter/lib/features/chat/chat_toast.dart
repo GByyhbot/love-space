@@ -32,30 +32,44 @@ const double recordSlideThreshold = 64.0;
 /// 录音手势中手指的全局坐标（真圆环跟随用；松手/取消时置空）
 final recordFingerProvider = StateProvider<Offset?>((_) => null);
 
-/// 胶囊行判定带（微信实测规格）：手指 x < 屏宽 44% 进取消区、> 56% 进
-/// 转文字区、中间为发送区；边界 [hysteresis]（18dp）迟滞防闪烁：
-/// 已在某区时退出该区需反向越过「区边界 + 迟滞带宽」。
+/// 胶囊行判定带（2.7.0 第②项机主口径：取消 30% / 转文字 70%，发送区扩为
+/// 屏宽 40%）；迟滞双带：
+/// · [hysteresis]（18dp）：已在某区时退出回发送区的防闪烁带（保留不变）；
+/// · [entryHysteresis]（12dp，新增）：从发送区进入取消/转文字区、以及取消↔
+///   转文字直接跳转，都需越过目标区边界 + 12dp（机主实测「稍微移动即误触」
+///   的修正）。
 RecordIntent recordIntentFor({
   required double x,
   required double screenWidth,
   RecordIntent? currentIntent,
   double hysteresis = 18.0,
+  double entryHysteresis = 12.0,
 }) {
   final cur = currentIntent ?? RecordIntent.send;
-  final cancelEdge = screenWidth * 0.44;
-  final textEdge = screenWidth * 0.56;
+  final cancelEdge = screenWidth * 0.30;
+  final textEdge = screenWidth * 0.70;
   switch (cur) {
     case RecordIntent.cancel:
-      if (x >= textEdge) return RecordIntent.toText;
-      if (x >= cancelEdge + hysteresis) return RecordIntent.send;
+      // 取消↔转文字直接跳转：越过目标区边界 + entry
+      if (x > textEdge + entryHysteresis) return RecordIntent.toText;
+      // 退出回发送：18dp 迟滞带只覆盖靠近发送区一侧（x 越过 textEdge−18
+      // 而未达跳转门槛时保持取消——若带全宽适用会截胡直接跳转）
+      if (x >= cancelEdge + hysteresis && x < textEdge - hysteresis) {
+        return RecordIntent.send;
+      }
       return RecordIntent.cancel;
     case RecordIntent.toText:
-      if (x < cancelEdge) return RecordIntent.cancel;
-      if (x < textEdge - hysteresis) return RecordIntent.send;
+      // 取消↔转文字直接跳转：越过目标区边界 − entry
+      if (x < cancelEdge - entryHysteresis) return RecordIntent.cancel;
+      // 退出回发送：18dp 迟滞带只覆盖靠近发送区一侧（对称口径）
+      if (x <= textEdge - hysteresis && x > cancelEdge + entryHysteresis) {
+        return RecordIntent.send;
+      }
       return RecordIntent.toText;
     case RecordIntent.send:
-      if (x < cancelEdge) return RecordIntent.cancel;
-      if (x > textEdge) return RecordIntent.toText;
+      // 进入取消/转文字：越过目标区边界 ± entry
+      if (x < cancelEdge - entryHysteresis) return RecordIntent.cancel;
+      if (x > textEdge + entryHysteresis) return RecordIntent.toText;
       return RecordIntent.send;
   }
 }
@@ -443,7 +457,8 @@ class _RecordBubbleState extends ConsumerState<_RecordBubble> {
         // 时长取定版三档 120/220/320 中的 220 档）
         AnimatedContainer(
           duration: Motion.base,
-          curve: Curves.easeOutBack,
+          // 2.7.0 第②项③：easeOutBack 回弹 → easeOutCubic（时长 220ms 保持）
+          curve: Curves.easeOutCubic,
           width: width,
           height: height,
           decoration: BoxDecoration(
@@ -780,8 +795,10 @@ class _FanTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 2.7.0 第②项③：胶囊选中态过渡 Motion.fast → Motion.base（220ms，机主
+    // 实测「动画过快」修正）
     return AnimatedContainer(
-      duration: Motion.fast,
+      duration: Motion.base,
       curve: Curves.easeOut,
       alignment: Alignment.center,
       decoration: BoxDecoration(
