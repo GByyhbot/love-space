@@ -226,7 +226,11 @@ def schedule():
         c.execute('BEGIN IMMEDIATE')
         zone = ZoneInfo(db.setting(c, 'space')['timezone'])
         today = dt.datetime.now(zone).date()
-        for row in c.execute('SELECT * FROM records WHERE deleted IS NULL').fetchall():
+        # 2.6.0 性能段 P1：schedule 只关心 surprise/anniversary/wish 三类——
+        # 此前全表逐行 body 解码（聊天占记录约 88%，纯浪费）。kind IN 命中
+        # records_kind(kind, created) 索引；cleanup 的 SQL 下推不在本批（主人裁定）。
+        for row in c.execute("SELECT * FROM records WHERE deleted IS NULL "
+                             "AND kind IN ('surprise','anniversary','wish')").fetchall():
             body = db.body_decode(row)
             if row['kind'] == 'surprise' and body.get('publish_at', float('inf')) <= now():
                 body.pop('publish_at', None)
@@ -592,18 +596,27 @@ def run(stop):
 
     media_thread = threading.Thread(target=media_loop, daemon=True, name='media-loop')
     media_thread.start()
-    counter = 0
+    # 2.6.0 性能段 P2：周期任务改墙钟门控——原 counter%N 按「循环计数」计时，
+    # 而每条聊天/记录创建都会 nudge() 提前唤醒主循环：越聊 counter 转速越高，
+    # 名义 60s 的 maintenance 可能十几秒就跑一轮（与 P1 全表扫描互为乘数）。
+    # 现在按 last_run 时间戳到期才跑；last_run=None（首次启动）立即跑一次，
+    # 保留「启动即跑」语义。nudge 只加速投递（deliver 三件套每轮执行，不变）。
+    periodic = {'maintenance': (60.0, 0.0), 'habit': (30.0, 0.0), 'music_drop': (300.0, 0.0)}
     try:
         while not stop.is_set():
             try:
-                if counter % 12 == 0:
+                t = now()
+                if t - periodic['maintenance'][1] >= periodic['maintenance'][0]:
+                    periodic['maintenance'] = (60.0, t)
                     maintenance()
                 # 共同打卡提醒：30s 查一次就够（20 点整后最迟半分钟送达），
                 # dedupe 保证同一天同一个人只提醒一次，重复跑没有副作用
-                if counter % 6 == 1:
+                if t - periodic['habit'][1] >= periodic['habit'][0]:
+                    periodic['habit'] = (30.0, t)
                     habit_reminders()
-                # 2.4.12 投放入库：counter%60 × 5s = 5 分钟一轮（≤5 分钟口径）
-                if counter % 60 == 0:
+                # 2.4.12 投放入库：5 分钟一轮（墙钟口径，≤5 分钟不变）
+                if t - periodic['music_drop'][1] >= periodic['music_drop'][0]:
+                    periodic['music_drop'] = (300.0, t)
                     from .music_drop import scan_once
                     result = scan_once()
                     if result['imported']:
@@ -614,7 +627,6 @@ def run(stop):
                 deliver_webpushes()
             except Exception:
                 log.exception('Scheduled task failed')
-            counter += 1
             # 基础节奏 5s；请求线程 nudge() 可立即唤醒，聊天推送即时出队
             wake.wait(5)
             wake.clear()

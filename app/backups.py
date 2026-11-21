@@ -243,6 +243,10 @@ def create_backup():
             if has_period:
                 period.copy_file(period_snapshot)
             try:
+                # 2.6.0 性能段 P9：包级默认 DEFLATED（db/manifest/secret.key.enc
+                # 文本与 SQLite 需要压缩）；媒体条目逐条 ZIP_STORED——JPEG/MP4
+                # 已是压缩格式，deflate 只能再榨 0-2% 却把 GB 级媒体在 NAS CPU
+                # 上过一遍 zlib。恢复侧按条目自带压缩类型解压，无兼容问题。
                 with zipfile.ZipFile(temp_target, 'w', zipfile.ZIP_DEFLATED, allowZip64=True) as archive:
                     archive.write(snapshot, 'love.db')
                     if has_period:
@@ -262,7 +266,8 @@ def create_backup():
                         folder = db.media_dir(m['zone'], m['mime'], m['created'])
                         for filename in (m['id'] + m['ext'], m['preview']):
                             if filename and (folder / filename).is_file():
-                                archive.write(folder / filename, 'media/' + filename)
+                                archive.write(folder / filename, 'media/' + filename,
+                                              compress_type=zipfile.ZIP_STORED)
                 # 口令已在入口校验过，这里必然走加密分支：产物永远是 .zip.enc
                 encrypted = encrypt_file(temp_target, password)
                 encrypted.replace(target.with_name(target.name + '.enc'))

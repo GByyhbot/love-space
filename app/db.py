@@ -124,6 +124,11 @@ def init():
           name TEXT NOT NULL, mime TEXT NOT NULL, size INTEGER NOT NULL, ext TEXT NOT NULL,
           status TEXT NOT NULL DEFAULT 'pending', preview TEXT, error TEXT, created REAL NOT NULL,
           attached INTEGER NOT NULL DEFAULT 0, zone TEXT NOT NULL DEFAULT '');
+        -- 2.6.0 性能段 P6：media 此前除主键外零索引——转码认领（worker 每 2s
+        -- 全表扫+排序）与选图/选片（mime 前缀 LIKE + created 排序）全靠 SCAN。
+        -- 幂等 DDL 放基线块（与 records_kind 同款）：新库建表即带，存量库启动即补。
+        CREATE INDEX IF NOT EXISTS media_claim ON media(status, attached, created);
+        CREATE INDEX IF NOT EXISTS media_mime_created ON media(mime COLLATE NOCASE, created DESC);
         CREATE TABLE IF NOT EXISTS likes(record_id TEXT NOT NULL REFERENCES records(id) ON DELETE CASCADE,
           user_id TEXT NOT NULL REFERENCES users(id), PRIMARY KEY(record_id,user_id));
         CREATE TABLE IF NOT EXISTS comments(id TEXT PRIMARY KEY, record_id TEXT NOT NULL REFERENCES records(id) ON DELETE CASCADE,

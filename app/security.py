@@ -15,6 +15,13 @@ from fastapi import HTTPException, Request
 from .db import DATA, connect, now
 
 
+# 2.6.0 性能段 P8：密钥材料进程内缓存——此前每次解密都读盘 secret.key +
+# HKDF 重派生，乘在 P1/P3 的全表循环里（每条私密记录每次 decode 都付一遍）。
+# 缓存按文件 mtime 失效（测试环境重建密钥文件自动生效）；密钥轮换本就要求
+# 重启服务，mtime 变化时连派生缓存一起清掉，语义安全。
+_key_cache: dict = {}
+
+
 def secret_key():
     path = DATA / 'secret.key'
     if not path.exists():
@@ -24,7 +31,14 @@ def secret_key():
             path.chmod(0o600)
         except FileExistsError:
             pass
-    return path.read_bytes()
+    mtime = path.stat().st_mtime
+    cached = _key_cache.get('raw')
+    if cached is None or cached[0] != mtime:
+        cached = (mtime, path.read_bytes())
+        _key_cache['raw'] = cached
+        _key_cache.pop('fernet', None)
+        _key_cache.pop('derived', None)
+    return cached[1]
 
 
 # ── 密钥用途分离 ────────────────────────────────────────────────
@@ -44,12 +58,25 @@ def cipher(purpose=None):
 
     purpose 非空 → 按用途派生独立子密钥；purpose 为空 → 直接用主密钥，
     **仅用于解用途分离之前落库的存量密文**，新的加密一律要带 purpose。
+    派生结果随 _key_cache 缓存（secret_key 的 mtime 失效机制连带清空）。
     """
+    # 🔴 顺序铁律：先 secret_key()（内部做 mtime 校验，必要时刷 raw 并清派生
+    # 缓存），**再** setdefault('derived')——反过来写的话，缓存未暖的首次调用
+    # 会在 setdefault 建好 dict 之后才触发刷新，把刚建的 derived 变成孤儿
+    # （f1 存进孤儿、f2 再建一份，缓存永远 miss）。
+    secret_key()
     if purpose is None:
-        return Fernet(secret_key())
-    material = HKDF(algorithm=SHA256(), length=32, salt=None,
-                    info=purpose).derive(base64.urlsafe_b64decode(secret_key()))
-    return Fernet(base64.urlsafe_b64encode(material))
+        f = _key_cache.get('fernet')
+        if f is None:
+            f = _key_cache['fernet'] = Fernet(secret_key())
+        return f
+    derived = _key_cache.setdefault('derived', {})
+    f = derived.get(purpose)
+    if f is None:
+        material = HKDF(algorithm=SHA256(), length=32, salt=None,
+                        info=purpose).derive(base64.urlsafe_b64decode(_key_cache['raw'][1]))
+        f = derived[purpose] = Fernet(base64.urlsafe_b64encode(material))
+    return f
 
 
 def decrypt_with_fallback(purpose, sealed: bytes):
