@@ -41,7 +41,11 @@ void main() {
     test('VoiceRecorder.ensurePermission 幂等且未授权不缓存', () {
       final rec = src('lib/features/chat/voice_recorder.dart');
       expect(rec.contains('if (_permChecked)'), isTrue, reason: '幂等：已缓存直接返回');
-      expect(rec.contains('_permChecked = true;\n    _permOk = ok;'), isTrue);
+      // 2.7.1 毒化修复：仅授权成功置缓存（旧断言钉的「无条件置位」正是根因字面）
+      expect(rec.contains('_permChecked = true;\n    _permOk = true;'), isTrue,
+          reason: '仅 ok==true 时置缓存');
+      expect(rec.contains("voiceDbg('recorder ensurePermission deny (not cached)')"),
+          isTrue, reason: '未授权不缓存，下次 tap 重新复查');
       expect(rec.contains('bool get permissionGranted => _permChecked && _permOk;'),
           isTrue, reason: '手势内只读的授权缓存 getter');
     });

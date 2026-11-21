@@ -65,14 +65,23 @@ class VoiceRecorder {
       return _permOk;
     }
     final ok = await hasPermission();
+    if (!ok) {
+      // 2.7.1 毒化修复：未授权不缓存（与上方文档注释一致）——ok=false 时
+      // 不置 _permChecked，下一次麦克风 tap 重新走 hasPermission() 复查
+      // （已授权时该调用静默返回 true 不弹窗，成本可忽略）。否则首次
+      // 检查的假 false 会毒化整会话：用户事后在系统设置开启权限，
+      // permissionGranted 仍恒 false，长按恒弹提示直到杀进程。
+      voiceDbg('recorder ensurePermission deny (not cached)');
+      return false;
+    }
     _permChecked = true;
-    _permOk = ok;
-    if (ok && !_everGranted) {
+    _permOk = true;
+    if (!_everGranted) {
       _everGranted = true;
       _justGranted = true;
       voiceDbg('recorder ensurePermission first-grant', 'justGranted=true');
     }
-    return ok;
+    return true;
   }
 
   /// 长按手势内只读的授权缓存标志（提示词①-1：手势内不许拉弹窗）。
