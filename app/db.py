@@ -127,7 +127,8 @@ def init():
           name TEXT NOT NULL, mime TEXT NOT NULL, size INTEGER NOT NULL, ext TEXT NOT NULL,
           status TEXT NOT NULL DEFAULT 'pending', preview TEXT, error TEXT, created REAL NOT NULL,
           attached INTEGER NOT NULL DEFAULT 0, zone TEXT NOT NULL DEFAULT '',
-          duration REAL);  -- 2.6.0 P5：转码时长（秒，REAL 可空；存量行保持 NULL，前端/API 容错）
+          duration REAL,  -- 2.6.0 P5：转码时长（秒，REAL 可空；存量行保持 NULL，前端/API 容错）
+          transcript TEXT);  -- 2.7.0 ASR：转写缓存（media_id 路径成功后落库，可空）
         -- 2.6.0 性能段 P6：media 此前除主键外零索引——转码认领（worker 每 2s
         -- 全表扫+排序）与选图/选片（mime 前缀 LIKE + created 排序）全靠 SCAN。
         -- 幂等 DDL 放基线块（与 records_kind 同款）：新库建表即带，存量库启动即补。
@@ -380,6 +381,10 @@ MIGRATIONS = {
     2: ('media 加 duration 列（转码时长秒，可空）',
         lambda c: None if 'duration' in {r[1] for r in c.execute('PRAGMA table_info(media)')}
         else c.execute('ALTER TABLE media ADD COLUMN duration REAL')),
+    # 2.7.0 ASR：语音转文字缓存列（media_id 路径转写成功后落缓存，可空）
+    3: ('media 加 transcript 列（ASR 转写缓存，可空）',
+        lambda c: None if 'transcript' in {r[1] for r in c.execute('PRAGMA table_info(media)')}
+        else c.execute('ALTER TABLE media ADD COLUMN transcript TEXT')),
 }
 
 

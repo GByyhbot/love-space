@@ -9,6 +9,8 @@ import os
 import re
 import secrets
 import shutil
+import subprocess
+import tempfile
 import socket
 import threading
 import time
@@ -20,7 +22,7 @@ from zoneinfo import ZoneInfo
 
 import httpx
 
-from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, Response, UploadFile
+from fastapi import Body, Depends, FastAPI, File, Form, HTTPException, Request, Response, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from PIL import Image
@@ -30,6 +32,7 @@ from starlette.middleware.gzip import GZipMiddleware
 from starlette.staticfiles import NotModifiedResponse
 
 from . import db
+from . import asr as asr_mod
 from . import rev_cache
 from . import importers
 from . import period
@@ -1783,6 +1786,90 @@ def sniff_media(path, mime):
             return check(f.read(32))
     except OSError:
         return False
+
+
+
+@app.post('/api/asr')
+async def api_asr(request: Request, user=Depends(current_user)):
+    """语音转文字（2.7.0 第③项）。两种入参二选一（Content-Type 区分）：
+    · multipart 上传 m4a/wav（录音直转）——不缓存；
+    · JSON {"media_id": N}（已发送语音）——服务端取媒体文件，成功后落
+      media.transcript 缓存，重复请求直接返回缓存不再重跑。
+    校验：仅音频类型、≤10MB；单飞队列（同一时刻一条，其余排队）；单条 60s
+    超时放弃；转写经线程池 + 子进程执行，不阻塞事件循环。
+    模型缺失 503「识别模型未就绪」。
+    """
+    ctype = (request.headers.get('content-type') or '').split(';')[0].lower()
+    media_id, up_file, up_name, up_mime = 0, None, '', ''
+    if ctype == 'multipart/form-data':
+        form = await request.form()
+        up = form.get('file')
+        if up is not None and hasattr(up, 'read'):
+            up_name = up.filename or 'a.m4a'
+            up_mime = (up.content_type or '').split(';')[0].lower()
+            up_file = await up.read()
+        raw_mid = form.get('media_id')
+        if raw_mid:
+            media_id = str(raw_mid)
+    else:
+        try:
+            body = await request.json()
+        except Exception:
+            body = None
+        if isinstance(body, dict) and body.get('media_id'):
+            media_id = str(body['media_id'])
+    if up_file is None and media_id == 0:
+        raise HTTPException(422, '请上传音频文件或提供 media_id')
+
+    if not asr_mod.is_ready():
+        raise HTTPException(503, '识别模型未就绪')
+
+    if up_file is not None:
+        if not up_mime.startswith('audio/'):
+            raise HTTPException(422, '仅支持音频文件')
+        if len(up_file) > asr_mod.MAX_BYTES:
+            raise HTTPException(422, '音频超过 10MB 上限')
+        if len(up_file) == 0:
+            raise HTTPException(422, '文件为空')
+        suffix = Path(up_name).suffix.lower() or '.m4a'
+        tmp_in = Path(tempfile.mkdtemp(prefix='asr-up-')) / ('in' + suffix)
+        tmp_in.write_bytes(up_file)
+        src, cleanup_dir = tmp_in, tmp_in.parent
+        mid = None
+    else:
+        with connect() as c:
+            row = c.execute('SELECT * FROM media WHERE id=?', (media_id,)).fetchone()
+        if not row:
+            raise HTTPException(404, '语音记录不存在')
+        if not row['mime'].startswith('audio/'):
+            raise HTTPException(422, '该媒体不是音频，无法转文字')
+        if row['transcript']:
+            return {'text': row['transcript'], 'cached': True}
+        src = db.media_dir(row['zone'], row['mime'], row['created']) / (row['id'] + row['ext'])
+        if not src.is_file():
+            raise HTTPException(404, '语音文件已缺失')
+        cleanup_dir = None
+        mid = row['id']
+
+    loop = asyncio.get_running_loop()
+    try:
+        text = await loop.run_in_executor(None, asr_mod.transcribe_file, src)
+    except asr_mod.ModelNotReady:
+        raise HTTPException(503, '识别模型未就绪')
+    except subprocess.TimeoutExpired:
+        raise HTTPException(504, '识别超时（60 秒），请稍后重试')
+    except HTTPException:
+        raise
+    except Exception:
+        log.exception('ASR 转写失败')
+        raise HTTPException(500, '识别失败，请稍后重试')
+    finally:
+        if cleanup_dir is not None:
+            shutil.rmtree(cleanup_dir, ignore_errors=True)
+    if mid is not None and text:
+        with connect() as c:
+            c.execute('UPDATE media SET transcript=? WHERE id=?', (text, mid))
+    return {'text': text, 'cached': False}
 
 
 @app.post('/api/media')

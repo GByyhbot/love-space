@@ -8,3 +8,4 @@ httpx==0.28.1
 cryptography==50.0.1
 tzdata==2026.2
 pywebpush==2.5.0
+sherpa-onnx==2.0.2
