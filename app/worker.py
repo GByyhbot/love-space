@@ -44,8 +44,50 @@ def nudge():
     wake.set()
 
 
-MEDIA_TIMEOUT = 300  # 单次 ffmpeg 转码上限：300s 还转不完的视频，本就该先压缩再传
+MEDIA_TIMEOUT = 300  # 音频转码固定上限（aac 编码开销小，不需要时长定标）
 MEDIA_POSTER_TIMEOUT = 120
+
+
+# ── 2.6.0 P5：视频转码参数/超时/时长（主人裁定口径）──────────────────────
+def build_video_ffmpeg_args(src, dst):
+    """视频转码参数：分辨率封顶 1080p（scale=-2:min(1080,ih) 不放大，低清
+    原样）、-threads 2 防 NAS 弱 CPU 被 ffmpeg 吃满。护栏钉参数构造。"""
+    return ['ffmpeg', '-y', '-i', str(src), '-map_metadata', '-1',
+            '-vf', 'scale=-2:min(1080,ih)', '-c:v', 'libx264', '-preset', 'fast',
+            '-crf', '25', '-pix_fmt', 'yuv420p', '-threads', '2',
+            '-c:a', 'aac', '-movflags', '+faststart', str(dst)]
+
+
+def build_poster_args(preview_src, poster_dst):
+    """封面参数：从**转码产物 preview.mp4** 抽帧——不再解码原片
+    （原片可能是 4K，抽帧要付全分辨率解码价；preview 已是 1080p 产物）。"""
+    return ['ffmpeg', '-y', '-i', str(preview_src), '-frames:v', '1',
+            '-vf', 'scale=640:-2', str(poster_dst)]
+
+
+def video_timeout(duration):
+    """超时按时长定标（替代一刀切 300s）：
+    video_timeout = clamp(60 + 2×duration, 60, 900)。
+    依据：1080p 封顶 + -threads 2 下 NAS 弱 CPU 转码约 0.5–1×实时，
+    2×实时留足余量；60s 起步覆盖短视频；900s 封顶防超长视频无限占用。"""
+    return int(min(900, max(60, 60 + 2 * (duration or 0))))
+
+
+def probe_duration(path):
+    """ffprobe 取时长秒（复用 music_drop._probe 范式：-show_format json）。
+    失败/无 ffprobe 返回 None（duration 列保持 NULL，前端/API 容错）。"""
+    if not shutil.which('ffprobe'):
+        return None
+    try:
+        out = subprocess.run(
+            ['ffprobe', '-v', 'error', '-show_format', '-of', 'json', str(path)],
+            capture_output=True, text=True, timeout=30, check=False)
+        if out.returncode != 0:
+            return None
+        dur = float(json.loads(out.stdout).get('format', {}).get('duration') or 0)
+        return max(0.0, dur) if dur > 0 else None
+    except (OSError, ValueError, json.JSONDecodeError):
+        return None
 
 
 class TranscodeAborted(Exception):
@@ -106,11 +148,14 @@ def claim_pending_media(c):
     return row
 
 
-def finish_media(row, status, preview=None, error=None):
-    """写回转码结果。行已被删（cleanup 抢跑）时不静默成功，要记日志并清掉孤儿文件。"""
+def finish_media(row, status, preview=None, error=None, duration=None):
+    """写回转码结果。行已被删（cleanup 抢跑）时不静默成功，要记日志并清掉孤儿文件。
+
+    2.6.0 P5：duration 一并回写（None=ffprobe 失败/图片口径，列保持 NULL）。
+    """
     with connect() as c:
-        cur = c.execute('UPDATE media SET status=?,preview=?,error=? WHERE id=? AND status=?',
-                        (status, preview or '', error, row['id'], 'processing'))
+        cur = c.execute('UPDATE media SET status=?,preview=?,error=?,duration=? WHERE id=? AND status=?',
+                        (status, preview or '', error, duration, row['id'], 'processing'))
         if cur.rowcount == 0:
             log.warning('附件 %s 在转码期间已不存在，结果丢弃（status=%s）', row['id'], status)
             if preview:
@@ -132,6 +177,7 @@ def process_media(stop=None):
     folder = db.media_dir(row['zone'], row['mime'], row['created'])
     path = folder / (row['id'] + row['ext'])
     preview = None
+    duration = None
     try:
         if row['mime'].startswith('image/'):
             preview = row['id'] + '.preview.jpg'
@@ -148,28 +194,32 @@ def process_media(stop=None):
                            MEDIA_POSTER_TIMEOUT, stop)
         elif shutil.which('ffmpeg'):
             video = row['mime'].startswith('video/')
+            duration = probe_duration(path)  # 原片时长（图片不 probe；原文件保留播放时同样有用）
             preview = row['id'] + ('.preview.mp4' if video else '.preview.m4a')
-            args = ['ffmpeg', '-y', '-i', str(path), '-map_metadata', '-1']
             if video:
-                args += ['-vf', 'scale=trunc(iw/2)*2:trunc(ih/2)*2', '-c:v', 'libx264', '-preset', 'fast', '-crf', '25', '-pix_fmt', 'yuv420p']
+                args = build_video_ffmpeg_args(path, folder / preview)
+                timeout = video_timeout(duration)
             else:
-                args += ['-vn']
-            args += ['-c:a', 'aac', '-movflags', '+faststart', str(folder / preview)]
-            run_ffmpeg(args, MEDIA_TIMEOUT, stop)
+                args = ['ffmpeg', '-y', '-i', str(path), '-map_metadata', '-1', '-vn',
+                        '-threads', '2', '-c:a', 'aac', '-movflags', '+faststart',
+                        str(folder / preview)]
+                timeout = MEDIA_TIMEOUT
+            run_ffmpeg(args, timeout, stop)
             if video:
-                # 抽首帧作为封面缩略图（前端列表用）；失败只影响封面，不影响视频转码结果
+                # 抽首帧作封面：从转码产物 preview.mp4 抽帧（P5：不再解码原片，
+                # 原片可能 4K）；失败只影响封面，不影响视频转码结果
                 poster = folder / (row['id'] + '.preview.jpg')
                 try:
-                    run_ffmpeg(['ffmpeg', '-y', '-i', str(path), '-frames:v', '1',
-                                '-vf', 'scale=640:-2', str(poster)], MEDIA_POSTER_TIMEOUT, stop)
+                    run_ffmpeg(build_poster_args(folder / preview, poster),
+                               MEDIA_POSTER_TIMEOUT, stop)
                 except Exception:
                     # 封面失败只影响列表缩略图，视频本身已经转好了，不值得把整条任务判失败
                     log.debug('附件 %s 封面抽取失败', row['id'], exc_info=True)
                     poster.unlink(missing_ok=True)
         else:
-            finish_media(row, 'original', error='未安装 FFmpeg，保留原文件播放')
+            finish_media(row, 'original', error='未安装 FFmpeg，保留原文件播放', duration=duration)
             return
-        finish_media(row, 'ready', preview=preview)
+        finish_media(row, 'ready', preview=preview, duration=duration)
     except TranscodeAborted:
         # 服务正在关闭：把行退回 pending，下次启动接着转，别留下永久的 processing
         if preview:
@@ -182,7 +232,8 @@ def process_media(stop=None):
             (folder / preview).unlink(missing_ok=True)
         # 真实原因只进日志（ffmpeg 报错里可能有路径），用户看到一句人话
         log.exception('附件 %s 转码失败', row['id'])
-        finish_media(row, 'original', error='预览转换失败（%s），原文件仍保留' % type(exc).__name__)
+        finish_media(row, 'original', error='预览转换失败（%s），原文件仍保留' % type(exc).__name__,
+                     duration=duration)
 
 
 def due_date(value, annual, today):

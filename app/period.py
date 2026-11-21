@@ -51,6 +51,8 @@ def connect():
     conn = sqlite3.connect(db_path(), timeout=30)
     conn.row_factory = sqlite3.Row
     conn.execute('PRAGMA busy_timeout=30000')
+    # 2.6.0 P7（主人裁定）：与主库同口径，WAL 配套 synchronous=NORMAL
+    conn.execute('PRAGMA synchronous=NORMAL')
     try:
         yield conn
         conn.commit()

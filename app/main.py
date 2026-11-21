@@ -1695,6 +1695,10 @@ def like(rid: str, user=Depends(current_user)):
                 # 同一条记录的点赞只提醒一次：反复点赞/取消不再刷屏（dedupe 全局唯一）
                 db.notice(c, 'comment', '有人喜欢了你的记录', rid, user['id'], recipient=row['author'],
                           dedupe=f'like:{rid}')
+        # 2.6.0 P10：likes/comments 表没有 revision 触发器——yearbook 聚合
+        # 含赞/评计数（rev_cache 键控缓存），写路径必须显式推进 content_revision
+        # 失效缓存（机主口径「写路径显式失效」的同族落地）。
+        db.bump_shared(c)
     return {'ok': True}
 
 
@@ -1708,6 +1712,8 @@ def comment(rid: str, body: TextInput, user=Depends(current_user)):
         row = get_record(c, rid, user)
         cid = uid()
         c.execute('INSERT INTO comments VALUES (?,?,?,?,?)', (cid, rid, user['id'], body.content, now()))
+        # 2.6.0 P10：同上——comments 无触发器，显式失效聚合缓存
+        db.bump_shared(c)
         if row['kind'] not in db.PRIVATE:
             db.notice(c, 'comment', '收到一条新回复', rid, user['id'])
     return {'id': cid}
