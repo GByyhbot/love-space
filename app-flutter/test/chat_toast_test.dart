@@ -115,7 +115,6 @@ void main() {
       // 胶囊选中态（Motion.fast → Motion.base）：按位置断言（对齐缩进无关）
       expect(src.contains('duration: Motion.base,'), isTrue,
           reason: '胶囊选中态 220ms（Motion.base 220ms）');
-      final capsuleI = src.indexOf('curve: Curves.easeOut,');
       final fastI = src.indexOf('duration: Motion.fast,\n      curve: Curves.easeOut,');
       expect(fastI, -1, reason: '胶囊选中态不再用 Motion.fast+easeOut 组合');
     });
