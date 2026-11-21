@@ -30,6 +30,7 @@ from starlette.middleware.gzip import GZipMiddleware
 from starlette.staticfiles import NotModifiedResponse
 
 from . import db
+from . import rev_cache
 from . import importers
 from . import period
 from .config import APK_VERSION, BUILD_ID, WEB_VERSION, SPACE_ROUTES, route_origins
@@ -2286,35 +2287,48 @@ async def events(request: Request, user=Depends(current_user)):
 
 @app.get('/api/dashboard')
 def dashboard(user=Depends(current_user)):
-    """两个人的数据看板：记录、心情、互动与近一年趋势。只统计当前用户可见的内容。"""
+    """两个人的数据看板：记录、心情、互动与近一年趋势。只统计当前用户可见的内容。
+
+    2.6.0 性能段 P3/P12：revision 键控缓存——键含用户与今天日期
+    （days_together 随天变，revision 不变也得换键）。计算体 _dashboard_compute。
+    """
+    with connect() as c:
+        space = db.setting(c, 'space') or {}
+    tz = ZoneInfo(space.get('timezone', 'Asia/Shanghai'))
+    today_iso = dt.datetime.now(tz).date().isoformat()
+    return rev_cache.cached(
+        ('dashboard', user['id'], today_iso),
+        lambda: _dashboard_compute(user['id'], today_iso, space))
+
+
+def _dashboard_compute(user_id: str, today_iso: str, space: dict) -> dict:
     vis = db.VISIBLE_SQL
     with connect() as c:
-        total = c.execute(f'SELECT count(*) FROM records WHERE {vis}', (user['id'],)).fetchone()[0]
+        total = c.execute(f'SELECT count(*) FROM records WHERE {vis}', (user_id,)).fetchone()[0]
         by_kind = {r['kind']: r['n'] for r in c.execute(
-            f'SELECT kind, count(*) n FROM records WHERE {vis} GROUP BY kind', (user['id'],))}
+            f'SELECT kind, count(*) n FROM records WHERE {vis} GROUP BY kind', (user_id,))}
         months = [{'month': r['m'], 'count': r['n']} for r in c.execute(
             f"SELECT strftime('%Y-%m', created, 'unixepoch') m, count(*) n FROM records "
-            f"WHERE {vis} GROUP BY m ORDER BY m DESC LIMIT 12", (user['id'],))]
+            f"WHERE {vis} GROUP BY m ORDER BY m DESC LIMIT 12", (user_id,))]
         months.reverse()
         moods = {r['e']: r['n'] for r in c.execute(
             f"SELECT json_extract(body,'$.emoji') e, count(*) n FROM records "
             f"WHERE {vis} AND kind='mood' AND json_extract(body,'$.emoji') IS NOT NULL GROUP BY e",
-            (user['id'],))}
+            (user_id,))}
         likes = c.execute(
             "SELECT count(*) FROM likes l JOIN records r ON r.id=l.record_id "
             "WHERE r.deleted IS NULL AND (r.kind NOT IN ('diary','draft','surprise') OR r.author=?)",
-            (user['id'],)).fetchone()[0]
+            (user_id,)).fetchone()[0]
         comments = c.execute(
             "SELECT count(*) FROM comments cm JOIN records r ON r.id=cm.record_id "
             "WHERE r.deleted IS NULL AND (r.kind NOT IN ('diary','draft','surprise') OR r.author=?)",
-            (user['id'],)).fetchone()[0]
+            (user_id,)).fetchone()[0]
         photos = c.execute(
             "SELECT count(DISTINCT j.value) FROM records r, json_each(r.body,'$.media') j "
             "WHERE r.deleted IS NULL AND r.kind='post'").fetchone()[0]
         wishes_done = c.execute(
             f"SELECT count(*) FROM records WHERE {vis} AND kind='wish' AND json_extract(body,'$.done')=1",
-            (user['id'],)).fetchone()[0]
-        space = db.setting(c, 'space') or {}
+            (user_id,)).fetchone()[0]
     days = None
     since = (space.get('since') or '')[:10]
     if since:
@@ -2478,18 +2492,27 @@ def yearbook(year: int = 0, user=Depends(current_user)):
 
     除了基础计数，还给几项"留得住人"的：连续记录天数、最活跃的月份与星期、
     最常记的类型、心情 Top、年度关键词、这一年收到的赞与评论。
+
+    2.6.0 性能段 P3：revision 键控缓存——键含用户/年份；计算体在
+    _yearbook_compute，与缓存前逐字对等（护栏 tests/test_rev_cache_260.py）。
     """
     with connect() as c:
         space = db.setting(c, 'space')
     tz = ZoneInfo((space or {}).get('timezone', 'Asia/Shanghai'))
     current_year = dt.datetime.now(tz).year
     y = year or current_year
+    return rev_cache.cached(
+        ('yearbook', user['id'], y),
+        lambda: _yearbook_compute(user['id'], y, tz, current_year))
+
+
+def _yearbook_compute(user_id: str, y: int, tz, current_year: int) -> dict:
     with connect() as c:
         # 先按可见性过滤、再批量取关联数据：逐行 serialize 会让每条记录各查 4 次，
         # 年报这类全表扫的场景是 O(4N) 次查询。serialize_many 按 300 条分批，O(N/300)。
         candidates = [r for r in c.execute('SELECT * FROM records ORDER BY created')
-                      if db.visible(r, user['id']) and r['kind'] not in {'chat', 'album'}]
-        rows = serialize_many(c, candidates, user['id'])
+                      if db.visible(r, user_id) and r['kind'] not in {'chat', 'album'}]
+        rows = serialize_many(c, candidates, user_id)
         like_count = dict(c.execute('SELECT record_id, count(*) FROM likes GROUP BY record_id').fetchall())
         comment_count = dict(c.execute('SELECT record_id, count(*) FROM comments GROUP BY record_id').fetchall())
 
@@ -2564,17 +2587,26 @@ def yearbook(year: int = 0, user=Depends(current_user)):
 
 @app.get('/api/calendar')
 def calendar(month: str = '', user=Depends(current_user)):
-    """共同年历：某月每天的心情/纪念日/打卡/动态聚合。"""
+    """共同年历：某月每天的心情/纪念日/打卡/动态聚合。
+
+    2.6.0 性能段 P3：revision 键控缓存——键含用户/月份（计算体 _calendar_compute）。
+    """
     if not re.fullmatch(r'\d{4}-\d{2}', month):
         with connect() as c:
             space = db.setting(c, 'space')
         month = dt.datetime.now(ZoneInfo((space or {}).get('timezone', 'Asia/Shanghai'))).strftime('%Y-%m')
+    return rev_cache.cached(
+        ('calendar', user['id'], month),
+        lambda: _calendar_compute(user['id'], month))
+
+
+def _calendar_compute(user_id: str, month: str) -> dict:
     year, mon = int(month[:4]), int(month[5:7])
     first, last = dt.date(year, mon, 1), (dt.date(year, mon + 1, 1) if mon < 12 else dt.date(year + 1, 1, 1))
     days = {}
     with connect() as c:
-        candidates = [r for r in c.execute('SELECT * FROM records') if db.visible(r, user['id'])]
-        rows = serialize_many(c, candidates, user['id'])
+        candidates = [r for r in c.execute('SELECT * FROM records') if db.visible(r, user_id)]
+        rows = serialize_many(c, candidates, user_id)
     for r in rows:
         if r['kind'] == 'mood' and (r['body'].get('date') or '').startswith(month):
             days.setdefault(r['body']['date'][8:10], {}).setdefault('moods', []).append(
@@ -2624,17 +2656,27 @@ def calendar(month: str = '', user=Depends(current_user)):
 
 @app.get('/api/on-this-day')
 def on_this_day(user=Depends(current_user)):
-    """历史上的今天：返回今天月-日匹配的所有可见记录，按年份分组。"""
+    """历史上的今天：返回今天月-日匹配的所有可见记录，按年份分组。
+
+    2.6.0 性能段 P3：revision 键控缓存——键含用户与今天月日/年份
+    （is_today 随天变，revision 不变也得换键）。计算体 _on_this_day_compute。
+    """
     with connect() as c:
         space = db.setting(c, 'space')
     tz_name = (space or {}).get('timezone', 'Asia/Shanghai')
     now_local = dt.datetime.now(ZoneInfo(tz_name))
     today_md = now_local.strftime('-%m-%d')
     today_year = now_local.year
+    return rev_cache.cached(
+        ('on-this-day', user['id'], today_md, today_year),
+        lambda: _on_this_day_compute(user['id'], today_md, today_year))
+
+
+def _on_this_day_compute(user_id: str, today_md: str, today_year: int) -> list:
     with connect() as c:
         candidates = [r for r in c.execute('SELECT * FROM records ORDER BY created')
-                      if db.visible(r, user['id']) and r['kind'] not in {'chat', 'album'}]
-        rows = serialize_many(c, candidates, user['id'])
+                      if db.visible(r, user_id) and r['kind'] not in {'chat', 'album'}]
+        rows = serialize_many(c, candidates, user_id)
     groups = {}
     for r in rows:
         # 传照片专属动态只进相册：历史上的今天不呈现（2.4.2）
