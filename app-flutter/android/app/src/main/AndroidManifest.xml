@@ -6,6 +6,8 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+    <!-- 2.8.0 第 0 步：后台定位（「始终允许」单独引导授予，提示词 FGS 合规项） -->
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION"/>
     <!-- 2.4.3 提交三（第 4 项第 10 点）：在线更新的安装包调起系统安装器 -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
     <!-- 2.4.5 甲组（原生通知 · 自托管常驻连接）：

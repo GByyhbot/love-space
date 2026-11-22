@@ -1,6 +1,7 @@
 /// love_space · Flutter 双平台客户端（方案 v2 · 阶段 1 脚手架）
 library;
 
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:audio_service/audio_service.dart' show AudioService, AudioServiceConfig;
 import 'core/audio/song_audio_handler.dart' show SongAudioHandler;
@@ -50,6 +51,7 @@ import 'core/audio/audio_init_status.dart' show AudioInitStatus, audioInitStatus
 import 'core/audio/song_playback.dart' show songPlaybackProvider;
 import 'core/notify/notify_service.dart'
     show NotifyCoordinator, notifyRouteHandler;
+import 'core/peer/peer_locator.dart';
 import 'features/chat/voice_playback.dart' show voiceInterruptHook;
 
 /// 2.4.5 甲组：通知/前台服务全局初始化先于首帧（Android only；失败不影响主链）。
@@ -92,6 +94,9 @@ Future<void> main() async {
   voiceInterruptHook = () => container.read(songPlaybackProvider.notifier).stop();
   // 2.5.9 裁定⑥：static 回调（onTaskData）写 provider 用
   NotifyCoordinator.notifyStatusContainer = container;
+  // 2.8.0 第 0 步：定位验证包冷启动自动恢复采集（开关持久化，
+  // experiment/peer-loc-verify 分支，确认后主体接线替换）
+  unawaited(peerLocatorAutoStart());
   runApp(UncontrolledProviderScope(container: container, child: const LoveApp()));
 }
 /// 认证驱动的路由重定向：checking → splash；out → /login；authed → 主框架。

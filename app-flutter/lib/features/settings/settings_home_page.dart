@@ -14,6 +14,7 @@ library;
 import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
+import '../../core/peer/peer_locator.dart';
 import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:love_space/core/audio/audio_init_status.dart' show audioInitStatusProvider;
@@ -196,6 +197,10 @@ class _SettingsHomePageState extends ConsumerState<SettingsHomePage> {
               subtitle: 'App 后台收 TA 的消息提醒',
               onTap: () => context.push('/settings/notify'),
             ),
+            const SizedBox(height: 16),
+            // 2.8.0 第 0 步：定位验证包临时开关（分支 experiment/peer-loc-verify，
+            // 机主确认后主体接线替换为正式设置页；本卡不进 main）
+            const _PeerVerifyCard(),
             const SizedBox(height: 16),
             _heading(context, '数据与账号'),
             _row(
@@ -401,6 +406,64 @@ class _SettingsHomePageState extends ConsumerState<SettingsHomePage> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// 2.8.0 第 0 步：定位验证包开关卡（临时；真机 24h 验证数据采集入口）。
+/// 开=权限引导 + 原生采集上报（正式 /api/peer/location，数据进 peer 表）；
+/// 关=停采停报清队列。不开 overlay、不反复弹窗（红线口径）。
+class _PeerVerifyCard extends StatefulWidget {
+  const _PeerVerifyCard();
+
+  @override
+  State<_PeerVerifyCard> createState() => _PeerVerifyCardState();
+}
+
+class _PeerVerifyCardState extends State<_PeerVerifyCard> {
+  late bool _on = peerVerifyOn;
+  String _stats = '';
+
+  Future<void> _toggle(bool v) async {
+    final ok = await peerVerifyToggle(v);
+    if (!mounted) return;
+    setState(() {
+      _on = ok;
+      _stats = ok ? '采集上报中（[peer-loc] 日志与 peer 表取证）' : '已关闭';
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(0, 4, 0, 4),
+        child: Column(children: [
+          SwitchListTile(
+            secondary: const Text('📍', style: TextStyle(fontSize: 22)),
+            title: const Text('位置共享（定位验证包）'),
+            subtitle: Text(_on
+                ? '开启中 · 数据仅存自家 NAS · 轨迹保留 15 天'
+                : '第 0 步真机验证 · 开启后按 25m 位移/5min 静止心跳上报',
+                style: Theme.of(context)
+                    .textTheme
+                    .bodySmall
+                    ?.copyWith(color: cs.outline)),
+            value: _on,
+            onChanged: _toggle,
+          ),
+          if (_stats.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: Text(_stats,
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodySmall
+                      ?.copyWith(color: cs.outline)),
+            ),
+        ]),
       ),
     );
   }
