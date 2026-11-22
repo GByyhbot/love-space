@@ -2523,7 +2523,7 @@ def _sse_probe(token: str, user_id: str, check_session: bool):
             for k in expired:
                 _typing.pop(k, None)
             peer_typing = 1 if any(uid != user_id for uid in _typing) else 0
-        return (row[0], row[1] or 0, row[2], row[3] or 0, row[4] or 0, peer_typing)
+        return (row[0], row[1] or 0, row[2], row[3] or 0, row[4] or 0, peer_typing, row[5] or 0)
 
 
 def _sse_payload(revision, private_revision, unread, previous,
