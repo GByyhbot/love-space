@@ -80,6 +80,8 @@ object PeerLocNative {
     private var reportedCount = 0
     private var droppedCount = 0
     private var lastError: String? = null
+    private var receivedCount = 0
+    private var lastReceivedAt = 0L
 
     private fun log(msg: String) = android.util.Log.d(TAG, msg)
 
@@ -92,8 +94,17 @@ object PeerLocNative {
                     baseUrl = args?.get("baseUrl") as? String
                     stillMode = false; stillCount = 0; queue.clear()
                     reportedCount = 0; droppedCount = 0; lastError = null
-                    start(context)
-                    result.success(true)
+                    receivedCount = 0; lastReceivedAt = 0
+                    val reason = startReason(context)
+                    if (reason != null) {
+                        log("start rejected: $reason")
+                        result.success(mapOf("started" to false, "reason" to reason))
+                    } else {
+                        start(context)
+                        log("start accepted: listeners=${listeners.size}")
+                        result.success(mapOf("started" to listeners.isNotEmpty(),
+                            "reason" to if (listeners.isEmpty()) "前台服务未运行，采集未挂起" else ""))
+                    }
                 }
                 "stop" -> {
                     stop()
@@ -104,6 +115,8 @@ object PeerLocNative {
                 "stats" -> result.success(
                     mapOf("queue" to queue.size, "reported" to reportedCount,
                           "dropped" to droppedCount, "still" to stillMode,
+                          "received" to receivedCount,
+                          "lastReceivedAt" to lastReceivedAt,
                           "error" to lastError))
                 else -> result.notImplemented()
             }
@@ -111,17 +124,39 @@ object PeerLocNative {
     }
 
     fun hasPermission(context: Context): Boolean =
+        fineGranted(context) && backgroundGranted(context)
+
+    /** FINE 定位：checkSelfPermission 硬门槛（各 ROM 口径一致）。 */
+    fun fineGranted(context: Context): Boolean =
         ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) ==
-            PackageManager.PERMISSION_GRANTED &&
-        ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_BACKGROUND_LOCATION) ==
             PackageManager.PERMISSION_GRANTED
+
+    /**
+     * BACKGROUND 定位（Android 11+ / MIUI 兼容口径）：
+     * 权限 API（checkSelfPermission/geolocator 枚举）在部分 ROM 上
+     * 「已授仍报 denied」不可作事实源（真机实证）——background 是否真生效
+     * 以**回调实证探针**为准：start 后统计真实 location 回调数（received），
+     * Dart 侧轮询 stats，3 min 内 0 回调即判定后台定位未生效并给用户可见
+     * 说明（权限 API 只做 FINE 硬门槛与引导）。
+     */
+    fun backgroundGranted(context: Context): Boolean =
+        ContextCompat.checkSelfPermission(
+            context, Manifest.permission.ACCESS_BACKGROUND_LOCATION) ==
+            PackageManager.PERMISSION_GRANTED
+
+    /** 启用前置检查：逐项给出缺失原因（FINE 硬门槛；background 走探针实证）。 */
+    fun startReason(context: Context): String? = when {
+        !fineGranted(context) -> "需要定位权限（使用期间/始终允许）"
+        else -> null
+    }
 
     @Synchronized
     fun start(context: Context) {
         appContext = context.applicationContext
         if (listeners.isNotEmpty()) return
-        if (!hasPermission(context)) {
-            log("start denied: fine+background location permission required")
+        val reason = startReason(context)
+        if (reason != null) {
+            log("start denied: $reason")
             return
         }
         val manager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
@@ -156,6 +191,8 @@ object PeerLocNative {
     // ── 采集与判定 ──────────────────────────────────────────────────────
 
     private fun onLocation(location: Location) {
+        receivedCount++
+        lastReceivedAt = System.currentTimeMillis()
         val acc = if (location.hasAccuracy()) location.accuracy.toDouble() else 9999.0
         // 精度过滤：acc>100 丢弃
         if (acc > ACC_DROP_M) {

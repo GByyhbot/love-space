@@ -425,13 +425,41 @@ class _PeerVerifyCardState extends State<_PeerVerifyCard> {
   late bool _on = peerVerifyOn;
   String _stats = '';
 
+  @override
+  void initState() {
+    super.initState();
+    // 回调实证探针失败 → 用户可见说明（后台定位未生效，不许静默）
+    onProbeFail = () {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text(
+              '定位回调 3 分钟无到达：后台定位可能未生效——请在系统设置中确认'
+              '本应用定位权限为「始终允许」并检查省电策略'),
+          duration: Duration(seconds: 6)));
+    };
+  }
+
+  @override
+  void dispose() {
+    onProbeFail = null;
+    super.dispose();
+  }
+
   Future<void> _toggle(bool v) async {
-    final ok = await peerVerifyToggle(v);
+    final r = await peerVerifyToggle(v);
     if (!mounted) return;
     setState(() {
-      _on = ok;
-      _stats = ok ? '采集上报中（[peer-loc] 日志与 peer 表取证）' : '已关闭';
+      _on = r.ok;
+      _stats = r.ok
+          ? '采集上报中（[peer-loc] 日志与 peer 表取证）'
+          : (v ? '开启失败' : '已关闭');
     });
+    // 启用失败必须给用户可见说明（提示词口径：不许静默回弹）
+    if (v && !r.ok && r.reason.isNotEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(r.reason),
+          duration: const Duration(seconds: 4)));
+    }
   }
 
   @override

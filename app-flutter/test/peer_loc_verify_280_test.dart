@@ -90,7 +90,34 @@ void main() {
       expect(manifest.contains('android.permission.ACCESS_FINE_LOCATION'), isTrue);
     });
 
-    test('Dart 侧：凭据注入与开关持久化契约', () {
+    test('2.7.1 风格真机修正：权限终判以原生 AppOps 口径为事实源', () {
+    final kt = File('android/app/src/main/kotlin/cn/iepose/lovespace/'
+            'love_space/PeerLocNative.kt')
+        .readAsStringSync();
+    final loc = File('lib/core/peer/peer_locator.dart').readAsStringSync();
+    // MIUI 兼容：background 权限用 AppOps noteOpNoThrow 复核
+    // 权限 API 不可作事实源——回调实证探针（received 计数）为准
+    expect(kt.contains('receivedCount'), isTrue, reason: '回调实证探针');
+    expect(kt.contains('startReason'), isTrue, reason: 'FINE 硬门槛缺失原因');
+    expect(kt.contains('noteOpNoThrow'), isFalse,
+        reason: 'AppOps hide API 不可达（真机翻车：String op 不存在/int 常量 hide）');
+    // Dart 探针 3min 口径
+    expect(loc.contains('_probeBackground'), isTrue);
+    expect(loc.contains('onProbeFail'), isTrue, reason: '探针失败可见说明回调');
+    // Dart：geolocator 只引导不终判——终判回原生
+    expect(loc.contains('只用来**弹系统对话框引导**'), isTrue);
+    expect(loc.contains('回调实证探针'), isTrue, reason: '探针口径注释');
+    // 启用失败必给用户可见说明（不许静默回弹）
+    expect(loc.contains('PeerVerifyResult'), isTrue, reason: '结构化 ok+reason');
+    expect(loc.contains('未登录或会话已失效'), isTrue, reason: '凭据空给说明');
+    expect(loc.contains('线路未就绪'), isTrue, reason: '线路空给说明');
+    final settings =
+        File('lib/features/settings/settings_home_page.dart').readAsStringSync();
+    expect(settings.contains('ScaffoldMessenger.of(context).showSnackBar'),
+        isTrue, reason: '失败原因 SnackBar 呈现');
+  });
+
+  test('Dart 侧：凭据注入与开关持久化契约', () {
       final locator =
           File('lib/core/peer/peer_locator.dart').readAsStringSync();
       expect(locator.contains("readSessionToken()"), isTrue,
