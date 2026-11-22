@@ -183,6 +183,41 @@ def init():
           sent_at REAL, day TEXT NOT NULL DEFAULT '', mine INTEGER NOT NULL DEFAULT 0);
         CREATE INDEX IF NOT EXISTS import_messages_import ON import_messages(import_id, id);
         CREATE INDEX IF NOT EXISTS import_messages_day ON import_messages(import_id, day);
+
+        -- ── 2.8.0 定位守护（docs/location-guard-plan.md 拍板定案）──────
+        -- 独立小表不动既有契约；轨迹/事件 15 天滚动删除（worker maintenance）。
+        CREATE TABLE IF NOT EXISTS peer_location_latest(
+          user TEXT PRIMARY KEY REFERENCES users(id),
+          lat REAL NOT NULL, lng REAL NOT NULL, acc REAL, speed REAL,
+          battery INTEGER, charging INTEGER, net TEXT, wifi TEXT,
+          updated REAL NOT NULL);
+        CREATE TABLE IF NOT EXISTS peer_location_points(
+          id TEXT PRIMARY KEY,
+          user TEXT NOT NULL REFERENCES users(id),
+          ts REAL NOT NULL, lat REAL NOT NULL, lng REAL NOT NULL,
+          acc REAL, speed REAL, backfill INTEGER NOT NULL DEFAULT 0,
+          created REAL NOT NULL);
+        CREATE INDEX IF NOT EXISTS peer_points_user_ts
+          ON peer_location_points(user, ts DESC, created);
+        CREATE TABLE IF NOT EXISTS peer_places(
+          id TEXT PRIMARY KEY, name TEXT NOT NULL,
+          lat REAL NOT NULL, lng REAL NOT NULL, radius REAL NOT NULL DEFAULT 150,
+          created REAL NOT NULL);
+        CREATE TABLE IF NOT EXISTS peer_events(
+          id TEXT PRIMARY KEY,
+          user TEXT NOT NULL REFERENCES users(id),
+          type TEXT NOT NULL, ts REAL NOT NULL, summary TEXT NOT NULL,
+          pushed INTEGER NOT NULL DEFAULT 0, created REAL NOT NULL);
+        CREATE INDEX IF NOT EXISTS peer_events_user_ts
+          ON peer_events(user, ts DESC, created);
+        CREATE TABLE IF NOT EXISTS peer_usage_daily(
+          user TEXT NOT NULL REFERENCES users(id),
+          day TEXT NOT NULL,
+          screen_sec INTEGER NOT NULL DEFAULT 0,
+          unlocks INTEGER NOT NULL DEFAULT 0,
+          top_apps TEXT NOT NULL DEFAULT '[]',
+          updated REAL NOT NULL,
+          PRIMARY KEY(user, day));
         ''')
         c.execute("INSERT OR IGNORE INTO app_state(key,value) VALUES ('content_revision',0)")
         # 刷新的颗粒度：内容变了不等于"整站都变了"。
@@ -192,6 +227,9 @@ def init():
         # content_revision 的语义保持不变（仍然涵盖一切），老客户端继续按整站刷新。
         c.execute("INSERT OR IGNORE INTO app_state(key,value) VALUES ('chat_revision',0)")
         c.execute("INSERT OR IGNORE INTO app_state(key,value) VALUES ('other_revision',0)")
+        # 2.8.0 定位守护：peer 状态版本号（位置/报备更新时 bump，驱动 SSE 第 7 段
+        # peer 事件——不 bump content_revision，客户端只刷地图标记不整站刷新）。
+        c.execute("INSERT OR IGNORE INTO app_state(key,value) VALUES ('peer_revision',0)")
         # Additive columns must exist before triggers reference them.
         if 'media_id' not in {r[1] for r in c.execute('PRAGMA table_info(import_messages)')}:
             c.execute("ALTER TABLE import_messages ADD COLUMN media_id TEXT NOT NULL DEFAULT ''")

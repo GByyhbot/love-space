@@ -593,6 +593,10 @@ def cleanup():
 def maintenance():
     schedule()
     cleanup()
+    # 2.8.0 定位守护：peer 轨迹/事件 15 天滚动删除（拍板口径；created 索引，
+    # 无匹配行时代价接近零）
+    with connect() as c:
+        peer.cleanup_expired(c, now())
     with connect() as c:
         last = db.setting(c, 'last_backup', now())
         if db.setting(c, 'last_backup') is None:

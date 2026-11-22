@@ -33,6 +33,7 @@ from starlette.staticfiles import NotModifiedResponse
 
 from . import db
 from . import asr as asr_mod
+from . import peer
 from . import rev_cache
 from . import importers
 from . import period
@@ -1789,6 +1790,228 @@ def sniff_media(path, mime):
 
 
 
+
+# ── 2.8.0 定位守护（docs/location-guard-plan.md 拍板定案）────────────────
+
+
+def _bump_peer(c):
+    """推进 peer 状态版本（SSE 第 7 段 peer 事件；不 bump content_revision）。"""
+    c.execute("UPDATE app_state SET value=value+1 WHERE key='peer_revision'")
+
+
+@app.post('/api/peer/location')
+def peer_location(request: Request, body: dict = Body(default=...),
+                  user=Depends(current_user)):
+    """批量上报轨迹点 + 可选最新状态（App 自适应采样攒批：≤50 条/批）。
+
+    points: [{id, ts, lat, lng, acc?, speed?, backfill?}]（client_id 幂等）
+    latest: {lat, lng, acc, speed, battery, charging, net, wifi} 可选
+    上报者自身定位共享开关关闭 → 422 拒（App 侧停采后不应再发，后端兜底）。
+    成功 bump peer_revision（对方地图标记刷新），不 bump content_revision。
+    """
+    points = body.get('points') or []
+    if not isinstance(points, list) or len(points) > peer.LOCATION_BATCH_MAX:
+        raise HTTPException(422, f'轨迹点一次最多 {peer.LOCATION_BATCH_MAX} 条')
+    with connect() as c:
+        c.execute('BEGIN IMMEDIATE')
+        if not peer.load_settings(c, user['id'])['location']:
+            raise HTTPException(422, '定位共享已关闭，请先在守护设置中开启')
+        accepted = 0
+        for pt in points:
+            pid = str(pt.get('id') or '')
+            if not pid or not isinstance(pt.get('lat'), (int, float)) \
+                    or not isinstance(pt.get('lng'), (int, float)):
+                continue
+            dup = c.execute('SELECT 1 FROM peer_location_points WHERE id=?',
+                            (pid,)).fetchone()
+            if dup:
+                continue  # client_id 幂等：补传重发不落重复点
+            c.execute('INSERT INTO peer_location_points'
+                      '(id,user,ts,lat,lng,acc,speed,backfill,created) '
+                      'VALUES (?,?,?,?,?,?,?,?,?)',
+                      (pid, user['id'], float(pt['ts']), float(pt['lat']),
+                       float(pt['lng']), pt.get('acc'), pt.get('speed'),
+                       1 if pt.get('backfill') else 0, now()))
+            accepted += 1
+        latest = body.get('latest')
+        if isinstance(latest, dict) and isinstance(latest.get('lat'), (int, float)):
+            c.execute('INSERT INTO peer_location_latest'
+                      '(user,lat,lng,acc,speed,battery,charging,net,wifi,updated) '
+                      'VALUES (?,?,?,?,?,?,?,?,?,?) '
+                      'ON CONFLICT(user) DO UPDATE SET lat=excluded.lat,'
+                      'lng=excluded.lng,acc=excluded.acc,speed=excluded.speed,'
+                      'battery=excluded.battery,charging=excluded.charging,'
+                      'net=excluded.net,wifi=excluded.wifi,updated=excluded.updated',
+                      (user['id'], float(latest['lat']), float(latest['lng']),
+                       latest.get('acc'), latest.get('speed'),
+                       latest.get('battery'), latest.get('charging'),
+                       latest.get('net'), latest.get('wifi'), now()))
+        _bump_peer(c)
+    return {'ok': True, 'accepted': accepted}
+
+
+@app.post('/api/peer/events')
+def peer_events(request: Request, body: dict = Body(default=...),
+                user=Depends(current_user)):
+    """批量报备事件（≤100/批，动态流恒全量）。
+
+    events: [{id, type, ts, summary}]
+    关键类型（DEFAULT_PUSH_TYPES，逐项开关二期接）写通知中心（非 chat 类，
+    计入铃铛口径）并置 pushed=1；其余入流不推送。
+    """
+    events = body.get('events') or []
+    if not isinstance(events, list) or len(events) > peer.EVENTS_BATCH_MAX:
+        raise HTTPException(422, f'事件一次最多 {peer.EVENTS_BATCH_MAX} 条')
+    with connect() as c:
+        c.execute('BEGIN IMMEDIATE')
+        if not peer.load_settings(c, user['id'])['events']:
+            raise HTTPException(422, '报备动态已关闭')
+        accepted = 0
+        for ev in events:
+            eid = str(ev.get('id') or '')
+            etype = str(ev.get('type') or '')
+            if not eid or not etype or not isinstance(ev.get('ts'), (int, float)):
+                continue
+            if c.execute('SELECT 1 FROM peer_events WHERE id=?', (eid,)).fetchone():
+                continue
+            summary = str(ev.get('summary') or '')[:200]
+            push = etype in peer.DEFAULT_PUSH_TYPES
+            c.execute('INSERT INTO peer_events'
+                      '(id,user,type,ts,summary,pushed,created) VALUES (?,?,?,?,?,?,?)',
+                      (eid, user['id'], etype, float(ev['ts']), summary,
+                       1 if push else 0, now()))
+            if push:
+                db.notice(c, 'peer', summary, actor=user['id'])
+            accepted += 1
+        _bump_peer(c)
+    return {'ok': True, 'accepted': accepted}
+
+
+@app.post('/api/peer/sos')
+def peer_sos(request: Request, user=Depends(current_user)):
+    """紧急求助（二期紧急强提醒的后端承载）：pushed=2 强推送口径，
+    写通知中心 + 事件流；对方端经 SSE peer 事件拉起全屏强提醒。"""
+    with connect() as c:
+        c.execute('BEGIN IMMEDIATE')
+        eid = uid()
+        c.execute('INSERT INTO peer_events'
+                  '(id,user,type,ts,summary,pushed,created) VALUES (?,?,?,?,?,?,?)',
+                  (eid, user['id'], 'sos', now(), '紧急求助', 2, now()))
+        db.notice(c, 'peer', '对方发起了紧急求助！', actor=user['id'])
+        _bump_peer(c)
+    return {'ok': True, 'id': eid}
+
+
+@app.get('/api/peer/status')
+def peer_status(user=Depends(current_user)):
+    """双方最新状态 + 四类共享开关 + 对方关闭态明示（对等口径 3.5：
+    关闭态明确返回，不给空白/假故障）。"""
+    with connect() as c:
+        mine = peer.load_settings(c, user['id'])
+        pid = peer.peer_partner(c, user['id'])
+        theirs = peer.load_settings(c, pid)
+        rows = c.execute('SELECT * FROM peer_location_latest WHERE user IN (?,?)',
+                         (user['id'], pid)).fetchall()
+        by_user = {r['user']: dict(r) for r in rows}
+        peer_rev = c.execute(
+            "SELECT value FROM app_state WHERE key='peer_revision'").fetchone()[0]
+    mine_row = by_user.get(user['id'])
+    peer_row = by_user.get(pid)
+    return {
+        'revision': int(peer_rev),
+        'mine': {'settings': mine,
+                 'location': mine_row, 'enabled': mine['location']},
+        'peer': {'settings': theirs,
+                 'location': peer_row,
+                 # 对等口径：关闭态明示（不空白/不假故障）
+                 'enabled': theirs['location'],
+                 'closed_off': not theirs['location']},
+    }
+
+
+@app.get('/api/peer/track')
+def peer_track(date: str = '', user=Depends(current_user)):
+    """按日双方轨迹点（轨迹页回放；对方 track 关闭 → closed_off 明示）。"""
+    with connect() as c:
+        tz_default = ZoneInfo((db.setting(c, 'space') or {}).get(
+            'timezone', 'Asia/Shanghai'))
+    day = date or dt.datetime.now(tz_default).strftime('%Y-%m-%d')
+    if not re.fullmatch(r'\d{4}-\d{2}-\d{2}', day):
+        raise HTTPException(422, '日期格式应为 YYYY-MM-DD')
+    with connect() as c:
+        mine_on = peer.load_settings(c, user['id'])['track']
+        pid = peer.peer_partner(c, user['id'])
+        theirs_on = peer.load_settings(c, pid)['track']
+        # day 边界按本地时区换算 unix 区间
+        tz = ZoneInfo((db.setting(c, 'space') or {}).get('timezone',
+                                                        'Asia/Shanghai'))
+        start = dt.datetime.strptime(day, '%Y-%m-%d').replace(tzinfo=tz).timestamp()
+        end = start + 86400
+        rows = []
+        if mine_on:
+            rows += [dict(r, mine=True) for r in c.execute(
+                'SELECT ts,lat,lng,acc,speed,backfill FROM peer_location_points '
+                'WHERE user=? AND ts>=? AND ts<? ORDER BY ts', (user['id'], start, end))]
+        peer_rows = []
+        if theirs_on:
+            peer_rows = [dict(r) for r in c.execute(
+                'SELECT ts,lat,lng,acc,speed,backfill FROM peer_location_points '
+                'WHERE user=? AND ts>=? AND ts<? ORDER BY ts', (pid, start, end))]
+    return {'date': day,
+            'mine': rows,
+            'peer': {'closed_off': not theirs_on, 'points': peer_rows}}
+
+
+@app.get('/api/peer/events')
+def peer_events_list(date: str = '', user=Depends(current_user)):
+    """按日双方报备事件流（动态流页；对方 events 关闭 → closed_off 明示）。"""
+    with connect() as c:
+        tz_default = ZoneInfo((db.setting(c, 'space') or {}).get(
+            'timezone', 'Asia/Shanghai'))
+    day = date or dt.datetime.now(tz_default).strftime('%Y-%m-%d')
+    if not re.fullmatch(r'\d{4}-\d{2}-\d{2}', day):
+        raise HTTPException(422, '日期格式应为 YYYY-MM-DD')
+    with connect() as c:
+        mine_on = peer.load_settings(c, user['id'])['events']
+        pid = peer.peer_partner(c, user['id'])
+        theirs_on = peer.load_settings(c, pid)['events']
+        tz = ZoneInfo((db.setting(c, 'space') or {}).get('timezone',
+                                                        'Asia/Shanghai'))
+        start = dt.datetime.strptime(day, '%Y-%m-%d').replace(tzinfo=tz).timestamp()
+        end = start + 86400
+        rows = []
+        if mine_on:
+            rows += [dict(r, mine=True) for r in c.execute(
+                'SELECT id,type,ts,summary,pushed FROM peer_events '
+                'WHERE user=? AND ts>=? AND ts<? ORDER BY ts DESC',
+                (user['id'], start, end))]
+        peer_rows = []
+        if theirs_on:
+            peer_rows = [dict(r) for r in c.execute(
+                'SELECT id,type,ts,summary,pushed FROM peer_events '
+                'WHERE user=? AND ts>=? AND ts<? ORDER BY ts DESC',
+                (pid, start, end))]
+    return {'date': day,
+            'mine': rows,
+            'peer': {'closed_off': not theirs_on, 'events': peer_rows}}
+
+
+@app.get('/api/peer/settings')
+def peer_settings_get(user=Depends(current_user)):
+    with connect() as c:
+        return peer.load_settings(c, user['id'])
+
+
+@app.put('/api/peer/settings')
+def peer_settings_put(body: dict = Body(default=...), user=Depends(current_user)):
+    """四类共享开关（location/track/events/usage）各自独立。"""
+    with connect() as c:
+        c.execute('BEGIN IMMEDIATE')
+        saved = peer.save_settings(c, user['id'], body or {})
+        _bump_peer(c)
+    return saved
+
+
 @app.post('/api/asr')
 async def api_asr(request: Request, user=Depends(current_user)):
     """语音转文字（2.7.0 第③项）。两种入参二选一（Content-Type 区分）：
@@ -2290,7 +2513,8 @@ def _sse_probe(token: str, user_id: str, check_session: bool):
             "       (SELECT value FROM user_revisions WHERE user_id=:u),"
             "       (SELECT count(*) FROM notices WHERE user_id=:u AND seen=0),"
             "       (SELECT value FROM app_state WHERE key='chat_revision'),"
-            "       (SELECT value FROM app_state WHERE key='other_revision')",
+            "       (SELECT value FROM app_state WHERE key='other_revision'),"
+            "       (SELECT value FROM app_state WHERE key='peer_revision')",
             {'u': user_id}).fetchone()
         # 对方正在输入（内存态，TTL 过期顺手清理；单人单空间 → 其余任一
         # 用户即对方）
@@ -2303,7 +2527,8 @@ def _sse_probe(token: str, user_id: str, check_session: bool):
 
 
 def _sse_payload(revision, private_revision, unread, previous,
-                 chat_revision=0, other_revision=0, peer_typing=0):
+                 chat_revision=0, other_revision=0, peer_typing=0,
+                 peer_revision=0):
     """这一轮 SSE 该推什么。
 
     refresh —— 整站数据变了（记录/聊天/照片），客户端要重拉一遍；
@@ -2324,16 +2549,20 @@ def _sse_payload(revision, private_revision, unread, previous,
     if len(parts) < 5:
         # 签名只有三段（升级瞬间的旧连接）：拿不到分类计数就当作两类都变了，
         # 让客户端走整站刷新——兼容优先，不能因为缺字段就把变化漏过去。
-        chat = other = True
+        chat = other = peer = True
     else:
         chat = chat_revision != prev(3)
         other = other_revision != prev(4)
+        # 第 7 段（2.8.0 定位守护）：peer 位置/报备更新——客户端只刷地图
+        # 标记与报备动态，不整站刷新；旧签名缺段按「变了」兜底（宁多不漏）。
+        peer = len(parts) < 7 or peer_revision != prev(6)
     # 第 6 段：对方正在输入（2.4.10）。typing 字段 = 当前状态（非变化
     # 标志——变化检测由 6 段 signature 对比承担）；旧签名缺段时推送与
     # 否由 signature 差异决定，这里只如实给状态。旧客户端只解析已知
     # 字段，多余段/字段自然忽略（硬顺序双向兼容）。
     return {'refresh': changed, 'unread': unread,
-            'chat': chat, 'other': other, 'typing': bool(peer_typing)}
+            'chat': chat, 'other': other, 'typing': bool(peer_typing),
+            'peer': peer}
 
 
 @app.get('/api/events')
@@ -2354,9 +2583,10 @@ async def events(request: Request, user=Depends(current_user)):
             if probe is None:
                 break
             revision, private_revision, unread, chat_revision, other_revision, \
-                peer_typing = probe
+                peer_typing, peer_revision = probe
             signature = (f'{revision}:{private_revision}:{unread}'
-                         f':{chat_revision}:{other_revision}:{peer_typing}')
+                         f':{chat_revision}:{other_revision}:{peer_typing}'
+                         f':{peer_revision}')
             if previous is None:
                 # 首轮只建立基线，不推 data：EventSource 断线重连很常见（代理空闲超时、
                 # 切前后台），每建一次连接就推一条，客户端会当成「数据变了」整页重绘，
@@ -2367,7 +2597,8 @@ async def events(request: Request, user=Depends(current_user)):
             elif signature != previous:
                 payload = _sse_payload(revision, private_revision, unread,
                                        previous, chat_revision,
-                                       other_revision, peer_typing)
+                                       other_revision, peer_typing,
+                                       peer_revision)
                 payload['rev'] = signature
                 yield 'data: ' + dumps(payload) + '\n\n'
                 previous = signature
