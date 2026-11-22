@@ -415,6 +415,10 @@ class _SettingsHomePageState extends ConsumerState<SettingsHomePage> {
 /// 开=权限引导 + 原生采集上报（正式 /api/peer/location，数据进 peer 表）；
 /// 关=停采停报清队列。不开 overlay、不反复弹窗（红线口径）。
 /// 公开化（fix2）：widget 测试直接驱动真组件验证呈现路径（原私有类测试不可达）。
+/// 2.8.0 定位守护验证卡（fix4 胶水重做：Dart 只搬运与渲染）。
+/// 开关态以原生 status 为单一事实源（页面进入与 toggle 后回填）；
+/// 缺前台/缺后台两种 reason 分别引导；fatal 日志提供导出入口
+/// （机主能把文件拿出来才算落盘完成）。不开 overlay、不反复弹窗。
 class PeerVerifyCard extends ConsumerStatefulWidget {
   const PeerVerifyCard({super.key});
 
@@ -423,55 +427,76 @@ class PeerVerifyCard extends ConsumerStatefulWidget {
 }
 
 class PeerVerifyCardState extends ConsumerState<PeerVerifyCard> {
-  late bool _on = peerVerifyOn;
-  String _stats = '';
+  bool _on = false;
+  bool _busy = false;
+  String _summary = '';
+  String _reason = '';
 
   @override
   void initState() {
     super.initState();
-    // 回调实证探针失败 → 用户可见说明（后台定位未生效，不许静默）；
-    // 转瞬提示走顶部弹窗 + 常驻原因行双通道
-    onProbeFail = () {
-      if (!mounted) return;
-      const msg = '定位回调 3 分钟无到达：后台定位可能未生效——请在系统设置中确认'
-          '本应用定位权限为「始终允许」并检查省电策略';
-      ref.read(chatToastProvider.notifier).show(msg, tone: ChatToastTone.warning);
-      setState(() => _reason = msg);
-    };
+    // 页面进入：以原生 status 回填（单一事实源）
+    peerLocatorAutoStart().then((_) => _refresh());
   }
 
-  @override
-  void dispose() {
-    onProbeFail = null;
-    super.dispose();
+  Future<void> _refresh() async {
+    final st = await peerVerifyStatus();
+    if (!mounted) return;
+    setState(() {
+      _on = st['running'] == true;
+      final received = (st['received'] as num?)?.toInt() ?? 0;
+      final queue = (st['queue'] as num?)?.toInt() ?? 0;
+      final reported = (st['reported'] as num?)?.toInt() ?? 0;
+      _summary = _on
+          ? '采集上报中 · 回调 $received · 已报 $reported · 队列 $queue'
+          : '已关闭';
+    });
   }
-
-  String? _reason; // 常驻失败原因（非常驻转瞬提示——失败态不许不可见）
 
   Future<void> _toggle(bool v) async {
-    // 🔴 全程 try：任何异常（含 peerVerifyToggle 冒泡）都必须产出可见说明
+    setState(() => _busy = true);
+    // 🔴 Dart 只搬运与渲染：结果由原生一口价返回，任何异常也产出可见原因
     PeerVerifyResult r;
     try {
       r = await peerVerifyToggle(v);
     } catch (e) {
-      r = PeerVerifyResult(false, '开关处理异常：${e.toString().substring(0, e.toString().length.clamp(0, 120))}');
+      r = PeerVerifyResult(
+          false,
+          '开关处理异常：${e.toString().substring(0, e.toString().length.clamp(0, 120))}',
+          const {});
     }
     if (!mounted) return;
     setState(() {
+      _busy = false;
       _on = r.ok;
-      if (!r.ok && v && r.reason.isNotEmpty) {
-        _reason = r.reason; // 常驻：失败原因钉在开关行下方
-      } else if (r.ok) {
-        _reason = null;
-      }
-      _stats = r.ok ? '采集上报中 · 点此行查看取证数字' : (v ? '开启失败' : '已关闭');
+      _reason = r.ok ? '' : r.reason;
+      _summary = r.ok ? '采集上报中（探针验证中）' : (v ? '开启失败' : '已关闭');
     });
-    // 转瞬提示走既有顶部弹窗（ChatToastHost 全局宿主——App 内禁底部
-    // SnackBar 是 2.4.x 既有契约）；常驻文案在 _reason 行（失败态不许不可见）。
     if (v && !r.ok && r.reason.isNotEmpty) {
-      ref
-          .read(chatToastProvider.notifier)
+      // 顶部弹窗（既有统一机制）+ 下方常驻原因行（失败态不许不可见）
+      ref.read(chatToastProvider.notifier)
           .show(r.reason, tone: ChatToastTone.warning);
+    }
+    if (r.ok) await _refresh();
+  }
+
+  Future<void> _exportFatal() async {
+    try {
+      final log = await exportPeerFatalLog();
+      if (!mounted) return;
+      if (log.content.isEmpty) {
+        ref.read(chatToastProvider.notifier).show(
+            '暂无 fatal 记录（${log.path.isEmpty ? "文件不存在" : log.path}）',
+            tone: ChatToastTone.info);
+        return;
+      }
+      await Clipboard.setData(ClipboardData(text: log.content));
+      ref.read(chatToastProvider.notifier).show(
+          'fatal 日志已复制到剪贴板（${log.content.length} 字符，源文件：${log.path}）',
+          tone: ChatToastTone.success);
+    } catch (e) {
+      ref.read(chatToastProvider.notifier)
+          .show('导出失败：$e', tone: ChatToastTone.error);
     }
   }
 
@@ -485,27 +510,28 @@ class PeerVerifyCardState extends ConsumerState<PeerVerifyCard> {
           SwitchListTile(
             secondary: const Text('📍', style: TextStyle(fontSize: 22)),
             title: const Text('位置共享（定位验证包）'),
-            subtitle: Text(_on
-                ? '开启中 · 数据仅存自家 NAS · 轨迹保留 15 天'
-                : '第 0 步真机验证 · 开启后按 25m 位移/5min 静止心跳上报',
+            subtitle: Text(
+                _on
+                    ? '开启中 · 数据仅存自家 NAS · 轨迹保留 15 天'
+                    : '第 0 步真机验证 · 原生 LocationManager 三 provider · 25m 位移/5min 心跳',
                 style: Theme.of(context)
                     .textTheme
                     .bodySmall
                     ?.copyWith(color: cs.outline)),
             value: _on,
-            onChanged: _toggle,
+            onChanged: _busy ? null : _toggle,
           ),
-          if (_stats.isNotEmpty)
+          if (_summary.isNotEmpty)
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-              child: Text(_stats,
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+              child: Text(_summary,
                   style: Theme.of(context)
                       .textTheme
                       .bodySmall
                       ?.copyWith(color: cs.outline)),
             ),
-          // 常驻失败原因行（失败态不许不可见——fix1 真机口径）
-          if (_reason != null && _reason!.isNotEmpty)
+          // 常驻失败原因行（细分引导：缺前台/缺后台文案由原生区分）
+          if (_reason.isNotEmpty)
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
               child: Text('⚠ $_reason',
@@ -514,6 +540,12 @@ class PeerVerifyCardState extends ConsumerState<PeerVerifyCard> {
                       .bodySmall
                       ?.copyWith(color: cs.error)),
             ),
+          TextButton.icon(
+            onPressed: _exportFatal,
+            icon: const Icon(Icons.bug_report, size: 16),
+            label: const Text('导出 peer-loc-fatal 日志'),
+          ),
+          const SizedBox(height: 4),
         ]),
       ),
     );

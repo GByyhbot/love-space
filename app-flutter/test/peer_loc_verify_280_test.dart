@@ -55,30 +55,36 @@ void main() {
     });
   });
 
-  group('原生桥契约（路线 B）', () {
-    test('Kotlin 侧：三 provider 采样 + 25m/15s + GCJ-02/距离函数在位', () {
+  group('原生桥契约（fix4 胶水重做：原生一口价）', () {
+    test('Kotlin 胶水：toggle 一口价 + 权限两值分开回报 + 探针保留', () {
       final kt = File('android/app/src/main/kotlin/cn/iepose/lovespace/'
               'love_space/PeerLocNative.kt')
           .readAsStringSync();
-      expect(kt.contains('LocationManager.GPS_PROVIDER'), isTrue);
-      expect(kt.contains('LocationManager.NETWORK_PROVIDER'), isTrue);
-      expect(kt.contains('LocationManager.PASSIVE_PROVIDER'), isTrue);
-      expect(kt.contains('MIN_DISTANCE_M = 25f'), isTrue, reason: '25m 位移触发');
+      // 一口价方法面
+      expect(kt.contains('"toggle" ->'), isTrue, reason: '单一原生入口');
+      expect(kt.contains('"status" ->'), isTrue, reason: '开关态单一事实源查询');
+      expect(kt.contains('"exportFatalLog" ->') || kt.contains('exportFatalLog()'),
+          isTrue, reason: 'fatal 导出入口');
+      // 权限两值分开回报（缺前台/缺后台两种 reason）
+      expect(kt.contains('val fine = fineGranted(context)'), isTrue);
+      expect(kt.contains('val bg = backgroundGranted(context)'), isTrue);
+      expect(kt.contains('需要把定位权限设为「始终允许」') ||
+          kt.contains('始终允许'), isTrue, reason: '缺后台对应引导文案');
+      // 返回结构 {ok, reason, detail}
+      expect(kt.contains('"detail" to detail'), isTrue);
+      // 采集核不动：采样参数/队列/422 自愈
+      expect(kt.contains('MIN_DISTANCE_M = 25f'), isTrue);
       expect(kt.contains('MIN_TIME_MS = 15_000L'), isTrue);
-      expect(kt.contains('STILL_HEARTBEAT_MS = 5 * 60_000L'), isTrue,
-          reason: '静止 5 min 心跳');
-      expect(kt.contains('STILL_CONFIRM_TIMES = 3'), isTrue, reason: '静止 3 次确认');
-      expect(kt.contains('ACC_DROP_M = 100.0'), isTrue, reason: 'acc>100 丢弃');
-      expect(kt.contains('ACC_LATEST_ONLY_M = 50.0'), isTrue,
-          reason: '50<acc≤100 只 latest');
-      expect(kt.contains('BATCH_MAX = 5'), isTrue, reason: '攒满 5 条上报');
-      expect(kt.contains('BATCH_FLUSH_MS = 3 * 60_000L'), isTrue, reason: '或 3 min');
-      expect(kt.contains('QUEUE_MAX = 50'), isTrue, reason: '队列上限 50 溢出丢最旧');
-      expect(kt.contains('X-Love-Space', ), isTrue, reason: '原生上报带写门禁头');
-      expect(kt.contains('wgs84ToGcj02'), isTrue, reason: '端上转换后上报');
-      expect(kt.contains('peer_revision'), isFalse,
-          reason: '原生层不碰 SSE 协议（后端职责）');
-      // [peer-loc] 日志保留（第 0 步取证）
+      expect(kt.contains('STILL_HEARTBEAT_MS = 5 * 60_000L'), isTrue);
+      expect(kt.contains('QUEUE_MAX = 50'), isTrue);
+      expect(kt.contains('BATCH_MAX = 5'), isTrue);
+      expect(kt.contains('X-Love-Space'), isTrue);
+      // 探针保留
+      expect(kt.contains('receivedCount'), isTrue, reason: '回调实证探针保留');
+      // fatal 落盘（原生侧）+ 导出
+      expect(kt.contains('fatal-native.txt'), isTrue);
+      expect(kt.contains('fun exportFatalLog'), isTrue);
+      // [peer-loc] 日志保留
       expect(kt.contains('TAG = "peer-loc"'), isTrue);
     });
 
@@ -90,72 +96,50 @@ void main() {
       expect(manifest.contains('android.permission.ACCESS_FINE_LOCATION'), isTrue);
     });
 
-    test('2.7.1 风格真机修正：权限终判以原生 AppOps 口径为事实源', () {
-    final kt = File('android/app/src/main/kotlin/cn/iepose/lovespace/'
-            'love_space/PeerLocNative.kt')
-        .readAsStringSync();
-    final loc = File('lib/core/peer/peer_locator.dart').readAsStringSync();
-    // MIUI 兼容：background 权限用 AppOps noteOpNoThrow 复核
-    // 权限 API 不可作事实源——回调实证探针（received 计数）为准
-    expect(kt.contains('receivedCount'), isTrue, reason: '回调实证探针');
-    expect(kt.contains('startReason'), isTrue, reason: 'FINE 硬门槛缺失原因');
-    expect(kt.contains('noteOpNoThrow'), isFalse,
-        reason: 'AppOps hide API 不可达（真机翻车：String op 不存在/int 常量 hide）');
-    // Dart 探针 3min 口径
-    expect(loc.contains('_probeBackground'), isTrue);
-    expect(loc.contains('onProbeFail'), isTrue, reason: '探针失败可见说明回调');
-    // Dart：geolocator 只引导不终判——终判回原生
-    expect(loc.contains('只用来**弹系统对话框引导**'), isTrue);
-    expect(loc.contains('回调实证探针'), isTrue, reason: '探针口径注释');
-    // 启用失败必给用户可见说明（不许静默回弹）
-    expect(loc.contains('PeerVerifyResult'), isTrue, reason: '结构化 ok+reason');
-    expect(loc.contains('未登录或会话已失效'), isTrue, reason: '凭据空给说明');
-    expect(loc.contains('线路未就绪'), isTrue, reason: '线路空给说明');
-    final settings =
-        File('lib/features/settings/settings_home_page.dart').readAsStringSync();
-    expect(settings.contains('showSnackBar'), isFalse,
-        reason: 'App 内禁底部 SnackBar（2.4.x 契约，2.8.0 fix2 落实）');
-    expect(settings.contains('chatToastProvider.notifier).show'), isTrue,
-        reason: '失败原因走顶部弹窗（既有统一机制）');
-    expect(settings.contains('_reason = msg') || settings.contains('_reason = r.reason'),
-        isTrue, reason: '常驻原因行（失败态不许不可见）');
-  });
-
-  test('fix3：toggle 链去 shared_preferences + fatal 堆栈落盘', () {
-    final loc = File('lib/core/peer/peer_locator.dart').readAsStringSync();
-    // 真机 Pigeon unregistered-instance 实证——peer 链不得再依赖该插件
-    expect(loc.contains("package:shared_preferences"), isFalse,
-        reason: 'peer 链不得 import shared_preferences');
-    expect(loc.contains('_writePersisted') &&
-        loc.contains('getApplicationDocumentsDirectory'),
-        isTrue, reason: '文件持久化（录音链同款通道，与插件注册解耦）');
-    expect(loc.contains('_dumpFatal'), isTrue,
-        reason: 'fatal 全量堆栈落盘（peer-loc-fatal.txt，开发期炸出来）');
-    expect(loc.contains('peer-loc-fatal.txt'), isTrue);
-  });
-
-  test('Dart 侧：凭据注入与开关持久化契约', () {
-      final locator =
-          File('lib/core/peer/peer_locator.dart').readAsStringSync();
-      expect(locator.contains("readSessionToken()"), isTrue,
-          reason: '会话正本与主 isolate dio 同源（secure_storage）');
-      expect(locator.contains('readLastRoute()'), isTrue, reason: '线路 base 同源');
-      expect(locator.contains("'cookie': 'love_session=\$token'"), isTrue);
-      expect(locator.contains('peerVerifyToggle'), isTrue);
-      expect(locator.contains('peerLocatorAutoStart'), isTrue,
-          reason: '冷启动自动恢复采集');
-      // 红线：不反复弹窗
-      expect(locator.contains('不反复弹窗'), isTrue);
+    test('fix4 Dart 胶水：只搬运与渲染（禁 import 三插件 + 单一入口）', () {
+      final loc = File('lib/core/peer/peer_locator.dart').readAsStringSync();
+      // 胶水令四：peer 链 Dart 侧禁止 import geolocator 与 shared_preferences
+      expect(loc.contains('package:geolocator'), isFalse,
+          reason: '禁 import geolocator');
+      expect(loc.contains('package:shared_preferences'), isFalse,
+          reason: '禁 import shared_preferences');
+      expect(loc.contains('package:path_provider'), isFalse,
+          reason: '禁 import path_provider（持久化链整段删除）');
+      // 单一原生入口 + 结构化结果
+      expect(loc.contains("invokeMethod<Map<Object?, Object?>>('toggle'"), isTrue,
+          reason: 'toggle 单一原生入口');
+      expect(loc.contains('class PeerVerifyResult'), isTrue);
+      expect(loc.contains('final Map<Object?, Object?> detail;'), isTrue);
+      // 开关态原生单一事实源（status 回填）
+      expect(loc.contains("invokeMethod<Map<Object?, Object?>>('status'"), isTrue);
+      expect(loc.contains("peerVerifyOn = status['running'] == true"), isTrue,
+          reason: '页面进入/toggle 后以查询结果回填');
+      // 凭据搬运（secure_storage 正本）
+      expect(loc.contains('readSessionToken()'), isTrue);
+      expect(loc.contains('readLastRoute()'), isTrue);
+      // fatal 导出
+      expect(loc.contains('exportPeerFatalLog'), isTrue);
+      // 红线：不调 events/sos（二三期后端面）
+      expect(loc.contains('/api/peer/events'), isFalse);
+      expect(loc.contains('/api/peer/sos'), isFalse);
+      expect(loc.contains('/api/peer/location'), isFalse,
+          reason: '上报在原生层执行');
     });
-  });
 
-  test('红线：验证包不调用 events/sos 接口（二三期后端面）', () {
-    final peer =
-        File('lib/core/peer/peer_locator.dart').readAsStringSync();
-    expect(peer.contains('/api/peer/events'), isFalse, reason: 'events 一期不调用');
-    expect(peer.contains('/api/peer/sos'), isFalse, reason: 'sos 一期不调用');
-    expect(peer.contains('/api/peer/location'), isFalse,
-        reason: '上报在原生层执行（channel 契约），Dart 侧不直连');
+    test('验证卡：status 回填 + 导出入口 + 常驻原因行（真实组件断言）', () {
+      final settings =
+          File('lib/features/settings/settings_home_page.dart').readAsStringSync();
+      expect(settings.contains('showSnackBar'), isFalse,
+          reason: 'App 内禁底部 SnackBar（2.4.x 契约）');
+      expect(settings.contains('peerVerifyStatus()'), isTrue,
+          reason: '页面进入回填');
+      expect(settings.contains('_refresh()'), isTrue);
+      expect(settings.contains('exportPeerFatalLog()'), isTrue,
+          reason: 'fatal 导出/分享入口');
+      expect(settings.contains("Text('⚠ "), isTrue, reason: '常驻原因行');
+      expect(settings.contains('chatToastProvider.notifier).show'), isTrue,
+          reason: '转瞬提示走顶部弹窗');
+    });
   });
 
   test('Kotlin GCJ-02 与 Dart 实现同公式（结构对拍：关键常数一致）', () {

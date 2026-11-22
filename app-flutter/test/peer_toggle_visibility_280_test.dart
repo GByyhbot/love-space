@@ -1,13 +1,11 @@
-/// 2.8.0 第 0 步 fix2 · 真机报告复现护栏（widget 级证据，fix1 静默回弹口径）。
+/// 2.8.0 第 0 步 fix4 · 胶水重做真机复现护栏（widget 级证据）。
 ///
-/// 复现：geolocator 平台通道抛 PlatformException（MIUI 实证路径）→
-/// fix1 行为：异常在 PeerVerifyResult 产生前冒泡被 framework 吞 → 开关
-/// 回弹、无 SnackBar、无常驻文案。
-/// 修复后行为：_toggle 全程装甲 + 常驻原因行（⚠）常驻在开关行下方 +
-/// 顶部弹窗（既有契约，SnackBar 禁用），开关保持关。
+/// 口径（胶水重做令）：Dart 只搬运与渲染——mock 原生 toggle 返回
+/// 「缺后台」细分 reason（{ok:false, reason:…, detail:{fine,background}}）→
+/// tap 后：⚠ 常驻原因行出现（细分引导文案）、开关保持关、无 SnackBar 违约；
+/// toggle 后以原生 status 回填开关。另覆盖「未登录」路径（凭据空 → 结构化
+/// 原因可见，不静默回弹）。
 library;
-
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -15,79 +13,104 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:love_space/features/settings/settings_home_page.dart';
-// PeerLocNative 原生通道 mock（返回结构化拒绝/成功，不依赖真机）
-Future<void> mockNative(Future<Object?>? Function(MethodCall call) handler) async {
-  TestWidgetsFlutterBinding.ensureInitialized();
-  TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-      .setMockMethodCallHandler(const MethodChannel('peer_loc/native'),
-          (call) async => handler(call));
-  // 开关态已改 path_provider 文件持久化（fix3：去 shared_preferences）——
-  // test binding 下 path_provider Pigeon 通道无 mock 会永挂（fix3 实证），
-  // 用官方 PathProviderPlatform.override 注入临时目录。
-  final tmp = Directory.systemTemp.createTempSync('peer-verify-test');
-  PathProviderPlatform.instance = _FakePathProvider(tmp.path);
-}
 
-void main() {
-  testWidgets('复现 fix1 缺陷：geolocator 平台异常 → 必须有可见说明（SnackBar + 常驻原因行）',
-      (tester) async {
-    // 原生层：start 也会被调到（权限终判走原生；原生 hasPermission=false
-    // → 引导 → geolocator 抛平台异常 → 原生终判 false → 结构化原因）
-    await mockNative((call) async {
-      switch (call.method) {
-        case 'hasPermission':
-          return false;
-        case 'start':
-          return {'started': false, 'reason': '需要定位权限'};
-        case 'stop':
-          return true;
-        case 'stats':
-          return {'received': 0, 'queue': 0, 'reported': 0};
-      }
-      return null;
-    });
-    // geolocator 平台通道：抛 PlatformException（MIUI 实证路径）
-    for (final ch in [
-      'flutter.baseflow.com/geolocator',
-      'flutter.baseflow.com/geolocator_android',
-    ]) {
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(MethodChannel(ch), (call) async {
-        throw PlatformException(code: 'locationServicesDisabled');
-      });
-    }
-
-    await tester.pumpWidget(const ProviderScope(
-        child: MaterialApp(home: Scaffold(body: PeerVerifyCard()))));
-    await tester.pump();
-
-    final sw = find.byType(SwitchListTile);
-    expect(sw, findsOneWidget);
-    await tester.tap(sw);
-    await tester.pump(); // 触发 _toggle
-    await tester.pump(const Duration(milliseconds: 100)); // async 链推进
-    await tester.pump(const Duration(milliseconds: 100));
-    await tester.pump(const Duration(milliseconds: 100));
-
-    // 修复后：常驻原因行必须出现（转瞬提示走顶部 toast——App 内禁
-    // SnackBar 是既有契约；fix1 是连常驻行都没有）
-    expect(find.byType(SnackBar), findsNothing,
-        reason: 'App 内禁底部 SnackBar（2.4.x 契约）');
-    // 常驻原因行必须出现（SnackBar 转瞬后仍可见）
-    expect(find.textContaining('⚠'), findsOneWidget,
-        reason: '失败原因常驻文案（fix1 缺失项）');
-    // 开关保持关（不假开）
-    final swWidget = tester.widget<SwitchListTile>(sw);
-    expect(swWidget.value, isFalse, reason: '失败态开关保持关');
-  });
-}
-
-/// path_provider 官方 override 口径（platform_interface 注入，test binding
-/// 不挂；真机走真通道）。
+/// path_provider 官方 override（test binding 下 Pigeon 通道无 mock 会永挂）。
 class _FakePathProvider extends PathProviderPlatform {
   _FakePathProvider(this.path);
   final String path;
 
   @override
   Future<String?> getApplicationDocumentsPath() async => path;
+}
+
+// PeerLocNative 原生通道 mock（fix4 契约面：toggle/status/exportFatal）
+Future<void> mockNative(
+  Future<Object?>? Function(MethodCall call) handler, {
+  bool withCredentials = false,
+}) async {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+      .setMockMethodCallHandler(const MethodChannel('peer_loc/native'),
+          (call) async => handler(call));
+  // secure_storage（凭据正本）：withCredentials=true 返回 token/route
+  TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+      .setMockMethodCallHandler(
+          const MethodChannel('plugins.it_nomads.com/flutter_secure_storage'),
+          (call) async {
+    if (withCredentials && call.method == 'read') {
+      final key = (call.arguments as Map)['key'] as String?;
+      if (key == 'love_session_token') return 'tok123';
+      if (key == 'last_route') return 'https://test.local';
+    }
+    return null;
+  });
+  // path_provider（卡片无持久化依赖，仅平台初始化兜底）
+  PathProviderPlatform.instance = _FakePathProvider('/tmp/peer-verify-test');
+}
+
+void main() {
+  testWidgets('缺后台权限：原生细分 reason → ⚠ 常驻行 + 顶部弹窗 + 开关保持关',
+      (tester) async {
+    await mockNative((call) async {
+      switch (call.method) {
+        case 'toggle':
+          return {
+            'ok': false,
+            'reason': '定位权限已授「使用期间」，还需要「始终允许」：'
+                '系统设置 → 应用 → 恋爱空间 → 位置 → 选择「始终允许」后重试',
+            'detail': {'fine': 'granted', 'background': 'denied'},
+          };
+        case 'status':
+          return {'running': false, 'received': 0, 'queue': 0, 'reported': 0};
+        case 'exportFatal':
+          return {'path': '', 'content': ''};
+      }
+      return null;
+    }, withCredentials: true);
+
+    await tester.pumpWidget(const ProviderScope(
+        child: MaterialApp(home: Scaffold(body: PeerVerifyCard()))));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    final sw = find.byType(SwitchListTile);
+    expect(sw, findsOneWidget);
+    await tester.tap(sw);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.pump(const Duration(milliseconds: 200));
+
+    // 常驻原因行（细分引导文案可见）
+    expect(find.textContaining('始终允许'), findsWidgets,
+        reason: '缺后台的细分引导必须可见（胶水令二）');
+    // App 内禁底部 SnackBar（2.4.x 契约）
+    expect(find.byType(SnackBar), findsNothing);
+    // 开关保持关
+    final swWidget = tester.widget<SwitchListTile>(sw);
+    expect(swWidget.value, isFalse, reason: '失败态开关保持关');
+  });
+
+  testWidgets('未登录路径：凭据空 → 结构化原因可见（不静默回弹）', (tester) async {
+    var nativeToggleCalled = false;
+    await mockNative((call) async {
+      if (call.method == 'toggle') nativeToggleCalled = true;
+      return {'ok': true, 'reason': '', 'detail': {}};
+    });
+
+    await tester.pumpWidget(const ProviderScope(
+        child: MaterialApp(home: Scaffold(body: PeerVerifyCard()))));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    await tester.tap(find.byType(SwitchListTile));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.pump(const Duration(milliseconds: 200));
+
+    // secure_storage mock 返回 null → 凭据空 → 结构化原因；原生 toggle 不被调
+    expect(find.textContaining('未登录或会话已失效'), findsOneWidget,
+        reason: '凭据空的可见说明');
+    expect(nativeToggleCalled, isFalse,
+        reason: '凭据缺失时不得到达原生启动层');
+  });
 }

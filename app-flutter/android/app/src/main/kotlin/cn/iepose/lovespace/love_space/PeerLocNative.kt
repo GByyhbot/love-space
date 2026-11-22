@@ -86,45 +86,32 @@ object PeerLocNative {
     private fun log(msg: String) = android.util.Log.d(TAG, msg)
 
     fun register(messenger: io.flutter.plugin.common.BinaryMessenger, context: Context) {
+        appContext = context.applicationContext
         MethodChannel(messenger, CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
-                "start" -> {
+                // ── 2.8.0 fix4 胶水重做：单一原生入口（一口价）──────────
+                // Dart 只搬运 {enable, cookie, baseUrl}（凭据从 secure_storage
+                // 正本读出后下传，Dart 只做渲染），一切权限判定/启停/状态
+                // 都在本原生层收口，返回 {ok, reason, detail}。
+                "toggle" -> {
                     val args = call.arguments() as? Map<*, *>
+                    val enable = args?.get("enable") == true
                     sessionCookie = args?.get("cookie") as? String
                     baseUrl = args?.get("baseUrl") as? String
-                    stillMode = false; stillCount = 0; queue.clear()
-                    reportedCount = 0; droppedCount = 0; lastError = null
-                    receivedCount = 0; lastReceivedAt = 0
-                    val reason = startReason(context)
-                    if (reason != null) {
-                        log("start rejected: $reason")
-                        result.success(mapOf("started" to false, "reason" to reason))
-                    } else {
-                        start(context)
-                        log("start accepted: listeners=${listeners.size}")
-                        result.success(mapOf("started" to listeners.isNotEmpty(),
-                            "reason" to if (listeners.isEmpty()) "前台服务未运行，采集未挂起" else ""))
-                    }
+                    result.success(toggle(context, enable))
                 }
-                "stop" -> {
-                    stop()
-                    result.success(true)
-                }
-                "isRunning" -> result.success(listeners.isNotEmpty())
-                "hasPermission" -> result.success(hasPermission(context))
-                "stats" -> result.success(
-                    mapOf("queue" to queue.size, "reported" to reportedCount,
-                          "dropped" to droppedCount, "still" to stillMode,
-                          "received" to receivedCount,
-                          "lastReceivedAt" to lastReceivedAt,
-                          "error" to lastError))
+                "status" -> result.success(status())
+                "exportFatal" -> result.success(exportFatalLog())
                 else -> result.notImplemented()
             }
         }
     }
 
-    fun hasPermission(context: Context): Boolean =
-        fineGranted(context) && backgroundGranted(context)
+    /**
+     * 2.8.0 fix4：FINE 硬门槛判定（toggle 内部分别回报 fine/background 两值，
+     * 缺后台走对应引导；background 是否真生效再由回调探针实证）。
+     */
+    fun hasPermission(context: Context): Boolean = fineGranted(context)
 
     /** FINE 定位：checkSelfPermission 硬门槛（各 ROM 口径一致）。 */
     fun fineGranted(context: Context): Boolean =
@@ -148,6 +135,73 @@ object PeerLocNative {
     fun startReason(context: Context): String? = when {
         !fineGranted(context) -> "需要定位权限（使用期间/始终允许）"
         else -> null
+    }
+
+    /** 胶水一口价：开/关。返回 {ok, reason, detail}（Dart 只渲染）。 */
+    @Synchronized
+    fun toggle(context: Context, enable: Boolean): Map<String, Any?> {
+        if (!enable) {
+            stop()
+            return mapOf("ok" to true, "reason" to "", "detail" to detailMap())
+        }
+        // 权限系统真实状态分开回报（缺前台/缺后台两种 reason，Dart 对应引导）
+        val fine = fineGranted(context)
+        val bg = backgroundGranted(context)
+        val detail = mapOf("fine" to (if (fine) "granted" else "denied"),
+                           "background" to (if (bg) "granted" else "denied"))
+        if (!fine) {
+            val reason = "需要定位权限（使用期间），请在系统设置中授予"
+            log("toggle-on rejected: fine=$fine bg=$bg")
+            fatal(context, "toggle-on rejected fine=${fine} bg=${bg}")
+            return mapOf("ok" to false, "reason" to reason, "detail" to detail)
+        }
+        if (!bg) {
+            val reason = "定位权限已授「使用期间」，还需要「始终允许」：" +
+                "系统设置 → 应用 → 恋爱空间 → 位置 → 选择「始终允许」后重试"
+            log("toggle-on rejected: fine=$fine bg=$bg")
+            fatal(context, "toggle-on rejected fine=${fine} bg=${bg}")
+            return mapOf("ok" to false, "reason" to reason, "detail" to detail)
+        }
+        stillMode = false; stillCount = 0; queue.clear()
+        reportedCount = 0; droppedCount = 0; lastError = null
+        receivedCount = 0; lastReceivedAt = 0
+        start(context)
+        val running = listeners.isNotEmpty()
+        val reason = if (running) "" else "采集启动失败（前台服务未运行或被系统拒绝），请重启 App 后重试"
+        log("toggle-on: running=$running")
+        if (!running) fatal(context, "toggle-on start failed (listeners empty)")
+        return mapOf("ok" to running, "reason" to reason, "detail" to detail)
+    }
+
+    /** 开关态单一事实源查询：服务在跑 + 最近回调计数（页面进入/toggle 后回填）。 */
+    fun status(): Map<String, Any?> = mapOf(
+        "running" to listeners.isNotEmpty(),
+        "received" to receivedCount,
+        "lastReceivedAt" to lastReceivedAt,
+        "queue" to queue.size,
+        "reported" to reportedCount,
+        "dropped" to droppedCount,
+        "still" to stillMode,
+        "error" to lastError)
+
+    /** fatal 日志导出（验证卡导出/分享入口——机主拿得出来才算落盘完成）。 */
+    fun exportFatalLog(): Map<String, Any?> {
+        val ctx = appContext
+        val f = java.io.File(
+            (ctx?.getExternalFilesDir(null) ?: ctx?.filesDir), "peer-loc${java.io.File.separator}fatal-native.txt")
+        val content = if (f.exists()) f.readText() else ""
+        return mapOf("path" to (if (f.exists()) f.absolutePath else ""),
+                     "content" to content)
+    }
+
+    /** 原生侧 fatal 落盘（注册类/采集类问题堆栈原文，logcat 截断兜底）。 */
+    private fun fatal(context: Context, msg: String) {
+        try {
+            val dir = java.io.File(context.getExternalFilesDir(null), "peer-loc")
+            if (!dir.exists()) dir.mkdirs()
+            java.io.File(dir, "fatal-native.txt").appendText(
+                "[${System.currentTimeMillis()}] $msg\n")
+        } catch (_: Exception) {}
     }
 
     @Synchronized
