@@ -137,12 +137,17 @@ object PeerLocNative {
         else -> null
     }
 
+    /** 权限两值 detail（fix4 分开回报口径）。 */
+    private fun detailMap(context: Context): Map<String, String> = mapOf(
+        "fine" to (if (fineGranted(context)) "granted" else "denied"),
+        "background" to (if (backgroundGranted(context)) "granted" else "denied"))
+
     /** 胶水一口价：开/关。返回 {ok, reason, detail}（Dart 只渲染）。 */
     @Synchronized
     fun toggle(context: Context, enable: Boolean): Map<String, Any?> {
         if (!enable) {
             stop()
-            return mapOf("ok" to true, "reason" to "", "detail" to detailMap())
+            return mapOf("ok" to true, "reason" to "", "detail" to detailMap(context))
         }
         // 权限系统真实状态分开回报（缺前台/缺后台两种 reason，Dart 对应引导）
         val fine = fineGranted(context)
