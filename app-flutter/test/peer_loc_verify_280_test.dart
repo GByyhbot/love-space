@@ -113,8 +113,12 @@ void main() {
     expect(loc.contains('线路未就绪'), isTrue, reason: '线路空给说明');
     final settings =
         File('lib/features/settings/settings_home_page.dart').readAsStringSync();
-    expect(settings.contains('ScaffoldMessenger.of(context).showSnackBar'),
-        isTrue, reason: '失败原因 SnackBar 呈现');
+    expect(settings.contains('showSnackBar'), isFalse,
+        reason: 'App 内禁底部 SnackBar（2.4.x 契约，2.8.0 fix2 落实）');
+    expect(settings.contains('chatToastProvider.notifier).show'), isTrue,
+        reason: '失败原因走顶部弹窗（既有统一机制）');
+    expect(settings.contains('_reason = msg') || settings.contains('_reason = r.reason'),
+        isTrue, reason: '常驻原因行（失败态不许不可见）');
   });
 
   test('Dart 侧：凭据注入与开关持久化契约', () {

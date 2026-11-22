@@ -63,27 +63,37 @@ class PeerVerifyResult {
 
 /// 开关切换（验证包临时开关行调用）。开启走权限引导；失败必给原因。
 Future<PeerVerifyResult> peerVerifyToggle(bool on) async {
-  if (on) {
-    final deny = await _ensurePermission();
-    if (deny != null) {
-      peerLocLog('toggle-on aborted: $deny');
-      peerVerifyOn = false;
-      await _persist(false);
-      return PeerVerifyResult(false, deny);
-    }
-    final r = await _startNative();
-    peerVerifyOn = r.ok;
-    await _persist(r.ok);
-    return r;
-  }
-  peerVerifyOn = false;
-  await _persist(false);
+  // 🔴 全程 try：任何异常（geolocator 平台异常/通道异常）都必须产出结构化
+  // 原因——fix1 实证异常冒泡被 Flutter 吞掉 = 无提示回弹（真机报告口径）
   try {
-    await _channel.invokeMethod('stop');
+    if (on) {
+      final deny = await _ensurePermission();
+      if (deny != null) {
+        peerLocLog('toggle-on aborted: $deny');
+        peerVerifyOn = false;
+        await _persist(false);
+        return PeerVerifyResult(false, deny);
+      }
+      final r = await _startNative();
+      peerVerifyOn = r.ok;
+      await _persist(r.ok);
+      return r;
+    }
+    peerVerifyOn = false;
+    await _persist(false);
+    try {
+      await _channel.invokeMethod('stop');
+    } catch (e) {
+      peerLocLog('stop error: $e');
+    }
+    return const PeerVerifyResult(false, '');
   } catch (e) {
-    peerLocLog('stop error: $e');
+    peerLocLog('toggle fatal: $e');
+    peerVerifyOn = false;
+    await _persist(false);
+    return PeerVerifyResult(
+        false, '启用失败（内部错误）：${e.toString().substring(0, e.toString().length.clamp(0, 120))}');
   }
-  return const PeerVerifyResult(false, '');
 }
 
 Future<bool> _persist(bool v) async {
@@ -111,10 +121,17 @@ Future<String?> _ensurePermission() async {
   }
   // 原生判定未过 → 引导一次：denied 时弹系统对话框（FINE）；「始终允许」
   // 在 Android 10+ 只能进系统设置单独授——引导 openAppSettings 一次。
-  var perm = await Geolocator.checkPermission();
-  if (perm == LocationPermission.denied) {
-    perm = await Geolocator.requestPermission();
-    peerLocLog('requestPermission result: $perm');
+  // 🔴 geolocator 调用全程 try：MIUI 上 checkPermission/requestPermission
+  // 可能抛平台异常（真机 fix1 实证：异常在 PeerVerifyResult 产生前炸掉
+  // 整条 toggle 链，UI 无任何提示直接回弹）——异常时跳过引导直接走原生终判。
+  try {
+    var perm = await Geolocator.checkPermission();
+    if (perm == LocationPermission.denied) {
+      perm = await Geolocator.requestPermission();
+      peerLocLog('requestPermission result: $perm');
+    }
+  } catch (e) {
+    peerLocLog('geolocator guide error (skip guide, native verdict): $e');
   }
   // 无论 geolocator 怎么报，终判回原生（AppOps 口径）
   final after = await _channel
@@ -125,7 +142,7 @@ Future<String?> _ensurePermission() async {
     peerLocLog('permission ok after request (native verdict)');
     return null;
   }
-  peerLocLog('permission still denied after guide (geo=$perm)');
+  peerLocLog('permission still denied after guide');
   return '需要定位权限，且在系统设置里设为「始终允许」后重试';
 }
 

@@ -25,7 +25,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import '../../core/api/api_client.dart' as api;
 import '../../core/config.dart';
 import '../../core/theme/tokens.dart';
-import '../chat/chat_toast.dart' show chatToastProvider;
+import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
 import '../update/update_service.dart' show manualCheck;
 import 'settings_state.dart';
 
@@ -200,7 +200,7 @@ class _SettingsHomePageState extends ConsumerState<SettingsHomePage> {
             const SizedBox(height: 16),
             // 2.8.0 第 0 步：定位验证包临时开关（分支 experiment/peer-loc-verify，
             // 机主确认后主体接线替换为正式设置页；本卡不进 main）
-            const _PeerVerifyCard(),
+            const PeerVerifyCard(),
             const SizedBox(height: 16),
             _heading(context, '数据与账号'),
             _row(
@@ -414,28 +414,29 @@ class _SettingsHomePageState extends ConsumerState<SettingsHomePage> {
 /// 2.8.0 第 0 步：定位验证包开关卡（临时；真机 24h 验证数据采集入口）。
 /// 开=权限引导 + 原生采集上报（正式 /api/peer/location，数据进 peer 表）；
 /// 关=停采停报清队列。不开 overlay、不反复弹窗（红线口径）。
-class _PeerVerifyCard extends StatefulWidget {
-  const _PeerVerifyCard();
+/// 公开化（fix2）：widget 测试直接驱动真组件验证呈现路径（原私有类测试不可达）。
+class PeerVerifyCard extends ConsumerStatefulWidget {
+  const PeerVerifyCard({super.key});
 
   @override
-  State<_PeerVerifyCard> createState() => _PeerVerifyCardState();
+  ConsumerState<PeerVerifyCard> createState() => PeerVerifyCardState();
 }
 
-class _PeerVerifyCardState extends State<_PeerVerifyCard> {
+class PeerVerifyCardState extends ConsumerState<PeerVerifyCard> {
   late bool _on = peerVerifyOn;
   String _stats = '';
 
   @override
   void initState() {
     super.initState();
-    // 回调实证探针失败 → 用户可见说明（后台定位未生效，不许静默）
+    // 回调实证探针失败 → 用户可见说明（后台定位未生效，不许静默）；
+    // 转瞬提示走顶部弹窗 + 常驻原因行双通道
     onProbeFail = () {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text(
-              '定位回调 3 分钟无到达：后台定位可能未生效——请在系统设置中确认'
-              '本应用定位权限为「始终允许」并检查省电策略'),
-          duration: Duration(seconds: 6)));
+      const msg = '定位回调 3 分钟无到达：后台定位可能未生效——请在系统设置中确认'
+          '本应用定位权限为「始终允许」并检查省电策略';
+      ref.read(chatToastProvider.notifier).show(msg, tone: ChatToastTone.warning);
+      setState(() => _reason = msg);
     };
   }
 
@@ -445,20 +446,32 @@ class _PeerVerifyCardState extends State<_PeerVerifyCard> {
     super.dispose();
   }
 
+  String? _reason; // 常驻失败原因（非常驻转瞬提示——失败态不许不可见）
+
   Future<void> _toggle(bool v) async {
-    final r = await peerVerifyToggle(v);
+    // 🔴 全程 try：任何异常（含 peerVerifyToggle 冒泡）都必须产出可见说明
+    PeerVerifyResult r;
+    try {
+      r = await peerVerifyToggle(v);
+    } catch (e) {
+      r = PeerVerifyResult(false, '开关处理异常：${e.toString().substring(0, e.toString().length.clamp(0, 120))}');
+    }
     if (!mounted) return;
     setState(() {
       _on = r.ok;
-      _stats = r.ok
-          ? '采集上报中（[peer-loc] 日志与 peer 表取证）'
-          : (v ? '开启失败' : '已关闭');
+      if (!r.ok && v && r.reason.isNotEmpty) {
+        _reason = r.reason; // 常驻：失败原因钉在开关行下方
+      } else if (r.ok) {
+        _reason = null;
+      }
+      _stats = r.ok ? '采集上报中 · 点此行查看取证数字' : (v ? '开启失败' : '已关闭');
     });
-    // 启用失败必须给用户可见说明（提示词口径：不许静默回弹）
+    // 转瞬提示走既有顶部弹窗（ChatToastHost 全局宿主——App 内禁底部
+    // SnackBar 是 2.4.x 既有契约）；常驻文案在 _reason 行（失败态不许不可见）。
     if (v && !r.ok && r.reason.isNotEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(r.reason),
-          duration: const Duration(seconds: 4)));
+      ref
+          .read(chatToastProvider.notifier)
+          .show(r.reason, tone: ChatToastTone.warning);
     }
   }
 
@@ -490,6 +503,16 @@ class _PeerVerifyCardState extends State<_PeerVerifyCard> {
                       .textTheme
                       .bodySmall
                       ?.copyWith(color: cs.outline)),
+            ),
+          // 常驻失败原因行（失败态不许不可见——fix1 真机口径）
+          if (_reason != null && _reason!.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: Text('⚠ $_reason',
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodySmall
+                      ?.copyWith(color: cs.error)),
             ),
         ]),
       ),
