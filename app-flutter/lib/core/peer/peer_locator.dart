@@ -14,17 +14,72 @@ library;
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:path_provider/path_provider.dart';
 
 import '../api/api_client.dart';
 
 const _channel = MethodChannel('peer_loc/native');
 
-const _prefsKey = 'peer_verify_on';
+// 2.7.1 风格真机 fix2 后再实证：SharedPreferencesApi(Pigeon) 在真机主
+// isolate 上仍抛 unregistered-instance（shared_preferences 2.5.6 后端路由
+// 异常，全量堆栈见 docs/fatal 落盘）——toggle 链**彻底去 shared_preferences**：
+// 开关态改 path_provider 文件持久化（该通道在真机服务 isolate 已被录音链
+// （getApplicationDocumentsDirectory）验证可用，与插件注册状态解耦）。
+const _persistFile = 'peer_verify_state.json';
+
+/// 测试注入点（fix3 实证：path_provider 的 Pigeon 通道在 test binding 下
+/// 无 mock 时 future 永挂——_toggle 卡死在 _writePersisted，呈现层同样
+/// 「无提示回弹」）。生产恒为 null 走真实目录。
+@visibleForTesting
+Future<Directory> Function()? stateDirFactory;
+
+Future<File> _stateFile() async {
+  final dir = stateDirFactory != null
+      ? await stateDirFactory!()
+      : await getApplicationDocumentsDirectory();
+  return File('${dir.path}${Platform.pathSeparator}$_persistFile');
+}
+
+/// 开关态读盘（文件损坏/缺失一律按关处理，不抛）。
+Future<bool> _readPersisted() async {
+  try {
+    final f = await _stateFile();
+    if (!f.existsSync()) return false;
+    return jsonDecode(f.readAsStringSync())['on'] == true;
+  } catch (e) {
+    peerLocLog('read persisted error: $e');
+    return false;
+  }
+}
+
+Future<bool> _writePersisted(bool v) async {
+  try {
+    final f = await _stateFile();
+    f.writeAsStringSync(jsonEncode({'on': v}), flush: true);
+    return v;
+  } catch (e) {
+    peerLocLog('write persisted error: $e');
+    return false;
+  }
+}
+
+/// 🔴 fatal 全量堆栈落盘（logcat 按行截断/机主截图截断的兜底——注册类
+/// 问题必须在开发期炸出来，堆栈原文留在文档目录可直接导出）。
+Future<void> _dumpFatal(String where, Object e, StackTrace stack) async {
+  try {
+    final dir = await getApplicationDocumentsDirectory();
+    File('${dir.path}${Platform.pathSeparator}peer-loc-fatal.txt')
+        .writeAsStringSync(
+            '[${DateTime.now().toIso8601String()}] $where\n$e\n\n$stack\n\n',
+            mode: FileMode.append, flush: true);
+  } catch (_) {}
+  peerLocLog('$where fatal: $e\n${stack.toString().split('\n').take(14).join('\n')}');
+}
 
 /// 验证开关（App 冷启动按此自动恢复采集）。
 bool peerVerifyOn = false;
@@ -32,24 +87,6 @@ bool peerVerifyOn = false;
 void peerLocLog(String msg) =>
     debugPrint('[peer-loc] ${DateTime.now().millisecondsSinceEpoch} $msg');
 
-/// App 启动钩子（main.dart 初始化后调用一次）：开关开 → 自动恢复采集。
-Future<void> peerLocatorAutoStart() async {
-  try {
-    final prefs = await SharedPreferences.getInstance();
-    peerVerifyOn = prefs.getBool(_prefsKey) ?? false;
-    peerLocLog('auto-start check: on=$peerVerifyOn');
-    if (!peerVerifyOn) return;
-    final deny = await _ensurePermission();
-    if (deny != null) {
-      peerLocLog('auto-start skipped: $deny');
-      return; // 不反复弹窗：未授权保持开关但本次不启，下次 tap 再引导
-    }
-    final r = await _startNative();
-    peerLocLog('auto-start native: ok=${r.ok} ${r.reason}');
-  } catch (e) {
-    peerLocLog('auto-start error: $e');
-  }
-}
 
 /// 开关切换返回结构：ok + 用户可见说明（启用失败必须给说明，不许静默回弹）。
 class PeerVerifyResult {
@@ -63,43 +100,37 @@ class PeerVerifyResult {
 
 /// 开关切换（验证包临时开关行调用）。开启走权限引导；失败必给原因。
 Future<PeerVerifyResult> peerVerifyToggle(bool on) async {
-  // 🔴 全程 try：任何异常（geolocator 平台异常/通道异常）都必须产出结构化
-  // 原因——fix1 实证异常冒泡被 Flutter 吞掉 = 无提示回弹（真机报告口径）
+  // 🔴 全程 try：任何异常都必须产出结构化原因——且 fatal 全量堆栈落盘
+  //（文档目录 peer-loc-fatal.txt），注册类问题开发期炸出来不许吞。
   try {
     if (on) {
       final deny = await _ensurePermission();
       if (deny != null) {
         peerLocLog('toggle-on aborted: $deny');
         peerVerifyOn = false;
-        await _persist(false);
+        await _writePersisted(false);
         return PeerVerifyResult(false, deny);
       }
       final r = await _startNative();
       peerVerifyOn = r.ok;
-      await _persist(r.ok);
+      await _writePersisted(r.ok);
       return r;
     }
     peerVerifyOn = false;
-    await _persist(false);
+    await _writePersisted(false);
     try {
       await _channel.invokeMethod('stop');
     } catch (e) {
       peerLocLog('stop error: $e');
     }
     return const PeerVerifyResult(false, '');
-  } catch (e) {
-    peerLocLog('toggle fatal: $e');
+  } catch (e, stack) {
+    await _dumpFatal('peerVerifyToggle', e, stack);
     peerVerifyOn = false;
-    await _persist(false);
+    await _writePersisted(false);
     return PeerVerifyResult(
         false, '启用失败（内部错误）：${e.toString().substring(0, e.toString().length.clamp(0, 120))}');
   }
-}
-
-Future<bool> _persist(bool v) async {
-  final prefs = await SharedPreferences.getInstance();
-  await prefs.setBool(_prefsKey, v);
-  return v;
 }
 
 /// 权限引导（2.4.6 风格：一次引导不反复弹）。
@@ -216,3 +247,21 @@ void Function()? onProbeFail;
 
 /// （保留）JSON 序列化占位：原生层 JSON 直接构建，Dart 侧无序列化职责。
 String debugDump(Object o) => jsonEncode(o);
+
+/// App 启动钩子（main.dart 初始化后调用一次）：开关开 → 自动恢复采集。
+Future<void> peerLocatorAutoStart() async {
+  try {
+    peerVerifyOn = await _readPersisted();
+    peerLocLog('auto-start check: on=$peerVerifyOn');
+    if (!peerVerifyOn) return;
+    final deny = await _ensurePermission();
+    if (deny != null) {
+      peerLocLog('auto-start skipped: $deny');
+      return; // 不反复弹窗：未授权保持开关但本次不启，下次 tap 再引导
+    }
+    final r = await _startNative();
+    peerLocLog('auto-start native: ok=${r.ok} ${r.reason}');
+  } catch (e, stack) {
+    await _dumpFatal('peerLocatorAutoStart', e, stack);
+  }
+}

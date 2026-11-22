@@ -121,6 +121,19 @@ void main() {
         isTrue, reason: '常驻原因行（失败态不许不可见）');
   });
 
+  test('fix3：toggle 链去 shared_preferences + fatal 堆栈落盘', () {
+    final loc = File('lib/core/peer/peer_locator.dart').readAsStringSync();
+    // 真机 Pigeon unregistered-instance 实证——peer 链不得再依赖该插件
+    expect(loc.contains("package:shared_preferences"), isFalse,
+        reason: 'peer 链不得 import shared_preferences');
+    expect(loc.contains('_writePersisted') &&
+        loc.contains('getApplicationDocumentsDirectory'),
+        isTrue, reason: '文件持久化（录音链同款通道，与插件注册解耦）');
+    expect(loc.contains('_dumpFatal'), isTrue,
+        reason: 'fatal 全量堆栈落盘（peer-loc-fatal.txt，开发期炸出来）');
+    expect(loc.contains('peer-loc-fatal.txt'), isTrue);
+  });
+
   test('Dart 侧：凭据注入与开关持久化契约', () {
       final locator =
           File('lib/core/peer/peer_locator.dart').readAsStringSync();
