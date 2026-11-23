@@ -7,6 +7,11 @@
 ///   · 本人 events 共享关闭 → **422**，detail=「报备事件共享已关闭」
 /// · `POST /api/peer/events/{id}/ack` → `{ok, event, peer_revision}`；自回应 400、不存在 404
 /// · `GET  /api/peer/events?date=`   → `{date, mine:[...], peer:{closed_off, events:[...]}}`
+/// · `GET  /api/peer/settings`       → **顶层四键** `{location,track,events,usage}`
+///   （实读 `app/main.py:2008` 直返 `peer.load_settings()` 的 dict，无包裹层）
+/// · `PUT  /api/peer/settings`       → 同结构；🔴 `peer.save_settings` 按
+///   `bool(data.get(k, True))` **全覆盖**写四键，前端漏传即被重置回 true，
+///   所以本文件所有写入口都提交完整四键（[PeerShareSettings.toJson]）。
 ///
 /// 🔴 错误通道（7-C 口径）：`validateAppStatus` 把 4xx 当成功 Response 放行，
 /// 因此每个写方法都必须显式 `writeResponseError` 判定，**不许只 catch
@@ -325,6 +330,110 @@ Future<PeerEventItem> ackReport(
   final raw = r.data;
   if (raw is! Map) throw const PeerApiException(genericErrorText);
   return PeerEventItem.fromJson((raw)['event']);
+}
+
+/// 本人四项共享开关（`GET/PUT /api/peer/settings` 的顶层四键）。
+///
+/// 🔴 不可变 + `toJson()` **恒输出全部 4 键**：后端 `save_settings` 逐键
+/// `bool(data.get(k, True))` 覆盖写，漏传键 = 静默重置为 `true`（把对方
+/// 刚关掉的共享又打开）。所有变更一律 `copyWith` 后整对象提交。
+class PeerShareSettings {
+  const PeerShareSettings({
+    this.location = true,
+    this.track = true,
+    this.events = true,
+    this.usage = true,
+  });
+
+  /// 实时位置共享。
+  final bool location;
+
+  /// 历史轨迹共享（轨迹 15 天滚动清理）。
+  final bool track;
+
+  /// 报备与事件共享（关闭后 `POST /api/peer/report` 返回 422）。
+  final bool events;
+
+  /// 设备使用报告共享（后续版本接入）。
+  final bool usage;
+
+  /// 全开（仅作 `copyWith` 基线与测试用，**不得**用作加载失败时的兜底渲染）。
+  static const PeerShareSettings allOn = PeerShareSettings();
+
+  /// 解析容缺：缺键/非 bool 一律按 `true`——与 `app/peer.py` 口径逐字一致。
+  static PeerShareSettings fromJson(Object? raw) {
+    final j = raw is Map ? raw.cast<String, dynamic>() : const <String, dynamic>{};
+    bool pick(String k) => j[k] is bool ? j[k] as bool : true;
+    return PeerShareSettings(
+      location: pick('location'),
+      track: pick('track'),
+      events: pick('events'),
+      usage: pick('usage'),
+    );
+  }
+
+  PeerShareSettings copyWith({
+    bool? location,
+    bool? track,
+    bool? events,
+    bool? usage,
+  }) =>
+      PeerShareSettings(
+        location: location ?? this.location,
+        track: track ?? this.track,
+        events: events ?? this.events,
+        usage: usage ?? this.usage,
+      );
+
+  /// 🔴 恒 4 键（见类注释），顺序与后端 `SHARE_KEYS` 一致。
+  Map<String, Object?> toJson() => {
+        'location': location,
+        'track': track,
+        'events': events,
+        'usage': usage,
+      };
+
+  @override
+  bool operator ==(Object other) =>
+      other is PeerShareSettings &&
+      other.location == location &&
+      other.track == track &&
+      other.events == events &&
+      other.usage == usage;
+
+  @override
+  int get hashCode => Object.hash(location, track, events, usage);
+
+  @override
+  String toString() =>
+      'PeerShareSettings(location:$location, track:$track, '
+      'events:$events, usage:$usage)';
+}
+
+/// 读本人四项共享开关（失败抛 [PeerApiException]，**不回落全开**——
+/// 加载失败必须走错误态，不许拿默认全开冒充服务端真实配置）。
+Future<PeerShareSettings> fetchPeerSettings(Dio dio) async {
+  final r = await dio.get('/api/peer/settings');
+  final err = writeResponseError(r);
+  if (err != null) throw PeerApiException(err);
+  final raw = r.data;
+  if (raw is! Map) throw const PeerApiException(genericErrorText);
+  return PeerShareSettings.fromJson(raw);
+}
+
+/// 写本人四项共享开关，返回后端落库后的最新状态。
+///
+/// 🔴 提交体恒为完整 4 键（[PeerShareSettings.toJson]），禁止只传变更键。
+Future<PeerShareSettings> updatePeerSettings(
+  Dio dio,
+  PeerShareSettings settings,
+) async {
+  final r = await dio.put('/api/peer/settings', data: settings.toJson());
+  final err = writeResponseError(r);
+  if (err != null) throw PeerApiException(err);
+  final raw = r.data;
+  if (raw is! Map) throw const PeerApiException(genericErrorText);
+  return PeerShareSettings.fromJson(raw);
 }
 
 /// 当日事件流（默认服务端时区的「今天」；传 [date] 可指定 yyyy-MM-dd）。
