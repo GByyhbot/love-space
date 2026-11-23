@@ -5,7 +5,8 @@
 ///    首页手势护栏（布局流内，可滚动 + 其它卡片可达）/ presets 失败回落默认 6 条；
 /// ⑤ 事件流卡片状态机：对方未 ack 有按钮 / 点击后整区禁用防连点 /
 ///    成功变「已回应」/ 我方两态文案 / closed_off 明示行；
-/// ⑥ 发送失败入队、422 关闭文案（且**不出现**无效的「去开启」按钮）。
+/// ⑥ 发送失败入队、422 关闭文案 + 「去开启」动作（2.8.0 P1：点击跳
+///    PeerShareSettingsPage，闭环接管 P0 遗留缺口）。
 library;
 
 import 'dart:async';
@@ -21,10 +22,17 @@ import 'package:love_space/core/api/api_client.dart' as api;
 import 'package:love_space/core/peer/peer_report_queue.dart';
 import 'package:love_space/core/sse/sse_client.dart'
     show SseClient, SseEvent, SsePhase, SseState, sseEventsProvider, sseProvider;
+import 'package:go_router/go_router.dart';
 import 'package:love_space/features/chat/chat_toast.dart'
-    show ChatToastController, ChatToastMessage, ChatToastTone, chatToastProvider;
+    show
+        ChatToastController,
+        ChatToastHost,
+        ChatToastMessage,
+        ChatToastTone,
+        chatToastProvider;
 import 'package:love_space/features/home/report_capsule_bar.dart'
     show ReportCapsuleBar, reportPresetsProvider;
+import 'package:love_space/features/settings/peer_share_settings_page.dart';
 import 'package:love_space/features/together/peer_report_page.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -68,6 +76,23 @@ class _NoTimerToastController extends ChatToastController {
   @override
   void show(String text, {ChatToastTone tone = ChatToastTone.info}) {
     state = ChatToastMessage(id: 1, text: text, tone: tone);
+  }
+
+  /// 2.8.0 P1：带动作的提示也要渲染出来（同样不挂定时器）。
+  @override
+  void showAction(
+    String text, {
+    required String actionLabel,
+    required VoidCallback onAction,
+    ChatToastTone tone = ChatToastTone.error,
+  }) {
+    state = ChatToastMessage(
+      id: 1,
+      text: text,
+      tone: tone,
+      actionLabel: actionLabel,
+      onAction: onAction,
+    );
   }
 }
 
@@ -200,6 +225,46 @@ void main() {
     await tester.pump(const Duration(milliseconds: 60));
   }
 
+  /// 带路由 + 顶部提示层的泵页：断言 422「去开启」跳到共享开关页
+  /// 必须是真实 GoRouter（`context.push` 依赖 GoRouter.of）。
+  Future<void> pumpBarWithRouter(WidgetTester tester, ProviderContainer c) async {
+    tester.view.devicePixelRatio = 1.0;
+    tester.view.physicalSize = const Size(393, 800);
+    addTearDown(tester.view.reset);
+    final router = GoRouter(
+      initialLocation: '/t',
+      routes: [
+        GoRoute(
+          path: '/t',
+          builder: (_, _) => Scaffold(
+            body: Column(children: [
+              const ChatToastHost(),
+              Expanded(
+                child: ListView(children: [
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: ReportCapsuleBar(outbox: outbox),
+                  ),
+                ]),
+              ),
+            ]),
+          ),
+        ),
+        GoRoute(
+          path: '/settings/peer-share',
+          builder: (_, _) => const PeerShareSettingsPage(),
+        ),
+      ],
+    );
+    addTearDown(router.dispose);
+    await tester.pumpWidget(UncontrolledProviderScope(
+      container: c,
+      child: MaterialApp.router(routerConfig: router),
+    ));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 60));
+  }
+
   _Adapter fullAdapter({
     Future<ResponseBody> Function(RequestOptions)? onPost,
     Object? presetBody,
@@ -215,6 +280,14 @@ void main() {
       }
       if (o.path.contains('/api/peer/events')) {
         return _json(dayBody ?? _day());
+      }
+      if (o.path.contains('/api/peer/settings')) {
+        return _json({
+          'location': true,
+          'track': true,
+          'events': true,
+          'usage': true,
+        });
       }
       if (o.path.contains('/api/peer/report')) {
         return onPost?.call(o) ??
@@ -322,21 +395,32 @@ void main() {
           reason: '同一次发送的重试必须复用同一 client_id');
     });
 
-    testWidgets('422 关闭：固定文案 + 不入队 + 不渲染无效「去开启」', (tester) async {
+    testWidgets('422 关闭：固定文案 + 「去开启」→ 跳共享开关页 + 不入队', (tester) async {
       final adapter = fullAdapter(
         onPost: (o) async => _json({'detail': '报备事件共享已关闭'}, 422),
       );
       final c = makeContainer(adapter);
-      await pumpBar(tester, c);
+      await pumpBarWithRouter(tester, c);
 
       await tester.tap(find.byKey(const Key('report-capsule-arrive_home')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 60));
+      await tester.pumpAndSettle();
 
       expect(c.read(chatToastProvider)?.text, '已关闭报备事件共享，开启后才能发报备');
       expect(await outbox.load(), isEmpty, reason: '422 不入队，重试无意义');
-      expect(find.text('去开启'), findsNothing,
-          reason: 'App 内无 events 开关落点 → 不渲染无效按钮');
+
+      // 2.8.0 P1：P0 遗留的「去开启」缺口闭环——动作存在且能导航
+      final action = find.byKey(const Key('toast-action'));
+      expect(action, findsOneWidget, reason: '422 提示必须带「去开启」动作');
+      expect(find.text('去开启'), findsOneWidget);
+
+      await tester.tap(action);
+      await tester.pumpAndSettle();
+      expect(find.byType(PeerShareSettingsPage), findsOneWidget,
+          reason: '「去开启」应 push 到 /settings/peer-share');
+      // 开关页按服务端真实值渲染（夹具全开）
+      expect(find.byKey(const Key('peer-share-events')), findsOneWidget);
     });
 
     testWidgets('最近一条小字：有对方 manual 报备才渲染，无则整行不渲染', (tester) async {

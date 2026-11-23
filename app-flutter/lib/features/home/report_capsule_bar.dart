@@ -14,12 +14,16 @@
 /// 仅作渲染回落，**不落库冒充用户配置**）；对方最近一条 manual 报备走
 /// `GET /api/peer/events`（仅当日，过零点自然清空，不额外回退查昨天）。
 ///
+/// 422 关闭：固定文案 + 「去开启」动作（2.8.0 P1 起跳到 /settings/peer-share，
+/// 开启后回到首页再点胶囊即可重发；已因 422 出队的旧报备不自动重发）。
+///
 /// 补发触发（令文二·3 三处）：组件初始化 / App 回前台 / SSE 重连成功。
 /// 全部走 [ReportOutbox.flush] 的内存单飞锁，并发触发直接忽略。
 library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/api/api_client.dart' show dioProvider;
 import '../../core/peer/peer_report_api.dart';
@@ -90,7 +94,7 @@ class _ReportCapsuleBarState extends ConsumerState<ReportCapsuleBar> {
       final res = await _outbox.flush(dio);
       if (!mounted || res.skipped) return;
       if (res.sent > 0) ref.invalidate(reportTodayPeerProvider);
-      if (res.closedOff) _toast(_shareClosedText, tone: ChatToastTone.error);
+      if (res.closedOff) _toastShareClosed();
     } catch (_) {
       // 补发失败静默：下次触发再来
     }
@@ -98,6 +102,19 @@ class _ReportCapsuleBarState extends ConsumerState<ReportCapsuleBar> {
 
   void _toast(String text, {ChatToastTone tone = ChatToastTone.info}) {
     ref.read(chatToastProvider.notifier).show(text, tone: tone);
+  }
+
+  /// 422「报备事件共享已关闭」：固定文案 + 「去开启」动作（2.8.0 P1 闭环）。
+  /// 动作按钮跳 `PeerShareSettingsPage`（设置二级页，push 语义）。
+  void _toastShareClosed() {
+    ref.read(chatToastProvider.notifier).showAction(
+      _shareClosedText,
+      actionLabel: '去开启',
+      onAction: () {
+        if (!mounted) return;
+        context.push('/settings/peer-share');
+      },
+    );
   }
 
   static const String _shareClosedText = '已关闭报备事件共享，开启后才能发报备';
@@ -127,9 +144,8 @@ class _ReportCapsuleBarState extends ConsumerState<ReportCapsuleBar> {
       ref.invalidate(reportTodayPeerProvider);
     } on ReportShareClosed {
       if (!mounted) return;
-      // 令文一·3 盘线缺口：App 内没有 events 独立开关的落点，
-      // 因此**只弹文案，不渲染无效的「去开启」按钮**（也不新造开关页）。
-      _toast(_shareClosedText, tone: ChatToastTone.error);
+      // 2.8.0 P1：开关页已落地（/settings/peer-share），提示带「去开启」跳转
+      _toastShareClosed();
     } on PeerApiException catch (e) {
       if (!mounted) return;
       _toast(e.detail, tone: ChatToastTone.error); // 其他 4xx：业务错误不入队
