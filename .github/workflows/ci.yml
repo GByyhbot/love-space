@@ -128,6 +128,13 @@ jobs:
       - run: flutter analyze
       - run: flutter test
       - run: flutter build apk --debug
+      # 注册层守卫（产物级，2.8.0 第 0 步 fix5）：既有 peer_loc_verify /
+      # peer_toggle_visibility 全程 mock 了 peer_loc/native，只测协议形状、
+      # 测不到接线。这一步读**产物**的 AndroidManifest（aapt dump xmltree）
+      # 断言 launcher activity = 自有 MainActivity（含通道注册）；源码级
+      # 断言同脚本内一并跑。不过即 job 失败（防回退到插件 Activity）。
+      - name: 注册层守卫（产物级 aapt）
+        run: python3 ../scripts/check_activity_registration.py --apk build/app/outputs/flutter-apk/app-debug.apk
       - uses: actions/upload-artifact@v4
         with:
           name: app-debug

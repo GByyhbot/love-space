@@ -1,13 +1,22 @@
 package cn.iepose.lovespace.love_space
 
-import io.flutter.embedding.android.FlutterActivity
+import com.ryanheise.audioservice.AudioServiceActivity
 import io.flutter.embedding.engine.FlutterEngine
 
-class MainActivity : FlutterActivity() {
+/**
+ * 🔴 2.8.0 第 0 步 fix5 根因修复（真机 MissingPluginException 实证）：
+ * manifest activity 此前直接指向 audio_service 插件的
+ * com.ryanheise.audioservice.AudioServiceActivity——本类（含
+ * PeerLocNative.register 的 configureFlutterEngine）从未被实例化，
+ * 原生 channel 不存在 → 前四轮 Dart→原生调用全部 MissingPluginException。
+ * 修法：本类改为继承 AudioServiceActivity（audio_service 官方支持的自定义
+ * Activity 口径，媒体前台服务行为不变）并接管 manifest activity 声明。
+ */
+class MainActivity : AudioServiceActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         // 2.8.0 第 0 步 · 路线 B：原生 LocationManager 采集桥
-        //（EventChannel peer_loc/events + MethodChannel peer_loc/native）
+        //（MethodChannel peer_loc/native：toggle/status/exportFatal 一口价）
         PeerLocNative.register(flutterEngine.dartExecutor.binaryMessenger, this)
     }
 }

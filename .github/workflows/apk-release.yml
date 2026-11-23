@@ -130,6 +130,11 @@ jobs:
             exit 1
           fi
 
+      - name: 注册层守卫（产物级 aapt）
+        run: |
+          python3 ../scripts/check_activity_registration.py \
+            --apk build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+
       - uses: actions/upload-artifact@v4
         with:
           name: lovespace-arm64-v${{ steps.ver.outputs.name }}

@@ -96,6 +96,32 @@ void main() {
       expect(manifest.contains('android.permission.ACCESS_FINE_LOCATION'), isTrue);
     });
 
+    test('fix5 真实注册断言（不 mock）：manifest activity 必须指向含注册的 MainActivity', () {
+      // 前四轮根因：manifest activity 指向 audio_service 插件的
+      // AudioServiceActivity，MainActivity.kt（含 PeerLocNative.register）
+      // 从未被实例化——通道不存在，Dart 侧全 mock 测试永远测不到。
+      final manifest =
+          File('android/app/src/main/AndroidManifest.xml').readAsStringSync();
+      expect(
+          manifest.contains(
+              'android:name="cn.iepose.lovespace.love_space.MainActivity"'),
+          isTrue,
+          reason: 'activity 必须指向自有 MainActivity（含通道注册）——指向插件类即回归');
+      final kt = File('android/app/src/main/kotlin/cn/iepose/lovespace/'
+              'love_space/MainActivity.kt')
+          .readAsStringSync();
+      expect(kt.contains('AudioServiceActivity()'), isTrue,
+          reason: 'MainActivity 必须继承 AudioServiceActivity（媒体前台服务保留）');
+      expect(kt.contains('PeerLocNative.register'), isTrue,
+          reason: '通道注册必须在被实例化的 Activity 内');
+      expect(kt.contains('configureFlutterEngine'), isTrue,
+          reason: '注册挂主 engine 生命周期钩子');
+      // MissingPluginException 致命态（不许当「关」吞掉）
+      final loc = File('lib/core/peer/peer_locator.dart').readAsStringSync();
+      expect(loc.contains('通道未注册'), isTrue, reason: '致命常驻文案');
+      expect(loc.contains('MissingPluginException'), isTrue,
+          reason: '显式识别致命类型');
+    });
     test('fix4 Dart 胶水：只搬运与渲染（禁 import 三插件 + 单一入口）', () {
       final loc = File('lib/core/peer/peer_locator.dart').readAsStringSync();
       // 胶水令四：peer 链 Dart 侧禁止 import geolocator 与 shared_preferences
