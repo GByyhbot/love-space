@@ -1,15 +1,16 @@
-# 情侣主动报备功能（P0）技术方案与入库实现说明
+# 情侣主动报备功能（P0）技术方案与入库施工说明（已对齐 `experiment` 分支）
 
-本方案面向 [GByyhbot/love-space](https://github.com/GByyhbot/love-space) 仓库（建议存放路径：`docs/couple-report-plan.md`），在现有 `2.8.0` 定位守护底座（[app/db.py](https://github.com/GByyhbot/love-space/blob/main/app/db.py)、[app/peer.py](https://github.com/GByyhbot/love-space/blob/main/app/peer.py)）之上，以**最小改动、零破坏存量契约**的方式补齐「一键主动报备 + 伴侣即时回应（Ack）+ 多渠道推送」闭环。
+本方案面向 [GByyhbot/love-space](https://github.com/GByyhbot/love-space) 仓库（建议存放路径：`docs/couple-report-plan.md`），已对照仓库现行 `app/db.py`、`app/peer.py`、`app/main.py` 与 `security` 模块完成契约对齐，可直接用于整包落地。
 
-## 一、设计原则与核心取舍
+## 一、与现行仓库的 5 处契约对齐要点
 
-1. **复用 `peer_events` 与 `peer_revision`**：手动报备与自动定位守护共享同一事件流和 SSE 增量版本号，避免引入第三套数据流和通知逻辑。
-2. **存量库幂等迁移**：沿用 [app/db.py](https://github.com/GByyhbot/love-space/blob/main/app/db.py) 现有的 `PRAGMA table_info(...)` + `ALTER TABLE ... ADD COLUMN` 惯例，升级无感且可重复执行。
-3. **保护手动报备不被误清理**：`app/peer.py` 原有 `cleanup_expired()` 会按 15 天滚动删除所有 `peer_events`，本方案将其收窄为仅删除 `source='auto'` 的自动守护事件，长期保留情侣手动报备记录。
-4. **模块化隔离**：新增路由放在独立文件 `app/report_routes.py`，通过工厂函数注入 `app/main.py` 现有的鉴权、写门禁、SSE 广播和通知回调，不再向 `app/main.py` 堆叠业务代码。
+1. **初始化入口为 `db.init()`**：`peer_events` 的幂等加列迁移追加到 `app/db.py` 的 `init()` 中（位于现有 `PRAGMA table_info(users)` 迁移块之后）。
+2. **复用真实鉴权与全局写门禁**：路由直接使用 `Depends(security.current_user)`（返回 `users` 行字典，取 `u['id']`）；`X-Love-Space: 1` 由 `app/main.py` 全局中间件统一拦截 `POST`/`PUT`，路由层不再重复声明写门禁依赖。
+3. **复用轮询 revision 与真实通知签名**：不引入虚构的 SSE 广播函数，写入/回应后直接递增 `app_state.peer_revision`（供现行探针轮询下发）；通知统一调用 `db.notice(c, event, title, actor=..., recipient=...)`（无 `body` 参数，将摘要与备注精炼拼入 `title`）。
+4. **保持现行 `GET /api/peer/events` 外层形状不变**：不破坏已交付组件消费的 `{mine, peer: {events}}` 返回结构；仅在现行 SQL `SELECT` 中增量补列并附加可选新字段，确保老组件零回归。
+5. **遵循 `events` 共享开关对等口径**：`POST /api/peer/report` 写入前检查 `peer.load_settings(c, user_id)['events']`，若已关闭则返回 `422` 拒绝，与现行 peer 套件口径一致。
 
-## 二、数据库变更（`app/db.py`）
+## 二、数据库迁移（`app/db.py` -> `init()`）
 
 ### 1. `peer_events` 新增字段说明
 
@@ -20,13 +21,11 @@
 | `note` | `TEXT NOT NULL` | `''` | 报备文字备注（最长 500 字） |
 | `place_name` | `TEXT NOT NULL` | `''` | 可选地点名称（手动填写或定位解析） |
 | `client_id` | `TEXT NOT NULL` | `''` | 客户端幂等键，用于弱网重试防重 |
-| `ack_by` | `TEXT NOT NULL` | `''` | 回应方 `users.id`（与 `users.id` 保持 `TEXT` 一致） |
+| `ack_by` | `TEXT NOT NULL` | `''` | 回应方 `users.id`（`TEXT`） |
 | `ack_emoji` | `TEXT NOT NULL` | `''` | 回应表情（如 `❤️`、`🫂`、`👍`） |
 | `ack_at` | `REAL` | `NULL` | 回应时间戳，`NULL` 表示对方尚未回应 |
 
-### 2. 迁移代码（追加至 `app/db.py` 的 `init_db()` 中）
-
-放在 `init_db()` 现有的 `PRAGMA table_info(users)` 迁移逻辑之后：
+### 2. 追加到 `app/db.py` 的 `init()` 中
 
 ```python
     # 2.8.x 情侣主动报备：peer_events 存量库幂等加列（与 users/media 同惯例）
@@ -56,9 +55,9 @@
     )
 ```
 
-## 三、数据存取与业务逻辑扩展（`app/peer.py`）
+## 三、业务与持久化扩展（`app/peer.py`）
 
-保留 [app/peer.py](https://github.com/GByyhbot/love-space/blob/main/app/peer.py) 原有的常量及 `settings_key`、`load_settings`、`save_settings`、`peer_partner`，追加以下内容并替换 `cleanup_expired`：
+保留 [app/peer.py](https://github.com/GByyhbot/love-space/blob/main/app/peer.py) 原有的常量及 `settings_key`、`load_settings`、`save_settings`、`peer_partner`，追加以下函数并替换 `cleanup_expired`：
 
 ```python
 import json
@@ -116,7 +115,7 @@ def save_report_presets(c, presets):
 
 
 def bump_peer_revision(c):
-    """递增 peer_revision 并返回最新版本号，供 SSE 下发。"""
+    """递增 app_state.peer_revision 并返回最新版本号（与现行 _bump_peer 口径一致）。"""
     c.execute(
         "UPDATE app_state SET value = CAST(value AS INTEGER) + 1 "
         "WHERE key='peer_revision'"
@@ -126,26 +125,29 @@ def bump_peer_revision(c):
 
 
 def serialize_peer_event(row):
+    """完整事件序列化（保留原有核心字段并增量附加主动报备与 ack 字段）。"""
+    keys = set(row.keys())
+    ack_at = row['ack_at'] if 'ack_at' in keys else None
     return {
         'id': row['id'],
-        'user': row['user'],
+        'user': row['user'] if 'user' in keys else '',
         'type': row['type'],
-        'source': row['source'],
-        'scene': row['scene'],
         'ts': row['ts'],
         'summary': row['summary'],
-        'note': row['note'],
-        'place_name': row['place_name'],
         'pushed': row['pushed'],
-        'created': row['created'],
-        'client_id': row['client_id'],
+        'created': row['created'] if 'created' in keys else row['ts'],
+        'source': row['source'] if 'source' in keys else 'auto',
+        'scene': row['scene'] if 'scene' in keys else '',
+        'note': row['note'] if 'note' in keys else '',
+        'place_name': row['place_name'] if 'place_name' in keys else '',
+        'client_id': row['client_id'] if 'client_id' in keys else '',
         'ack': (
             {
                 'by': row['ack_by'],
                 'emoji': row['ack_emoji'],
-                'at': row['ack_at'],
+                'at': ack_at,
             }
-            if row['ack_at'] is not None
+            if ack_at is not None
             else None
         ),
     }
@@ -236,25 +238,26 @@ def cleanup_expired(c, now):
 
 ## 四、独立 FastAPI Router（新建 `app/report_routes.py`）
 
-### 1. 接口契约一览
-
-| 方法与路径 | 写门禁 | 作用 | SSE / 推送行为 |
-| :--- | :--- | :--- | :--- |
-| `POST /api/peer/report` | 需要 `X-Love-Space: 1` | 发起一次主动报备（支持 `client_id` 幂等） | 递增 `peer_revision`，广播 `peer_report`，按开关推送伴侣 |
-| `POST /api/peer/events/{event_id}/ack` | 需要 `X-Love-Space: 1` | 伴侣一键回应报备（禁止自回应） | 递增 `peer_revision`，广播 `peer_report_ack`，推送告知发送方 |
-| `GET /api/peer/report-presets` | 无 | 读取双人快捷报备模板 | 无 |
-| `PUT /api/peer/report-presets` | 需要 `X-Love-Space: 1` | 更新双人快捷报备模板（最多 12 条） | 递增 `peer_revision`，广播 `peer_presets` |
-
-### 2. 路由实现代码（`app/report_routes.py`）
+直接对接 `security.current_user`（返回 user 行字典）、`peer.load_settings`（422 开关校验）、`peer.bump_peer_revision`（轮询 revision）和 `db.notice(c, event, title, actor=..., recipient=...)`：
 
 ```python
-"""情侣主动报备与回应（P0）独立 Router。"""
+"""情侣主动报备与回应（P0）独立 Router。
+
+直接对齐现行仓库契约：
+- 鉴权：Depends(security.current_user) -> 返回 user 行字典（取 u['id']）
+- 写门禁：由 app/main.py 全局中间件统一拦截 POST/PUT 的 X-Love-Space: 1
+- 实时同步：递增 app_state.peer_revision，由现行探针轮询下发
+- 通知中心：db.notice(c, event, title, actor=..., recipient=...)
+"""
 
 from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from . import db, peer
+from . import db, peer, security
+
+router = APIRouter(prefix='/api/peer', tags=['peer-report'])
 
 
 class ReportIn(BaseModel):
@@ -275,115 +278,116 @@ class PresetsIn(BaseModel):
     presets: list[dict]
 
 
-def make_report_router(
-    *,
-    require_user,
-    require_write,
-    broadcast_peer,
-    notify_partner,
-):
-    """
-    参数说明（均直接传入 app/main.py 现有函数）：
-    - require_user: 校验 love_session Cookie 并返回当前 user_id 的依赖
-    - require_write: 校验 X-Love-Space: 1 写门禁的依赖
-    - broadcast_peer(rev: int, event_type: str, payload: dict): 广播 SSE 事件
-    - notify_partner(c, partner_id: str, title: str, body: str, kind: str, ref_id: str): 写入 notices 并触发外发推送
-    """
-    router = APIRouter(prefix='/api/peer', tags=['peer-report'])
+def _format_report_notice_title(event: dict) -> str:
+    extra = event['note'] or event['place_name']
+    if extra:
+        return f"{event['summary']} · {extra}"[:120]
+    return event['summary'][:120]
 
-    @router.post('/report', dependencies=[Depends(require_write)])
-    def create_report(body: ReportIn, user_id: str = Depends(require_user)):
-        with db.connect() as c:
-            presets = {p['scene']: p for p in peer.load_report_presets(c)}
-            should_push = (
-                body.push
-                if body.push is not None
-                else bool(presets.get(body.scene, {}).get('push', True))
-            )
-            event, created, rev = peer.create_manual_report(
+
+@router.post('/report')
+def create_report(body: ReportIn, u=Depends(security.current_user)):
+    user_id = u['id']
+    with db.connect() as c:
+        # 对齐现行 peer 套件口径：events 共享关闭时 422 拒绝
+        if not peer.load_settings(c, user_id)['events']:
+            raise HTTPException(status_code=422, detail='报备事件共享已关闭')
+
+        presets = {p['scene']: p for p in peer.load_report_presets(c)}
+        should_push = (
+            body.push
+            if body.push is not None
+            else bool(presets.get(body.scene, {}).get('push', True))
+        )
+        event, created, rev = peer.create_manual_report(
+            c,
+            user_id,
+            scene=body.scene,
+            summary=body.summary,
+            note=body.note,
+            place_name=body.place_name,
+            push=should_push,
+            client_id=body.client_id,
+            ts=body.ts,
+        )
+        partner_id = peer.peer_partner(c, user_id)
+        if created and should_push and partner_id:
+            db.notice(
                 c,
-                user_id,
-                scene=body.scene,
-                summary=body.summary,
-                note=body.note,
-                place_name=body.place_name,
-                push=should_push,
-                client_id=body.client_id,
-                ts=body.ts,
-            )
-            partner_id = peer.peer_partner(c, user_id)
-            if created and should_push and partner_id:
-                notify_body = event['note'] or event['place_name'] or event['summary']
-                notify_partner(
-                    c,
-                    partner_id,
-                    title=event['summary'],
-                    body=notify_body,
-                    kind='peer_report',
-                    ref_id=event['id'],
-                )
-
-        if created and rev is not None:
-            broadcast_peer(rev, 'peer_report', event)
-        return {'ok': True, 'created': created, 'event': event, 'peer_revision': rev}
-
-    @router.post('/events/{event_id}/ack', dependencies=[Depends(require_write)])
-    def ack_event(event_id: str, body: AckIn, user_id: str = Depends(require_user)):
-        with db.connect() as c:
-            event, status, rev = peer.ack_peer_event(c, user_id, event_id, body.emoji)
-            if status == 'not_found':
-                raise HTTPException(status_code=404, detail='报备事件不存在')
-            if status == 'cannot_ack_own':
-                raise HTTPException(status_code=400, detail='不能回应自己的报备')
-
-            notify_partner(
-                c,
-                event['user'],
-                title=f"对方回应了你的报备 {body.emoji}",
-                body=event['summary'],
-                kind='peer_report_ack',
-                ref_id=event['id'],
+                'peer_report',
+                _format_report_notice_title(event),
+                actor=user_id,
+                recipient=partner_id,
             )
 
-        broadcast_peer(rev, 'peer_report_ack', event)
-        return {'ok': True, 'event': event, 'peer_revision': rev}
+    return {'ok': True, 'created': created, 'event': event, 'peer_revision': rev}
 
-    @router.get('/report-presets')
-    def get_report_presets(user_id: str = Depends(require_user)):
-        with db.connect() as c:
-            return {'presets': peer.load_report_presets(c)}
 
-    @router.put('/report-presets', dependencies=[Depends(require_write)])
-    def put_report_presets(body: PresetsIn, user_id: str = Depends(require_user)):
-        with db.connect() as c:
-            saved = peer.save_report_presets(c, body.presets)
-            rev = peer.bump_peer_revision(c)
-        broadcast_peer(rev, 'peer_presets', {'presets': saved})
-        return {'ok': True, 'presets': saved, 'peer_revision': rev}
+@router.post('/events/{event_id}/ack')
+def ack_event(event_id: str, body: AckIn, u=Depends(security.current_user)):
+    user_id = u['id']
+    with db.connect() as c:
+        event, status, rev = peer.ack_peer_event(c, user_id, event_id, body.emoji)
+        if status == 'not_found':
+            raise HTTPException(status_code=404, detail='报备事件不存在')
+        if status == 'cannot_ack_own':
+            raise HTTPException(status_code=400, detail='不能回应自己的报备')
 
-    return router
+        db.notice(
+            c,
+            'peer_report_ack',
+            f"回应了你的报备 {body.emoji} · {event['summary']}"[:120],
+            actor=user_id,
+            recipient=event['user'],
+        )
+
+    return {'ok': True, 'event': event, 'peer_revision': rev}
+
+
+@router.get('/report-presets')
+def get_report_presets(u=Depends(security.current_user)):
+    with db.connect() as c:
+        return {'presets': peer.load_report_presets(c)}
+
+
+@router.put('/report-presets')
+def put_report_presets(body: PresetsIn, u=Depends(security.current_user)):
+    with db.connect() as c:
+        saved = peer.save_report_presets(c, body.presets)
+        rev = peer.bump_peer_revision(c)
+    return {'ok': True, 'presets': saved, 'peer_revision': rev}
 ```
 
-## 五、`app/main.py` 挂载方式
+## 五、`app/main.py` 挂载与现行 `GET /api/peer/events` 兼容改造
 
-在 `app/main.py` 路由注册处挂载新 Router，并将现有 `GET /api/peer/events` 的单行序列化改为调用 `peer.serialize_peer_event(r)`：
+### 1. 挂载新 Router（只需 2 行）
 
 ```python
-from .report_routes import make_report_router
+from . import report_routes
 
-app.include_router(
-    make_report_router(
-        require_user=你的现有鉴权依赖,
-        require_write=你的现有写门禁依赖,
-        broadcast_peer=lambda rev, typ, payload: 你的现有SSE广播函数(...),
-        notify_partner=lambda c, uid, title, body, kind, ref_id: 你的现有写notices与推送函数(...),
-    )
-)
+app.include_router(report_routes.router)
 ```
 
-## 六、入库前最小验收清单
+### 2. 现行 `GET /api/peer/events` 零破坏扩列
 
-- [ ] 存量 `love.db` 启动时 `init_db()` 幂等执行两次不报错，`PRAGMA table_info(peer_events)` 包含全部 8 个新增列。
-- [ ] `POST /api/peer/report` 传入相同 `client_id` 连续请求两次，仅生成 1 条记录且不重复推送。
-- [ ] 发起人自己调用 `POST /api/peer/events/{id}/ack` 返回 `400`；伴侣调用返回 `200`，且 `GET /api/peer/events` 返回完整的 `ack` 对象。
-- [ ] `cleanup_expired()` 执行后，超过 15 天的 `source='auto'` 记录被清理，`source='manual'` 手动报备记录保留。
+保持现行响应外层 `{mine, peer: {events}}` 及原有 5 个字段完全不动，仅在现行查询语句的 `SELECT` 中增量补齐以下列，并对每行叠加可选新字段（老组件忽略未知字段，新前端可直接读取 `source`、`scene`、`note`、`place_name`、`ack`）：
+
+```sql
+SELECT id, user, type, ts, summary, pushed, created,
+       source, scene, note, place_name, client_id,
+       ack_by, ack_emoji, ack_at
+FROM peer_events
+WHERE user=? AND ts>=? AND ts<?
+ORDER BY ts DESC, created DESC
+```
+
+每条记录使用 `peer.serialize_peer_event(r)` 生成，仍装入现行 `{mine: [...], peer: {..., events: [...]}}` 结构返回。
+
+## 六、施工验收清单
+
+- [ ] `db.init()` 对存量库重复执行两次无报错，`peer_events` 包含全部 8 个新增列与唯一索引 `peer_events_user_client`。
+- [ ] `events` 共享开关关闭时，`POST /api/peer/report` 返回 `422`，不写库、不发通知。
+- [ ] 同一用户携带相同 `client_id` 连续两次 `POST /api/peer/report`，第二次返回 `created=False`、`peer_revision=None`，不重复入库且不重复调用 `db.notice`。
+- [ ] `POST /api/peer/events/{id}/ack`：不存在返回 `404`；自己回应自己返回 `400`；伴侣回应返回 `200`，正确更新 `ack` 并调用 `db.notice(..., actor=伴侣, recipient=发起人)`。
+- [ ] `GET /api/peer/events` 外层仍保持 `{mine, peer: {events}}` 形状，现行报备信息组件无回归。
+- [ ] `peer.cleanup_expired(c, now)` 仅清理 15 天前 `source='auto'` 记录，保留 `source='manual'` 手动报备。
