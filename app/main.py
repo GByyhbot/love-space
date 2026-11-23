@@ -34,6 +34,7 @@ from starlette.staticfiles import NotModifiedResponse
 from . import db
 from . import asr as asr_mod
 from . import peer
+from . import report_routes
 from . import rev_cache
 from . import importers
 from . import period
@@ -99,6 +100,7 @@ async def lifespan(app):
 
 
 app = FastAPI(title='恋爱空间', lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
+app.include_router(report_routes.router)  # 情侣主动报备（P0）：/api/peer/report、/ack、/report-presets
 
 
 class SelectiveGZip(GZipMiddleware):
@@ -1981,14 +1983,21 @@ def peer_events_list(date: str = '', user=Depends(current_user)):
         end = start + 86400
         rows = []
         if mine_on:
-            rows += [dict(r, mine=True) for r in c.execute(
-                'SELECT id,type,ts,summary,pushed FROM peer_events '
-                'WHERE user=? AND ts>=? AND ts<? ORDER BY ts DESC',
-                (user['id'], start, end))]
+            for r in c.execute(
+                    'SELECT id,user,type,ts,summary,pushed,created,source,scene,'
+                    'note,place_name,client_id,ack_by,ack_emoji,ack_at '
+                    'FROM peer_events '
+                    'WHERE user=? AND ts>=? AND ts<? ORDER BY ts DESC',
+                    (user['id'], start, end)):
+                item = peer.serialize_peer_event(r)
+                item['mine'] = True
+                rows.append(item)
         peer_rows = []
         if theirs_on:
-            peer_rows = [dict(r) for r in c.execute(
-                'SELECT id,type,ts,summary,pushed FROM peer_events '
+            peer_rows = [peer.serialize_peer_event(r) for r in c.execute(
+                'SELECT id,user,type,ts,summary,pushed,created,source,scene,'
+                'note,place_name,client_id,ack_by,ack_emoji,ack_at '
+                'FROM peer_events '
                 'WHERE user=? AND ts>=? AND ts<? ORDER BY ts DESC',
                 (pid, start, end))]
     return {'date': day,
