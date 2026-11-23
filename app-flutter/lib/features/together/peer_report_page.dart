@@ -21,12 +21,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_client.dart' as api;
 import '../../core/peer/peer_locator.dart';
+import '../../core/peer/peer_report_api.dart';
 import '../../core/peer/peer_report_data.dart';
 import '../../core/sse/sse_client.dart';
 import '../../core/theme/tokens.dart';
 import '../../core/ui/empty_view.dart';
 import '../../core/ui/error_view.dart';
 import '../../core/ui/progress.dart';
+import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
 
 class PeerReportPage extends ConsumerStatefulWidget {
   const PeerReportPage({super.key});
@@ -45,6 +47,20 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage> {
   int? _queue;
   bool _expectedOn = false;
   bool? _batteryIgnored;
+
+  /// 今日事件流（P0 新增；`GET /api/peer/events` 当日）。
+  PeerEventsDay? _day;
+  bool _dayLoading = false;
+  String? _dayError;
+
+  /// 正在回应的事件 id（非空即禁用全部回应按钮，防弱网连点重复推送）。
+  String? _ackingId;
+
+  /// 正在回应的 emoji（只给被点的那个按钮画 loading）。
+  String? _ackingEmoji;
+
+  /// 回应按钮文案（三个一键回应）。
+  static const List<String> _ackEmojis = ['❤️', '🫂', '👍'];
 
   @override
   void initState() {
@@ -73,6 +89,70 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage> {
       });
     }
     await _loadMine();
+    await _loadEvents(silent: silent);
+  }
+
+  /// 今日事件流：打开拉一次 + SSE peer 静默重拉（沿本页现行刷新通道）。
+  Future<void> _loadEvents({bool silent = false}) async {
+    if (!silent) setState(() => _dayLoading = true);
+    try {
+      final dio = await ref.read(api.dioProvider.future);
+      final day = await fetchPeerEvents(dio);
+      if (!mounted) return;
+      setState(() {
+        _day = day;
+        _dayError = null;
+        _dayLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      // 失败不清旧值：旧流可留，但横幅会标明「非实时」
+      setState(() {
+        _dayError = api.errorDetail(e);
+        _dayLoading = false;
+      });
+    }
+  }
+
+  /// 一键回应：只在接口真返回后改本地态（**不做本地假成功**）；
+  /// 请求期间 [_ackingId] 非空 → 全部按钮禁用（防弱网连点）。
+  Future<void> _ack(PeerEventItem item, String emoji) async {
+    if (_ackingId != null) return;
+    setState(() {
+      _ackingId = item.id;
+      _ackingEmoji = emoji;
+    });
+    try {
+      final dio = await ref.read(api.dioProvider.future);
+      final updated = await ackReport(dio, item.id, emoji);
+      if (!mounted) return;
+      final ack = updated.ack ?? PeerEventAck(by: '', emoji: emoji);
+      setState(() {
+        final day = _day;
+        if (day == null) return;
+        _day = PeerEventsDay(
+          date: day.date,
+          events: day.events
+              .map((e) => e.id == item.id ? e.withAck(ack) : e)
+              .toList(growable: false),
+          peerClosedOff: day.peerClosedOff,
+        );
+      });
+    } catch (e) {
+      if (!mounted) return;
+      // 失败：按钮恢复可用（_ackingId 在 finally 清空）+ 顶部通知重试
+      ref.read(chatToastProvider.notifier).show(
+            api.errorDetail(e),
+            tone: ChatToastTone.error,
+          );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _ackingId = null;
+          _ackingEmoji = null;
+        });
+      }
+    }
   }
 
   /// 我的侧状态：原生 status（running/queue）与 fix6 两项本地状态，读不到给 null。
@@ -132,6 +212,8 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage> {
               _sectionTitle(theme, '我的报备'),
               const SizedBox(height: Spacing.gap),
               _mineBlock(theme, cs, d),
+              const SizedBox(height: 16),
+              ..._eventsSection(theme, cs),
             ],
           ],
         ),
@@ -229,6 +311,199 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage> {
               : (_batteryIgnored! ? '已豁免' : '未豁免'),
         ),
       ]),
+    );
+  }
+
+  /// 今日事件流一节：仅 `manual_report` 渲染报备卡与回应按钮，
+  /// 自动事件维持简行（不许混淆两种来源）。
+  List<Widget> _eventsSection(ThemeData theme, ColorScheme cs) {
+    final day = _day;
+    final out = <Widget>[
+      _sectionTitle(theme, '今日事件流'),
+      const SizedBox(height: Spacing.gap),
+    ];
+    if (day == null) {
+      if (_dayLoading) {
+        out.add(const AppProgress());
+        return out;
+      }
+      out.add(_card(
+        cs,
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(
+            '事件流拉不到：${_dayError ?? api.genericErrorText}',
+            style: theme.textTheme.bodySmall?.copyWith(color: cs.error),
+          ),
+          const SizedBox(height: Spacing.gap),
+          TextButton(
+            key: const Key('report-events-retry'),
+            onPressed: () => _loadEvents(),
+            child: const Text('重试'),
+          ),
+        ]),
+      ));
+      return out;
+    }
+    // 对方关闭共享：整节明示（对等口径），但仍列出我自己的报备
+    if (day.peerClosedOff) {
+      out.add(_card(
+        cs,
+        child: Text(
+          'TA 已关闭报备共享',
+          key: const Key('report-events-closed'),
+          style: theme.textTheme.bodySmall?.copyWith(color: cs.error),
+        ),
+      ));
+      if (day.events.isNotEmpty) out.add(const SizedBox(height: Spacing.gap));
+    }
+    if (day.events.isEmpty) {
+      out.add(_card(
+        cs,
+        child: AppEmptyView(
+          icon: Icons.forum_outlined,
+          title: '今天还没有报备',
+          hint: '在首页点一下快捷报备，TA 就能看到',
+          padding: const EdgeInsets.symmetric(vertical: 20),
+        ),
+      ));
+      return out;
+    }
+    for (final e in day.events) {
+      out.add(_eventCard(theme, cs, e));
+      out.add(const SizedBox(height: Spacing.gap));
+    }
+    return out;
+  }
+
+  Widget _eventCard(ThemeData theme, ColorScheme cs, PeerEventItem e) {
+    if (!e.isManualReport) {
+      // 自动事件：简行（时间 + 摘要），无回应按钮
+      return Padding(
+        key: Key('report-event-${e.id}'),
+        padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
+        child: Row(children: [
+          Expanded(
+            child: Text(
+              e.summary,
+              style: theme.textTheme.bodySmall?.copyWith(color: cs.outline),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            relativeTimeZh(e.ts),
+            style: theme.textTheme.bodySmall?.copyWith(color: cs.outline),
+          ),
+        ]),
+      );
+    }
+    final extra = <Widget>[
+      if (e.note.isNotEmpty)
+        Text(e.note, style: theme.textTheme.bodyMedium),
+      if (e.placeName.isNotEmpty)
+        Padding(
+          padding: const EdgeInsets.only(top: 2),
+          child: Row(children: [
+            Icon(Icons.place_outlined, size: 13, color: cs.outline),
+            const SizedBox(width: 3),
+            Expanded(
+              child: Text(
+                e.placeName,
+                style: theme.textTheme.bodySmall?.copyWith(color: cs.outline),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ]),
+        ),
+    ];
+    return Container(
+      key: Key('report-event-${e.id}'),
+      width: double.infinity,
+      padding: const EdgeInsets.all(Spacing.cardPad),
+      decoration: BoxDecoration(
+        color: cs.surface,
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        border: Border.all(color: cs.outlineVariant),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Text(e.mine ? '我' : 'TA',
+              style: theme.textTheme.labelSmall?.copyWith(color: cs.outline)),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              e.summary,
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            relativeTimeZh(e.ts),
+            style: theme.textTheme.bodySmall?.copyWith(color: cs.outline),
+          ),
+        ]),
+        if (extra.isNotEmpty) ...[
+          const SizedBox(height: 6),
+          ...extra,
+        ],
+        const SizedBox(height: Spacing.gap),
+        _ackArea(theme, cs, e),
+      ]),
+    );
+  }
+
+  /// 回应区：
+  /// · 对方未 ack → 三个按钮；点击后整区禁用/loading 直到接口返回；
+  /// · 对方已 ack → 「已回应 {emoji}」，不再给按钮；
+  /// · 我的报备 → 「对方已收到」**只与 ack 绑定**（后端没有独立已读字段，
+  ///   不许用其它信号伪造已收到）。
+  Widget _ackArea(ThemeData theme, ColorScheme cs, PeerEventItem e) {
+    final ack = e.ack;
+    if (e.mine) {
+      return Text(
+        ack == null ? '等待对方回应' : '对方已收到 ${ack.emoji}',
+        key: Key('report-ack-state-${e.id}'),
+        style: theme.textTheme.bodySmall?.copyWith(color: cs.outline),
+      );
+    }
+    if (ack != null) {
+      return Text(
+        '已回应 ${ack.emoji}',
+        key: Key('report-ack-state-${e.id}'),
+        style: theme.textTheme.bodySmall?.copyWith(color: cs.outline),
+      );
+    }
+    final busy = _ackingId == e.id;
+    return Row(
+      key: Key('report-ack-buttons-${e.id}'),
+      children: [
+        for (final emoji in _ackEmojis)
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: OutlinedButton(
+              key: Key('report-ack-${e.id}-$emoji'),
+              // 任一回应进行中 → 全部按钮禁用（防弱网连点重复推送）
+              onPressed: _ackingId == null ? () => _ack(e, emoji) : null,
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size(48, 32),
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+              ),
+              child: busy && _ackingEmoji == emoji
+                  ? const SizedBox(
+                      width: 12,
+                      height: 12,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Text(emoji, style: const TextStyle(fontSize: 15)),
+            ),
+          ),
+      ],
     );
   }
 
