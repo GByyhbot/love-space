@@ -23,6 +23,10 @@ B. 源码 MainActivity.kt：继承 AudioServiceActivity（保住 audio_service �
    `PeerLocNative.register(...)` 之前（不先调 super 会丢插件的 engine 钩子）
 C. 产物 APK：`aapt dump xmltree` 读出的 launcher activity 实名与 A 一致
    —— 防「源码改了、合并清单或打包配置没生效」这类只在真机才暴露的偏差
+D. 源码 manifest：fix6 两项权限（FOREGROUND_SERVICE_LOCATION /
+   REQUEST_IGNORE_BATTERY_OPTIMIZATIONS）在位
+E. 产物：合并清单里若存在 location 型前台服务（type 含 0x8），
+   FOREGROUND_SERVICE_LOCATION 必须已声明（Android 14+ 硬要求）
 
 ## 用法
 
@@ -164,6 +168,23 @@ def check_source():
     else:
         print('  ✓ super 在前、PeerLocNative.register 在后')
 
+    print('\n[D] 源码 manifest：fix6 两项权限声明')
+    try:
+        raw = MANIFEST.read_text(encoding='utf-8')
+    except OSError as exc:
+        fail(f'读不了 {MANIFEST}：{exc}')
+        return
+    for perm, why in (
+            ('android.permission.FOREGROUND_SERVICE_LOCATION',
+             'location 型前台服务（合并清单里的 GeolocatorLocationService）'
+             '在 targetSdk 34+ 必须持有该权限'),
+            ('android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS',
+             '设置卡「忽略电池优化」入口发送系统意图的前提权限')):
+        if perm in raw:
+            print(f'  ✓ {perm}')
+        else:
+            fail(f'缺权限 {perm}——{why}')
+
 
 def apk_launcher_activity(apk):
     """C 项：产物 APK 内 MAIN+LAUNCHER 的 activity 实名（aapt dump xmltree）。"""
@@ -215,6 +236,65 @@ def _launcher_from_xmltree(text):
     return launchers
 
 
+def _attr_hex(text, attr):
+    """从 `A: android:xxx(0x…)="…"` 或 `A: android:xxx(0x…)=(type 0x11)0x8` 取值。"""
+    m = re.search(re.escape(attr) + r'\(0x[0-9a-fA-F]+\)=(?:\(type 0x[0-9a-fA-F]+\))?(.+?)\s*$',
+                  text)
+    if not m:
+        return None
+    raw = m.group(1).strip()
+    if raw.startswith('"'):
+        # 字符串属性行后面还跟 `(Raw: "…")`，只取第一个引号对的内容
+        end = raw.find('"', 1)
+        return raw[1:end] if end > 0 else raw.strip('"')
+    try:
+        return int(raw, 16) if raw.lower().startswith('0x') else int(raw)
+    except ValueError:
+        return None
+
+
+def declared_permissions(xmltree):
+    """从合并清单 xmltree 文本里取 uses-permission 的实名集合。"""
+    perms, lines = set(), xmltree.splitlines()
+    for i, line in enumerate(lines):
+        s = line.strip()
+        if not (s.startswith('E: uses-permission')):
+            continue
+        base = len(line) - len(line.lstrip())
+        for follow in lines[i + 1:i + 4]:
+            if not follow.strip().startswith('A: '):
+                break
+            if len(follow) - len(follow.lstrip()) <= base:
+                break
+            name = _attr_hex(follow.strip(), 'android:name')
+            if isinstance(name, str) and name.startswith('android.permission.'):
+                perms.add(name)
+    return perms
+
+
+def services_with_fgs_type(xmltree):
+    """从合并清单 xmltree 取 (service 实名, foregroundServiceType 整数)。"""
+    out, lines = [], xmltree.splitlines()
+    for i, line in enumerate(lines):
+        s = line.strip()
+        if not s.startswith('E: service'):
+            continue
+        base = len(line) - len(line.lstrip())
+        name, fgs = None, None
+        for follow in lines[i + 1:i + 6]:
+            fs = follow.strip()
+            if not fs.startswith('A: '):
+                break
+            if len(follow) - len(follow.lstrip()) <= base:
+                break
+            if name is None:
+                name = _attr_hex(fs, 'android:name')
+            if 'foregroundServiceType' in fs:
+                fgs = _attr_hex(fs, 'android:foregroundServiceType')
+        out.append((name, fgs if isinstance(fgs, int) else 0))
+    return out
+
+
 def check_artifact(apk_path):
     print(f'\n[C] 产物 APK 内 launcher activity：{apk_path}')
     apk = Path(apk_path)
@@ -241,6 +321,23 @@ def check_artifact(apk_path):
         if launchers[0] in line:
             info(f'xmltree 原文：{line.strip()}')
             break
+
+    print('\n[E] 产物：location 型前台服务 ↔ FOREGROUND_SERVICE_LOCATION 权限')
+    perms = declared_permissions(raw)
+    services = services_with_fgs_type(raw)
+    info('合并清单 FGS 服务：' + '；'.join(
+        f'{name}(type={hex(t) if t else "未声明"})' for name, t in services))
+    location_services = [name for name, t in services if t and (t & 0x8)]
+    if location_services:
+        info('location 型服务：' + '、'.join(str(n) for n in location_services))
+        if 'android.permission.FOREGROUND_SERVICE_LOCATION' in perms:
+            print('  ✓ 产物已声明 FOREGROUND_SERVICE_LOCATION')
+        else:
+            fail('产物里有 location 型前台服务，但未声明 '
+                 'android.permission.FOREGROUND_SERVICE_LOCATION——'
+                 'Android 14+ 启动该服务会抛 SecurityException')
+    else:
+        print('  ✓ 产物无 location 型前台服务（本轮无需该权限，声明仍在源码层钉住）')
 
 
 def main():

@@ -431,12 +431,29 @@ class PeerVerifyCardState extends ConsumerState<PeerVerifyCard> {
   bool _busy = false;
   String _summary = '';
   String _reason = '';
+  /// fix6 A1：期望态（用户意图，落盘）。只用于「已停止→点击恢复」提示，
+  /// 永不自动开启采集；实态仍以原生 status 为唯一事实源。
+  bool _expectedOn = false;
+  /// fix6 B3：电池优化豁免状态（平台 API 读回；null=读不到）。
+  bool? _batteryIgnored;
 
   @override
   void initState() {
     super.initState();
-    // 页面进入：以原生 status 回填（单一事实源）
-    peerLocatorAutoStart().then((_) => _refresh());
+    // 页面进入：以原生 status 回填（单一事实源）+ 读期望态/电池豁免
+    peerLocatorAutoStart().then((_) => _loadExtras());
+  }
+
+  /// 期望态与电池豁免状态（旁路信息，读失败不影响开关链）。
+  Future<void> _loadExtras() async {
+    final expected = await peerExpectedOn();
+    final battery = await peerBatteryIgnored();
+    if (!mounted) return;
+    setState(() {
+      _expectedOn = expected;
+      _batteryIgnored = battery;
+    });
+    await _refresh();
   }
 
   Future<void> _refresh() async {
@@ -471,6 +488,8 @@ class PeerVerifyCardState extends ConsumerState<PeerVerifyCard> {
       _on = r.ok;
       _reason = r.ok ? '' : r.reason;
       _summary = r.ok ? '采集上报中（探针验证中）' : (v ? '开启失败' : '已关闭');
+      // 期望态由 peerVerifyToggle 写盘，这里同步内存值（开关返回即真相）
+      if (!v || r.ok) _expectedOn = v;
     });
     if (v && !r.ok && r.reason.isNotEmpty) {
       // 顶部弹窗（既有统一机制）+ 下方常驻原因行（失败态不许不可见）
@@ -478,6 +497,20 @@ class PeerVerifyCardState extends ConsumerState<PeerVerifyCard> {
           .show(r.reason, tone: ChatToastTone.warning);
     }
     if (r.ok) await _refresh();
+  }
+
+  /// fix6 B3：拉起系统「忽略电池优化」对话框，回来后复读平台 API。
+  Future<void> _requestBatteryExemption() async {
+    final sent = await requestPeerBatteryExemption();
+    if (!mounted) return;
+    if (!sent) {
+      ref.read(chatToastProvider.notifier).show(
+          '无法拉起系统对话框，请在系统设置中手动将本应用设为「不限制」',
+          tone: ChatToastTone.warning);
+    }
+    final now = await peerBatteryIgnored();
+    if (!mounted) return;
+    setState(() => _batteryIgnored = now);
   }
 
   Future<void> _exportFatal() async {
@@ -540,6 +573,79 @@ class PeerVerifyCardState extends ConsumerState<PeerVerifyCard> {
                       .bodySmall
                       ?.copyWith(color: cs.error)),
             ),
+          // fix6 A1：期望开而实态停（进程被系统结束）→ 黄色提示 + 一键恢复。
+          // 只提示、不自动开启：恢复必须由用户点击（采集启动仍是显式动作）。
+          if (_expectedOn && !_on)
+            Container(
+              width: double.infinity,
+              margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
+              decoration: BoxDecoration(
+                color: Colors.amber.withValues(alpha: 0.18),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.amber.withValues(alpha: 0.6)),
+              ),
+              child: Wrap(
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 8,
+                children: [
+                  const Text('⚠ 已停止（进程被系统结束），点击恢复',
+                      style: TextStyle(fontSize: 12, color: Colors.amber)),
+                  TextButton(
+                    onPressed: _busy ? null : () => _toggle(true),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      minimumSize: const Size(0, 28),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: const Text('恢复', style: TextStyle(fontSize: 12)),
+                  ),
+                ],
+              ),
+            ),
+          // fix6 B3：电池优化豁免（平台 API 读回，不做推断）+ 小米两项引导
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 8, 0),
+            child: Row(children: [
+              Expanded(
+                child: Text(
+                  _batteryIgnored == null
+                      ? '电池优化：状态未知（通道未注册）'
+                      : (_batteryIgnored!
+                          ? '电池优化：已豁免'
+                          : '电池优化：未豁免（后台可能被系统限制）'),
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodySmall
+                      ?.copyWith(
+                          color: _batteryIgnored == false
+                              ? Colors.amber
+                              : cs.outline),
+                ),
+              ),
+              if (_batteryIgnored != true)
+                TextButton(
+                  onPressed: _busy ? null : _requestBatteryExemption,
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    minimumSize: const Size(0, 28),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  child: const Text('去豁免', style: TextStyle(fontSize: 12)),
+                ),
+            ]),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 2, 16, 6),
+            child: Text(
+              '小米机型还需在「设置 → 应用 → 本应用」里单独开启「自启动」与'
+              '「后台高耗电时不限制」——这两项系统开关无法由 App 代开。',
+              style: Theme.of(context)
+                  .textTheme
+                  .bodySmall
+                  ?.copyWith(color: cs.outline),
+            ),
+          ),
           TextButton.icon(
             onPressed: _exportFatal,
             icon: const Icon(Icons.bug_report, size: 16),

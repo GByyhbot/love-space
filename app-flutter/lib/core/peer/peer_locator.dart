@@ -22,6 +22,9 @@ import '../api/api_client.dart';
 // fix5：诊断落盘独立成模块（同类目内），本文件不直引 path_provider——
 // 既有「peer 链禁持久化插件」护栏口径不变（详见 peer_fatal_log.dart 头注）。
 import 'peer_fatal_log.dart';
+// fix6：期望态（用户意图）落盘同样独立成模块，本文件不直引
+// shared_preferences；期望态只用于显示与恢复提示，永不自启采集。
+import 'peer_expected_state.dart';
 
 const _channel = MethodChannel('peer_loc/native');
 
@@ -80,6 +83,7 @@ Future<PeerVerifyResult> peerVerifyToggle(bool on) async {
     peerLocLog('toggle result: ok=$ok reason=$reason detail=$detail');
     final res = PeerVerifyResult(ok, reason, detail);
     await _recordToggle('toggle-result', res);
+    await _recordExpected(on, ok);
     return res;
   } catch (e, stack) {
     final brief = _stackBrief(stack);
@@ -93,6 +97,7 @@ Future<PeerVerifyResult> peerVerifyToggle(bool on) async {
       // 致命态：原文 + 栈摘要 + 结果 + status（此时 status 亦不可用 → unregistered）
       await _recordToggle('toggle-missing-plugin', res,
           extra: {'exception': e.toString(), 'stack': brief, 'enable': on});
+      await _recordExpected(on, false);
       return res;
     }
     final res = PeerVerifyResult(
@@ -101,12 +106,26 @@ Future<PeerVerifyResult> peerVerifyToggle(bool on) async {
         const {});
     await _recordToggle('toggle-error', res,
         extra: {'exception': e.toString(), 'stack': brief, 'enable': on});
+    await _recordExpected(on, false);
     return res;
   }
 }
 
 String _stackBrief(StackTrace stack) =>
     stack.toString().split('\n').take(10).join(' | ');
+
+/// 期望态落盘（fix6 A1）：只在「开关被拨到关闭」或「开启成功」时写入。
+/// 开启失败（权限缺失/通道未注册）不写——避免制造「期望开」的假象。
+Future<void> _recordExpected(bool enable, bool ok) async {
+  if (!enable) {
+    await writePeerExpectedOn(false);
+    return;
+  }
+  if (ok) await writePeerExpectedOn(true);
+}
+
+/// 期望态读回（卡面提示用；**只读**，不参与开关判定、不触发采集）。
+Future<bool> peerExpectedOn() => readPeerExpectedOn();
 
 /// 诊断落盘：toggle 结构化结果 + status 快照一并写入（Dart 侧文件）。
 /// 诊断链失败不影响开关链（peerFatalRecord 内部吞异常）。
@@ -182,5 +201,28 @@ Future<void> peerLocatorAutoStart() async {
         'received=${status['received']}');
   } catch (e) {
     peerLocLog('auto-start error: $e');
+  }
+}
+
+/// 电池优化豁免状态（fix6 B3）：true=已豁免 / false=未豁免 / null=读不到
+/// （通道不可用）。系统 API 读回，Dart 不做任何推断。
+Future<bool?> peerBatteryIgnored() async {
+  try {
+    return await _channel.invokeMethod<bool>('batteryIgnored');
+  } on MissingPluginException {
+    return null;
+  } catch (_) {
+    return null;
+  }
+}
+
+/// 拉起系统「忽略电池优化」对话框（fix6 B3）。
+/// 返回值只代表**意图已送出**；是否豁免必须随后用 [peerBatteryIgnored] 复读。
+Future<bool> requestPeerBatteryExemption() async {
+  try {
+    return await _channel.invokeMethod<bool>('requestIgnoreBattery') == true;
+  } catch (e) {
+    peerLocLog('requestIgnoreBattery error: $e');
+    return false;
   }
 }

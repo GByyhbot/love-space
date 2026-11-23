@@ -19,6 +19,17 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE"/>
+    <!-- 2.8.0 fix6（B1 声明补齐）：合并清单里存在 location 型前台服务
+         （com.baseflow.geolocator.GeolocatorLocationService，
+         foregroundServiceType=0x8，插件自带声明）——targetSdk 36 下按
+         Android 14+ 口径，启动该类型 FGS 必须持有此权限，缺失会在 14+
+         机型上抛 SecurityException。构建期由
+         scripts/check_activity_registration.py 守卫（缺则构建失败）。 -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION"/>
+    <!-- 2.8.0 fix6（B3 电池豁免）：设置卡「忽略电池优化」入口发送
+         ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS 的前提权限
+         （普通权限，无运行时弹窗；豁免与否仍由 PowerManager 判定）。 -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
     <!-- 2.4.12 条目五：通知栏播放器（裁定6：两服务并存、不合并）。
          mediaPlayback 类型前台服务由 audio_service 插件声明，播放时才有；
          SSE 保活的 specialUse 服务原样不动。 -->

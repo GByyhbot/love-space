@@ -102,6 +102,12 @@ object PeerLocNative {
                 }
                 "status" -> result.success(status())
                 "exportFatal" -> result.success(exportFatalLog())
+                // ── 2.8.0 fix6 B3：电池优化豁免（设置卡入口）──────────
+                // 状态查询走平台 API（PowerManager），不做任何推断；
+                // 申请走系统对话框（ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS），
+                // 是否真的豁免由系统决定，本层只回传「意图是否送出」。
+                "batteryIgnored" -> result.success(batteryIgnored(context))
+                "requestIgnoreBattery" -> result.success(requestIgnoreBattery(context))
                 else -> result.notImplemented()
             }
         }
@@ -197,6 +203,35 @@ object PeerLocNative {
         val content = if (f.exists()) f.readText() else ""
         return mapOf("path" to (if (f.exists()) f.absolutePath else ""),
                      "content" to content)
+    }
+
+    /**
+     * 2.8.0 fix6 B3：电池优化豁免状态（平台 API 读取，不做任何推断）。
+     * 设置卡显示「已豁免/未豁免」即读此值；true = 系统已把本 App 列入
+     * Doze 白名单（isIgnoringBatteryOptimizations）。
+     */
+    fun batteryIgnored(context: Context): Boolean = try {
+        val pm = context.getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+        pm.isIgnoringBatteryOptimizations(context.packageName)
+    } catch (_: Exception) {
+        false
+    }
+
+    /**
+     * 2.8.0 fix6 B3：拉起系统「忽略电池优化」对话框。
+     * 返回 true 只代表**意图已送出**，是否豁免由用户在系统弹窗里决定，
+     * 真实状态仍以 batteryIgnored() 复读为准（不许用返回值当结论）。
+     * 依赖清单权限 REQUEST_IGNORE_BATTERY_OPTIMIZATIONS（普通权限）。
+     */
+    fun requestIgnoreBattery(context: Context): Boolean = try {
+        val intent = android.content.Intent(
+            android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+            android.net.Uri.parse("package:${context.packageName}"))
+        intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+        context.startActivity(intent)
+        true
+    } catch (_: Exception) {
+        false
     }
 
     /** 原生侧 fatal 落盘（注册类/采集类问题堆栈原文，logcat 截断兜底）。 */
