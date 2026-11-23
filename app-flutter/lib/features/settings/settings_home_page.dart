@@ -5,7 +5,8 @@
 /// 路由沿用 `/settings`（旧长页退役，路径语义无缝接管）：
 /// · 外观组：空间信息（弹窗，沿 spaceEditRequestedProvider 机制）/
 ///   主题与外观 / 主页背景 / 聊天背景 / 聊天气泡（后四张独立页）；
-/// · 连接与提醒组：提醒设置（→ /channels）/ 线路与连接（独立页）；
+/// · 连接与提醒组：提醒设置（→ /channels）/ 线路与连接 / 消息通知 /
+///   伴侣共享与守护（2.8.0 P1，均为独立页）；
 /// · 数据与账号组：数据导出（独立页）/ 备份与存储（→ /backups，admin
 ///   门控沿用 main.dart redirect）/ 邀请另一半入住（→ /settings/invite）。
 /// 页头文案「设置 / 管理空间、账号和数据。」（沿用原页副题逐字）。
@@ -196,6 +197,15 @@ class _SettingsHomePageState extends ConsumerState<SettingsHomePage> {
               title: '消息通知',
               subtitle: 'App 后台收 TA 的消息提醒',
               onTap: () => context.push('/settings/notify'),
+            ),
+            // 2.8.0 P1：四项共享开关页（也是报备 422「去开启」的跳转目标）
+            _row(
+              context,
+              key: const Key('settings-home-peer-share'),
+              emoji: '🛡️',
+              title: '伴侣共享与守护',
+              subtitle: '位置、轨迹、报备与使用报告共享开关',
+              onTap: () => context.push('/settings/peer-share'),
             ),
             const SizedBox(height: 16),
             // 2.8.0 第 0 步：定位验证包临时开关（分支 experiment/peer-loc-verify，

@@ -22,6 +22,7 @@ import 'features/settings/export_page.dart';
 import 'features/settings/invite_page.dart';
 import 'features/settings/links_page.dart';
 import 'features/settings/notify_settings_page.dart';
+import 'features/settings/peer_share_settings_page.dart';
 import 'features/settings/settings_home_page.dart';
 import 'features/settings/space_info_page.dart';
 import 'features/settings/settings_state.dart';
@@ -172,6 +173,11 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
           path: '/settings/notify',
           builder: (_, _) => const NotifySettingsPage()),
+      // 2.8.0 P1：伴侣四项共享开关页（设置主页「连接与提醒」组入口，
+      // 也是报备 422「去开启」的跳转目标；一律 context.push）
+      GoRoute(
+          path: '/settings/peer-share',
+          builder: (_, _) => const PeerShareSettingsPage()),
       GoRoute(
           path: '/settings/export', builder: (_, _) => const ExportPage()),
       GoRoute(
