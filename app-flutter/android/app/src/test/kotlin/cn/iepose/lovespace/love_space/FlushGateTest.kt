@@ -28,7 +28,7 @@ class FlushGateTest {
         assertTrue(FlushGate.shouldTailFlush(pending = true, succeeded = true, running = true))
         assertFalse(FlushGate.shouldTailFlush(pending = false, succeeded = true, running = true))
         assertFalse(FlushGate.shouldTailFlush(pending = true, succeeded = false, running = true),
-            reason = "失败不补发：无网夜空转打点，交给下个 tick")
+            "失败不补发：无网夜空转打点，交给下个 tick")
         assertFalse(FlushGate.shouldTailFlush(pending = true, succeeded = true, running = false))
     }
 

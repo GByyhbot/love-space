@@ -719,7 +719,7 @@ object PeerLocNative {
                 } else if (ok) {
                     // 按快照 id 从队头移除（只删本次提交的；队头已变则停手）
                     for (id in ids) {
-                        val head = queue.peekFirst() ?: break
+                        val head = queue.firstOrNull() ?: break
                         if (head.optString("id") != id) break
                         queue.removeFirst()
                     }
