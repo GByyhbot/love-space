@@ -38,6 +38,14 @@ const String kOngoingChannelId = 'love_ongoing';
 /// 通知点击路由回调（LoveApp build 注入：router.push）
 void Function(String route)? notifyRouteHandler;
 
+/// 2.8.1：记录级通知点击回调（LoveApp build 注入）。
+///
+/// 系统通知/冷启动的 payload 里只有 record_id + event，**没有 kind**；
+/// 落点要靠 `GET /api/records/{rid}` 取到记录后按 kind 判定（anniversary
+/// 进纪念日页、period 进生理期页、其余开记录弹层）。所以这条链路必须异步、
+/// 而且不能依赖页面 context。
+Future<void> Function(String recordId, String event)? notifyNoticeTapHandler;
+
 /// 2.5.9 条目二：回前台必刷回调（shell_page 注入 authProvider.reload）——
 /// 主 isolate onResume 时重拉 /api/me 对账两角标（服务端为准，不本地推算）。
 void Function()? onAppResumedReload;
@@ -209,6 +217,14 @@ class NotifyCoordinator {
   /// 通知点击（运行期 onDidReceiveNotificationResponse / 冷启动 launch）
   void handleTap(NotifyItem item) {
     if (item.clearChatOnTap) clearChatNotifications();
+    // 2.8.1：记录级通知 / 报备类通知走 kind 感知路由——
+    // 需要先取记录判 kind，交给注入的异步处理器（与通知中心同一套落点判定）。
+    final rich = notifyNoticeTapHandler;
+    if (rich != null && (item.recordId.isNotEmpty || item.event == 'peer')) {
+      // 冷启动时 router 可能还没挂载：处理器内部自带一帧退避与降级
+      unawaited(rich(item.recordId, item.event));
+      return;
+    }
     final handler = notifyRouteHandler;
     if (handler != null && item.route.isNotEmpty) {
       handler(item.route);

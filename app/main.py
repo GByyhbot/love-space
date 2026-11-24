@@ -33,6 +33,7 @@ from starlette.staticfiles import NotModifiedResponse
 
 from . import db
 from . import asr as asr_mod
+from . import notice_title
 from . import peer
 from . import report_routes
 from . import rev_cache
@@ -398,11 +399,16 @@ def public_user(row):
 APK_REPO = (os.getenv('APK_GITHUB_REPO') or 'GByyhbot/love-space').strip()
 APK_PROXY = (os.getenv('APK_PROXY_PREFIX') or '').strip()  # 仓库公开后填代理前缀才有意义
 _APK_STATIC_FILE = Path(__file__).resolve().parent.parent / 'static' / 'lovespace.apk'
+# 2.8.1：正式版 Release 的资产名。apk-release.yml 打的是 app-v<版本> 标签 +
+# 分 ABI 的 arm64 包，和 Capacitor 时代的 v<版本>/app-release.apk 完全不同。
+APK_ASSET_NAME = (os.getenv('APK_ASSET_NAME') or 'app-arm64-v8a-release.apk').strip()
 
 
 def _apk_github_url(ver=None):
     ver = ver or APK_VERSION
-    return f'https://github.com/{APK_REPO}/releases/download/v{ver}/app-release.apk'
+    # 2.8.1 治本：站内副本删除后 /apk/download 全靠这条直链，标签与资产名
+    # 必须与 apk-release.yml 一致，否则 302 出去就是 404。
+    return f'https://github.com/{APK_REPO}/releases/download/app-v{ver}/{APK_ASSET_NAME}'
 
 
 def _apk_local_url():
@@ -440,7 +446,9 @@ def status():
             'version': WEB_VERSION, 'build': BUILD_ID,
             'apk_version': APK_VERSION,
             'apk_url': '/apk/download',
-            'apk_mirror': _apk_local_url(),
+            # 2.8.1：没有站内副本时给空串——客户端 `apkMirror || '/apk/download'`
+            # 会自然回落到 /apk/download（再 302 到 Release），不会复制出死链
+            'apk_mirror': _apk_local_url() if _APK_STATIC_FILE.exists() else '',
             'apk_has_local': _APK_STATIC_FILE.exists(),
             'apk_url_direct': _apk_github_url(),
             'apk_proxy': APK_PROXY,
@@ -1342,6 +1350,27 @@ def _period_touch():
         db.bump_shared(c)
 
 
+def _notice_meta(c, body):
+    """给通知标题用的旁证：首个附件的 mime + 所属相册名（2.8.1）。
+
+    只读两条轻查询，取不到一律给空值——标题构造必须容错，不许因旁证失败
+    让整条记录的创建路径报错。
+    """
+    mime = None
+    media_ids = body.get('media') or []
+    if media_ids:
+        row = c.execute('SELECT mime FROM media WHERE id=?', (media_ids[0],)).fetchone()
+        if row:
+            mime = row['mime']
+    album_name = ''
+    aid = body.get('album')
+    if aid:
+        arow = c.execute("SELECT kind, body FROM records WHERE id=? AND kind='album'", (aid,)).fetchone()
+        if arow:
+            album_name = notice_title.plain(db.body_decode(arow).get('title'))
+    return mime, album_name
+
+
 def create_period_record(body, user):
     with connect() as c:
         existing = period.find_by_client(user['id'], body.client_id)
@@ -1353,7 +1382,7 @@ def create_period_record(body, user):
     with connect() as c:
         c.execute('BEGIN IMMEDIATE')
         db.bump_shared(c)
-        db.notice(c, 'activity', '你们的空间有了新记录', rid, user['id'])
+        db.notice(c, 'activity', notice_title.build_title('period', cleaned), rid, user['id'])
     nudge_worker()
     return period.serialize(period.get(rid), user['id'])
 
@@ -1403,9 +1432,13 @@ def create_record(body: RecordInput, user=Depends(current_user)):
                    timestamp if body.kind not in db.PRIVATE else None, body.client_id))
         if body.kind not in db.PRIVATE:
             event = 'chat' if body.kind == 'chat' else ('note' if body.kind == 'note' else 'activity')
-            title = '你们的空间有了新记录'
             if body.kind == 'chat':
+                # 红线：聊天不解密，标题恒不带内容
                 title = '收到一条新消息'
+            else:
+                n_mime, n_album = _notice_meta(c, cleaned)
+                title = notice_title.build_title(body.kind, cleaned,
+                                                 first_media_mime=n_mime, album_name=n_album)
             db.notice(c, event, title, rid, user['id'])
             # 新通知已入队：立即唤醒后台投递循环，推送不再等下一个轮询周期
             nudge_worker()
@@ -1526,7 +1559,12 @@ def update_record(rid: str, body: RecordInput, user=Depends(current_user)):
             if not still_used:
                 c.execute('UPDATE media SET attached=0 WHERE id=?', (mid,))
         if row['kind'] == 'draft' and body.kind == 'post':
-            db.notice(c, 'activity', '你们的空间有了新记录', rid, user['id'])
+            # 草稿发布：与新建动态同口径（2.8.1 明文标题）
+            pub_mime, pub_album = _notice_meta(c, cleaned)
+            db.notice(c, 'activity',
+                      notice_title.build_title('post', cleaned,
+                                                first_media_mime=pub_mime, album_name=pub_album),
+                      rid, user['id'])
         return serialize(c, c.execute('SELECT * FROM records WHERE id=?', (rid,)).fetchone(), user['id'])
 
 
@@ -1695,11 +1733,11 @@ def like(rid: str, user=Depends(current_user)):
         else:
             c.execute('INSERT INTO likes VALUES (?,?)', (rid, user['id']))
             # 2.4.10 第 09 项（主人批准一行特化）：聊天点赞不发通知——
-            # 对方就在聊天页（爱心回应即时可见），「有人喜欢了你的记录」
+            # 对方就在聊天页（爱心回应即时可见），「喜欢了你的记录」这类
             # 文案对聊天场景违和；其余 kind 照旧。
             if row['kind'] not in db.PRIVATE and row['kind'] != 'chat':
                 # 同一条记录的点赞只提醒一次：反复点赞/取消不再刷屏（dedupe 全局唯一）
-                db.notice(c, 'comment', '有人喜欢了你的记录', rid, user['id'], recipient=row['author'],
+                db.notice(c, 'comment', '对方喜欢了你的记录', rid, user['id'], recipient=row['author'],
                           dedupe=f'like:{rid}')
         # 2.6.0 P10：likes/comments 表没有 revision 触发器——yearbook 聚合
         # 含赞/评计数（rev_cache 键控缓存），写路径必须显式推进 content_revision
@@ -1721,7 +1759,11 @@ def comment(rid: str, body: TextInput, user=Depends(current_user)):
         # 2.6.0 P10：同上——comments 无触发器，显式失效聚合缓存
         db.bump_shared(c)
         if row['kind'] not in db.PRIVATE:
-            db.notice(c, 'comment', '收到一条新回复', rid, user['id'])
+            # 2.8.1 明文：带评论摘录；只通知被评论的记录作者——
+            # 自己评论自己的记录时 recipient 命中 actor，db.notice 自然跳过
+            db.notice(c, 'comment',
+                      notice_title.build_title('comment', None, comment_text=body.content),
+                      rid, user['id'], recipient=row['author'])
     return {'id': cid}
 
 
@@ -1741,6 +1783,12 @@ def answer(rid: str, body: TextInput, user=Depends(current_user)):
             raise HTTPException(422, '这不是问答')
         c.execute('INSERT INTO answers VALUES (?,?,?) ON CONFLICT(record_id,author) DO UPDATE SET content=excluded.content',
                   (rid, user['id'], body.content))
+        # 2.8.1 补通知覆盖：问答回答此前完全静默。dedupe 按「记录+人+日」——
+        # 首次回答必发；同日反复修改答案只提醒一次（避免边改边炸）
+        day = dt.datetime.now(ZoneInfo(db.setting(c, 'space')['timezone'])).date().isoformat()
+        db.notice(c, 'activity',
+                  notice_title.build_title('answer', None, answer_text=body.content),
+                  rid, user['id'], dedupe=f'answer:{rid}:{user["id"]}:{day}')
     return {'ok': True}
 
 
@@ -1751,7 +1799,15 @@ def check(rid: str, user=Depends(current_user)):
         if row['kind'] != 'habit':
             raise HTTPException(422, '这不是打卡目标')
         day = dt.datetime.now(ZoneInfo(db.setting(c, 'space')['timezone'])).date().isoformat()
-        c.execute('INSERT OR IGNORE INTO checks VALUES (?,?,?)', (rid, user['id'], day))
+        inserted = c.execute('INSERT OR IGNORE INTO checks VALUES (?,?,?)',
+                             (rid, user['id'], day)).rowcount
+        # 2.8.1 补通知覆盖：打卡此前完全静默。只在**真正插入**时发（重复打卡
+        # 走 IGNORE，rowcount=0，不许轰炸）；dedupe 再按「记录+人+日」兜一层，
+        # 并发重复请求也只会有一条通知
+        if inserted:
+            db.notice(c, 'activity',
+                      notice_title.build_title('check', db.body_decode(row)),
+                      rid, user['id'], dedupe=f'check:{rid}:{user["id"]}:{day}')
     return {'ok': True}
 
 

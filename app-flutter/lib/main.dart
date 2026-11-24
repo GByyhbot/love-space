@@ -31,7 +31,7 @@ import 'features/auth/auth_state.dart';
 import 'features/auth/login_page.dart';
 import 'features/home/on_this_day_page.dart';
 import 'features/home/yearbook_page.dart';
-import 'features/chat/chat_toast.dart' show ChatToastHost;
+import 'features/chat/chat_toast.dart' show ChatToastHost, ChatToastTone, chatToastProvider;
 import 'features/chat/messages_page.dart';
 import 'features/notify/channels_page.dart';
 import 'features/notify/notices_page.dart';
@@ -52,7 +52,11 @@ import 'features/together/weekly_page.dart';
 import 'core/audio/audio_init_status.dart' show AudioInitStatus, audioInitStatusProvider;
 import 'core/audio/song_playback.dart' show songPlaybackProvider;
 import 'core/notify/notify_service.dart'
-    show NotifyCoordinator, notifyRouteHandler;
+    show NotifyCoordinator, notifyRouteHandler, notifyNoticeTapHandler;
+// 2.8.1：系统通知/冷启动点击与通知中心共用同一套落点判定
+import 'core/api/api_client.dart' as api;
+import 'core/notify/notify_decision.dart' show NoticeTargetKind, noticeTargetOf;
+import 'features/timeline/record_story_sheet.dart' show showRecordStorySheet;
 import 'core/peer/peer_locator.dart';
 import 'features/chat/voice_playback.dart' show voiceInterruptHook;
 
@@ -308,6 +312,56 @@ class LoveApp extends ConsumerWidget {
     final router = ref.watch(routerProvider);
     // 2.4.5 甲组：通知点击路由（回调由 local_notifications 层调用）
     notifyRouteHandler = (route) => router.push(route);
+    // 2.8.1：记录级系统通知点击——payload 只有 record_id + event，
+    // 先取记录判 kind，再走与通知中心完全相同的落点判定（两态一致）。
+    // 冷启动时首帧可能还没挂载导航器，故取 context 前留一次短暂退避。
+    notifyNoticeTapHandler = (recordId, event) async {
+      final first = noticeTargetOf(event, recordId);
+      if (first.kind == NoticeTargetKind.route) {
+        if (first.route.isNotEmpty) router.push(first.route);
+        return;
+      }
+      if (recordId.isEmpty) {
+        // 备份/存储等运维通知没有 rid：进通知中心，别开空白页
+        router.push('/notices');
+        return;
+      }
+      api.Record? record;
+      try {
+        final dio = await ref.read(api.dioProvider.future);
+        final r = await dio.get('/api/records/$recordId');
+        if (r.statusCode == 200 && r.data is Map) {
+          record = api.Record.fromJson((r.data as Map).cast<String, dynamic>());
+        }
+      } catch (_) {
+        record = null;
+      }
+      BuildContext? ctx = router.routerDelegate.navigatorKey.currentContext;
+      if (ctx == null) {
+        await Future<void>.delayed(const Duration(milliseconds: 350));
+        ctx = router.routerDelegate.navigatorKey.currentContext;
+      }
+      if (record == null) {
+        if (ctx != null && ctx.mounted) {
+          ref
+              .read(chatToastProvider.notifier)
+              .show('这条记录已不存在', tone: ChatToastTone.warning);
+        }
+        return;
+      }
+      final second = noticeTargetOf(event, recordId, record.kind);
+      if (second.kind == NoticeTargetKind.route) {
+        router.push(second.route);
+        return;
+      }
+      final me = ref.read(authProvider.notifier).me;
+      final sheetCtx = ctx;
+      if (sheetCtx != null && me != null && sheetCtx.mounted) {
+        await showRecordStorySheet(sheetCtx, record: record, me: me);
+      } else {
+        router.push('/notices');
+      }
+    };
     // 🔴 段 D：ThemeData 真的吃到 space.theme / custom_color。
     // spaceAppearanceProvider / appearancePrefsProvider 任一变化都会让
     // MaterialApp 立刻重建（Riverpod 驱动），主题色 + 夜间模式正确叠加。

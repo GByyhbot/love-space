@@ -66,9 +66,9 @@ void main() {
         expect(NoticeTargetKind.values.contains(tRid.kind), isTrue,
             reason: '$e 带 recordId 落点合法');
       }
-      // chat 在通知中心首行被过滤（notices_page.dart:95-97），防御性断言：
-      // 即便漏进来也有兜底落点
-      expect(noticeTargetOf('chat', '').kind, NoticeTargetKind.fallback);
+      // 2.8.1 起 chat 通知点击直达聊天页（旧口径是落兜底弹层）
+      expect(noticeTargetOf('chat', '').kind, NoticeTargetKind.route);
+      expect(noticeTargetOf('chat', '').route, '/messages');
     });
   });
 

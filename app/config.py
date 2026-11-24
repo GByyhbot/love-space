@@ -6,8 +6,6 @@
 """
 import os
 import re
-import zipfile
-from pathlib import Path
 from urllib.parse import urlparse
 
 
@@ -46,41 +44,21 @@ WEB_VERSION = clean_version(_env('LOVE_VERSION', 'dev'), 'dev')
 BUILD_ID = _env('LOVE_BUILD', 'local')
 
 
-def _static_dir():
-    """镜像内 /srv/static；本地开发时退回仓库根的 static/。"""
-    p = Path('/srv/static')
-    if p.is_dir():
-        return p
-    return Path(__file__).resolve().parent.parent / 'static'
+# APK 版本（2.8.1 治本，机主 2026-11-24 22:38 拍板）：
+# **以构建期注入的 LOVE_APK_VERSION 为准**——它由 CI 按 git tag 注入，与
+# /api/status 的 version 同源，天然不会停在旧值。
+#
+# 旧实现是运行时扫 static/*.apk 的 `assets/capacitor.config.json` 找
+# `LoveSpaceApp/<ver>` 标记。Capacitor 壳早已被 Flutter 取代，Flutter 包里
+# 根本没有这个文件 → 扫描恒失败，APK_VERSION 长期停在旧包残留的 1.7.4，
+# 与线上真实版本脱节。/apk/download 也因此一直下发 43MB 的旧壳包。
+# 该扫描逻辑已整体删除；本地开发没注入环境变量时给 '0.0.0'（明确表示未知，
+# 不再假装是某个历史版本）。
+def _apk_version():
+    return clean_version(_env('LOVE_APK_VERSION', ''), '0.0.0')
 
 
-# APK 版本：不写死在构建期，而是运行时扫 static/ 下所有 .apk 包，从
-# assets/capacitor.config.json 里解出 `LoveSpaceApp/<version>` 标记。
-# 这样同步新包（sync_apk.py 覆盖 static/lovespace.apk）部署后，/api/status
-# 自动反映新版本，App 内「检查更新」立刻能发现——不再依赖打 v* tag 才前进。
-# 旧行为（构建期注入 LOVE_APK_VERSION）保留为兜底：扫不到包时用它。
-def _scan_apk_version():
-    fallback = clean_version(_env('LOVE_APK_VERSION', ''), '1.6.10')
-    best = ''
-    try:
-        for apk in sorted(_static_dir().glob('*.apk'), key=lambda p: p.stat().st_mtime):
-            try:
-                with zipfile.ZipFile(apk) as z:
-                    cfg = z.read('assets/capacitor.config.json').decode('utf-8', 'replace')
-            except Exception:
-                continue
-            m = re.search(r'LoveSpaceApp/(\d+(?:\.\d+)*)', cfg)
-            if m:
-                v = clean_version(m.group(1), '')
-                # 取最大版本（多包并存时挑新的）
-                if v > best:
-                    best = v
-    except OSError:
-        pass
-    return best or fallback
-
-
-APK_VERSION = _scan_apk_version()
+APK_VERSION = _apk_version()
 
 
 # 内外网可达的线路。以前这份清单分别硬编码在前端 app.js 和安卓

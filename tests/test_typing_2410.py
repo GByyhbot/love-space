@@ -88,11 +88,11 @@ def test_chat_like_sends_no_notice(client_a, client_b):
     rid_chat = r.json()['id']
     # B 给聊天点赞 → 不发通知（增量口径：其它测试可能发过同类通知）
     with db.connect() as c:
-        n0 = c.execute("SELECT count(*) FROM notices WHERE title='有人喜欢了你的记录'").fetchone()[0]
+        n0 = c.execute("SELECT count(*) FROM notices WHERE title='对方喜欢了你的记录'").fetchone()[0]
     r = client_b.post(f'/api/records/{rid_chat}/like', headers=HEADERS)
     assert r.status_code == 200
     with db.connect() as c:
-        n1 = c.execute("SELECT count(*) FROM notices WHERE title='有人喜欢了你的记录'").fetchone()[0]
+        n1 = c.execute("SELECT count(*) FROM notices WHERE title='对方喜欢了你的记录'").fetchone()[0]
     assert n1 == n0, '聊天点赞不发通知（09 特化）'
     # B 发普通记录，A 点赞 → 照旧发通知
     r = client_b.post('/api/records', headers=HEADERS,
@@ -103,7 +103,7 @@ def test_chat_like_sends_no_notice(client_a, client_b):
     r = client_a.post(f'/api/records/{rid_note}/like', headers=HEADERS)
     assert r.status_code == 200
     with db.connect() as c:
-        n2 = c.execute("SELECT count(*) FROM notices WHERE title='有人喜欢了你的记录'").fetchone()[0]
+        n2 = c.execute("SELECT count(*) FROM notices WHERE title='对方喜欢了你的记录'").fetchone()[0]
     assert n2 == n1 + 1, '普通记录点赞照旧发通知'
 
 

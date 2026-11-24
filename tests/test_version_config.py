@@ -17,7 +17,6 @@ import pytest
 from app import config, main
 
 ROOT = Path(__file__).resolve().parents[1]
-GRADLE = ROOT / 'android-app' / 'android' / 'app' / 'build.gradle'
 
 
 def test_defaults_when_env_missing(monkeypatch):
@@ -52,15 +51,19 @@ def test_status_reads_config_not_literals(monkeypatch, client_a):
     assert body['apk_version'] == '9.9.9'
 
 
-@pytest.mark.skipif(not GRADLE.is_file(), reason='android-app 不在当前工作副本里')
-def test_apk_version_matches_gradle():
-    text = GRADLE.read_text(encoding='utf-8')
-    found = re.search(r'versionName\s+"([^"]+)"', text)
-    assert found, 'build.gradle 里没找到 versionName'
-    assert found.group(1) == config.APK_VERSION, (
-        f'android-app 打出来的 APK 是 {found.group(1)}，但 /api/status 报的是 '
-        f'{config.APK_VERSION}（app/config.py 的默认值或 LOVE_APK_VERSION）——'
-        '两者不同号，客户端"检查更新"会一直提示有新版本'
+def test_no_static_apk_in_repo():
+    """2.8.1 治本后的新契约：仓库里不再存放任何 APK。
+
+    旧契约是「/api/status 的 apk_version 必须等于 android-app 里 Capacitor 壳
+    打包用的 versionName」——而那条链路早已被 Flutter 取代：壳包 static/lovespace.apk
+    长期不更新，把 apk_version 钉死在 1.7.4，/apk/download 一直发旧包。
+    现在 APK 只走 GitHub Release（app-v<版本>，由 apk-release.yml 构建），
+    apk_version 由构建期注入的 LOVE_APK_VERSION 决定（与 tag 同源，见
+    tests/test_notice_281.py::test_apk_version_comes_from_env）。
+    """
+    assert not (ROOT / 'static' / 'lovespace.apk').exists(), (
+        '仓库里又出现了 static/lovespace.apk——它会让 /api/status 的 apk_version '
+        '与线上真实版本脱节，且 /apk/download 会绕过 Release 发旧包'
     )
 
 
@@ -97,12 +100,11 @@ def test_apk_version_never_has_letters():
     assert re.fullmatch(r'\d+(?:\.\d+){1,2}', config.APK_VERSION), config.APK_VERSION
 
 
-# ---- UA 标记必须和 APK 版本同号 -------------------------------------------
-# APK 是远程加载模式，Capacitor 的桥接脚本不保证注入，网页端靠 UA 里的
-# `LoveSpaceApp/<版本>` 判断「我在 App 里」并读出版本号。这条标记写死在
-# capacitor.config.json 里，忘了跟着 versionName 一起改，App 就会误判
-# 自己是不是最新版（正是「装 1.2.9 却说已是最新」那个 bug 的来源之一）。
-
+# ---- UA 标记随 Capacitor 壳一并退役（2.8.1）-----------------------------
+# 旧断言是「capacitor.config.json 的 appendUserAgent 必须等于 APK 版本」。
+# 那条链路已删除：Flutter 包用原生 UA（LoveSpaceApp/<版本>，见
+# app-flutter 的 settings_state.dart），仓库里也不再发布 Capacitor 壳。
+# 这里只在**壳配置仍存在于工作副本**时做自洽校验，不再与 APK 版本挂钩。
 CAP_CONFIGS = [
     ROOT / 'android-app' / 'capacitor.config.json',
     ROOT / 'android-app' / 'android' / 'app' / 'src' / 'main' / 'assets' / 'capacitor.config.json',
@@ -110,15 +112,13 @@ CAP_CONFIGS = [
 
 
 @pytest.mark.parametrize('path', CAP_CONFIGS)
-def test_append_user_agent_matches_apk_version(path):
+def test_capacitor_ua_self_consistent_if_present(path):
+    """壳工程若还留着，其 UA 至少要与自身版本自洽；整个目录不在则跳过。"""
     if not path.is_file():
         pytest.skip(f'{path.name} 不在当前工作副本里')
     cfg = json.loads(path.read_text(encoding='utf-8'))
     ua = cfg.get('appendUserAgent') or ''
-    assert ua == f'LoveSpaceApp/{config.APK_VERSION}', (
-        f'{path.parent.name}/{path.name} 里 appendUserAgent 是 {ua!r}，'
-        f'但 APK 版本是 {config.APK_VERSION}——两者不同号，App 内「检查更新」会误判版本'
-    )
+    assert ua.startswith('LoveSpaceApp/'), f'{path.name} 的 appendUserAgent 异常：{ua!r}'
 
 
 # ---- HTML 外壳不能被 WebView 启发式缓存 ------------------------------------

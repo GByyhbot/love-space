@@ -42,6 +42,8 @@ class NotifyItem {
     required this.route,
     required this.clearChatOnTap,
     this.count = 1,
+    this.recordId = '',
+    this.event = '',
   });
 
   final String key;
@@ -59,6 +61,11 @@ class NotifyItem {
   /// 合并通知的条数（>1 时由呈现层拼「有 N 条新消息」）
   final int count;
 
+  /// 2.8.1：记录级通知的 record_id / event。系统通知点击要按 kind 直达，
+  /// 冷启动时只能靠 payload 里这两个字段还原落点（kind 到场再取记录判定）。
+  final String recordId;
+  final String event;
+
   Map<String, dynamic> toJson() => {
         'key': key,
         'androidId': androidId,
@@ -68,6 +75,8 @@ class NotifyItem {
         'route': route,
         'clearChatOnTap': clearChatOnTap,
         'count': count,
+        'recordId': recordId,
+        'event': event,
       };
 
   static NotifyItem fromJson(Map<String, dynamic> j) => NotifyItem(
@@ -79,6 +88,8 @@ class NotifyItem {
         route: (j['route'] ?? '').toString(),
         clearChatOnTap: j['clearChatOnTap'] == true,
         count: (j['count'] as num?)?.toInt() ?? 1,
+        recordId: (j['recordId'] ?? '').toString(),
+        event: (j['event'] ?? '').toString(),
       );
 }
 
@@ -249,6 +260,10 @@ NotifyDecision decideNoticeNotifications({
       body: n.title,
       route: noticeRoute(n.event),
       clearChatOnTap: false,
+      // 2.8.1：把 record_id + event 带进系统通知 payload——
+      // 冷启动点通知时才可能还原落点（kind 到场再取记录）
+      recordId: n.recordId,
+      event: n.event,
     ));
   }
   return NotifyDecision(items: items, seenDelta: seen);
@@ -302,9 +317,35 @@ class NoticeTarget {
 /// ① 有 recordId → 弹层直显该条（跨事件类型统一，弹层即内容本体）；
 /// ② 无 recordId 但有直达路由（kNoticeRoutes）→ 功能页；
 /// ③ 都没有 → 兜底弹层（title + 事件名 + 时间，标已读））。
-NoticeTarget noticeTargetOf(String event, String recordId) {
+/// 单条通知的落点判定（2.8.1 起按 kind 分流，不再是「有 rid 就弹层」）。
+///
+/// 点击时通知行只有 event + record_id，没有 kind——kind 由调用方先
+/// `GET /api/records/{rid}` 取到记录后传入（[kind] 为空表示尚未取到）：
+/// · event='chat' → 聊天页；
+/// · event='peer'（报备/SOS）→ 报备详情页；
+/// · 有 rid 且 kind='anniversary' → 纪念日列表页（记录本体是个日期，弹层没意义）；
+/// · 有 rid 且 kind='period' → 生理期页（红线：内容不外显）；
+/// · 有 rid 的其它 kind → 记录底部弹层（内容本体）；
+/// · 无 rid 但命中 [kNoticeRoutes] → 对应功能页；
+/// · 都没有（备份/存储等运维通知）→ 兜底弹层（title + 事件名 + 时间）。
+NoticeTarget noticeTargetOf(String event, String recordId, [String kind = '']) {
+  if (event == 'chat') {
+    return const NoticeTarget(kind: NoticeTargetKind.route, route: '/messages');
+  }
+  if (event == 'peer') {
+    return const NoticeTarget(
+        kind: NoticeTargetKind.route, route: '/together/peer-report');
+  }
   final rid = recordId.trim();
   if (rid.isNotEmpty) {
+    final k = kind.trim();
+    if (k == 'anniversary') {
+      return const NoticeTarget(
+          kind: NoticeTargetKind.route, route: '/together/anniversary');
+    }
+    if (k == 'period') {
+      return const NoticeTarget(kind: NoticeTargetKind.route, route: '/period');
+    }
     return const NoticeTarget(kind: NoticeTargetKind.recordStory);
   }
   final route = kNoticeRoutes[event];

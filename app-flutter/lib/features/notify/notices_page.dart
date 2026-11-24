@@ -243,26 +243,45 @@ class _NoticesPageState extends ConsumerState<NoticesPage> {
     );
   }
 
-  /// recordStory 落点：拉单条记录 → 弹层；失败退兜底弹层。
+  /// recordStory 落点（2.8.1：取到记录后按 kind 二次分流）。
+  ///
+  /// 通知行只有 event + record_id，没有 kind。所以统一先取记录：
+  /// · 取不到（记录已删 / 404）→ toast「这条记录已不存在」，留在通知中心，
+  ///   标已读、不崩溃、不跳空白页；
+  /// · kind=anniversary → 纪念日列表页；kind=period → 生理期页；
+  /// · 其余 → 「历史上的今天」同款记录底部弹层。
   Future<void> _openRecordStory(NoticeItem n) async {
+    api.Record? record;
     try {
       final dio = await ref.read(api.dioProvider.future);
       final r = await dio.get('/api/records/${n.recordId}');
-      if (!mounted) return;
-      if (r.statusCode != 200 || r.data is! Map) {
-        await _showFallbackDialog(n);
-      } else {
-        final record = api.Record.fromJson((r.data as Map).cast<String, dynamic>());
-        final me = ref.read(authProvider.notifier).me;
-        if (!mounted) return;
-        if (me == null) {
-          await _showFallbackDialog(n);
-        } else {
-          await showRecordStorySheet(context, record: record, me: me);
-        }
+      if (r.statusCode == 200 && r.data is Map) {
+        record = api.Record.fromJson((r.data as Map).cast<String, dynamic>());
       }
     } catch (_) {
-      if (mounted) await _showFallbackDialog(n);
+      record = null;
+    }
+    if (!mounted) return;
+    if (record == null) {
+      _toast('这条记录已不存在', tone: ChatToastTone.warning);
+      await _runWrite(
+        (NotifyApi svc) => svc.markNoticesRead(recordId: n.recordId),
+        successText: '已标记为已读',
+      );
+      return;
+    }
+    final target = noticeTargetOf(n.event, n.recordId, record.kind);
+    if (target.kind == NoticeTargetKind.route) {
+      await _runWrite(
+        (NotifyApi svc) => svc.markNoticesRead(recordId: n.recordId),
+        successText: '已标记为已读',
+      );
+      if (mounted) context.push(target.route);
+      return;
+    }
+    final me = ref.read(authProvider.notifier).me;
+    if (me != null) {
+      await showRecordStorySheet(context, record: record, me: me);
     }
     if (!mounted) return;
     await _runWrite(

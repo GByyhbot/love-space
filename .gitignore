@@ -20,9 +20,11 @@ secrets/
 .tmp/
 output/
 
-# ---- 二进制：只保留对外下载的那份 APK ----
+# ---- 二进制：仓库内不再存放任何 APK（2.8.1 起）----
+# 旧 Capacitor 壳包 static/lovespace.apk 已删除：它让 /api/status 的
+# apk_version 长期停在 1.7.4、/apk/download 一直发旧包。现在 APK 只走
+# GitHub Release 资产（app-v<版本>），仓库里 *.apk 一律不入库。
 *.apk
-!static/lovespace.apk
 恋爱空间.apk
 
 # ---- Android 签名密钥与本地签名配置，绝不能入库（泄露=别人能给你的 App 签名） ----
