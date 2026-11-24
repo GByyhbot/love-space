@@ -27,8 +27,9 @@ class FlushGateTest {
     fun tailFlush_onlyAfterSuccessWhileRunning() {
         assertTrue(FlushGate.shouldTailFlush(pending = true, succeeded = true, running = true))
         assertFalse(FlushGate.shouldTailFlush(pending = false, succeeded = true, running = true))
-        assertFalse(FlushGate.shouldTailFlush(pending = true, succeeded = false, running = true),
-            "失败不补发：无网夜空转打点，交给下个 tick")
+        // JUnit4 只有 assertFalse(String, boolean) 这一个带消息的重载（无 (boolean, String)）
+        assertFalse("失败不补发：无网夜空转打点，交给下个 tick",
+            FlushGate.shouldTailFlush(pending = true, succeeded = false, running = true))
         assertFalse(FlushGate.shouldTailFlush(pending = true, succeeded = true, running = false))
     }
 
