@@ -18,6 +18,9 @@
 #
 # 触发：GitHub 仓库 Actions → "APK Release" → Run workflow → 选 main；
 # 可选 inputs.notes 填本次更新要点（写入 Release 说明，缺省给通用句）。
+# inputs.publish_release：'false' = 只构建正式签名 APK + 上传 artifact，
+# **不发布/不改写 GitHub Release 资产**（验证线出包专用：同版本重跑不会
+# 覆盖线上已发布的同名 Release；2.8.0 fix8 起支持）。
 # 产物：artifact lovespace-arm64-v<版本> + GitHub Release app-v<版本>
 # （APK + .sha256 资产；「⚠️ 卸载重装」提醒见 2.4.3 交付摘要）。
 name: APK Release
@@ -29,6 +32,14 @@ on:
         description: '本次更新要点（逐条短句，写入 Release 说明；可空）'
         required: false
         default: ''
+      publish_release:
+        description: '是否发布 GitHub Release（false = 只出签名 APK 与 artifact）'
+        required: true
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
 
 # 发布 Release 需要 contents: write（gh release create/upload）
 permissions:
@@ -144,7 +155,9 @@ jobs:
       # GitHub Release 发布（第 4 项发布侧）：标签 app-v<版本>——严禁裸 v*
       # 前缀（会误触 docker.yml 镜像构建与 android.yml 老壳发布两条流水线）。
       # 幂等：同版本重跑 → 更新既有 Release 资产（--clobber），不产生重复。
+      # publish_release=false 时整步跳过：验证线出包不许改写线上同名 Release。
       - name: Publish GitHub Release
+        if: ${{ github.event.inputs.publish_release != 'false' }}
         env:
           GH_TOKEN: ${{ github.token }}
           NOTES: ${{ github.event.inputs.notes }}
