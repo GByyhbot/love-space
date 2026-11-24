@@ -65,16 +65,18 @@ class HeartbeatGateTest {
         assertFalse(HeartbeatGate.shouldEmitOnTick(true, true, false))
     }
 
-    // ⑥ 续挂锚点 = lastSentAt + 窗口；锚点已过则 earliest = now + 1s（不漂移累加）
+    // ⑥ 续挂锚点 = lastSentAt + 窗口；只有锚点已过（tick 迟到满一个窗口）才
+    //    立刻补一跳。锚点在未来时必须等它——不许按 tick 时刻累加造成漂移。
     @Test
     fun nextArmAt_anchorsOnLastSentAt_notOnNow() {
         val last = 10_000L
         assertEquals(last + win, HeartbeatGate.nextArmAt(last + 1_000L, last))
         // tick 早到（被系统提前唤醒）：仍按锚点，不把下一次推后
         assertEquals(last + win, HeartbeatGate.nextArmAt(last - 1_000L, last))
-        // 锚点已过：立刻补一跳，且不早于 now + minDelay
-        assertEquals(50_000L + HeartbeatGate.MIN_ARM_DELAY_MS,
-            HeartbeatGate.nextArmAt(50_000L, last))
+        // 锚点已过（now 已超过 last+窗口）：立刻补一跳，且不早于 now + minDelay
+        val late = last + win + 5_000L
+        assertEquals(late + HeartbeatGate.MIN_ARM_DELAY_MS,
+            HeartbeatGate.nextArmAt(late, last))
     }
 
     // ⑦ acc 口径：只有 ≤50 的来源定位能造心跳轨迹点，50–100 只许保鲜 latest
