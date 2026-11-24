@@ -1,0 +1,630 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="color-scheme" content="light dark" />
+<link rel="icon" href="data:," />
+<title>恋爱空间 Love Space</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@600;700;900&family=Noto+Sans+SC:wght@400;500;700;900&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#FFF8F5; --bg2:#FFF1EC; --surface:#FFFFFF; --surface2:#FFF6F2;
+  --ink:#2B1D1A; --ink2:#6B5751; --ink3:#9A847E;
+  --line:#F0DDD6; --line2:#E8CFC6;
+  --rose:#E14B64; --rose-dark:#C2334D; --rose-soft:#FFE4E8; --rose-mid:#FFB3BE;
+  --peach:#FF8A5B; --gold:#E9A23B; --teal:#1F7A6B; --teal-soft:#DDF2EC;
+  --shadow:0 12px 32px rgba(180,70,80,.10); --shadow-sm:0 4px 16px rgba(180,70,80,.08);
+  --radius:20px;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#171012; --bg2:#1E1518; --surface:#241A1E; --surface2:#2A1F24;
+    --ink:#FDF0EE; --ink2:#C9ADA8; --ink3:#8F7772;
+    --line:#3A2A2F; --line2:#4A353C;
+    --rose:#FF6B84; --rose-dark:#FF8A9E; --rose-soft:#3D222A; --rose-mid:#6B3542;
+    --peach:#FF9A6B; --gold:#F2B95A; --teal:#3EC9B0; --teal-soft:#1E3530;
+    --shadow:0 12px 32px rgba(0,0,0,.35); --shadow-sm:0 4px 16px rgba(0,0,0,.25);
+  }
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Noto Sans SC",system-ui,-apple-system,sans-serif;line-height:1.6;-webkit-font-smoothing:antialiased}
+a{color:var(--rose);text-decoration:none}
+button,[role="button"]{min-height:44px;cursor:pointer;font-family:inherit}
+img{max-width:100%;display:block}
+.wrap{max-width:1120px;margin:0 auto;padding:0 20px}
+.mono{font-family:"JetBrains Mono",monospace}
+
+/* NAV */
+.topbar{position:sticky;top:0;z-index:40;background:color-mix(in srgb, var(--bg) 88%, transparent);backdrop-filter:blur(14px);border-bottom:1px solid var(--line)}
+.topbar-in{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 0}
+.brand{display:flex;align-items:center;gap:10px;font-weight:900;letter-spacing:.02em}
+.brand-mark{width:38px;height:38px;border-radius:11px;background:var(--rose);color:#fff;display:grid;place-items:center;font-size:19px;flex:none}
+.brand small{display:block;font-weight:500;color:var(--ink2);font-size:11px;letter-spacing:.14em;text-transform:uppercase}
+.navlinks{display:flex;gap:4px;flex-wrap:wrap}
+.navlinks a{color:var(--ink2);font-size:14px;font-weight:500;padding:10px 12px;border-radius:999px}
+.navlinks a:hover{background:var(--rose-soft);color:var(--rose)}
+.btn{display:inline-flex;align-items:center;gap:8px;border-radius:999px;padding:11px 20px;font-weight:700;font-size:14px;border:1px solid transparent;transition:.18s}
+.btn-rose{background:var(--rose);color:#fff;box-shadow:0 8px 20px rgba(225,75,100,.28)}
+.btn-rose:hover{background:var(--rose-dark)}
+.btn-ghost{background:var(--surface);border-color:var(--line2);color:var(--ink)}
+.btn-ghost:hover{border-color:var(--rose);color:var(--rose)}
+@media(max-width:640px){.navlinks{display:none}}
+
+/* HERO */
+.hero{padding:44px 0 36px;background:linear-gradient(180deg,var(--bg2),var(--bg));overflow:hidden}
+.hero-grid{display:grid;grid-template-columns:1.05fr .95fr;gap:36px;align-items:center}
+@media(max-width:860px){.hero-grid{grid-template-columns:1fr}}
+.eyebrow{display:inline-flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:6px 12px 6px 8px;font-size:12.5px;font-weight:700;color:var(--ink2);box-shadow:var(--shadow-sm)}
+.eyebrow i{width:22px;height:22px;border-radius:50%;background:var(--rose-soft);display:grid;place-items:center;font-style:normal;font-size:12px}
+.hero h1{font-family:"Noto Serif SC",serif;font-size:clamp(42px,7vw,68px);line-height:1.02;font-weight:900;letter-spacing:-.02em;margin:18px 0 6px}
+.hero h1 em{font-style:normal;color:var(--rose)}
+.hero .en{font-family:"JetBrains Mono",monospace;letter-spacing:.22em;font-size:12px;color:var(--ink3);text-transform:uppercase;margin-bottom:16px}
+.hero p.lead{font-size:17px;color:var(--ink2);line-height:1.75;max-width:34em;margin:0 0 22px}
+.hero p.lead strong{color:var(--ink)}
+.hero-cta{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:26px}
+.hero-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;max-width:520px}
+@media(max-width:480px){.hero-stats{grid-template-columns:repeat(2,1fr)}}
+.hstat{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px 14px}
+.hstat b{font-size:20px;display:block;line-height:1;font-family:"Noto Serif SC",serif}
+.hstat span{font-size:12px;color:var(--ink2)}
+.repo-line{margin-top:16px;font-size:13px;color:var(--ink3);display:flex;gap:14px;flex-wrap:wrap}
+.repo-line code{background:var(--surface2);border:1px solid var(--line);padding:2px 7px;border-radius:6px;font-size:12px;color:var(--ink2)}
+
+/* PHONE MOCK */
+.phone-stage{position:relative;display:flex;justify-content:center}
+.phone{width:300px;max-width:86vw;background:#1C1214;border-radius:38px;padding:10px;box-shadow:0 30px 60px rgba(60,20,25,.28);transform:rotate(2deg)}
+.phone-screen{background:#FFF8F5;border-radius:30px;overflow:hidden;color:#2B1D1A}
+@media(prefers-color-scheme:dark){.phone-screen{background:#241A1E;color:#FDF0EE}}
+.ph-top{padding:16px 16px 10px;display:flex;justify-content:space-between;align-items:flex-start}
+.ph-top small{color:#9A847E;font-size:11px;letter-spacing:.08em}
+.ph-top h4{margin:2px 0 0;font-family:"Noto Serif SC",serif;font-size:18px}
+.ph-avatar{width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#FFB3BE,#E14B64);display:grid;place-items:center;color:#fff;font-size:15px}
+.ph-hero-card{margin:0 14px;background:linear-gradient(135deg,#E14B64,#FF7A6B);color:#fff;border-radius:18px;padding:16px;position:relative;overflow:hidden}
+.ph-hero-card:after{content:"♥";position:absolute;right:10px;top:-8px;font-size:64px;opacity:.16}
+.ph-hero-card small{opacity:.85;font-size:11px;letter-spacing:.1em}
+.ph-hero-card .days{font-family:"Noto Serif SC",serif;font-size:36px;font-weight:900;line-height:1;margin:4px 0}
+.ph-hero-card p{margin:0;font-size:12px;opacity:.9}
+.ph-moods{display:flex;gap:8px;margin:12px 14px 0}
+.ph-mood{flex:1;background:#fff;border:1px solid #F0DDD6;border-radius:12px;padding:9px 10px;font-size:12px}
+@media(prefers-color-scheme:dark){.ph-mood{background:#2A1F24;border-color:#3A2A2F}}
+.ph-mood b{display:block;font-size:13px}
+.ph-feed{padding:12px 14px 6px}
+.ph-feed h5{margin:0 0 8px;font-size:12px;color:#9A847E;letter-spacing:.08em}
+.ph-item{display:flex;gap:10px;padding:10px 0;border-top:1px dashed #F0DDD6}
+.ph-thumb{width:44px;height:44px;border-radius:10px;flex:none}
+.ph-item p{margin:0;font-size:12.5px;line-height:1.5}
+.ph-item small{color:#9A847E;font-size:11px}
+.ph-tabbar{display:flex;border-top:1px solid #F0DDD6;margin-top:6px}
+.ph-tabbar span{flex:1;text-align:center;padding:10px 2px 14px;font-size:11px;color:#9A847E}
+.ph-tabbar span.on{color:#E14B64;font-weight:700}
+.float-chip{position:absolute;z-index:5;background:var(--surface);border:1px solid var(--line);box-shadow:var(--shadow);border-radius:14px;padding:10px 14px;font-size:13px;font-weight:700;display:flex;gap:8px;align-items:center}
+.float-chip small{display:block;font-weight:500;color:var(--ink2);font-size:11px}
+.fc1{left:0;top:52px}.fc2{right:0;bottom:64px}
+@media(max-width:860px){.fc1{left:2%}.fc2{right:2%}}
+
+/* SECTIONS */
+section{padding:52px 0}
+.sec-head{max-width:640px;margin-bottom:28px}
+.sec-head .k{font-family:"JetBrains Mono",monospace;font-size:11px;letter-spacing:.22em;color:var(--rose);text-transform:uppercase;font-weight:600}
+.sec-head h2{font-family:"Noto Serif SC",serif;font-size:clamp(26px,4vw,36px);margin:8px 0 8px;line-height:1.2}
+.sec-head p{color:var(--ink2);margin:0;font-size:15.5px}
+.alt{background:var(--surface2);border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+
+/* FEATURES */
+.feat-layout{display:grid;grid-template-columns:1fr 380px;gap:20px;align-items:start}
+@media(max-width:860px){.feat-layout{grid-template-columns:1fr}}
+.feat-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+@media(max-width:520px){.feat-grid{grid-template-columns:1fr}}
+.feat-card{text-align:left;background:var(--surface);border:1.5px solid var(--line);border-radius:16px;padding:18px;width:100%;transition:.15s;color:var(--ink)}
+.feat-card:hover{border-color:var(--rose-mid);transform:translateY(-2px)}
+.feat-card.active{border-color:var(--rose);background:var(--rose-soft)}
+.feat-card .fi{font-size:24px;margin-bottom:8px}
+.feat-card h3{margin:0 0 4px;font-size:16px}
+.feat-card p{margin:0;font-size:13px;color:var(--ink2);line-height:1.55}
+.feat-detail{background:var(--ink);color:#FFF3EF;border-radius:var(--radius);padding:26px;position:sticky;top:84px}
+@media(prefers-color-scheme:dark){.feat-detail{background:#0F0A0B;border:1px solid var(--line)}}
+.feat-detail .fd-icon{font-size:34px}
+.feat-detail h3{font-family:"Noto Serif SC",serif;font-size:24px;margin:10px 0 8px;color:#fff}
+.feat-detail p{color:#D8BDB8;font-size:14.5px;margin:0 0 14px}
+.feat-detail ul{margin:0;padding:0;list-style:none}
+.feat-detail li{padding:8px 0;border-top:1px solid rgba(255,255,255,.12);font-size:14px;display:flex;gap:9px}
+.feat-detail li::before{content:"♥";color:var(--rose-mid);font-size:11px;margin-top:3px}
+
+/* ARCH */
+.arch{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+@media(max-width:860px){.arch{grid-template-columns:1fr}}
+.arch-col{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:22px;box-shadow:var(--shadow-sm)}
+.arch-col .tag{display:inline-block;font-size:11px;font-weight:800;letter-spacing:.12em;padding:4px 9px;border-radius:999px;margin-bottom:12px}
+.arch-col h3{margin:0 0 6px;font-size:18px}
+.arch-col p{margin:0 0 14px;color:var(--ink2);font-size:14px}
+.arch-col ul{margin:0;padding-left:18px;color:var(--ink2);font-size:14px}
+.arch-col li{margin:5px 0}
+.arch-col code{font-size:12.5px;background:var(--surface2);padding:1px 6px;border-radius:5px;border:1px solid var(--line)}
+.flow{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:18px;background:var(--surface);border:1px dashed var(--line2);border-radius:14px;padding:14px 16px;font-size:13.5px}
+.flow b{background:var(--rose-soft);color:var(--rose-dark);padding:5px 10px;border-radius:8px;white-space:nowrap}
+@media(prefers-color-scheme:dark){.flow b{color:var(--rose)}}
+.flow .arr{color:var(--ink3)}
+
+/* DEPLOY TABS */
+.tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
+.tab-btn{border:1.5px solid var(--line2);background:var(--surface);color:var(--ink2);border-radius:999px;padding:10px 18px;font-weight:700;font-size:14px}
+.tab-btn.active{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.tab-panel{display:none}
+.tab-panel.active{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:860px){.tab-panel.active{grid-template-columns:1fr}}
+.codebox{background:#1B1214;color:#F5E6E2;border-radius:16px;padding:18px 18px 14px;position:relative;overflow:hidden}
+.codebox pre{margin:0;font-family:"JetBrains Mono",monospace;font-size:12.8px;line-height:1.75;overflow-x:auto;white-space:pre-wrap;word-break:break-all}
+.codebox .cb-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.codebox .cb-head span{font-size:11px;letter-spacing:.14em;color:#B99A94;text-transform:uppercase;font-family:"JetBrains Mono",monospace}
+.copy-btn{background:rgba(255,255,255,.1);color:#fff;border:1px solid rgba(255,255,255,.2);border-radius:8px;padding:6px 12px;font-size:12px;min-height:36px}
+.copy-btn:hover{background:var(--rose)}
+.note-card{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:20px}
+.note-card h4{margin:0 0 10px;font-size:16px}
+.note-card ul{margin:0;padding-left:18px;color:var(--ink2);font-size:14px}
+.note-card li{margin:6px 0}
+.warn{background:#FFF4E0;border:1px solid #F2D492;border-radius:12px;padding:12px 14px;font-size:13.5px;color:#7A5510;margin-top:12px}
+@media(prefers-color-scheme:dark){.warn{background:#33270F;border-color:#5C4718;color:#F2C979}}
+
+/* NOTIFY */
+.notify-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+@media(max-width:860px){.notify-grid{grid-template-columns:repeat(2,1fr)}}
+.nchip{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:13px 14px;font-size:14px;font-weight:600;display:flex;gap:9px;align-items:center}
+.nchip span{font-size:17px}
+
+/* CONFIG TABLE -> cards */
+.cfg{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+@media(max-width:700px){.cfg{grid-template-columns:1fr}}
+.cfg-item{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 16px;display:flex;gap:14px;align-items:flex-start}
+.cfg-item code{font-family:"JetBrains Mono",monospace;font-size:13px;font-weight:600;color:var(--rose);white-space:nowrap}
+.cfg-item .def{font-size:11px;background:var(--surface2);border:1px solid var(--line);border-radius:6px;padding:1px 7px;color:var(--ink2);white-space:nowrap}
+.cfg-item p{margin:3px 0 0;font-size:13px;color:var(--ink2)}
+
+/* SECURITY */
+.sec-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+@media(max-width:860px){.sec-grid{grid-template-columns:1fr}}
+.sec-card{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:20px}
+.sec-card .si{width:42px;height:42px;border-radius:12px;background:var(--teal-soft);display:grid;place-items:center;font-size:20px;margin-bottom:12px}
+.sec-card h3{margin:0 0 6px;font-size:16px}
+.sec-card p{margin:0;color:var(--ink2);font-size:14px}
+
+/* DEV / TIMELINE */
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:860px){.two-col{grid-template-columns:1fr}}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:24px}
+.panel h3{margin:0 0 4px;font-family:"Noto Serif SC",serif;font-size:20px}
+.panel .sub{color:var(--ink2);font-size:14px;margin:0 0 16px}
+.file-table{width:100%;border-collapse:collapse;font-size:14px}
+.file-table td{padding:9px 8px;border-top:1px solid var(--line);vertical-align:top}
+.file-table td:first-child{font-family:"JetBrains Mono",monospace;font-size:12.5px;color:var(--rose);white-space:nowrap;font-weight:600}
+.file-table td:last-child{color:var(--ink2)}
+.timeline{list-style:none;margin:0;padding:0}
+.timeline li{position:relative;padding:0 0 20px 26px;border-left:2px solid var(--line)}
+.timeline li:last-child{padding-bottom:4px}
+.timeline li::before{content:"";position:absolute;left:-7px;top:4px;width:12px;height:12px;border-radius:50%;background:var(--rose);border:3px solid var(--bg)}
+.timeline b{font-size:14.5px}
+.timeline p{margin:2px 0 0;color:var(--ink2);font-size:13.5px}
+.timeline .when{font-family:"JetBrains Mono",monospace;font-size:11px;color:var(--ink3);letter-spacing:.06em}
+
+/* CTA */
+.cta{background:var(--ink);border-radius:24px;padding:36px;text-align:center;color:#FFF3EF;position:relative;overflow:hidden}
+@media(prefers-color-scheme:dark){.cta{background:#0F0A0B;border:1px solid var(--line)}}
+.cta h2{font-family:"Noto Serif SC",serif;font-size:clamp(24px,4vw,34px);margin:0 0 10px;color:#fff}
+.cta p{color:#D8BDB8;max-width:36em;margin:0 auto 22px;font-size:15px}
+.cta .btn-ghost{background:transparent;color:#fff;border-color:rgba(255,255,255,.3)}
+footer{padding:28px 0 40px;color:var(--ink3);font-size:13px}
+footer .wrap{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.toast{position:fixed;left:50%;bottom:24px;transform:translate(-50%,80px);background:var(--ink);color:var(--bg);padding:11px 20px;border-radius:999px;font-size:14px;font-weight:600;transition:.3s;z-index:99;box-shadow:var(--shadow)}
+.toast.show{transform:translate(-50%,0)}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="wrap topbar-in">
+    <div class="brand"><div class="brand-mark">♥</div><div>恋爱空间<small>LOVE SPACE · GByyhbot</small></div></div>
+    <nav class="navlinks">
+      <a href="#features">功能</a><a href="#arch">架构</a><a href="#deploy">部署</a><a href="#android">App</a><a href="#location">定位守护</a><a href="#security">安全</a><a href="#dev">开发笔记</a>
+    </nav>
+    <a class="btn btn-rose" href="https://github.com/GByyhbot/love-space" target="_blank" rel="noopener" style="padding:9px 16px">GitHub 仓库 ↗</a>
+  </div>
+</header>
+
+<!-- HERO -->
+<div class="hero">
+  <div class="wrap hero-grid">
+    <div>
+      <span class="eyebrow"><i>🔒</i> 自部署 · 数据完全自己掌握 · 当前 v2.7.1</span>
+      <h1>只属于<em>两个人</em>的<br>私密恋爱空间</h1>
+      <div class="en">FastAPI + SQLite + Flutter · Docker · NAS 部署</div>
+      <p class="lead">发动态、存照片、聊天、写日记、记纪念日、听歌、一起看——<strong>手机体验优先</strong>，后端 Docker 部署在 NAS 上，手机端已迁移到 <strong>Flutter（v2.7.1 / 271）</strong>。没有第三方平台，没有信息流，打开就是你们两个人的世界。<strong>2.8.0 定位守护正在开发中。</strong></p>
+      <div class="hero-cta">
+        <a class="btn btn-rose" href="#location">看 2.8.0 定位守护进展</a>
+        <a class="btn btn-ghost" href="#features">看看都有什么功能</a>
+      </div>
+      <div class="hero-stats">
+        <div class="hstat"><b>2.7.1</b><span>当前正式版 · VC 271</span></div>
+        <div class="hstat"><b>2.8.0</b><span>开发中 · 定位守护</span></div>
+        <div class="hstat"><b>2 人</b><span>绑定后注册自动关闭</span></div>
+        <div class="hstat"><b>11+</b><span>种通知渠道</span></div>
+      </div>
+      <div class="repo-line">
+        <span>仓库 <code>GByyhbot/love-space</code></span>
+        <span>部署 <code>NAS · 容器端口 1314</code></span>
+        <span>镜像 <code>ghcr.io/gbyyhbot/love-space</code> · 二标制</span>
+      </div>
+    </div>
+
+    <div class="phone-stage">
+      <div class="float-chip fc1">🎂 <div>下个纪念日<small>还有 12 天 · 已开启提前提醒</small></div></div>
+      <div class="phone"><div class="phone-screen">
+        <div class="ph-top"><div><small>我们的空间</small><h4>早上好，今天也要开心</h4></div><div class="ph-avatar">♥</div></div>
+        <div class="ph-hero-card"><small>我们在一起</small><div class="days">520 天</div><p>从相遇的那一天开始计数 ♥</p></div>
+        <div class="ph-moods">
+          <div class="ph-mood">😊 我的心情<b>想你了</b></div>
+          <div class="ph-mood">🥰 TA 的心情<b>超开心</b></div>
+        </div>
+        <div class="ph-feed"><h5>最新动态</h5>
+          <div class="ph-item"><div class="ph-thumb" style="background:linear-gradient(135deg,#FFD9A0,#FF8A5B)"></div><div><p>周末去的那家小店，蛋糕真的绝了，下次还去！</p><small>时光 · 2 小时前 · ♥ 1 · 💬 2</small></div></div>
+          <div class="ph-item"><div class="ph-thumb" style="background:linear-gradient(135deg,#A8E6CF,#1F7A6B)"></div><div><p>补记：第一次一起看海的那天 🌊</p><small>时光 · 昨天 · 支持补记过去</small></div></div>
+        </div>
+        <div class="ph-tabbar"><span class="on">🏠 首页</span><span>🕰 时光</span><span>💬 消息</span><span>💑 我们</span><span>🌙 我的</span></div>
+      </div></div>
+      <div class="float-chip fc2">💬 <div>新消息提醒<small>仅推送摘要，锁屏不露正文</small></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- FEATURES -->
+<section id="features">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="k">Features</div>
+      <h2>功能一览：点开每个模块看看</h2>
+      <p>覆盖一对情侣日常记录的全部场景，含 2.7.x 新增的音乐、一起看与 2.8.0 开发中的定位报备。点击左侧卡片，右侧会展开该模块的完整能力清单——内容与仓库 README（2026-11-24 更新至 v2.7.1）一致。</p>
+    </div>
+    <div class="feat-layout">
+      <div class="feat-grid" id="featGrid"></div>
+      <aside class="feat-detail" id="featDetail"></aside>
+    </div>
+  </div>
+</section>
+
+<!-- ARCH -->
+<section class="alt" id="arch">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="k">Architecture</div>
+      <h2>架构：轻量，但该有的都有</h2>
+      <p>后端单体 FastAPI + SQLite，Web 端原生 JS，手机端 Flutter 一套代码覆盖 Android + iOS（Capacitor 旧壳已退役）；部署靠 Docker 镜像，NAS 上只拉取不编译。</p>
+    </div>
+    <div class="arch">
+      <div class="arch-col">
+        <span class="tag" style="background:var(--rose-soft);color:var(--rose)">后端 BACKEND</span>
+        <h3>FastAPI + SQLite</h3>
+        <p>Python 单体服务，数据全在一个目录里，备份迁移就是打包一个文件夹。</p>
+        <ul>
+          <li><code>app/</code> — API、媒体处理、定时 Worker</li>
+          <li><code>love.db</code> 主库 + <code>period.db</code> 生理期独立库</li>
+          <li>SSE 实时事件推送 <code>/api/events</code></li>
+          <li>SelectiveGZip：静态与 JSON 压缩，SSE / 视频流原样直出保 Range</li>
+          <li>媒体转码、每日备份、通知投递由内置 Worker 驱动</li>
+        </ul>
+      </div>
+      <div class="arch-col">
+        <span class="tag" style="background:var(--teal-soft);color:var(--teal)">客户端 CLIENT</span>
+        <h3>Web 原生 JS + Flutter App</h3>
+        <p>Web 无框架拆分 bundle；App 已全面迁移 Flutter，后端接口零改动复用。</p>
+        <ul>
+          <li><code>watch.js</code> 一起看 · <code>chat.js</code> 私聊 · <code>music.js</code> 歌单 · <code>period.js</code> 生理期 · <code>app.js</code> 核心</li>
+          <li>Flutter：五 Tab + Dock 上滑「记录此刻」抽屉，二级页统一 <code>context.push</code></li>
+          <li>鉴权纯 Cookie <code>love_session</code>（30 天），写接口需 <code>X-Love-Space: 1</code></li>
+          <li>实时走 SSE <code>/api/events</code>，聊天以 <code>client_id</code> 去重</li>
+          <li>媒体按区隔离：<code>chat/ timeline/ music/ private/ space/ inbox/</code> 分月存放</li>
+        </ul>
+      </div>
+      <div class="arch-col">
+        <span class="tag" style="background:#FFF1D6;color:#9A6B12">交付 DELIVERY</span>
+        <h3>Docker + Flutter APK</h3>
+        <p>GitHub Actions 构建镜像与 APK；版本名由 versionCode 推导，镜像执行二标制。</p>
+        <ul>
+          <li>镜像二标制：每源仅 <code>latest</code> + 当前版本（GHCR 与 Docker Hub 各一份）</li>
+          <li>NAS 拉取：GHCR 直连首选，不可达时 Hub 按 <code>digest</code> 强拉同一产物；禁用 Hub <code>latest</code></li>
+          <li>版本镜像规则：VC 271 ↔ 2.7.1，合并发布时一次性推到 280 ↔ 2.8.0</li>
+          <li>验真以 <code>/api/status</code> 的 build 号为准，不以本机 image ID 为准</li>
+        </ul>
+      </div>
+    </div>
+    <div class="flow"><span>访问路径：</span><b>手机 / 浏览器</b><span class="arr">→ HTTPS →</span><b>Nginx / Caddy 反代</b><span class="arr">→ 127.0.0.1:1314 →</span><b>love-space 容器</b><span class="arr">→</span><b>/data 持久化目录</b></div>
+  </div>
+</section>
+
+<!-- DEPLOY -->
+<section id="deploy">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="k">Deploy</div>
+      <h2>部署：只需要两个文件</h2>
+      <p>运行只需要 <span class="mono" style="font-size:14px">docker-compose.yml</span> 和 <span class="mono" style="font-size:14px">.env</span>——镜像由 GitHub Actions 构建好推到 GHCR，服务器 / NAS 上不编译源码。</p>
+    </div>
+    <div class="tabs" role="tablist">
+      <button class="tab-btn active" data-tab="docker">🐳 Docker 快速开始</button>
+      <button class="tab-btn" data-tab="cloud">☁️ 云服务器</button>
+      <button class="tab-btn" data-tab="nas">🏠 家庭设备 / NAS</button>
+      <button class="tab-btn" data-tab="dev">🛠 本地开发</button>
+    </div>
+
+    <div class="tab-panel active" data-panel="docker">
+      <div class="codebox"><div class="cb-head"><span>Terminal</span><button class="copy-btn" data-copy="c1">复制</button></div><pre id="c1"># 1. 建目录，放上仓库根目录的 docker-compose.yml
+mkdir -p /vol1/1000/LARJ && cd /vol1/1000/LARJ
+
+# 2. 首次初始化设置一次性随机口令
+echo "SETUP_TOKEN=&lt;随机口令&gt;" >> .env
+
+# 3. 拉镜像并启动（数据目录 ./data 自动创建）
+docker compose pull
+docker compose up -d
+
+# 4. 查看状态
+docker compose ps
+curl http://127.0.0.1:1314/health</pre></div>
+      <div class="note-card"><h4>初始化三步</h4><ul>
+        <li>第一个账号在页面完成初始化（需输入 <code>SETUP_TOKEN</code>）</li>
+        <li>初始化完成后从 <code>.env</code> 删除 <code>SETUP_TOKEN</code> 并重启容器</li>
+        <li>首页点「发送邀请」生成链接给另一半注册；<strong>双方绑定后注册自动关闭</strong></li></ul>
+        <div class="warn">⚠️ 镜像口径已定（2026-11-19 / 11-23 补充）：NAS 首选 GHCR 直连 <code>ghcr.io/gbyyhbot/love-space</code>；GHCR 不可达时，从 Docker Hub 按 <code>digest</code> 强拉同一 CI 产物并本地 retag。禁用 Hub <code>latest</code>，不用南大代理（缓存旧 manifest）。回执 digest 必须以注册表回读为准。</div>
+      </div>
+    </div>
+
+    <div class="tab-panel" data-panel="cloud">
+      <div class="codebox"><div class="cb-head"><span>Caddyfile · 自动 HTTPS</span><button class="copy-btn" data-copy="c2">复制</button></div><pre id="c2">love.example.com {
+    reverse_proxy 127.0.0.1:1314
+}
+
+# .env 中设置：
+# PUBLIC_URL=https://love.example.com
+# SECURE_COOKIES=true（默认开启）</pre></div>
+      <div class="note-card"><h4>云服务器要点</h4><ul>
+        <li>域名解析到服务器，Nginx / Caddy 反代到容器 1314 端口并配证书</li>
+        <li>防火墙只放行 80 / 443；应用端口默认仅监听本机 <code>127.0.0.1:1314</code></li>
+        <li>每日自动备份在 <code>data/backups/</code> 保留 7 份，可设 <code>BACKUP_EXTRA_DIR</code> 异地再存一份</li>
+        <li>升级：改 <code>.env</code> 的 <code>LOVE_IMAGE</code> 到目标 tag 后 <code>docker compose pull && up -d</code>，数据目录不受影响</li></ul></div>
+    </div>
+
+    <div class="tab-panel" data-panel="nas">
+      <div class="codebox"><div class="cb-head"><span>恢复与迁移</span><button class="copy-btn" data-copy="c3">复制</button></div><pre id="c3"># 手动完整备份
+docker exec love-space python -m app.manage backup
+
+# 导出备份包（含 love.db 与 period.db）
+docker cp love-space:/data/backups/backup-XXXX.zip .
+
+# 恢复到新目录（目标必须是新的空目录）
+docker run --rm -v /vol1/1000:/target -v $PWD:/src 镜像名 \
+  python -m app.manage restore /src/backup-XXXX.zip /target/LARJ-new</pre></div>
+      <div class="note-card"><h4>NAS 部署注意</h4><ul>
+        <li>会话 Cookie 默认要求 HTTPS；用 NAS IP 访问会跳转到 <code>PUBLIC_URL</code> 域名</li>
+        <li>数据目录放 NAS 共享卷，随快照 / RAID 一起保护</li>
+        <li>网页录音需要 HTTPS：可用 NAS 反向域名或自签证书 + Tailscale / WireGuard</li>
+        <li>iPhone 网页通知需 iOS 16.4+ 先「添加到主屏幕」再开启</li>
+        <li>远程访问建议走 Tailscale / VPN，避免直接暴露公网；恢复后所有登录会话与待发通知会被安全重置</li></ul></div>
+    </div>
+
+    <div class="tab-panel" data-panel="dev">
+      <div class="codebox"><div class="cb-head"><span>本地开发</span><button class="copy-btn" data-copy="c4">复制</button></div><pre id="c4">python -m venv .venv && . .venv/bin/activate
+pip install -r requirements-dev.txt
+uvicorn app.main:app --reload --port 8000
+pytest   # API 验收 + 媒体链路 + 安全 + 版本一致性</pre></div>
+      <div class="note-card"><h4>两条铁律</h4><ul>
+        <li><strong>改前端必须同时改两个版本号</strong>：<code>static/sw.js</code> 的 <code>VERSION</code> 与 <code>static/index.html</code> 全部 <code>?v=</code> 必须同号，否则用户会拿到「新 JS + 旧 CSS」</li>
+        <li><strong>网页版本号从 git tag 来</strong>：发版只需 <code>git tag v1.2.5 && git push --tags</code>，镜像版本号自动生成，不要手改代码</li>
+        <li>发版前照 <code>docs/真机验收.md</code> 在真机走一遍——干净库的冒烟测试覆盖不到历史数据渲染等分支</li></ul></div>
+    </div>
+
+    <h3 style="font-family:'Noto Serif SC',serif;font-size:20px;margin:34px 0 6px">关键环境变量</h3>
+    <p style="color:var(--ink2);font-size:14px;margin:0 0 14px">全部配置走 <span class="mono" style="font-size:13px">.env</span>，数据目录必须持久化。</p>
+    <div class="cfg">
+      <div class="cfg-item"><div><code>DATA_DIR</code> <span class="def">/data</span><p>主库、生理期独立库、媒体、备份、密钥，必须持久化</p></div></div>
+      <div class="cfg-item"><div><code>SETUP_TOKEN</code> <span class="def">空</span><p>首次远程初始化一次性口令，用完即删</p></div></div>
+      <div class="cfg-item"><div><code>PUBLIC_URL</code> <span class="def">空</span><p>对外访问地址，用于通知跳转链接与来源校验</p></div></div>
+      <div class="cfg-item"><div><code>SECURE_COOKIES</code> <span class="def">true</span><p>会话 Cookie 仅通过 HTTPS 发送，生产保持开启</p></div></div>
+      <div class="cfg-item"><div><code>LOVE_BIND_ADDRESS</code> <span class="def">127.0.0.1</span><p>宿主机监听地址，只允许同机反向代理连接</p></div></div>
+      <div class="cfg-item"><div><code>MAX_UPLOAD_MB</code> <span class="def">250</span><p>单文件上传上限</p></div></div>
+      <div class="cfg-item"><div><code>BACKUP_PASSWORD</code> <span class="def">空</span><p>设置后新备份使用 AES-GCM 加密，忘记无法恢复</p></div></div>
+      <div class="cfg-item"><div><code>RUN_WORKER</code> <span class="def">true</span><p>内置定时任务：媒体转码、备份、通知投递</p></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ANDROID + NOTIFY -->
+<section class="alt" id="android">
+  <div class="wrap">
+    <div class="two-col">
+      <div class="panel">
+        <h3>📱 Flutter App：当前 v2.7.1（271）</h3>
+        <p class="sub">已从 Capacitor 迁移到 Flutter，一套代码覆盖 Android + iOS，后端不变。当前正式版 2.7.1+271 在两台真机运行；2.8.0 在 <code>experiment/peer-loc-verify</code> 分支开发，验证线保持 271 不进位，合并发布时一次性推 280。</p>
+        <ul style="margin:0;padding-left:18px;color:var(--ink2);font-size:14.5px">
+          <li style="margin:7px 0"><strong style="color:var(--ink)">版本名由 versionCode 推导</strong>——minor = (VC−200) div 10、patch = (VC−200) mod 10 恒一位，如 271 ↔ 2.7.1、280 ↔ 2.8.0</li>
+          <li style="margin:7px 0">导航：二级页一律 <code>context.push</code>，系统返回回上一页、仅首页根部退出；Dock 去掉中间 + 按钮，五 Tab 均分，发布走 Dock 上滑「记录此刻」抽屉</li>
+          <li style="margin:7px 0">首页定版：标题 + 封面 hero + 今日双格（心情 + 纪念日）+ 每日一句 + 年报四格（条记录 / 张照片 / 天心情 / 个心愿）</li>
+          <li style="margin:7px 0">播放：全局单引擎（音乐 / 动态歌曲卡 / 聊天歌曲卡互斥于语音），通知栏播放器与 SSE 前台服务并存不合并</li>
+          <li style="margin:7px 0">设置已独立成组：顶栏齿轮进入设置首页（外观 / 连接与提醒 / 数据与账号），主题、主页背景、聊天背景、气泡均为独立页；2.8.0 新增伴侣共享开关页（连接与提醒组，<code>/settings/peer-share</code>）</li>
+        </ul>
+      </div>
+      <div class="panel">
+        <h3>🔔 通知：以企业微信机器人为实际主力</h3>
+        <p class="sub">App 原生通知在真机上不够可靠，实际依赖后端企业微信机器人渠道。口径已定（2026-11-20）：铃铛计数与通知中心列表<strong style="color:var(--ink)">排除 chat</strong>（铃铛 = max(0, 未读 − chat 未读)，「全部已读」只清非 chat）；徽标以服务端为准，恢复前台 / SSE 重连 / 退出聊天页时重载。</p>
+        <div class="notify-grid" style="grid-template-columns:repeat(2,1fr)">
+          <div class="nchip"><span>📲</span> ntfy（APK 内置）</div>
+          <div class="nchip"><span>🌐</span> 浏览器系统推送</div>
+          <div class="nchip"><span>🍎</span> Bark</div>
+          <div class="nchip"><span>✉️</span> SMTP 邮件</div>
+          <div class="nchip"><span>🐱</span> Server酱</div>
+          <div class="nchip"><span>➕</span> PushPlus</div>
+          <div class="nchip"><span>💼</span> 企业微信机器人</div>
+          <div class="nchip"><span>✈️</span> Telegram</div>
+          <div class="nchip"><span>📌</span> 钉钉 / 飞书</div>
+          <div class="nchip"><span>🔗</span> 通用 Webhook</div>
+        </div>
+        <p style="color:var(--ink2);font-size:13.5px;margin:14px 0 0">所有渠道失败自动重试；通知只发摘要不含正文，锁屏仅显示通用提醒。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- LOCATION 2.8.0 -->
+<section id="location">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="k">2.8.0 · Location Guardian</div>
+      <h2>定位守护与情侣报备：修复已交付，待过夜复验</h2>
+      <p>第 0 步已通关；24 小时双机验证已于 2026-11-24 上午提前复盘并裁定<strong>未通过</strong>，根因定位后 fix7 / fix8 接连交付收单，今晚双机装 fix8 包过夜复验，通过后才合并发版。这一节是当前开发主线，状态截至 2026-11-24。</p>
+    </div>
+    <div class="sec-grid">
+      <div class="sec-card"><div class="si">📍</div><h3>第 0 步已通关 · fix5 / fix6</h3><p>四轮开关失败的根因不在采集核：2.4.5 起 manifest 的 activity 被 audio_service 顶掉，自家 MainActivity 成死代码，<code>peer_loc/native</code> 通道从未注册。fix5 恢复 MainActivity（继承 AudioServiceActivity）并注册通道；fix6 补 FOREGROUND_SERVICE_LOCATION 声明、电池豁免入口，以及「期望开但服务没在跑」时的琥珀色提示 + 一键恢复（只提示、不自动拉起）。真机复验通过。</p></div>
+      <div class="sec-card"><div class="si">⏱️</div><h3>24h 验证未通过 · 根因已定位</h3><p>提前复盘（窗口 17 小时 28 分）跑数实证：双机 &gt;60 分钟断档共 5 段（yang 机 02:09→08:45 共 396 分；对方 166 / 257 / 100 / 188 分），全部 backfill=0——不是上传失败，是采集侧压根没产点。根因：静止 5 分钟心跳写在 <code>onLocation()</code> 内部，是<strong>门控而非定时器</strong>，静止无回调就永不触发；且心跳放行后 &lt;10m 去重未给心跳点豁免、<code>heartbeat</code> 标志置后未被消费。先前按 App 计数器（回调 / 已报）读出的「整夜没断」已被点表实数推翻、作废。A2 自动恢复 / B2 独立定位 FGS 继续冻结（断档非进程死亡所致，与解冻条件无关）；夜间耗电证据不足（8.5 小时掉 34% 含晨间使用、无同机基线），不裁、挂起。</p></div>
+      <div class="sec-card"><div class="si">🛠</div><h3>fix7 + fix8 已交付 · 今晚过夜复验</h3><p>fix7（9fe4a85）：静止心跳改 AlarmManager 真定时器（<code>setAndAllowWhileIdle</code> + <code>ELAPSED_REALTIME_WAKEUP</code>），心跳点豁免去重，无 acc ≤ 50 的历史点时只保鲜 latest、不冒充轨迹点。fix8（五提交至 c91e755）：闹钟改为与采集会话同寿的看门狗（出点只看距上次上报是否满 5 分钟，与静止模式是否置位解耦）、flush 加单飞锁、「已报」计数改按后端返回的 <code>accepted</code> 累加——根治计数虚高（曾出现卡面 +85 vs 服务端落点 17）。门禁：analyze 0 问题、flutter test 1008 过 + 4 既有漂移、JVM 单测 12 条、CI 45323561464 全绿。验收包经 CI 以 <code>publish_release=false</code> 出包（线上 v2.7.1 Release 未被覆盖），正式签名，sha256 <code>fe9e3f07…</code>，版本仍 271。今晚双机装此包静止过夜 ≥8 小时：断档 0 段、最大间隔 ≤30 分钟才算关闭；通过后合并 experiment 进 main、进位 280、后端部署 NAS 并做报备全链路真机联调，再发 2.8.0。</p></div>
+      <div class="sec-card"><div class="si">💌</div><h3>报备信息已交付 · Flutter P0 + P1 已收单</h3><p>「我们」页宽卡（纪念日与工具格之间）一行摘要：TA · N 分钟前报备 · 电量 X%；详情页 <code>/together/peer-report</code> 看 TA 最新报备与我的状态。后端 P0 已由 Muse 直接施工推送 experiment 分支（e29f5a1：db 幂等加列、手动报备 / ack、cleanup 仅删 auto，8 条新测试 + 既有 12 条全绿），未部署 NAS。Flutter 报备入口 P0 已交付并代码级收单（2026-11-24，两提交 44b515a + 76f1efa）：API 层复用现有 Dio 客户端（422 单独映射「已关闭报备事件共享」）、client_id 转发聊天同款 UUID + 文件持久化离线队列（单飞锁补发、毒丸出队不卡后续）、首页横向快捷报备胶囊条（布局流内，单击发预设 / 长按补备注）与详情页今日事件流（一键 ack ❤️ / 🫂 / 👍，「已收到」只认 ack）。Flutter 伴侣共享开关页 P1 亦已交付并代码级收单（同日，三提交 cdb3562 + f47df40 + e886347）：设置首页「连接与提醒」组新增入口，二级页 <code>/settings/peer-share</code> 四项共享开关（location / track / events / usage）读写 <code>/api/peer/settings</code> 顶层四键，PUT 恒传全量四键防后端覆盖写把漏传键重置回 true；422 时 toast 带「去开启」直达开关页（ChatToastHost 新增 showAction，带动作提示 6 秒）。测试累计 1012 项 = 1008 过 + 4 项既有 period golden 漂移（P0 +28、P1 +13 条新护栏），CI run 45231232421 与 45237729376 均全绿，版本仍 2.7.1+271。尚未做真实链路联调（无本地服务、无真机），待今晚 fix8 过夜复验通过、合并发版时与后端一起验证；events 开关缺省全开，其中 usage 开关后端暂未消费（页内已明示「后续版本接入」）。</p></div>
+    </div>
+    <div class="flow"><span>定位口径：</span><b>原生 LocationManager</b><span class="arr">→</span><b>端上 GCJ-02 转换 · 零 GMS 依赖</b><span class="arr">→</span><b>轨迹保留 15 天滚动删除</b><span class="arr">→</span><b>入口在「我们」页卡片 + 首页状态条（布局流内）</b></div>
+    <p style="color:var(--ink2);font-size:14px;margin:14px 0 0">同期修复：worker.py 因未导入 <code>peer</code> 导致每分钟维护抛 NameError、15 天清理与自动备份自 2026-11-22 起从未运行——已修复部署（2026-11-23 晚，提交 2e37953 + 289e0ca），积压备份已补跑（331MB）；下一次自动备份 2026-11-24 17:11 待核。通知 bad response 已排查收单：属中间层抖动、仅延迟不丢达，NAS 日志零 5xx。</p>
+  </div>
+</section>
+
+<!-- SECURITY -->
+<section id="security" class="alt">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="k">Security & Privacy</div>
+      <h2>安全与隐私：私密是默认，不是选项</h2>
+      <p>这是给两个人存最私密记录的地方，所以从加密、权限到通知文案，每一层都按「对方和外人都看不到」来设计。</p>
+    </div>
+    <div class="sec-grid">
+      <div class="sec-card"><div class="si">🔐</div><h3>正文加密落库</h3><p>私密日记、草稿、未公开惊喜的正文以 AES-GCM 加密存储，且不出现在对方的页面、搜索、相册、通知和导出中——完全账号隔离。</p></div>
+      <div class="sec-card"><div class="si">🗝</div><h3>密钥与密码</h3><p>渠道密钥用 Fernet 加密存储；密码使用 scrypt 哈希；登录 / 注册有频率限制；备份文件权限 600，可再加 BACKUP_PASSWORD 加密。</p></div>
+      <div class="sec-card"><div class="si">🛡</div><h3>访问控制</h3><p>未登录无法访问任何 API 与媒体文件，所有媒体经权限校验后流式返回；外发通知地址强制 HTTPS 与公网校验，防 SSRF。</p></div>
+      <div class="sec-card"><div class="si">📵</div><h3>通知不泄密</h3><p>通知仅发送摘要、不含正文；Android 锁屏仅显示通用提醒；退出登录时清除本机草稿与推送订阅。</p></div>
+      <div class="sec-card"><div class="si">💾</div><h3>数据保障</h3><p>每日自动备份保留 7 份，支持手动备份、个人数据导出、完整恢复与迁移；导出仅包含本人有权查看的内容。</p></div>
+      <div class="sec-card"><div class="si">📦</div><h3>资源防护</h3><p>聊天 ZIP 导入限制压缩包 50MB、解压总量 100MB、单条目 30MB、图片 2000 张，避免异常压缩包耗尽资源。</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- DEV NOTES -->
+<section id="dev">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="k">Engineering Notes</div>
+      <h2>开发笔记：这个项目踩过的坑</h2>
+      <p>从 2.3.x 到 2.8.0 沉淀下来的约定与教训——回执证据只认出厂包真机 logcat 原文、digest 以注册表回读为准，都是真金白银换来的。</p>
+    </div>
+    <div class="two-col">
+      <div class="panel">
+        <h3>前端五件套与版本纪律</h3>
+        <p class="sub">新增 / 拆分文件要同步四处：index.html 的 script 标签、sw.js 的 BUNDLES、三个部署脚本的 FILES、版本一致性测试——漏一处 pytest 直接失败。</p>
+        <table class="file-table">
+          <tr><td>watch.js</td><td>一起看放映区 + 进度同步 + 片源四层</td></tr>
+          <tr><td>chat.js</td><td>私聊消息流 / 壁纸 / 表情 / 气泡 / 贴纸面板</td></tr>
+          <tr><td>music.js</td><td>歌单页与选歌弹窗</td></tr>
+          <tr><td>period.js</td><td>生理期日历 / 分析 / 记录表单</td></tr>
+          <tr><td>app.js</td><td>其余页面渲染核心，末尾 boot() 调用以上四者——顺序反了整页白屏</td></tr>
+        </table>
+        <div class="warn">⌨️ <strong>长期攻坚项：聊天键盘与工具栏动画。</strong>2026-11-07 的专项分析定位到结构性根源——MainActivity 未声明 <code>windowSoftInputMode</code>（系统默认 adjustUnspecified），而 Web 层已叠了多层启发式补丁：chat.js 里按 90px 硬编码的 A/B 设备分流、原生 IME 高度桥、rAF 平滑，以及逐帧追赶键盘高度的工具栏面板动画。</div>
+      </div>
+      <div class="panel">
+        <h3>项目时间线</h3>
+        <p class="sub">从仓库元数据与项目记录整理。</p>
+        <ul class="timeline">
+          <li><span class="when">2026-10-24</span><br><b>仓库创建</b><p>GByyhbot/love-space 在 GitHub 建仓，定位为「只属于两个人的私密恋爱空间」。</p></li>
+          <li><span class="when">2026-11-16 ~ 11-20</span><br><b>2.3.x ~ 2.6.0：首页冻结 excision、Dock 重构、媒体隔离</b><p>首页「最近的小美好」区引发冻结，2.3.5 整段切除关闭；Dock 去中间按钮、发布改上滑抽屉；2.4.11 媒体按区隔离 + 回收站永不自动删除（手动彻底删除保留）；2.6.0 通知改进段关闭。</p></li>
+          <li><span class="when">2026-11-22 ~ 11-23</span><br><b>2.7.0 语音段关闭 · 2.8.0 第 0 步通关</b><p>2.7.0+270 发布（2.7.1+271 补丁）；定位验证历经 fix1–fix4 失败后复盘定位到 MainActivity 死代码，fix5 修注册、fix6 补声明与期望态显示，真机通过，24h 验证起跑。</p></li>
+          <li><span class="when">2026-11-24</span><br><b>README 更新至 v2.7.1 · 报备后端与 Flutter P0 / P1 落地</b><p>README 与情侣报备方案 v2 入库 main（0460160 / 9b7d630）；报备后端实现推送 experiment（e29f5a1）；Flutter 报备入口 P0 两提交交付（44b515a API + 文件队列、76f1efa 首页胶囊条 + 详情页事件流），伴侣共享开关页 P1 三提交续交付（cdb3562 API、f47df40 二级页 + 设置入口 + 路由、e886347 422「去开启」闭环），均已代码级收单：测试累计 1008 过 + 4 既有漂移，CI run 45231232421 与 45237729376 全绿，真实链路联调待发版时与后端一起验。CI run 45145668345 的 android 失败待定性（疑 update_245 竞态第三次，只诊断不施工）。同日定下长期规矩：项目每完成一个阶段（收单 / 发版 / 里程碑），自动按项目档案同步更新本空间，无需机主再开口。同日 24h 验证提前复盘裁定<strong>未通过</strong>：双机 5 段 &gt;60 分钟断档（最长 396 分）、backfill 全 0，根因是静止心跳为回调内门控而非定时器（外加去重未给心跳点豁免），先前「整夜没断」读数作废，A2 / B2 继续冻结、耗电不裁挂起。fix7（AlarmManager 真定时器，9fe4a85）与 fix8（看门狗 + flush 单飞 + accepted 计数口径，五提交至 c91e755，CI 45323561464 全绿，验收包以 publish_release=false 经 CI 出包、线上 v2.7.1 未被覆盖）接连交付收单；今晚双机装 fix8 包过夜复验，通过后合并进位 280 发版。报备 P2（预设编辑 UI、首页关闭态明示）定为发版后再议，不进发版关键路径。</p></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="cta" style="margin-top:20px">
+      <h2>把你们的故事，存在自己手里</h2>
+      <p>不需要注册任何平台，不需要把最私密的记录交给别人的服务器。一台小主机或一台 NAS，两个人，一个只属于你们的空间。</p>
+      <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+        <a class="btn btn-rose" href="https://github.com/GByyhbot/love-space" target="_blank" rel="noopener">打开 GitHub 仓库 ↗</a>
+        <a class="btn btn-ghost" href="#deploy">查看部署指南</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <span>恋爱空间 Love Space · GByyhbot/love-space · FastAPI + SQLite + PWA</span>
+    <span>本页内容整理自仓库 README 与项目档案 · 数据截至 2026-11-24</span>
+  </div>
+</footer>
+
+<div class="toast" id="toast">已复制到剪贴板 ✓</div>
+
+<script>
+var FEATURES = [
+  {icon:"🏠", name:"首页", short:"恋爱天数、今日心情、纪念日倒计时，一打开就看到彼此。", desc:"空间的门面：你们在一起多久、今天心情如何、下一个重要日子还有几天，最新的动态也在这里汇合。", points:["恋爱天数自动计数","双方今日心情一览","下个纪念日倒计时","最新动态速览"]},
+  {icon:"🕰", name:"时光", short:"图文 / 视频 / 语音动态，点赞评论，还能补记过去。", desc:"两个人的朋友圈，只有彼此能看。可以补记第一次见面那天，也可以按日期、作者、类型、关键词把回忆翻出来。", points:["图文 / 视频 / 语音动态","点赞与评论","支持补记过去的日子","按日期 / 作者 / 类型 / 关键词筛选"]},
+  {icon:"🖼", name:"相册", short:"动态照片自动汇总，可建主题相册。", desc:"不用手动整理：发动态时带的图片会自动汇总进相册；也可以建主题相册分类收藏。删分类不删照片，不怕误删。", points:["动态照片自动汇总","可建主题相册","删除分类不删照片"]},
+  {icon:"💬", name:"消息", short:"双人即时聊天，文字 / 图片 / 语音 / 视频全支持。", desc:"只属于两个人的聊天：断线自动重连、发送失败可重试、还有防重复发送机制，不会因为网络抖动发出两条一样的话。", points:["文字 / 图片 / 语音 / 视频","断线重连","失败重试","防重复发送"]},
+  {icon:"💑", name:"我们", short:"纪念日、愿望清单、情侣问答、共同打卡都在这。", desc:"经营关系的工具箱：纪念日每年重复并提前提醒，愿望清单一起攒，情侣问答每天多了解对方一点，共同打卡把约定坚持下去。", points:["纪念日（每年重复 / 提前提醒）","共同愿望清单","每日心情 · 留言板","情侣问答 · 共同打卡"]},
+  {icon:"🌙", name:"个人角落", short:"私密日记完全隔离，还有草稿箱与定时惊喜。", desc:"即使在两个人的空间里，也留一块只属于自己的地方：日记完全账号隔离、对方不可见；定时惊喜写好后到期自动公开。删掉的东西先进回收站——系统永不自动删除，只能由作者手动彻底删除。", points:["私密日记（完全账号隔离）","草稿箱","定时惊喜（到期自动公开）","回收站永不自动删除 · 作者可彻底删除"]},
+  {icon:"🔔", name:"通知中心", short:"11+ 种渠道，失败自动重试，摘要不露正文。", desc:"浏览器系统推送（含 iPhone 主屏幕网页）、Android 原生提醒，再加上 SMTP、Bark、Server酱、PushPlus、企业微信、Webhook、Telegram、钉钉、飞书、ntfy——总有一条能找到你。", points:["浏览器推送 + Android 原生提醒","Bark / Server酱 / PushPlus 等 9 种第三方渠道","失败自动重试","通知仅摘要，不含正文"]},
+  {icon:"💾", name:"数据保障", short:"每日自动备份，导出、恢复、迁移全链路。", desc:"数据在自己手里，也要对自己负责：每日自动备份保留 7 份，支持手动备份、个人数据导出，以及完整的恢复与跨设备迁移。", points:["每日自动备份（保留 7 份）","手动备份","个人数据导出","完整恢复与迁移"]},
+  {icon:"🎵", name:"音乐", short:"只收 kind=music 的歌：本地、投放导入与在线预览。", desc:"音乐页边界按记录类型划分——只有 kind=music 本身进歌单，聊天语音与录音附件永不混入。NAS 的 data/music-drop/ 投放目录会被自动扫描导入（去重、读标签、移入月目录）；动态可挂歌曲卡，全局单引擎与语音互斥。", points:["歌单只收 kind=music 记录","music-drop 投放文件夹自动导入","动态 / 时光歌曲卡（失效有占位）","全局播放引擎 + 通知栏播放器"]},
+  {icon:"🌸", name:"生理期", short:"独立加密库，双方可见可改，预测只在前端算。", desc:"数据存独立加密的 period.db（共享密钥），双方都能看、能建、能改、能删，仅恢复限作者。预测公式只存在于前端（Web period.js 与 App 1:1 移植，后端零计算）；四阶段配色为 App 定版的清透柔和方案 B。", points:["独立 period.db 加密存储","双方可见可编辑","预测公式纯前端 1:1 移植","经期 / 卵泡 / 排卵 / 黄体四色"]},
+  {icon:"📍", name:"位置守护与报备 · 2.8.0", short:"原生定位 + 主动报备，开发中，第 0 步已通关。", desc:"路线 B：原生 LocationManager 采样、端上 GCJ-02 转换、零 GMS 依赖，轨迹保留 15 天。报备组件已交付（我们页宽卡 + 详情页），后端 P0、Flutter 报备入口 P0 与伴侣共享开关页 P1 均已落地 experiment 分支并收单（首页胶囊条 + 事件流 ack + 四项共享开关页）。24h 双机验证提前复盘未通过——静止心跳原是写在定位回调里的门控、不是真定时器；fix7 改 AlarmManager 定时心跳、fix8 补看门狗与计数口径，均已交付收单，今晚双机装 fix8 包过夜复验，通过后随 2.8.0 发版并做真实链路联调。", points:["原生三 provider · 25m 位移 / 5min 心跳","期望态提示 + 电池豁免入口","报备摘要：TA · N 分钟前 · 电量 X%","手动报备 + ack 已收到态","首页胶囊条一键发预设 · 离线队列幂等补发","伴侣共享开关页：四项开关 · 422「去开启」闭环","静止心跳：AlarmManager 真定时器 + 看门狗兜底（fix7 / fix8）"]}
+];
+var grid = document.getElementById('featGrid');
+var detail = document.getElementById('featDetail');
+FEATURES.forEach(function(f, i){
+  var b = document.createElement('button');
+  b.className = 'feat-card' + (i===0 ? ' active' : '');
+  b.innerHTML = '<div class="fi">'+f.icon+'</div><h3>'+f.name+'</h3><p>'+f.short+'</p>';
+  b.addEventListener('click', function(){
+    document.querySelectorAll('.feat-card').forEach(function(c){c.classList.remove('active')});
+    b.classList.add('active');
+    renderDetail(f);
+  });
+  grid.appendChild(b);
+});
+function renderDetail(f){
+  detail.innerHTML = '<div class="fd-icon">'+f.icon+'</div><h3>'+f.name+'</h3><p>'+f.desc+'</p><ul>' +
+    f.points.map(function(p){return '<li>'+p+'</li>'}).join('') + '</ul>';
+}
+renderDetail(FEATURES[0]);
+
+/* Tabs */
+document.querySelectorAll('.tab-btn').forEach(function(btn){
+  btn.addEventListener('click', function(){
+    document.querySelectorAll('.tab-btn').forEach(function(b){b.classList.remove('active')});
+    document.querySelectorAll('.tab-panel').forEach(function(p){p.classList.remove('active')});
+    btn.classList.add('active');
+    document.querySelector('[data-panel="'+btn.dataset.tab+'"]').classList.add('active');
+  });
+});
+
+/* Copy */
+var toast = document.getElementById('toast');
+document.querySelectorAll('.copy-btn').forEach(function(btn){
+  btn.addEventListener('click', function(){
+    var text = document.getElementById(btn.dataset.copy).innerText;
+    function done(){ toast.classList.add('show'); setTimeout(function(){toast.classList.remove('show')}, 1800); }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done).catch(function(){ fallback(); });
+    } else { fallback(); }
+    function fallback(){
+      var ta = document.createElement('textarea');
+      ta.value = text; document.body.appendChild(ta); ta.select();
+      try { document.execCommand('copy'); done(); } catch(e){}
+      document.body.removeChild(ta);
+    }
+  });
+});
+</script>
+</body>
+</html>
