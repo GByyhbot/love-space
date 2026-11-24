@@ -5,7 +5,8 @@
 /// 路由沿用 `/settings`（旧长页退役，路径语义无缝接管）：
 /// · 外观组：空间信息（弹窗，沿 spaceEditRequestedProvider 机制）/
 ///   主题与外观 / 主页背景 / 聊天背景 / 聊天气泡（后四张独立页）；
-/// · 连接与提醒组：提醒设置（→ /channels）/ 线路与连接（独立页）；
+/// · 连接与提醒组：提醒设置（→ /channels）/ 线路与连接 / 消息通知 /
+///   伴侣共享与守护（2.8.0 P1，均为独立页）；
 /// · 数据与账号组：数据导出（独立页）/ 备份与存储（→ /backups，admin
 ///   门控沿用 main.dart redirect）/ 邀请另一半入住（→ /settings/invite）。
 /// 页头文案「设置 / 管理空间、账号和数据。」（沿用原页副题逐字）。
@@ -14,6 +15,7 @@ library;
 import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
+import '../../core/peer/peer_locator.dart';
 import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:love_space/core/audio/audio_init_status.dart' show audioInitStatusProvider;
@@ -24,7 +26,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import '../../core/api/api_client.dart' as api;
 import '../../core/config.dart';
 import '../../core/theme/tokens.dart';
-import '../chat/chat_toast.dart' show chatToastProvider;
+import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
 import '../update/update_service.dart' show manualCheck;
 import 'settings_state.dart';
 
@@ -196,6 +198,19 @@ class _SettingsHomePageState extends ConsumerState<SettingsHomePage> {
               subtitle: 'App 后台收 TA 的消息提醒',
               onTap: () => context.push('/settings/notify'),
             ),
+            // 2.8.0 P1：四项共享开关页（也是报备 422「去开启」的跳转目标）
+            _row(
+              context,
+              key: const Key('settings-home-peer-share'),
+              emoji: '🛡️',
+              title: '伴侣共享与守护',
+              subtitle: '位置、轨迹、报备与使用报告共享开关',
+              onTap: () => context.push('/settings/peer-share'),
+            ),
+            const SizedBox(height: 16),
+            // 2.8.0 第 0 步：定位验证包临时开关（分支 experiment/peer-loc-verify，
+            // 机主确认后主体接线替换为正式设置页；本卡不进 main）
+            const PeerVerifyCard(),
             const SizedBox(height: 16),
             _heading(context, '数据与账号'),
             _row(
@@ -401,6 +416,253 @@ class _SettingsHomePageState extends ConsumerState<SettingsHomePage> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// 2.8.0 第 0 步：定位验证包开关卡（临时；真机 24h 验证数据采集入口）。
+/// 开=权限引导 + 原生采集上报（正式 /api/peer/location，数据进 peer 表）；
+/// 关=停采停报清队列。不开 overlay、不反复弹窗（红线口径）。
+/// 公开化（fix2）：widget 测试直接驱动真组件验证呈现路径（原私有类测试不可达）。
+/// 2.8.0 定位守护验证卡（fix4 胶水重做：Dart 只搬运与渲染）。
+/// 开关态以原生 status 为单一事实源（页面进入与 toggle 后回填）；
+/// 缺前台/缺后台两种 reason 分别引导；fatal 日志提供导出入口
+/// （机主能把文件拿出来才算落盘完成）。不开 overlay、不反复弹窗。
+class PeerVerifyCard extends ConsumerStatefulWidget {
+  const PeerVerifyCard({super.key});
+
+  @override
+  ConsumerState<PeerVerifyCard> createState() => PeerVerifyCardState();
+}
+
+class PeerVerifyCardState extends ConsumerState<PeerVerifyCard> {
+  bool _on = false;
+  bool _busy = false;
+  String _summary = '';
+  String _reason = '';
+  /// fix6 A1：期望态（用户意图，落盘）。只用于「已停止→点击恢复」提示，
+  /// 永不自动开启采集；实态仍以原生 status 为唯一事实源。
+  bool _expectedOn = false;
+  /// fix6 B3：电池优化豁免状态（平台 API 读回；null=读不到）。
+  bool? _batteryIgnored;
+
+  @override
+  void initState() {
+    super.initState();
+    // 页面进入：以原生 status 回填（单一事实源）+ 读期望态/电池豁免
+    peerLocatorAutoStart().then((_) => _loadExtras());
+  }
+
+  /// 期望态与电池豁免状态（旁路信息，读失败不影响开关链）。
+  Future<void> _loadExtras() async {
+    final expected = await peerExpectedOn();
+    final battery = await peerBatteryIgnored();
+    if (!mounted) return;
+    setState(() {
+      _expectedOn = expected;
+      _batteryIgnored = battery;
+    });
+    await _refresh();
+  }
+
+  Future<void> _refresh() async {
+    final st = await peerVerifyStatus();
+    if (!mounted) return;
+    setState(() {
+      _on = st['running'] == true;
+      final received = (st['received'] as num?)?.toInt() ?? 0;
+      final queue = (st['queue'] as num?)?.toInt() ?? 0;
+      final reported = (st['reported'] as num?)?.toInt() ?? 0;
+      _summary = _on
+          ? '采集上报中 · 回调 $received · 已报 $reported · 队列 $queue'
+          : '已关闭';
+    });
+  }
+
+  Future<void> _toggle(bool v) async {
+    setState(() => _busy = true);
+    // 🔴 Dart 只搬运与渲染：结果由原生一口价返回，任何异常也产出可见原因
+    PeerVerifyResult r;
+    try {
+      r = await peerVerifyToggle(v);
+    } catch (e) {
+      r = PeerVerifyResult(
+          false,
+          '开关处理异常：${e.toString().substring(0, e.toString().length.clamp(0, 120))}',
+          const {});
+    }
+    if (!mounted) return;
+    setState(() {
+      _busy = false;
+      _on = r.ok;
+      _reason = r.ok ? '' : r.reason;
+      _summary = r.ok ? '采集上报中（探针验证中）' : (v ? '开启失败' : '已关闭');
+      // 期望态由 peerVerifyToggle 写盘，这里同步内存值（开关返回即真相）
+      if (!v || r.ok) _expectedOn = v;
+    });
+    if (v && !r.ok && r.reason.isNotEmpty) {
+      // 顶部弹窗（既有统一机制）+ 下方常驻原因行（失败态不许不可见）
+      ref.read(chatToastProvider.notifier)
+          .show(r.reason, tone: ChatToastTone.warning);
+    }
+    if (r.ok) await _refresh();
+  }
+
+  /// fix6 B3：拉起系统「忽略电池优化」对话框，回来后复读平台 API。
+  Future<void> _requestBatteryExemption() async {
+    final sent = await requestPeerBatteryExemption();
+    if (!mounted) return;
+    if (!sent) {
+      ref.read(chatToastProvider.notifier).show(
+          '无法拉起系统对话框，请在系统设置中手动将本应用设为「不限制」',
+          tone: ChatToastTone.warning);
+    }
+    final now = await peerBatteryIgnored();
+    if (!mounted) return;
+    setState(() => _batteryIgnored = now);
+  }
+
+  Future<void> _exportFatal() async {
+    try {
+      final log = await exportPeerFatalLog();
+      if (!mounted) return;
+      if (log.content.isEmpty) {
+        ref.read(chatToastProvider.notifier).show(
+            '暂无 fatal 记录（${log.path.isEmpty ? "文件不存在" : log.path}）',
+            tone: ChatToastTone.info);
+        return;
+      }
+      await Clipboard.setData(ClipboardData(text: log.content));
+      ref.read(chatToastProvider.notifier).show(
+          'fatal 日志已复制到剪贴板（${log.content.length} 字符，源文件：${log.path}）',
+          tone: ChatToastTone.success);
+    } catch (e) {
+      ref.read(chatToastProvider.notifier)
+          .show('导出失败：$e', tone: ChatToastTone.error);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(0, 4, 0, 4),
+        child: Column(children: [
+          SwitchListTile(
+            secondary: const Text('📍', style: TextStyle(fontSize: 22)),
+            title: const Text('位置共享（定位验证包）'),
+            subtitle: Text(
+                _on
+                    ? '开启中 · 数据仅存自家 NAS · 轨迹保留 15 天'
+                    : '第 0 步真机验证 · 原生 LocationManager 三 provider · 25m 位移/5min 心跳',
+                style: Theme.of(context)
+                    .textTheme
+                    .bodySmall
+                    ?.copyWith(color: cs.outline)),
+            value: _on,
+            onChanged: _busy ? null : _toggle,
+          ),
+          if (_summary.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+              child: Text(_summary,
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodySmall
+                      ?.copyWith(color: cs.outline)),
+            ),
+          // 常驻失败原因行（细分引导：缺前台/缺后台文案由原生区分）
+          if (_reason.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: Text('⚠ $_reason',
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodySmall
+                      ?.copyWith(color: cs.error)),
+            ),
+          // fix6 A1：期望开而实态停（进程被系统结束）→ 黄色提示 + 一键恢复。
+          // 只提示、不自动开启：恢复必须由用户点击（采集启动仍是显式动作）。
+          if (_expectedOn && !_on)
+            Container(
+              width: double.infinity,
+              margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
+              decoration: BoxDecoration(
+                color: Colors.amber.withValues(alpha: 0.18),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.amber.withValues(alpha: 0.6)),
+              ),
+              child: Wrap(
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 8,
+                children: [
+                  const Text('⚠ 已停止（进程被系统结束），点击恢复',
+                      style: TextStyle(fontSize: 12, color: Colors.amber)),
+                  TextButton(
+                    onPressed: _busy ? null : () => _toggle(true),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      minimumSize: const Size(0, 28),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: const Text('恢复', style: TextStyle(fontSize: 12)),
+                  ),
+                ],
+              ),
+            ),
+          // fix6 B3：电池优化豁免（平台 API 读回，不做推断）+ 小米两项引导
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 8, 0),
+            child: Row(children: [
+              Expanded(
+                child: Text(
+                  _batteryIgnored == null
+                      ? '电池优化：状态未知（通道未注册）'
+                      : (_batteryIgnored!
+                          ? '电池优化：已豁免'
+                          : '电池优化：未豁免（后台可能被系统限制）'),
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodySmall
+                      ?.copyWith(
+                          color: _batteryIgnored == false
+                              ? Colors.amber
+                              : cs.outline),
+                ),
+              ),
+              if (_batteryIgnored != true)
+                TextButton(
+                  onPressed: _busy ? null : _requestBatteryExemption,
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    minimumSize: const Size(0, 28),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  child: const Text('去豁免', style: TextStyle(fontSize: 12)),
+                ),
+            ]),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 2, 16, 6),
+            child: Text(
+              '小米机型还需在「设置 → 应用 → 本应用」里单独开启「自启动」与'
+              '「后台高耗电时不限制」——这两项系统开关无法由 App 代开。',
+              style: Theme.of(context)
+                  .textTheme
+                  .bodySmall
+                  ?.copyWith(color: cs.outline),
+            ),
+          ),
+          TextButton.icon(
+            onPressed: _exportFatal,
+            icon: const Icon(Icons.bug_report, size: 16),
+            label: const Text('导出 peer-loc-fatal 日志'),
+          ),
+          const SizedBox(height: 4),
+        ]),
       ),
     );
   }

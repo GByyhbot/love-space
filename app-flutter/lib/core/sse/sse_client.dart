@@ -17,7 +17,7 @@ import '../api/api_client.dart';
 import '../config.dart';
 
 class SseEvent {
-  const SseEvent({required this.raw, this.chat = false, this.other = false, this.refresh = false, this.typing = false});
+  const SseEvent({required this.raw, this.chat = false, this.other = false, this.refresh = false, this.typing = false, this.peer = false});
   final String raw;
   final bool chat;
   final bool other;
@@ -26,6 +26,11 @@ class SseEvent {
   /// 2.4.10 第 08 项：对方正在输入（内存态信号；旧后端无此字段=false，
   /// 胶囊永不出现自然降级）。
   final bool typing;
+
+  /// 2.8.0 第 7 段（`peer_revision`）：定位/报备数据变了——只刷定位与报备
+  /// 相关呈现，不整站刷新；旧后端无此字段=false 自然降级（报备页另有
+  /// 打开时拉取一次兜底）。
+  final bool peer;
 }
 
 enum SsePhase { idle, connecting, connected, stopped, unauthorized }
@@ -147,6 +152,7 @@ class SseClient extends Notifier<SseState> {
               other: j?['other'] == true,
               refresh: j?['refresh'] == true,
               typing: j?['typing'] == true,
+              peer: j?['peer'] == true,
             ));
           }
         }

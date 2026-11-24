@@ -1,6 +1,7 @@
 /// love_space · Flutter 双平台客户端（方案 v2 · 阶段 1 脚手架）
 library;
 
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:audio_service/audio_service.dart' show AudioService, AudioServiceConfig;
 import 'core/audio/song_audio_handler.dart' show SongAudioHandler;
@@ -21,6 +22,7 @@ import 'features/settings/export_page.dart';
 import 'features/settings/invite_page.dart';
 import 'features/settings/links_page.dart';
 import 'features/settings/notify_settings_page.dart';
+import 'features/settings/peer_share_settings_page.dart';
 import 'features/settings/settings_home_page.dart';
 import 'features/settings/space_info_page.dart';
 import 'features/settings/settings_state.dart';
@@ -42,6 +44,7 @@ import 'features/together/calendar_page.dart';
 import 'features/together/dashboard_page.dart';
 import 'features/together/ledger_page.dart';
 import 'features/together/music_page.dart';
+import 'features/together/peer_report_page.dart';
 import 'features/together/question_habit_pages.dart';
 import 'features/together/quest_page.dart';
 import 'features/together/tool_pages.dart';
@@ -50,6 +53,7 @@ import 'core/audio/audio_init_status.dart' show AudioInitStatus, audioInitStatus
 import 'core/audio/song_playback.dart' show songPlaybackProvider;
 import 'core/notify/notify_service.dart'
     show NotifyCoordinator, notifyRouteHandler;
+import 'core/peer/peer_locator.dart';
 import 'features/chat/voice_playback.dart' show voiceInterruptHook;
 
 /// 2.4.5 甲组：通知/前台服务全局初始化先于首帧（Android only；失败不影响主链）。
@@ -92,6 +96,9 @@ Future<void> main() async {
   voiceInterruptHook = () => container.read(songPlaybackProvider.notifier).stop();
   // 2.5.9 裁定⑥：static 回调（onTaskData）写 provider 用
   NotifyCoordinator.notifyStatusContainer = container;
+  // 2.8.0 第 0 步：定位验证包冷启动自动恢复采集（开关持久化，
+  // experiment/peer-loc-verify 分支，确认后主体接线替换）
+  unawaited(peerLocatorAutoStart());
   runApp(UncontrolledProviderScope(container: container, child: const LoveApp()));
 }
 /// 认证驱动的路由重定向：checking → splash；out → /login；authed → 主框架。
@@ -166,6 +173,11 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
           path: '/settings/notify',
           builder: (_, _) => const NotifySettingsPage()),
+      // 2.8.0 P1：伴侣四项共享开关页（设置主页「连接与提醒」组入口，
+      // 也是报备 422「去开启」的跳转目标；一律 context.push）
+      GoRoute(
+          path: '/settings/peer-share',
+          builder: (_, _) => const PeerShareSettingsPage()),
       GoRoute(
           path: '/settings/export', builder: (_, _) => const ExportPage()),
       GoRoute(
@@ -259,6 +271,12 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (_, _) => const DashboardPage(),
       ),
       GoRoute(path: '/together/weekly', builder: (_, _) => const WeeklyPage()),
+      // 2.8.0 报备信息（只读展示层）：hub 摘要卡 push 进入；二级页规范
+      // （AppBar 自动返回 + 系统手势回「我们」页，keep 原 tab 栈）。
+      GoRoute(
+        path: '/together/peer-report',
+        builder: (_, _) => const PeerReportPage(),
+      ),
       // 相册查看器（条目 5 · 段 B 甲档）：Hero 共享元素转场 + 跨相册翻页 +
       // InteractiveViewer 缩放 + 下拉跟手关闭 + 计数/caption/预加载 + 下载顶部通知。
       // 二级页一律 context.push：保留主页在路由栈，返回按钮/系统手势回网格。

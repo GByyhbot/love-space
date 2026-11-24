@@ -115,9 +115,21 @@ void main() {
     expect(manifest.contains('FOREGROUND_SERVICE_MEDIA_PLAYBACK'), isTrue);
     expect(manifest.contains('FOREGROUND_SERVICE_SPECIAL_USE'), isTrue,
         reason: 'SSE 保活服务原样保留（裁定⑥并存不合并）');
+    // fix5（2026-11-23 定案）：本条断言原先是「manifest 主 activity 直接指向
+    // com.ryanheise.audioservice.AudioServiceActivity」——那正是 fix0–fix4 真机
+    // MissingPluginException 的根因（自有 MainActivity 从不被实例化，
+    // PeerLocNative.register 永不执行）。audio_service 官方口径本就是「自家
+    // Activity 继承 AudioServiceActivity」，故要求原位搬迁、不减弱：
+    // 媒体前台服务/通知能力仍由继承关系保证，实名由注册层守卫另行钉死。
+    final mainActivity = src(
+        'android/app/src/main/kotlin/cn/iepose/lovespace/love_space/MainActivity.kt');
+    expect(mainActivity.contains(': AudioServiceActivity()'), isTrue,
+        reason: 'audio_service 要求 Activity 继承官方实现（媒体前台服务/通知保留）');
     expect(
-        manifest.contains('com.ryanheise.audioservice.AudioServiceActivity'),
-        isTrue, reason: 'audio_service 要求 Activity 换官方实现');
+        manifest.contains('cn.iepose.lovespace.love_space.MainActivity'),
+        isTrue,
+        reason: '主 activity 必须是自有 MainActivity（否则 peer_loc 通道注册不执行，'
+            '且 audio_service 的 engine 钩子随 super 链失效）');
     final plist = src('ios/Runner/Info.plist');
     expect(plist.contains('<string>audio</string>'), isTrue);
   });

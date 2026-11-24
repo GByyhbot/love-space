@@ -88,10 +88,18 @@ class ChatToastMessage {
     required this.id,
     required this.text,
     required this.tone,
+    this.actionLabel,
+    this.onAction,
   });
   final int id;
   final String text;
   final ChatToastTone tone;
+
+  /// 动作按钮文案（2.8.0 P1：报备 422 的「去开启」）。null = 纯文字提示。
+  final String? actionLabel;
+
+  /// 动作回调（由 [ChatToastController.showAction] 注入，调用前自动收起）。
+  final VoidCallback? onAction;
 }
 
 /// 页面级提示控制器：同一时刻只留最新一条，定时器内不访问已释放的 notifier。
@@ -99,6 +107,12 @@ class ChatToastController extends Notifier<ChatToastMessage?> {
   Timer? _timer;
   bool _alive = true;
   int _seq = 0;
+
+  /// 纯文字提示停留时长（历史口径，不动）。
+  static const Duration _plainDuration = Duration(milliseconds: 2200);
+
+  /// 带动作按钮时停留 6s——2.2s 内用户根本来不及看到并点中按钮。
+  static const Duration _actionDuration = Duration(milliseconds: 6000);
 
   @override
   ChatToastMessage? build() {
@@ -111,9 +125,38 @@ class ChatToastController extends Notifier<ChatToastMessage?> {
   }
 
   void show(String text, {ChatToastTone tone = ChatToastTone.info}) {
+    _emit(text, tone, null, null, _plainDuration);
+  }
+
+  /// 带动作按钮的提示（2.8.0 P1）：报备 422「去开启」→ 跳共享开关页。
+  ///
+  /// 与 [show] 分开的重载而不是加可选参数，是为了不动既有 9 处测试替身
+  /// （它们只覆写 `show(String, {tone})`，加参会全部编译失败）。
+  void showAction(
+    String text, {
+    required String actionLabel,
+    required VoidCallback onAction,
+    ChatToastTone tone = ChatToastTone.error,
+  }) {
+    _emit(text, tone, actionLabel, onAction, _actionDuration);
+  }
+
+  void _emit(
+    String text,
+    ChatToastTone tone,
+    String? actionLabel,
+    VoidCallback? onAction,
+    Duration duration,
+  ) {
     _timer?.cancel();
-    state = ChatToastMessage(id: ++_seq, text: text, tone: tone);
-    _timer = Timer(const Duration(milliseconds: 2200), () {
+    state = ChatToastMessage(
+      id: ++_seq,
+      text: text,
+      tone: tone,
+      actionLabel: actionLabel,
+      onAction: onAction,
+    );
+    _timer = Timer(duration, () {
       if (_alive) state = null;
     });
   }
@@ -237,12 +280,12 @@ Color _toneAccent(ChatToastTone tone, ColorScheme scheme) => switch (tone) {
       ChatToastTone.error => scheme.error,
     };
 
-class _ToastPill extends StatelessWidget {
+class _ToastPill extends ConsumerWidget {
   const _ToastPill({super.key, required this.message});
   final ChatToastMessage message;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
     final accent = _toneAccent(message.tone, scheme);
     return Container(
@@ -270,6 +313,30 @@ class _ToastPill extends StatelessWidget {
                   fontWeight: FontWeight.w500,
                   height: 1.35)),
         ),
+        // 2.8.0 P1：动作按钮（报备 422「去开启」）。点击即收起再执行跳转，
+        // 避免提示层在导航后的新页面上继续停留。
+        if (message.actionLabel != null)
+          Padding(
+            padding: const EdgeInsets.only(left: 6),
+            child: TextButton(
+              key: const Key('toast-action'),
+              onPressed: () {
+                final act = message.onAction;
+                ref.read(chatToastProvider.notifier).hide();
+                act?.call();
+              },
+              style: TextButton.styleFrom(
+                minimumSize: const Size(0, 32),
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                foregroundColor: scheme.inversePrimary,
+              ),
+              child: Text(message.actionLabel!,
+                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                      color: scheme.inversePrimary,
+                      fontWeight: FontWeight.w600)),
+            ),
+          ),
       ]),
     );
   }

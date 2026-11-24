@@ -18,6 +18,7 @@ except Exception:
     _HEIF_OK = False
 
 from . import db
+from . import peer
 from .db import connect, dumps, now
 from . import period
 from .security import PURPOSE_CHANNEL_CONFIG, cipher, decrypt_with_fallback
@@ -597,6 +598,11 @@ def maintenance():
     # 无匹配行时代价接近零）
     with connect() as c:
         peer.cleanup_expired(c, now())
+        # 观察行（2.8.0 修复令四）：本条只用于证明清理步骤确实执行（删除 0 条
+        # 也留痕），不参与任何判定，也不改保留期口径。
+        # 用 WARNING 是因为容器内 root logger 为 WARNING、应用 logger 未配级别，
+        # log.info 不会落进 docker logs（实测：投放夹入库的 info 从未出现）。
+        log.warning('维护：peer 滚动清理已执行')
     with connect() as c:
         last = db.setting(c, 'last_backup', now())
         if db.setting(c, 'last_backup') is None:

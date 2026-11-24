@@ -32,6 +32,7 @@ import '../shell/web_chrome.dart';
 import '../settings/settings_widgets.dart' show GlassActionBar;
 import '../../core/theme/tokens.dart';
 import 'home_cards.dart' show OnThisDayCard, YearbookCard, onThisDayProvider, yearbookProvider;
+import 'report_capsule_bar.dart' show ReportCapsuleBar;
 
 /// 今日日期（本地时区，与 Web today() 一致格式 yyyy-MM-dd）
 String todayStr() {
@@ -158,6 +159,10 @@ class HomePage extends ConsumerWidget {
             const SizedBox(height: 14), // today-card margin-bottom 14（:1414）
             _DailyQuote(theme: theme),
             const SizedBox(height: 18), // daily-quote margin-bottom 18（:1906）
+            // 2.8.0 报备入口 P0：快捷报备胶囊条（每日一句之下、历史上的今天
+            // 之上）。普通布局子组件，禁 overlay/悬浮层（2.3.2 手势事故红线）。
+            const ReportCapsuleBar(),
+            const SizedBox(height: 14), // 卡间统一间距（today-card 家族）
             // 2.4.3 第 1 项：历史上的今天卡（往年无记录整卡不渲染，间距随卡
             // 消隐——报年份无记录时年报卡直接接在每日一句下方，间距仍是 18）。
             if (showOtdCard) ...[

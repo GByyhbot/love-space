@@ -249,6 +249,31 @@ def init():
             c.execute("ALTER TABLE users ADD COLUMN bubble_fg TEXT NOT NULL DEFAULT ''")
         if 'bubble_swap' not in _users_cols:
             c.execute('ALTER TABLE users ADD COLUMN bubble_swap INTEGER')
+        # 2.8.x 情侣主动报备：peer_events 存量库幂等加列（与 users/media 同惯例）
+        # ack_at 不给 NOT NULL — NULL 表示对方尚未回应
+        _peer_event_cols = {r[1] for r in c.execute('PRAGMA table_info(peer_events)')}
+        if 'source' not in _peer_event_cols:
+            c.execute("ALTER TABLE peer_events ADD COLUMN source TEXT NOT NULL DEFAULT 'auto'")
+        if 'scene' not in _peer_event_cols:
+            c.execute("ALTER TABLE peer_events ADD COLUMN scene TEXT NOT NULL DEFAULT ''")
+        if 'note' not in _peer_event_cols:
+            c.execute("ALTER TABLE peer_events ADD COLUMN note TEXT NOT NULL DEFAULT ''")
+        if 'place_name' not in _peer_event_cols:
+            c.execute("ALTER TABLE peer_events ADD COLUMN place_name TEXT NOT NULL DEFAULT ''")
+        if 'client_id' not in _peer_event_cols:
+            c.execute("ALTER TABLE peer_events ADD COLUMN client_id TEXT NOT NULL DEFAULT ''")
+        if 'ack_by' not in _peer_event_cols:
+            c.execute("ALTER TABLE peer_events ADD COLUMN ack_by TEXT NOT NULL DEFAULT ''")
+        if 'ack_emoji' not in _peer_event_cols:
+            c.execute("ALTER TABLE peer_events ADD COLUMN ack_emoji TEXT NOT NULL DEFAULT ''")
+        if 'ack_at' not in _peer_event_cols:
+            c.execute('ALTER TABLE peer_events ADD COLUMN ack_at REAL')
+
+        # 仅对携带 client_id 的手动报备做幂等防重（弱网重试不重复入流）
+        c.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS peer_events_user_client "
+            "ON peer_events(user, client_id) WHERE client_id<>''"
+        )
         # Public changes share one O(1) revision. Private records, uploaded
         # unshared media and imported logs advance only their owner's revision.
         for table in ('records', 'media', 'likes', 'comments', 'answers', 'checks', 'notices', 'imports', 'import_messages', 'settings', 'users'):

@@ -13,6 +13,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/sse/sse_client.dart';
+import '../../core/api/api_client.dart' as api;
+import '../../core/peer/peer_report_data.dart';
 import '../../core/ui/pressable_scale.dart' show PressableScale;
 import '../../core/ui/page_heading.dart';
 import '../../core/together/together_data.dart';
@@ -88,6 +90,11 @@ class _TogetherPageState extends ConsumerState<TogetherPage> {
                 const _PeriodEntryCard(),
                 const SizedBox(height: 12),
                 _AnniversaryCard(ann: ann),
+                const SizedBox(height: 12),
+                // 2.8.0 报备信息（只读展示层）：摘要卡置于「纪念日卡」与
+                // 「工具宫格」之间——上方两张是宽卡（生理期/纪念日），本卡
+                // 同为宽卡，宫格以下全部是入口卡，故落在宽卡段末尾。
+                const _PeerReportCard(),
                 const SizedBox(height: 12),
                 // 2.3.4：11 张工具卡 2 列宫格（原顺序零变化：年历→心情→留言→
                 // 愿望→问答→打卡→清单→账本→歌单→看板→周报）
@@ -461,6 +468,121 @@ class _AnniversaryCard extends StatelessWidget {
                     Icon(Icons.chevron_right, color: cs.outline),
                   ],
                 ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 报备信息摘要卡（2.8.0 · 「我们」页入口）。
+///
+/// 形态与 [_PeriodEntryCard] 同族（AppRadius.card + outlineVariant 边框 +
+/// 16/18 padding + 左图标 + 标题/摘要 + chevron），点击 `context.push`
+/// 进 `/together/peer-report`（二级页；返回按钮 + 系统手势都回本页）。
+///
+/// 🔴 摘要口径（施工令一）：一行「TA · 12 分钟前报备 · 电量 82%」；
+/// 对方无任何报备 → 「TA 还没有报备数据」；拉取失败 → 「状态未知」——
+/// **失败时清空旧值**，不拿旧缓存冒充实时。数据由本卡自拉（一次），
+/// 页内 SSE `peer` 段到达时静默重拉（不弹提示）。
+class _PeerReportCard extends ConsumerStatefulWidget {
+  const _PeerReportCard();
+
+  @override
+  ConsumerState<_PeerReportCard> createState() => _PeerReportCardState();
+}
+
+class _PeerReportCardState extends ConsumerState<_PeerReportCard> {
+  PeerReport? _data;
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    Future.microtask(_load);
+  }
+
+  Future<void> _load() async {
+    try {
+      final dio = await ref.read(api.dioProvider.future);
+      final data = await fetchPeerReport(dio);
+      if (!mounted) return;
+      setState(() {
+        _data = data;
+        _error = null;
+        _loading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      // 失败即置未知：清掉旧值，摘要不显示陈旧的新鲜度/电量
+      setState(() {
+        _data = null;
+        _error = '状态未知';
+        _loading = false;
+      });
+    }
+  }
+
+  /// 摘要一行文案（口径见 peer_report_data.peerSummaryLine 与类注释）。
+  String get _summary {
+    if (_error != null) return peerSummaryLine(null, failed: true);
+    final d = _data;
+    if (d == null) return _loading ? '正在读取…' : peerSummaryLine(null);
+    return peerSummaryLine(d.status);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    ref.listen(sseEventsProvider, (prev, next) {
+      if (next.value?.peer == true) _load();
+    });
+
+    return Container(
+      margin: EdgeInsets.zero,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        border: Border.all(color: cs.outlineVariant),
+        color: cs.surface,
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        onTap: () => context.push('/together/peer-report'),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+          child: Row(children: [
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: cs.primaryContainer.withValues(alpha: 0.55),
+                border: Border.all(color: cs.outlineVariant),
+              ),
+              alignment: Alignment.center,
+              child: Icon(Icons.my_location_rounded,
+                  size: 22, color: cs.onSurfaceVariant),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('报备信息', style: theme.textTheme.titleMedium),
+                  const SizedBox(height: 2),
+                  Text(
+                    _summary,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodySmall
+                        ?.copyWith(color: cs.outline),
+                  ),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right_rounded, color: cs.outline),
+          ]),
         ),
       ),
     );
