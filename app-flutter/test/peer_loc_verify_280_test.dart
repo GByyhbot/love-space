@@ -75,7 +75,16 @@ void main() {
       // 采集核不动：采样参数/队列/422 自愈
       expect(kt.contains('MIN_DISTANCE_M = 25f'), isTrue);
       expect(kt.contains('MIN_TIME_MS = 15_000L'), isTrue);
-      expect(kt.contains('STILL_HEARTBEAT_MS = 5 * 60_000L'), isTrue);
+      // fix7：心跳周期改为单一事实源 HeartbeatGate.HEARTBEAT_MS（值仍是 5 min）
+      expect(kt.contains('STILL_HEARTBEAT_MS = HeartbeatGate.HEARTBEAT_MS'), isTrue,
+          reason: '心跳周期必须引用 HeartbeatGate 常量，不许各写一份');
+      expect(kt.contains('const val HEARTBEAT_MS = 5 * 60_000L'), isTrue,
+          reason: '5 分钟口径钉在 HeartbeatGate');
+      // fix7：静止心跳必须是 AlarmManager 真定时器（Handler.postDelayed 在 Doze 下停表）
+      expect(kt.contains('setAndAllowWhileIdle'), isTrue, reason: 'Doze 穿透档');
+      expect(kt.contains('AlarmManager.ELAPSED_REALTIME_WAKEUP'), isTrue);
+      expect(kt.contains('SystemClock.elapsedRealtime()'), isTrue,
+          reason: '统一 elapsed 时钟，禁与墙钟混用');
       expect(kt.contains('QUEUE_MAX = 50'), isTrue);
       expect(kt.contains('BATCH_MAX = 5'), isTrue);
       expect(kt.contains('X-Love-Space'), isTrue);

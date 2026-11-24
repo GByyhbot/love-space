@@ -128,6 +128,12 @@ jobs:
       - run: flutter analyze
       - run: flutter test
       - run: flutter build apk --debug
+      # 2.8.0 fix7：静止心跳判定（HeartbeatGate）的 JVM 单测——它在
+      # android/app/src/test 下，不进 `flutter test` 的范围，必须单独跑；
+      # 放在 build apk 之后，复用已解析的 Gradle 依赖与 local.properties。
+      - name: 原生心跳单测（fix7）
+        working-directory: app-flutter/android
+        run: ./gradlew :app:testDebugUnitTest --console=plain
       # 注册层守卫（产物级，2.8.0 第 0 步 fix5）：既有 peer_loc_verify /
       # peer_toggle_visibility 全程 mock 了 peer_loc/native，只测协议形状、
       # 测不到接线。这一步读**产物**的 AndroidManifest（aapt dump xmltree）

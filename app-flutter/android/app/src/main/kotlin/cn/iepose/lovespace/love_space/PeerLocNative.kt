@@ -1,13 +1,20 @@
 package cn.iepose.lovespace.love_space
 
 import android.Manifest
+import android.app.AlarmManager
+import android.app.PendingIntent
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import androidx.core.content.ContextCompat
 import io.flutter.plugin.common.MethodChannel
 import org.json.JSONArray
@@ -42,6 +49,34 @@ import kotlin.math.PI
  *   失败保留队列网络恢复补传（置 backfilled 标记）；
  * · 坐标：端上 WGS-84→GCJ-02 转换后上报（后端入库统一 GCJ-02，不二次转换）。
  *
+ * ── 2.8.0 fix7：静止心跳改真定时器（24h 复盘实证的断档根因）───────────
+ * 旧实现把「静止 5 min 心跳」写成 onLocation() 内部的**门控**：静止时
+ * GPS/NETWORK 不产回调、PASSIVE 依赖别的 App，回调不来 → 心跳永不触发，
+ * 整夜 0 轨迹点（复盘 5 段 >60min 断档，backfill 全 0＝压根没产点）。
+ * 现在：
+ * 1. **AlarmManager 真定时器**（`ELAPSED_REALTIME_WAKEUP` +
+ *    `setAndAllowWhileIdle`）。不用 `Handler.postDelayed`：Doze 下会停表。
+ *    注：本 App 的 FGS 是 `specialUse`（flutter_foreground_task，
+ *    `allowWakeLock: true` 持部分唤醒锁），理论上持有唤醒锁时 Handler 也能
+ *    跑，但那是插件配置的副作用、改一行配置就静默失效，不能当契约；
+ *    且 Doze 下闹钟本身也是被推迟的对象，`setAndAllowWhileIdle` 是最小
+ *    可行集（深度 idle 会被节流到约 9–15 min 一次，仍满足验收口径）。
+ * 2. **时钟统一 `SystemClock.elapsedRealtime()`**：`lastSentAt` /
+ *    `lastFlushAt` 全改 elapsed 口径，不再与墙钟混用（墙钟可被用户改，
+ *    且跨时区/校时会出现负间隔）。上报载荷里的 `ts` 仍是墙钟（服务端要
+ *    epoch），两码事。
+ * 3. **去重豁免**：心跳点（定时器路径 + 回调路径 heartbeat=true）跳过
+ *    <10 m 的 lastEnqueued 去重——静止点与上一点必然 <10 m，旧实现即使
+ *    偶有回调触发心跳也会被去重丢弃（`heartbeat` 变量当时置后无人消费）。
+ * 4. **acc 口径防坑**：心跳点只沿用**最后一次 acc ≤ 50 的入点定位**
+ *    （[lastAccepted]），不拿 lastSent/latest 快照冒充（快照可能来自
+ *    50–100 的精度层，拿它造点等于给轨迹注水）。无 acc ≤ 50 历史点时
+ *    退化为只保鲜 latest。冷启动即静止且无任何历史点 → 跳过不造假点。
+ * 5. **latest 保鲜**：tick 即使不产轨迹点也刷新 lastSent 并 flush，
+ *    使对方端「最后在线」不冻结。
+ * 6. **防双发**：两条路径共用 [lastSentAt] 门控，同一 5 min 窗口只出一点
+ *    （先到者为准），tick 被门控时只续挂下一次闹钟、不补点。
+ *
  * [peer-loc] 前缀调试日志（采样切换/上报成败/补传量），本段保留不删。
  */
 object PeerLocNative {
@@ -51,14 +86,18 @@ object PeerLocNative {
     // ── 参数集中（二期调参）────────────────────────────────────────────
     private const val MIN_DISTANCE_M = 25f
     private const val MIN_TIME_MS = 15_000L
-    private const val STILL_HEARTBEAT_MS = 5 * 60_000L
-    private const val STILL_CONFIRM_TIMES = 3
+    private const val STILL_HEARTBEAT_MS = HeartbeatGate.HEARTBEAT_MS
+    private const val STILL_CONFIRM_TIMES = HeartbeatGate.STILL_CONFIRM_TIMES
     private const val ACC_DROP_M = 100.0        // >100 m 丢弃
     private const val ACC_LATEST_ONLY_M = 50.0  // >50 m 只更新 latest
     private const val BATCH_MAX = 5
     private const val BATCH_FLUSH_MS = 3 * 60_000L
     private const val QUEUE_MAX = 50
     private const val POINT_RETENTION_HINT = 15 // 仅注释口径，清理在后端
+
+    /** 静止心跳 tick 的私有广播 action（仅进程内动态注册，RECEIVER_NOT_EXPORTED）。 */
+    private const val HEARTBEAT_ACTION = "cn.iepose.lovespace.love_space.PEER_HEARTBEAT"
+    private const val HEARTBEAT_REQUEST_CODE = 0x4842 // 'HB'，固定即可（单闹钟）
 
     private var lm: LocationManager? = null
     private val listeners = mutableListOf<LocationListener>()
@@ -73,15 +112,23 @@ object PeerLocNative {
     private val queue = ArrayDeque<JSONObject>()
     private var lastSent: JSONObject? = null
     private var lastEnqueued: JSONObject? = null
-    private var lastSentAt = 0L
+
+    /** 最后一次 **acc ≤ 50 且已入轨迹点** 的定位（GCJ 坐标 + acc），心跳点唯一来源。 */
+    private var lastAccepted: JSONObject? = null
+    private var lastSentAt = 0L      // elapsedRealtime 口径（fix7 统一时钟）
     private var stillCount = 0
     private var stillMode = false
-    private var lastFlushAt = 0L
+    private var lastFlushAt = 0L     // elapsedRealtime 口径
     private var reportedCount = 0
     private var droppedCount = 0
     private var lastError: String? = null
     private var receivedCount = 0
     private var lastReceivedAt = 0L
+
+    // fix7 心跳定时器态
+    private var heartbeatReceiver: BroadcastReceiver? = null
+    private var heartbeatArmed = false
+    private var heartbeatTicks = 0   // 诊断：tick 实际触发次数（真机复验看此值）
 
     private fun log(msg: String) = android.util.Log.d(TAG, msg)
 
@@ -176,6 +223,11 @@ object PeerLocNative {
         stillMode = false; stillCount = 0; queue.clear()
         reportedCount = 0; droppedCount = 0; lastError = null
         receivedCount = 0; lastReceivedAt = 0
+        // fix7：重开前先清掉可能残留的旧闹钟（上一会话的 stillMode 已归零，
+        // 闹钟若还在会在 5 min 后空转一跳）
+        cancelHeartbeat(context)
+        heartbeatTicks = 0
+        lastAccepted = null
         start(context)
         val running = listeners.isNotEmpty()
         val reason = if (running) "" else "采集启动失败（前台服务未运行或被系统拒绝），请重启 App 后重试"
@@ -193,6 +245,10 @@ object PeerLocNative {
         "reported" to reportedCount,
         "dropped" to droppedCount,
         "still" to stillMode,
+        // fix7 诊断：定时器是否挂着 / 实际 tick 次数（真机复验看这两个值，
+        // 比只看落库点数更早暴露「闹钟没挂上」）
+        "heartbeatArmed" to heartbeatArmed,
+        "heartbeatTicks" to heartbeatTicks,
         "error" to lastError)
 
     /** fatal 日志导出（验证卡导出/分享入口——机主拿得出来才算落盘完成）。 */
@@ -257,6 +313,9 @@ object PeerLocNative {
         lm = manager
         val listener = LocationListener { onLocation(it) }
         listeners.add(listener)
+        // fix7：心跳广播接收器随采集会话注册/注销（不写清单——本仓库约定
+        // 只动这一处原生文件；进程由 FGS 保活，动态接收器足够）
+        ensureHeartbeatReceiver(context)
         try {
             manager.requestLocationUpdates(
                 LocationManager.GPS_PROVIDER, MIN_TIME_MS, MIN_DISTANCE_M, listener,
@@ -274,12 +333,159 @@ object PeerLocNative {
 
     @Synchronized
     fun stop() {
-        val manager = lm ?: return
-        for (l in listeners) { try { manager.removeUpdates(l) } catch (_: Exception) {} }
+        // fix7：先摘闹钟与接收器（任何一条退出路径都必须取消，防泄漏/空转）
+        cancelHeartbeat(appContext)
+        unregisterHeartbeatReceiver()
+        // 原实现是 `val manager = lm ?: return` 提前返回，导致 lm 为空时
+        // 不清理状态；这里改成「有就摘监听、无论如何清状态」
+        val manager = lm
+        if (manager != null) {
+            for (l in listeners) { try { manager.removeUpdates(l) } catch (_: Exception) {} }
+        }
         listeners.clear(); lm = null; queue.clear(); lastSent = null
-        lastEnqueued = null; lastSentAt = 0
-        stillMode = false; stillCount = 0
-        log("stopped (queue cleared)")
+        lastEnqueued = null; lastAccepted = null; lastSentAt = 0; lastFlushAt = 0
+        stillMode = false; stillCount = 0; heartbeatTicks = 0
+        log("stopped (queue cleared, heartbeat alarm cancelled)")
+    }
+
+    // ── fix7：静止心跳真定时器（AlarmManager + 动态接收器）──────────────
+
+    private fun heartbeatIntent(ctx: Context): PendingIntent {
+        val intent = Intent(HEARTBEAT_ACTION).setPackage(ctx.packageName)
+        return PendingIntent.getBroadcast(
+            ctx, HEARTBEAT_REQUEST_CODE, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+    }
+
+    private fun ensureHeartbeatReceiver(ctx: Context) {
+        if (heartbeatReceiver != null) return
+        val r = object : BroadcastReceiver() {
+            override fun onReceive(c: Context?, intent: Intent?) {
+                if (intent?.action == HEARTBEAT_ACTION) onHeartbeatTick()
+            }
+        }
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                ctx.registerReceiver(r, IntentFilter(HEARTBEAT_ACTION),
+                    Context.RECEIVER_NOT_EXPORTED)
+            } else {
+                @Suppress("UnspecifiedRegisterReceiverFlag")
+                ctx.registerReceiver(r, IntentFilter(HEARTBEAT_ACTION))
+            }
+            heartbeatReceiver = r
+            log("heartbeat receiver registered")
+        } catch (e: Exception) {
+            log("heartbeat receiver register failed: ${e.message}")
+            fatal(ctx, "heartbeat receiver register failed: ${e.message}")
+        }
+    }
+
+    private fun unregisterHeartbeatReceiver() {
+        val r = heartbeatReceiver ?: return
+        heartbeatReceiver = null
+        try { appContext?.unregisterReceiver(r) } catch (_: Exception) {}
+        log("heartbeat receiver unregistered")
+    }
+
+    /**
+     * 挂下一次心跳。`ELAPSED_REALTIME_WAKEUP` 不受用户改时间影响；
+     * `setAndAllowWhileIdle` 是 Doze 下唯一能穿透的闹钟档（深度 idle 会被
+     * 节流到约 9–15 min 一次，验收口径 ≤30 min 仍满足）。
+     */
+    private fun scheduleHeartbeat(ctx: Context) {
+        val am = ctx.getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
+        val at = SystemClock.elapsedRealtime() + STILL_HEARTBEAT_MS
+        try {
+            am.setAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, at, heartbeatIntent(ctx))
+            heartbeatArmed = true
+            log("heartbeat alarm armed (+${STILL_HEARTBEAT_MS / 1000}s)")
+        } catch (e: Exception) {
+            heartbeatArmed = false
+            log("heartbeat alarm arm failed: ${e.message}")
+        }
+    }
+
+    private fun cancelHeartbeat(ctx: Context?) {
+        heartbeatArmed = false
+        val c = ctx ?: appContext ?: return
+        val am = c.getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
+        try {
+            am.cancel(heartbeatIntent(c))
+            log("heartbeat alarm cancelled")
+        } catch (_: Exception) {
+        }
+    }
+
+    /**
+     * 闹钟 tick（主线程 = BroadcastReceiver.onReceive，与 onLocation 同线程，
+     * 故 lastSentAt/stillMode/lastAccepted 无需加锁，天然串行）。
+     */
+    @Synchronized
+    private fun onHeartbeatTick() {
+        heartbeatArmed = false
+        heartbeatTicks++
+        val ctx = appContext
+        val running = listeners.isNotEmpty()
+        val now = SystemClock.elapsedRealtime()
+        // 退出条件：采集已停 / 已恢复行进 → 不产点也不续挂
+        if (HeartbeatGate.shouldEndArm(running, stillMode)) {
+            log("hb tick: end arm (running=$running still=$stillMode)")
+            return
+        }
+        if (!HeartbeatGate.shouldEmitOnTick(running, stillMode, HeartbeatGate.due(now, lastSentAt))) {
+            // 只剩「本窗口已有回调出点」这一种 → 不补点（防双发），只续挂
+            log("hb tick: gated by callback (${(now - lastSentAt) / 1000}s < ${STILL_HEARTBEAT_MS / 1000}s) -> re-arm")
+            ctx?.let { scheduleHeartbeat(it) }
+            return
+        }
+        emitHeartbeat(now)
+        ctx?.let { scheduleHeartbeat(it) }
+    }
+
+    /**
+     * 心跳出点：优先用 [lastAccepted]（acc ≤ 50 的最后入点定位）造轨迹点；
+     * 无历史点时只保鲜 latest。两者都做「刷新 lastSent + 立即 flush」，
+     * 保证对方端最后在线不冻结。
+     */
+    private fun emitHeartbeat(atElapsed: Long) {
+        val nowMs = System.currentTimeMillis()
+        // 口径二次校验：来源必须是 acc ≤ 50 的入点定位（[lastAccepted] 本来
+        // 只存这类，这里是防将来有人改 lastAccepted 的写入条件）
+        val src = lastAccepted?.takeIf {
+            HeartbeatGate.heartbeatSourceAllowed(it.getDouble("acc"), ACC_LATEST_ONLY_M)
+        }
+        val prev = lastSent
+        if (src == null && prev == null) {
+            // 冷启动即静止且无任何历史定位：不造假点（下个 tick 再说）
+            log("hb tick: cold start without any fix -> skip")
+            return
+        }
+        if (src != null) {
+            val point = JSONObject().apply {
+                put("id", "pl-hb-$nowMs")
+                put("ts", nowMs.toDouble())
+                put("lat", src.getDouble("lat"))
+                put("lng", src.getDouble("lng"))
+                put("acc", src.getDouble("acc"))
+                put("speed", 0.0) // 静止心跳，速度按 0 记
+            }
+            enqueue(point)
+            lastEnqueued = point
+            log("hb tick: point enqueued (acc=${src.getDouble("acc")})")
+        } else {
+            log("hb tick: no acc<=50 history -> latest only (${prev!!.optDouble("battery", -1.0)})")
+        }
+        val lat = src?.getDouble("lat") ?: prev!!.getDouble("lat")
+        val lng = src?.getDouble("lng") ?: prev!!.getDouble("lng")
+        lastSent = JSONObject().apply {
+            put("lat", lat); put("lng", lng)
+            put("battery", readBattery()); put("charging", readCharging())
+            put("net", readNet()); put("wifi", readWifi())
+            put("ts", nowMs.toDouble())
+        }
+        lastSentAt = atElapsed
+        // 直连 flush：queue 可能为空（只保鲜 latest），flush 已允许空 points 载荷
+        flush()
     }
 
     // ── 采集与判定 ──────────────────────────────────────────────────────
@@ -300,30 +506,40 @@ object PeerLocNative {
         var heartbeat = false
         if (moved < MIN_DISTANCE_M) {
             stillCount++
-            if (stillCount >= STILL_CONFIRM_TIMES && !stillMode) {
+            if (HeartbeatGate.shouldEnterStill(stillCount, stillMode)) {
                 stillMode = true
                 log("still confirmed x$stillCount -> heartbeat ${STILL_HEARTBEAT_MS / 1000}s")
+                // fix7：进入静止立即挂真定时器（不依赖后续回调）
+                appContext?.let { scheduleHeartbeat(it) }
             }
         } else {
-            if (stillMode) log("movement resumed (moved=${moved.toInt()}m) -> active pace")
+            if (stillMode) {
+                log("movement resumed (moved=${moved.toInt()}m) -> active pace")
+                // fix7：退出静止必须取消闹钟，否则空转并与回调双发
+                cancelHeartbeat(appContext)
+            }
             stillCount = 0; stillMode = false
         }
-        // 静止心跳 5 min 时间门控：门控未到直接丢弃本次回调（PASSIVE/重复
-        // provider 高频触发，不能每帧都当心跳入点）
+        // 静止心跳 5 min 时间门控（与定时器共用 lastSentAt，先到者为准）：
+        // 门控未到直接丢弃本次回调（PASSIVE/重复 provider 高频触发，
+        // 不能每帧都当心跳入点）
         if (stillMode) {
-            val since = System.currentTimeMillis() - lastSentAt
-            if (since < STILL_HEARTBEAT_MS) {
-                log("still heartbeat gated (${since / 1000}s < ${STILL_HEARTBEAT_MS / 1000}s)")
+            val now = SystemClock.elapsedRealtime()
+            if (!HeartbeatGate.due(now, lastSentAt)) {
+                log("still heartbeat gated (${(now - lastSentAt) / 1000}s < ${STILL_HEARTBEAT_MS / 1000}s)")
                 return
             }
             heartbeat = true
         }
-        // 多 provider 去重：与上一个**入队**点 <10 m 视为同位置重复回调
-        lastEnqueued?.let {
-            if (distanceMeters(it.getDouble("lat"), it.getDouble("lng"),
-                    gcj.first, gcj.second) < 10.0) {
-                log("dedup: same spot as last enqueued (${location.provider})")
-                return
+        // 多 provider 去重：与上一个**入队**点 <10 m 视为同位置重复回调。
+        // fix7：心跳点豁免——静止点必然 <10 m，豁免否则心跳永远入不了队
+        if (!heartbeat) {
+            lastEnqueued?.let {
+                if (distanceMeters(it.getDouble("lat"), it.getDouble("lng"),
+                        gcj.first, gcj.second) < 10.0) {
+                    log("dedup: same spot as last enqueued (${location.provider})")
+                    return
+                }
             }
         }
         val point = JSONObject().apply {
@@ -337,6 +553,10 @@ object PeerLocNative {
         // 精度分层：50<acc≤100 只更新 latest，不入轨迹 points
         if (acc <= ACC_LATEST_ONLY_M) {
             enqueue(point)
+            // fix7：记住「最后一条 acc ≤ 50 的入点定位」，心跳点只从它复制
+            lastAccepted = JSONObject().apply {
+                put("lat", gcj.first); put("lng", gcj.second); put("acc", acc)
+            }
         }
         lastEnqueued = point
         lastSent = JSONObject().apply {
@@ -345,7 +565,7 @@ object PeerLocNative {
             put("net", readNet()); put("wifi", readWifi())
             put("ts", System.currentTimeMillis().toDouble())
         }
-        lastSentAt = System.currentTimeMillis()
+        lastSentAt = SystemClock.elapsedRealtime()
         maybeFlush()
     }
 
@@ -356,18 +576,25 @@ object PeerLocNative {
     }
 
     private fun maybeFlush() {
-        val last = lastSent ?: return
+        if (lastSent == null) return
         val due = queue.size >= BATCH_MAX ||
-            (queue.isNotEmpty() && System.currentTimeMillis() - lastFlushAt >= BATCH_FLUSH_MS)
+            (queue.isNotEmpty() &&
+                SystemClock.elapsedRealtime() - lastFlushAt >= BATCH_FLUSH_MS)
         if (due) flush()
     }
 
     // ── 原生上报（HttpURLConnection 零依赖）────────────────────────────
 
+    /**
+     * fix7：允许 **空 points 载荷**——心跳 tick 只保鲜 latest 时队列为空，
+     * 也要把 latest 送出去（否则断档期间对方端「最后在线」冻结）。
+     * 后端 `POST /api/peer/location` 对空 points 合法（`body.get('points') or []`
+     * → 循环空转，只写 latest）。
+     */
     private fun flush() {
         val urlBase = baseUrl ?: return
         val cookie = sessionCookie ?: return
-        if (queue.isEmpty()) return
+        if (queue.isEmpty() && lastSent == null) return
         val batch = JSONArray()
         while (batch.length() < BATCH_MAX && queue.isNotEmpty()) batch.put(queue.first())
         val latest = lastSent
@@ -392,7 +619,11 @@ object PeerLocNative {
                 if (!ok) {
                     lastError = "HTTP $code"
                     // 上报者开关关闭 422 → 端上自愈：停报清队列（提示词对齐修订 6）
-                    if (code == 422) { queue.clear(); stop(); log("422 -> self-heal: stop & clear") }
+                    // fix7：本回调在**上报线程**上，stop() 会改 stillMode/lastSentAt
+                    // 等采集态——必须抛回主线程执行，避免与 onLocation/tick 竞争
+                    if (code == 422) {
+                        handler.post { queue.clear(); stop(); log("422 -> self-heal: stop & clear") }
+                    }
                 }
                 conn.disconnect()
             } catch (e: Exception) {
@@ -402,7 +633,7 @@ object PeerLocNative {
                 if (ok) {
                     repeat(batch.length()) { if (queue.isNotEmpty()) queue.removeFirst() }
                     reportedCount += batch.length()
-                    lastFlushAt = System.currentTimeMillis()
+                    lastFlushAt = SystemClock.elapsedRealtime()
                     log("flush ok n=${batch.length()} (reported=$reportedCount, queue=${queue.size})")
                 } else {
                     log("flush fail (queue=${queue.size}) err=$lastError")
@@ -499,4 +730,54 @@ object PeerLocNative {
             cos(lat1*PI/180)*cos(lat2*PI/180)*sin(dLng/2)*sin(dLng/2)
         return r * 2 * atan2(sqrt(s), sqrt(1 - s))
     }
+}
+
+/**
+ * fix7 静止心跳的**纯决策**（不碰 Android API，JVM 单测直接覆盖）。
+ *
+ * 抽出来的理由：真正的风险不在四则运算，而在「判定条件写错/漏一条」——
+ * 旧实现就是门控写进 onLocation 且 `heartbeat` 变量置后无人消费，导致
+ * 去重把心跳点全杀了。把这几条判定集中成纯函数，单测能锁住：
+ * · 满窗口才出点（防双发）
+ * · 运行中且静止才出点（停止/恢复行进即收摊）
+ * · 连续 N 次静止才进 stillMode（且不重复挂表）
+ *
+ * **不被单测覆盖的部分**（回执已注明）：AlarmManager 在真机 Doze 下是否
+ * 准时触发、动态接收器是否收到广播——这两条只能真机 `dumpsys deviceidle`
+ * + logcat 实测，JVM 单测无法证明。
+ */
+internal object HeartbeatGate {
+    /** 心跳窗口（5 min）。生产侧 `STILL_HEARTBEAT_MS` 引用此值，改参只改这里。 */
+    const val HEARTBEAT_MS = 5 * 60_000L
+
+    /** 连续多少次「位移 <25 m」判定进入静止。 */
+    const val STILL_CONFIRM_TIMES = 3
+
+    /** 距上次上报是否已满一个心跳窗口（定时器与回调两路共用，先到者为准）。 */
+    fun due(
+        nowElapsed: Long,
+        lastSentAtElapsed: Long,
+        windowMs: Long = HEARTBEAT_MS,
+    ): Boolean = nowElapsed - lastSentAtElapsed >= windowMs
+
+    /** 是否进入静止态（已静止不重复触发，避免重复挂表）。 */
+    fun shouldEnterStill(
+        stillCount: Int,
+        alreadyStill: Boolean,
+        confirmTimes: Int = STILL_CONFIRM_TIMES,
+    ): Boolean = !alreadyStill && stillCount >= confirmTimes
+
+    /** tick 的退出条件：采集已停 / 已恢复行进 → 不产点也不续挂。 */
+    fun shouldEndArm(running: Boolean, stillMode: Boolean): Boolean = !running || !stillMode
+
+    /** tick 是否该产点：运行中 + 静止 + 满窗口（三条全真）。 */
+    fun shouldEmitOnTick(running: Boolean, stillMode: Boolean, due: Boolean): Boolean =
+        running && stillMode && due
+
+    /**
+     * 心跳点能否入轨迹（acc 口径）：只接受 acc ≤ [accLatestOnlyM] 的来源定位，
+     * 50–100 的定位只许保鲜 latest，不许拿来造轨迹点。
+     */
+    fun heartbeatSourceAllowed(acc: Double, accLatestOnlyM: Double = 50.0): Boolean =
+        acc <= accLatestOnlyM
 }
