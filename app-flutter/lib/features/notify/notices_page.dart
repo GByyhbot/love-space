@@ -252,18 +252,27 @@ class _NoticesPageState extends ConsumerState<NoticesPage> {
   /// · 其余 → 「历史上的今天」同款记录底部弹层。
   Future<void> _openRecordStory(NoticeItem n) async {
     api.Record? record;
+    // 404 = 记录确实被删了（走 toast）；网络/5xx 不当成"已删"（走既有兜底弹层）
+    var gone = false;
     try {
       final dio = await ref.read(api.dioProvider.future);
       final r = await dio.get('/api/records/${n.recordId}');
       if (r.statusCode == 200 && r.data is Map) {
         record = api.Record.fromJson((r.data as Map).cast<String, dynamic>());
+      } else if (r.statusCode == 404) {
+        gone = true;
       }
     } catch (_) {
-      record = null;
+      gone = false;
     }
     if (!mounted) return;
     if (record == null) {
-      _toast('这条记录已不存在', tone: ChatToastTone.warning);
+      if (gone) {
+        _toast('这条记录已不存在', tone: ChatToastTone.warning);
+      } else {
+        await _showFallbackDialog(n);
+      }
+      if (!mounted) return;
       await _runWrite(
         (NotifyApi svc) => svc.markNoticesRead(recordId: n.recordId),
         successText: '已标记为已读',
