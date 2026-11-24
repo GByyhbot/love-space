@@ -237,17 +237,17 @@ footer .wrap{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
 <div class="hero">
   <div class="wrap hero-grid">
     <div>
-      <span class="eyebrow"><i>🔒</i> 自部署 · 数据完全自己掌握 · 当前 v2.7.1</span>
+      <span class="eyebrow"><i>🔒</i> 自部署 · 数据完全自己掌握 · 当前 v2.8.0</span>
       <h1>只属于<em>两个人</em>的<br>私密恋爱空间</h1>
       <div class="en">FastAPI + SQLite + Flutter · Docker · NAS 部署</div>
-      <p class="lead">发动态、存照片、聊天、写日记、记纪念日、听歌、一起看——<strong>手机体验优先</strong>，后端 Docker 部署在 NAS 上，手机端已迁移到 <strong>Flutter（v2.7.1 / 271）</strong>。没有第三方平台，没有信息流，打开就是你们两个人的世界。<strong>2.8.0 定位守护正在开发中。</strong></p>
+      <p class="lead">发动态、存照片、聊天、写日记、记纪念日、听歌、一起看——<strong>手机体验优先</strong>，后端 Docker 部署在 NAS 上，手机端已迁移到 <strong>Flutter（v2.8.0 / 280）</strong>。没有第三方平台，没有信息流，打开就是你们两个人的世界。<strong>2.8.0 定位守护与情侣报备已正式发布。</strong></p>
       <div class="hero-cta">
-        <a class="btn btn-rose" href="#location">看 2.8.0 定位守护进展</a>
+        <a class="btn btn-rose" href="#location">看 2.8.0 定位守护与报备</a>
         <a class="btn btn-ghost" href="#features">看看都有什么功能</a>
       </div>
       <div class="hero-stats">
-        <div class="hstat"><b>2.7.1</b><span>当前正式版 · VC 271</span></div>
-        <div class="hstat"><b>2.8.0</b><span>开发中 · 定位守护</span></div>
+        <div class="hstat"><b>2.8.0</b><span>当前正式版 · VC 280</span></div>
+        <div class="hstat"><b>2.8.1</b><span>紧接着施工 · 通知明文与直达</span></div>
         <div class="hstat"><b>2 人</b><span>绑定后注册自动关闭</span></div>
         <div class="hstat"><b>11+</b><span>种通知渠道</span></div>
       </div>
@@ -284,7 +284,7 @@ footer .wrap{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
     <div class="sec-head">
       <div class="k">Features</div>
       <h2>功能一览：点开每个模块看看</h2>
-      <p>覆盖一对情侣日常记录的全部场景，含 2.7.x 新增的音乐、一起看与 2.8.0 开发中的定位报备。点击左侧卡片，右侧会展开该模块的完整能力清单——内容与仓库 README（2026-11-24 更新至 v2.7.1）一致。</p>
+      <p>覆盖一对情侣日常记录的全部场景，含 2.7.x 新增的音乐、一起看与 2.8.0 已发布的定位守护与情侣报备。点击左侧卡片，右侧会展开该模块的完整能力清单——内容以项目档案为准，截至 2026-11-24 晚 2.8.0 发版状态。</p>
     </div>
     <div class="feat-layout">
       <div class="feat-grid" id="featGrid"></div>
@@ -333,7 +333,7 @@ footer .wrap{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
         <ul>
           <li>镜像二标制：每源仅 <code>latest</code> + 当前版本（GHCR 与 Docker Hub 各一份）</li>
           <li>NAS 拉取：GHCR 直连首选，不可达时 Hub 按 <code>digest</code> 强拉同一产物；禁用 Hub <code>latest</code></li>
-          <li>版本镜像规则：VC 271 ↔ 2.7.1，合并发布时一次性推到 280 ↔ 2.8.0</li>
+          <li>版本镜像规则：当前 VC 280 ↔ 2.8.0（已发布）；版本名恒由 versionCode 推导</li>
           <li>验真以 <code>/api/status</code> 的 build 号为准，不以本机 image ID 为准</li>
         </ul>
       </div>
@@ -443,14 +443,14 @@ pytest   # API 验收 + 媒体链路 + 安全 + 版本一致性</pre></div>
   <div class="wrap">
     <div class="two-col">
       <div class="panel">
-        <h3>📱 Flutter App：当前 v2.7.1（271）</h3>
-        <p class="sub">已从 Capacitor 迁移到 Flutter，一套代码覆盖 Android + iOS，后端不变。当前正式版 2.7.1+271 在两台真机运行；2.8.0 在 <code>experiment/peer-loc-verify</code> 分支开发，验证线保持 271 不进位，合并发布时一次性推 280。</p>
+        <h3>📱 Flutter App：当前 v2.8.0（280）</h3>
+        <p class="sub">已从 Capacitor 迁移到 Flutter，一套代码覆盖 Android + iOS，后端不变。当前正式版 2.8.0+280 已发布并收单：main 合并 <code>c8b3dcf</code> + 进位 <code>f9f32e5</code>，GitHub Release <code>app-v2.8.0</code> 已建并设为 Latest（APK sha256 <code>fe8b7886…</code>，正式签名 <code>7822c36e…123a4</code>，aapt 读回 2280 / 2.8.0）。</p>
         <ul style="margin:0;padding-left:18px;color:var(--ink2);font-size:14.5px">
           <li style="margin:7px 0"><strong style="color:var(--ink)">版本名由 versionCode 推导</strong>——minor = (VC−200) div 10、patch = (VC−200) mod 10 恒一位，如 271 ↔ 2.7.1、280 ↔ 2.8.0</li>
           <li style="margin:7px 0">导航：二级页一律 <code>context.push</code>，系统返回回上一页、仅首页根部退出；Dock 去掉中间 + 按钮，五 Tab 均分，发布走 Dock 上滑「记录此刻」抽屉</li>
           <li style="margin:7px 0">首页定版：标题 + 封面 hero + 今日双格（心情 + 纪念日）+ 每日一句 + 年报四格（条记录 / 张照片 / 天心情 / 个心愿）</li>
           <li style="margin:7px 0">播放：全局单引擎（音乐 / 动态歌曲卡 / 聊天歌曲卡互斥于语音），通知栏播放器与 SSE 前台服务并存不合并</li>
-          <li style="margin:7px 0">设置已独立成组：顶栏齿轮进入设置首页（外观 / 连接与提醒 / 数据与账号），主题、主页背景、聊天背景、气泡均为独立页；2.8.0 新增伴侣共享开关页（连接与提醒组，<code>/settings/peer-share</code>）</li>
+          <li style="margin:7px 0">设置已独立成组：顶栏齿轮进入设置首页（外观 / 连接与提醒 / 数据与账号），主题、主页背景、聊天背景、气泡均为独立页；2.8.0 已发布伴侣共享开关页（连接与提醒组，<code>/settings/peer-share</code>）</li>
         </ul>
       </div>
       <div class="panel">
@@ -479,17 +479,27 @@ pytest   # API 验收 + 媒体链路 + 安全 + 版本一致性</pre></div>
   <div class="wrap">
     <div class="sec-head">
       <div class="k">2.8.0 · Location Guardian</div>
-      <h2>定位守护与情侣报备：报备真机验收通过，fix8 过夜复验在跑</h2>
-      <p>第 0 步已通关；24 小时双机验证已于 2026-11-24 上午提前复盘并裁定<strong>未通过</strong>，根因定位后 fix7 / fix8 接连交付收单。报备后端已提前部署 NAS，报备全链路已于 2026-11-24 晚真机验收通过、报备线收口；fix8 已装机，今晚双机过夜复验在跑，明早看 heartbeatArmed / heartbeatTicks / 落点三件套裁断档，通过后才合并发版。这一节是当前开发主线，状态截至 2026-11-24 晚。</p>
+      <h2>定位守护与情侣报备：已随 2.8.0 正式发布</h2>
+      <p>第 0 步已通关；24 小时双机验证已于 2026-11-24 上午提前复盘并裁定<strong>未通过</strong>，根因定位后 fix7 / fix8 接连交付收单。报备后端已提前部署 NAS，报备全链路已于 2026-11-24 晚真机验收通过、报备线收口。随后 2.8.0 已正式发版并收单：experiment 合并进 main（<code>c8b3dcf</code>）+ 进位 <code>f9f32e5</code>（2.8.0+280）；NAS 已换 v2.8.0 正式镜像（<code>/api/status</code> version=2.8.0、build=<code>f9f32e5-20261124</code>，双注册表现役 digest <code>sha256:6392022a…</code>）；GitHub Release <code>app-v2.8.0</code> 已建并设为 Latest。门禁取 CI（本地 flutter test 被机器 I/O 卡死，CI 1007 过 + 1 跳过与基线对齐）。这一节状态截至 2026-11-24 晚发版完成。</p>
     </div>
     <div class="sec-grid">
       <div class="sec-card"><div class="si">📍</div><h3>第 0 步已通关 · fix5 / fix6</h3><p>四轮开关失败的根因不在采集核：2.4.5 起 manifest 的 activity 被 audio_service 顶掉，自家 MainActivity 成死代码，<code>peer_loc/native</code> 通道从未注册。fix5 恢复 MainActivity（继承 AudioServiceActivity）并注册通道；fix6 补 FOREGROUND_SERVICE_LOCATION 声明、电池豁免入口，以及「期望开但服务没在跑」时的琥珀色提示 + 一键恢复（只提示、不自动拉起）。真机复验通过。</p></div>
       <div class="sec-card"><div class="si">⏱️</div><h3>24h 验证未通过 · 根因已定位</h3><p>提前复盘（窗口 17 小时 28 分）跑数实证：双机 &gt;60 分钟断档共 5 段（yang 机 02:09→08:45 共 396 分；对方 166 / 257 / 100 / 188 分），全部 backfill=0——不是上传失败，是采集侧压根没产点。根因：静止 5 分钟心跳写在 <code>onLocation()</code> 内部，是<strong>门控而非定时器</strong>，静止无回调就永不触发；且心跳放行后 &lt;10m 去重未给心跳点豁免、<code>heartbeat</code> 标志置后未被消费。先前按 App 计数器（回调 / 已报）读出的「整夜没断」已被点表实数推翻、作废。A2 自动恢复 / B2 独立定位 FGS 继续冻结（断档非进程死亡所致，与解冻条件无关）；夜间耗电证据不足（8.5 小时掉 34% 含晨间使用、无同机基线），不裁、挂起。</p></div>
-      <div class="sec-card"><div class="si">🛠</div><h3>fix7 + fix8 已交付 · fix8 已装机，过夜复验在跑</h3><p>fix7（9fe4a85）：静止心跳改 AlarmManager 真定时器（<code>setAndAllowWhileIdle</code> + <code>ELAPSED_REALTIME_WAKEUP</code>），心跳点豁免去重，无 acc ≤ 50 的历史点时只保鲜 latest、不冒充轨迹点。fix8（五提交至 c91e755）：闹钟改为与采集会话同寿的看门狗（出点只看距上次上报是否满 5 分钟，与静止模式是否置位解耦）、flush 加单飞锁、「已报」计数改按后端返回的 <code>accepted</code> 累加——根治计数虚高（曾出现卡面 +85 vs 服务端落点 17）。门禁：analyze 0 问题、flutter test 1008 过 + 4 既有漂移、JVM 单测 12 条、CI 45323561464 全绿。验收包经 CI 以 <code>publish_release=false</code> 出包（线上 v2.7.1 Release 未被覆盖），正式签名，sha256 <code>fe9e3f07…</code>，版本仍 271。fix8 已装机（2026-11-24 晚），今晚双机静止过夜复验在跑（≥8 小时）；明早看 heartbeatArmed / heartbeatTicks / 落点三件套裁断档：断档 0 段、最大间隔 ≤30 分钟才算关闭；通过后合并 experiment 进 main、进位 280，再发 2.8.0。</p></div>
-      <div class="sec-card"><div class="si">💌</div><h3>报备信息已交付 · P0 + P1 真机验收通过</h3><p>「我们」页宽卡（纪念日与工具格之间）一行摘要：TA · N 分钟前报备 · 电量 X%；详情页 <code>/together/peer-report</code> 看 TA 最新报备与我的状态。后端 P0 已由 Muse 直接施工推送 experiment 分支（e29f5a1：db 幂等加列、手动报备 / ack、cleanup 仅删 auto，8 条新测试 + 既有 12 条全绿），并已提前部署 NAS（2026-11-24 13:25，补丁镜像 love-space:report-e29f5a1，/api/status build 为 289e0ca+e29f5a1.report.20261124；自验全过：未登录 presets / report 返回 401 而非 404、登录态 presets 200 六条预设、events 形状逐键不变、部署后定位落点 260→261）。Flutter 报备入口 P0 已交付并代码级收单（2026-11-24，两提交 44b515a + 76f1efa）：API 层复用现有 Dio 客户端（422 单独映射「已关闭报备事件共享」）、client_id 转发聊天同款 UUID + 文件持久化离线队列（单飞锁补发、毒丸出队不卡后续）、首页横向快捷报备胶囊条（布局流内，单击发预设 / 长按补备注）与详情页今日事件流（一键 ack ❤️ / 🫂 / 👍，「已收到」只认 ack）。Flutter 伴侣共享开关页 P1 亦已交付并代码级收单（同日，三提交 cdb3562 + f47df40 + e886347）：设置首页「连接与提醒」组新增入口，二级页 <code>/settings/peer-share</code> 四项共享开关（location / track / events / usage）读写 <code>/api/peer/settings</code> 顶层四键，PUT 恒传全量四键防后端覆盖写把漏传键重置回 true；422 时 toast 带「去开启」直达开关页（ChatToastHost 新增 showAction，带动作提示 6 秒）。测试累计 1012 项 = 1008 过 + 4 项既有 period golden 漂移（P0 +28、P1 +13 条新护栏），CI run 45231232421 与 45237729376 均全绿，版本仍 2.7.1+271。真机全链路验收已通过（2026-11-24 18:24，机主报）：胶囊发送 → 对象收到 → ack 回执 → 关 events 后 422 +「去开启」→ 开关页重开 → 重发成功，整链无异常，报备 P0 / P1 真机收口，只待 2.8.0 合并发版；events 开关缺省全开，其中 usage 开关后端暂未消费（页内已明示「后续版本接入」）。</p></div>
+      <div class="sec-card"><div class="si">🛠</div><h3>fix7 + fix8 已随 2.8.0 发布</h3><p>fix7（9fe4a85）：静止心跳改 AlarmManager 真定时器（<code>setAndAllowWhileIdle</code> + <code>ELAPSED_REALTIME_WAKEUP</code>），心跳点豁免去重，无 acc ≤ 50 的历史点时只保鲜 latest、不冒充轨迹点。fix8（五提交至 c91e755）：闹钟改为与采集会话同寿的看门狗（出点只看距上次上报是否满 5 分钟，与静止模式是否置位解耦）、flush 加单飞锁、「已报」计数改按后端返回的 <code>accepted</code> 累加——根治计数虚高（曾出现卡面 +85 vs 服务端落点 17）。fix8 验收包曾经 CI 以 <code>publish_release=false</code> 出包（当时线上 v2.7.1 Release 未被覆盖），正式签名，sha256 <code>fe9e3f07…</code>。现已合并发版：main 合并 <code>c8b3dcf</code> + 进位 <code>f9f32e5</code>（2.8.0+280），门禁取 CI run 45397963930（本地 flutter test 被机器 I/O 卡死；CI analyze 0 问题、flutter test 1007 过 + 1 跳过与基线对齐、JVM 单测 12 条、产物守卫全过）；正式包见 Release <code>app-v2.8.0</code>（Latest，APK sha256 <code>fe8b7886…</code>）。过夜复验改以发版构建重新计时，见下方待办。</p></div>
+      <div class="sec-card"><div class="si">💌</div><h3>报备信息已发布 · 随 2.8.0 上线</h3><p>「我们」页宽卡（纪念日与工具格之间）一行摘要：TA · N 分钟前报备 · 电量 X%；详情页 <code>/together/peer-report</code> 看 TA 最新报备与我的状态。后端 P0 已由 Muse 直接施工推送 experiment 分支（e29f5a1：db 幂等加列、手动报备 / ack、cleanup 仅删 auto，8 条新测试 + 既有 12 条全绿），并已提前部署 NAS（2026-11-24 13:25，补丁镜像 love-space:report-e29f5a1，/api/status build 为 289e0ca+e29f5a1.report.20261124；自验全过：未登录 presets / report 返回 401 而非 404、登录态 presets 200 六条预设、events 形状逐键不变、部署后定位落点 260→261）。Flutter 报备入口 P0 已交付并代码级收单（2026-11-24，两提交 44b515a + 76f1efa）：API 层复用现有 Dio 客户端（422 单独映射「已关闭报备事件共享」）、client_id 转发聊天同款 UUID + 文件持久化离线队列（单飞锁补发、毒丸出队不卡后续）、首页横向快捷报备胶囊条（布局流内，单击发预设 / 长按补备注）与详情页今日事件流（一键 ack ❤️ / 🫂 / 👍，「已收到」只认 ack）。Flutter 伴侣共享开关页 P1 亦已交付并代码级收单（同日，三提交 cdb3562 + f47df40 + e886347）：设置首页「连接与提醒」组新增入口，二级页 <code>/settings/peer-share</code> 四项共享开关（location / track / events / usage）读写 <code>/api/peer/settings</code> 顶层四键，PUT 恒传全量四键防后端覆盖写把漏传键重置回 true；422 时 toast 带「去开启」直达开关页（ChatToastHost 新增 showAction，带动作提示 6 秒）。测试累计 1012 项 = 1008 过 + 4 项既有 period golden 漂移（P0 +28、P1 +13 条新护栏），CI run 45231232421 与 45237729376 均全绿。真机全链路验收已通过（2026-11-24 18:24，机主报）：胶囊发送 → 对象收到 → ack 回执 → 关 events 后 422 +「去开启」→ 开关页重开 → 重发成功，整链无异常，报备 P0 / P1 真机收口；现已随 2.8.0 合并发版正式上线（main <code>f9f32e5</code>，NAS 已换 v2.8.0 正式镜像，部署后 presets 与定位落点自验全过）；events 开关缺省全开，其中 usage 开关后端暂未消费（页内已明示「后续版本接入」）。报备 P2（预设编辑 UI、首页关闭态明示）仍为发版后再议，不进关键路径。</p></div>
+    </div>
+    <div class="panel" style="margin-top:16px">
+      <h3 style="margin:0 0 4px;font-family:'Noto Serif SC',serif;font-size:20px">发版后待办</h3>
+      <p class="sub" style="color:var(--ink2);font-size:14px;margin:0 0 14px">2.8.0 已发版收单，接下来按此顺序推进：</p>
+      <ul style="list-style:none;margin:0;padding:0">
+        <li style="padding:10px 0;border-top:1px solid var(--line);display:flex;gap:10px"><span aria-hidden="true">▸</span><span><strong>双机装发版包冒烟</strong>——双机装 <code>app-v2.8.0</code> 正式包，冒烟三项：定位采集在跑 + 卡面 <code>heartbeatArmed=true</code> + 已报按 <code>accepted</code> 口径；发一条报备 → 对方收到 → ack 回执；首页 / 时光 / 聊天各开一次。</span></li>
+        <li style="padding:10px 0;border-top:1px solid var(--line);display:flex;gap:10px"><span aria-hidden="true">▸</span><span><strong>今晚过夜复验以发版构建重新计时，明早跑数</strong>——窗口从装好发版包起算（静止 ≥8 小时），明早按原口径跑数：断档 0 段、静止最大间隔 ≤30 分钟、heartbeat 三件套（armed / ticks / 落点），并并入自动备份抽查。</span></li>
+        <li style="padding:10px 0;border-top:1px solid var(--line);display:flex;gap:10px"><span aria-hidden="true">▸</span><span><strong><code>apk_version=1.7.4</code> 缺口</strong>——<code>/api/status</code> 的 apk_version 由 <code>config.py</code> 优先扫镜像内 <code>static/lovespace.apk</code>（43.5 MB 旧 Capacitor 包，git 跟踪），致 Web <code>/apk/download</code> 仍发旧包；App 内更新走 Releases 不受影响。治本方案（版本号优先 / 下载跳最新 Release + 删仓库旧包）并入 2.8.1 后端批，不采每版拷包进 git 的快修。</span></li>
+        <li style="padding:10px 0;border-top:1px solid var(--line);display:flex;gap:10px"><span aria-hidden="true">▸</span><span><strong>2.8.1 通知明文与直达紧接着施工</strong>——三层全做：按类型生成明文标题 + 摘录（聊天维持摘要、生理期只报类型、私密内容不剧透）、补齐打卡 / 问答等无通知动作、通知点击按 record_id 直达对应记录。</span></li>
+      </ul>
     </div>
     <div class="flow"><span>定位口径：</span><b>原生 LocationManager</b><span class="arr">→</span><b>端上 GCJ-02 转换 · 零 GMS 依赖</b><span class="arr">→</span><b>轨迹保留 15 天滚动删除</b><span class="arr">→</span><b>入口在「我们」页卡片 + 首页状态条（布局流内）</b></div>
-    <p style="color:var(--ink2);font-size:14px;margin:14px 0 0">同期修复：worker.py 因未导入 <code>peer</code> 导致每分钟维护抛 NameError、15 天清理与自动备份自 2026-11-22 起从未运行——已修复部署（2026-11-23 晚，提交 2e37953 + 289e0ca），积压备份已补跑（331MB）；下一次自动备份 2026-11-24 17:11 待核。通知 bad response 已排查收单：属中间层抖动、仅延迟不丢达，NAS 日志零 5xx。</p>
+    <p style="color:var(--ink2);font-size:14px;margin:14px 0 0">同期修复：worker.py 因未导入 <code>peer</code> 导致每分钟维护抛 NameError、15 天清理与自动备份自 2026-11-22 起从未运行——已修复部署（2026-11-23 晚，提交 2e37953 + 289e0ca），积压备份已补跑（331MB）；自动备份抽查并入发版构建过夜复验的明早复核清单。通知 bad response 已排查收单：属中间层抖动、仅延迟不丢达，NAS 日志零 5xx。</p>
   </div>
 </section>
 
@@ -540,7 +550,8 @@ pytest   # API 验收 + 媒体链路 + 安全 + 版本一致性</pre></div>
           <li><span class="when">2026-10-24</span><br><b>仓库创建</b><p>GByyhbot/love-space 在 GitHub 建仓，定位为「只属于两个人的私密恋爱空间」。</p></li>
           <li><span class="when">2026-11-16 ~ 11-20</span><br><b>2.3.x ~ 2.6.0：首页冻结 excision、Dock 重构、媒体隔离</b><p>首页「最近的小美好」区引发冻结，2.3.5 整段切除关闭；Dock 去中间按钮、发布改上滑抽屉；2.4.11 媒体按区隔离 + 回收站永不自动删除（手动彻底删除保留）；2.6.0 通知改进段关闭。</p></li>
           <li><span class="when">2026-11-22 ~ 11-23</span><br><b>2.7.0 语音段关闭 · 2.8.0 第 0 步通关</b><p>2.7.0+270 发布（2.7.1+271 补丁）；定位验证历经 fix1–fix4 失败后复盘定位到 MainActivity 死代码，fix5 修注册、fix6 补声明与期望态显示，真机通过，24h 验证起跑。</p></li>
-          <li><span class="when">2026-11-24</span><br><b>README 更新至 v2.7.1 · 报备后端与 Flutter P0 / P1 落地并真机验收通过</b><p>README 与情侣报备方案 v2 入库 main（0460160 / 9b7d630）；报备后端实现推送 experiment（e29f5a1）；Flutter 报备入口 P0 两提交交付（44b515a API + 文件队列、76f1efa 首页胶囊条 + 详情页事件流），伴侣共享开关页 P1 三提交续交付（cdb3562 API、f47df40 二级页 + 设置入口 + 路由、e886347 422「去开启」闭环），均已代码级收单：测试累计 1008 过 + 4 既有漂移，CI run 45231232421 与 45237729376 全绿；报备后端随后提前部署 NAS（2026-11-24 13:25），报备全链路真机验收已于同日晚通过（胶囊发送 → 对象收到 → ack 回执 → 关 events 后 422 +「去开启」→ 开关页重开 → 重发成功），报备线真机收口。CI run 45145668345 的 android 失败待定性（疑 update_245 竞态第三次，只诊断不施工）。同日定下长期规矩：项目每完成一个阶段（收单 / 发版 / 里程碑），自动按项目档案同步更新本空间，无需机主再开口。同日 24h 验证提前复盘裁定<strong>未通过</strong>：双机 5 段 &gt;60 分钟断档（最长 396 分）、backfill 全 0，根因是静止心跳为回调内门控而非定时器（外加去重未给心跳点豁免），先前「整夜没断」读数作废，A2 / B2 继续冻结、耗电不裁挂起。fix7（AlarmManager 真定时器，9fe4a85）与 fix8（看门狗 + flush 单飞 + accepted 计数口径，五提交至 c91e755，CI 45323561464 全绿，验收包以 publish_release=false 经 CI 出包、线上 v2.7.1 未被覆盖）接连交付收单；fix8 已装机，今晚双机过夜复验在跑，明早看 heartbeatArmed / heartbeatTicks / 落点三件套裁断档（断档 0 段、最大间隔 ≤30 分钟），通过后合并 experiment 进 main、进位 280 发 2.8.0。报备 P2（预设编辑 UI、首页关闭态明示）定为发版后再议，不进发版关键路径。</p></li>
+          <li><span class="when">2026-11-24</span><br><b>README 更新至 v2.7.1 · 报备后端与 Flutter P0 / P1 落地并真机验收通过</b><p>README 与情侣报备方案 v2 入库 main（0460160 / 9b7d630）；报备后端实现推送 experiment（e29f5a1）；Flutter 报备入口 P0 两提交交付（44b515a API + 文件队列、76f1efa 首页胶囊条 + 详情页事件流），伴侣共享开关页 P1 三提交续交付（cdb3562 API、f47df40 二级页 + 设置入口 + 路由、e886347 422「去开启」闭环），均已代码级收单：测试累计 1008 过 + 4 既有漂移，CI run 45231232421 与 45237729376 全绿；报备后端随后提前部署 NAS（2026-11-24 13:25），报备全链路真机验收已于同日晚通过（胶囊发送 → 对象收到 → ack 回执 → 关 events 后 422 +「去开启」→ 开关页重开 → 重发成功），报备线真机收口。CI run 45145668345 的 android 失败待定性（疑 update_245 竞态第三次，只诊断不施工）。同日定下长期规矩：项目每完成一个阶段（收单 / 发版 / 里程碑），自动按项目档案同步更新本空间，无需机主再开口。同日 24h 验证提前复盘裁定<strong>未通过</strong>：双机 5 段 &gt;60 分钟断档（最长 396 分）、backfill 全 0，根因是静止心跳为回调内门控而非定时器（外加去重未给心跳点豁免），先前「整夜没断」读数作废，A2 / B2 继续冻结、耗电不裁挂起。fix7（AlarmManager 真定时器，9fe4a85）与 fix8（看门狗 + flush 单飞 + accepted 计数口径，五提交至 c91e755，CI 45323561464 全绿，验收包以 publish_release=false 经 CI 出包、当时线上 v2.7.1 未被覆盖）接连交付收单。报备 P2（预设编辑 UI、首页关闭态明示）定为发版后再议，不进发版关键路径。</p></li>
+          <li><span class="when">2026-11-24 晚</span><br><b>2.8.0 正式发版并收单 · 定位守护与报备已发布</b><p>合并 experiment → main（c8b3dcf，零冲突）+ 进位 f9f32e5（2.8.0+280），main HEAD=f9f32e5。门禁取 CI run 45397963930（本地 flutter test 被机器 I/O 卡死；CI 1007 过 + 1 跳过与基线对齐）。后端 tag v2.8.0，双注册表现役 digest 同为 sha256:6392022a…；NAS 已换 v2.8.0 正式镜像（/api/status version=2.8.0、build=f9f32e5-20261124，healthy，自验 presets 与落点全过）。App Release app-v2.8.0 已建并设为 Latest（APK sha256 fe8b7886…，正式签名 7822c36e…123a4，aapt 2280/2.8.0）。发版后待办：双机装发版包冒烟；今晚过夜复验以发版构建重新计时、明早跑数；apk_version=1.7.4 缺口（Web /apk/download 仍发旧 Capacitor 包）治本并入 2.8.1；2.8.1 通知明文与直达紧接着施工。</p></li>
         </ul>
       </div>
     </div>
@@ -577,7 +588,7 @@ var FEATURES = [
   {icon:"💾", name:"数据保障", short:"每日自动备份，导出、恢复、迁移全链路。", desc:"数据在自己手里，也要对自己负责：每日自动备份保留 7 份，支持手动备份、个人数据导出，以及完整的恢复与跨设备迁移。", points:["每日自动备份（保留 7 份）","手动备份","个人数据导出","完整恢复与迁移"]},
   {icon:"🎵", name:"音乐", short:"只收 kind=music 的歌：本地、投放导入与在线预览。", desc:"音乐页边界按记录类型划分——只有 kind=music 本身进歌单，聊天语音与录音附件永不混入。NAS 的 data/music-drop/ 投放目录会被自动扫描导入（去重、读标签、移入月目录）；动态可挂歌曲卡，全局单引擎与语音互斥。", points:["歌单只收 kind=music 记录","music-drop 投放文件夹自动导入","动态 / 时光歌曲卡（失效有占位）","全局播放引擎 + 通知栏播放器"]},
   {icon:"🌸", name:"生理期", short:"独立加密库，双方可见可改，预测只在前端算。", desc:"数据存独立加密的 period.db（共享密钥），双方都能看、能建、能改、能删，仅恢复限作者。预测公式只存在于前端（Web period.js 与 App 1:1 移植，后端零计算）；四阶段配色为 App 定版的清透柔和方案 B。", points:["独立 period.db 加密存储","双方可见可编辑","预测公式纯前端 1:1 移植","经期 / 卵泡 / 排卵 / 黄体四色"]},
-  {icon:"📍", name:"位置守护与报备 · 2.8.0", short:"原生定位 + 主动报备：报备真机验收通过，定位过夜复验在跑。", desc:"路线 B：原生 LocationManager 采样、端上 GCJ-02 转换、零 GMS 依赖，轨迹保留 15 天。报备组件已交付（我们页宽卡 + 详情页），后端 P0、Flutter 报备入口 P0 与伴侣共享开关页 P1 均已落地并收单（首页胶囊条 + 事件流 ack + 四项共享开关页）；报备后端已提前部署 NAS，报备全链路已于 2026-11-24 真机验收通过（胶囊发送 → 对象收到 → ack 回执 → 关 events 后 422 +「去开启」→ 开关页重开 → 重发成功，整链无异常）。24h 双机验证提前复盘未通过——静止心跳原是写在定位回调里的门控、不是真定时器；fix7 改 AlarmManager 定时心跳、fix8 补看门狗与计数口径，均已交付收单，fix8 已装机，今晚过夜复验在跑，明早看 heartbeatArmed / heartbeatTicks / 落点三件套裁断档，通过后合并 experiment、进位 280 发 2.8.0。", points:["原生三 provider · 25m 位移 / 5min 心跳","期望态提示 + 电池豁免入口","报备摘要：TA · N 分钟前 · 电量 X%","手动报备 + ack 已收到态","首页胶囊条一键发预设 · 离线队列幂等补发","伴侣共享开关页：四项开关 · 422「去开启」闭环","报备全链路真机验收通过（2026-11-24）","静止心跳：AlarmManager 真定时器 + 看门狗兜底（fix7 / fix8）"]}
+  {icon:"📍", name:"位置守护与报备 · 2.8.0", short:"原生定位 + 主动报备：已随 2.8.0 正式发布。", desc:"路线 B：原生 LocationManager 采样、端上 GCJ-02 转换、零 GMS 依赖，轨迹保留 15 天。报备组件已交付（我们页宽卡 + 详情页），后端 P0、Flutter 报备入口 P0 与伴侣共享开关页 P1 均已落地并收单（首页胶囊条 + 事件流 ack + 四项共享开关页）；报备后端已提前部署 NAS，报备全链路已于 2026-11-24 真机验收通过（胶囊发送 → 对象收到 → ack 回执 → 关 events 后 422 +「去开启」→ 开关页重开 → 重发成功，整链无异常）。24h 双机验证提前复盘未通过——静止心跳原是写在定位回调里的门控、不是真定时器；fix7 改 AlarmManager 定时心跳、fix8 补看门狗与计数口径，均已交付收单。现已正式发版：main 合并 c8b3dcf + 进位 f9f32e5（2.8.0+280），NAS 已换 v2.8.0 正式镜像（/api/status version=2.8.0、build=f9f32e5-20261124，双注册表 digest sha256:6392022a…），Release app-v2.8.0 已设为 Latest（APK sha256 fe8b7886…，签名 7822c36e…123a4，aapt 2280/2.8.0）；门禁取 CI（1007 过 + 1 跳过与基线对齐）。过夜复验改以发版构建重新计时，明早跑数。", points:["原生三 provider · 25m 位移 / 5min 心跳","期望态提示 + 电池豁免入口","报备摘要：TA · N 分钟前 · 电量 X%","手动报备 + ack 已收到态","首页胶囊条一键发预设 · 离线队列幂等补发","伴侣共享开关页：四项开关 · 422「去开启」闭环","报备全链路真机验收通过（2026-11-24）","静止心跳：AlarmManager 真定时器 + 看门狗兜底（fix7 / fix8）","已随 2.8.0 正式发布（main f9f32e5 · Release Latest）"]}
 ];
 var grid = document.getElementById('featGrid');
 var detail = document.getElementById('featDetail');
