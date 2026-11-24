@@ -77,6 +77,27 @@ import kotlin.math.PI
  * 6. **防双发**：两条路径共用 [lastSentAt] 门控，同一 5 min 窗口只出一点
  *    （先到者为准），tick 被门控时只续挂下一次闹钟、不补点。
  *
+ * ── 2.8.0 fix8：flush 单飞 + accepted 计数 + 无回调兜底心跳 ────────────
+ * fix7 回执附带的诊断实证了两处原生缺陷，本批收口：
+ * 1. **flush 单飞锁**：原实现每次入队 ≥5 条就 spawn 一个上报线程，请求在途
+ *    期间队列未消费，下一次入队再 spawn → 多个线程取到**同一批**，各自 2xx
+ *    后都按本地批次长度累加 `reportedCount`，同一批被重复计数（卡面「已报」
+ *    虚高、服务端按 id 幂等挡掉所以落点数不涨）。现在 `flushing` 单飞 +
+ *    `flushPending` 尾随标志，在途请求只允许一个。
+ * 2. **队列线程安全**：`queue`（ArrayDeque）原来被主线程写、上报线程读，
+ *    无锁。现在上报前在 **main** 线程切片成不可变快照（id 列表 + payload
+ *    字符串），后台线程只持快照；2xx 回 main 线程按快照 id 从队头移除。
+ * 3. **reportedCount 按服务端 `accepted` 累加**：后端
+ *    `POST /api/peer/location` 返回 `{'ok': True, 'accepted': <int>}`
+ *    （`app/main.py:1852`，`accepted` 只统计真正落库条数，幂等 dup/非法行
+ *    不计）。解析失败/旧服务端缺字段一律按 0，不抛异常；空 points 只保鲜
+ *    latest 的响应恒为 0，不再虚增。
+ * 4. **无回调兜底心跳**：fix7 只在 `stillMode` 置位时挂表，覆盖不到「刚移动
+ *    完就熄屏、静止回调不足 3 次」的整夜空窗。现在只要**采集中且已有历史
+ *    定位**就一直维持一根 5 min 闹钟，锚点恒为 `lastSentAt + HEARTBEAT_MS`
+ *    （不以 tick 时刻漂移累加）；tick 时距上次上报不足一个窗口说明期间正常
+ *    运动出了回调 → 不补点，只按新锚点续挂。
+ *
  * [peer-loc] 前缀调试日志（采样切换/上报成败/补传量），本段保留不删。
  */
 object PeerLocNative {
@@ -86,8 +107,9 @@ object PeerLocNative {
     // ── 参数集中（二期调参）────────────────────────────────────────────
     private const val MIN_DISTANCE_M = 25f
     private const val MIN_TIME_MS = 15_000L
+    // fix8：静止判定门槛仍在 HeartbeatGate（shouldEnterStill 的默认参数），
+    // 这里不再复制一份常量，避免两处口径漂移
     private const val STILL_HEARTBEAT_MS = HeartbeatGate.HEARTBEAT_MS
-    private const val STILL_CONFIRM_TIMES = HeartbeatGate.STILL_CONFIRM_TIMES
     private const val ACC_DROP_M = 100.0        // >100 m 丢弃
     private const val ACC_LATEST_ONLY_M = 50.0  // >50 m 只更新 latest
     private const val BATCH_MAX = 5
@@ -129,6 +151,11 @@ object PeerLocNative {
     private var heartbeatReceiver: BroadcastReceiver? = null
     private var heartbeatArmed = false
     private var heartbeatTicks = 0   // 诊断：tick 实际触发次数（真机复验看此值）
+    private var armedTarget = 0L     // 已挂闹钟的目标时刻（elapsed），避免重复 set
+
+    // fix8 上报单飞态（全部只在 main 线程读写）
+    private var flushing = false
+    private var flushPending = false
 
     private fun log(msg: String) = android.util.Log.d(TAG, msg)
 
@@ -345,6 +372,7 @@ object PeerLocNative {
         listeners.clear(); lm = null; queue.clear(); lastSent = null
         lastEnqueued = null; lastAccepted = null; lastSentAt = 0; lastFlushAt = 0
         stillMode = false; stillCount = 0; heartbeatTicks = 0
+        flushing = false; flushPending = false
         log("stopped (queue cleared, heartbeat alarm cancelled)")
     }
 
@@ -391,14 +419,20 @@ object PeerLocNative {
      * 挂下一次心跳。`ELAPSED_REALTIME_WAKEUP` 不受用户改时间影响；
      * `setAndAllowWhileIdle` 是 Doze 下唯一能穿透的闹钟档（深度 idle 会被
      * 节流到约 9–15 min 一次，验收口径 ≤30 min 仍满足）。
+     *
+     * fix8：锚点恒为 `lastSentAt + HEARTBEAT_MS`（不按 tick 时刻累加，避免
+     * 漂移）；锚点已过则最早 1 s 后触发。同目标时刻重复调用只 set 一次。
      */
     private fun scheduleHeartbeat(ctx: Context) {
         val am = ctx.getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
-        val at = SystemClock.elapsedRealtime() + STILL_HEARTBEAT_MS
+        val now = SystemClock.elapsedRealtime()
+        val at = HeartbeatGate.nextArmAt(now, lastSentAt)
+        if (heartbeatArmed && armedTarget == at) return
         try {
             am.setAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, at, heartbeatIntent(ctx))
             heartbeatArmed = true
-            log("heartbeat alarm armed (+${STILL_HEARTBEAT_MS / 1000}s)")
+            armedTarget = at
+            log("heartbeat alarm armed (in ${(at - now) / 1000}s)")
         } catch (e: Exception) {
             heartbeatArmed = false
             log("heartbeat alarm arm failed: ${e.message}")
@@ -407,6 +441,7 @@ object PeerLocNative {
 
     private fun cancelHeartbeat(ctx: Context?) {
         heartbeatArmed = false
+        armedTarget = 0
         val c = ctx ?: appContext ?: return
         val am = c.getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
         try {
@@ -416,9 +451,22 @@ object PeerLocNative {
         }
     }
 
+    /** 采集中且有历史定位就维持闹钟（fix8 无回调兜底：不再要求 stillMode）。 */
+    private fun maybeArmHeartbeat() {
+        val ctx = appContext ?: return
+        val running = listeners.isNotEmpty()
+        val hasHistory = HeartbeatGate.hasHistory(lastAccepted != null, lastSent != null)
+        if (!HeartbeatGate.shouldArm(running, hasHistory)) return
+        scheduleHeartbeat(ctx)
+    }
+
     /**
      * 闹钟 tick（主线程 = BroadcastReceiver.onReceive，与 onLocation 同线程，
      * 故 lastSentAt/stillMode/lastAccepted 无需加锁，天然串行）。
+     *
+     * fix8：不再要求 stillMode——只要**距上次上报满一个窗口**就产心跳点，
+     * 这样「刚移动完立刻息屏」也能靠闹钟续上；窗口未满说明期间有正常回调，
+     * 不补点、只按 `lastSentAt + HEARTBEAT_MS` 续挂。
      */
     @Synchronized
     private fun onHeartbeatTick() {
@@ -426,15 +474,17 @@ object PeerLocNative {
         heartbeatTicks++
         val ctx = appContext
         val running = listeners.isNotEmpty()
+        val hasHistory = HeartbeatGate.hasHistory(lastAccepted != null, lastSent != null)
         val now = SystemClock.elapsedRealtime()
-        // 退出条件：采集已停 / 已恢复行进 → 不产点也不续挂
-        if (HeartbeatGate.shouldEndArm(running, stillMode)) {
-            log("hb tick: end arm (running=$running still=$stillMode)")
+        // 停采即收摊（开关关闭 / 422 自愈 / stop()）
+        if (HeartbeatGate.shouldEndArm(running)) {
+            log("hb tick: end arm (running=$running)")
             return
         }
-        if (!HeartbeatGate.shouldEmitOnTick(running, stillMode, HeartbeatGate.due(now, lastSentAt))) {
-            // 只剩「本窗口已有回调出点」这一种 → 不补点（防双发），只续挂
-            log("hb tick: gated by callback (${(now - lastSentAt) / 1000}s < ${STILL_HEARTBEAT_MS / 1000}s) -> re-arm")
+        if (!HeartbeatGate.shouldEmitOnTick(
+                running, hasHistory, HeartbeatGate.due(now, lastSentAt))) {
+            // 本窗口已有回调出点（或尚无历史定位）→ 不补点，只按锚点续挂
+            log("hb tick: gated (${(now - lastSentAt) / 1000}s < ${STILL_HEARTBEAT_MS / 1000}s) -> re-arm")
             ctx?.let { scheduleHeartbeat(it) }
             return
         }
@@ -509,15 +559,9 @@ object PeerLocNative {
             if (HeartbeatGate.shouldEnterStill(stillCount, stillMode)) {
                 stillMode = true
                 log("still confirmed x$stillCount -> heartbeat ${STILL_HEARTBEAT_MS / 1000}s")
-                // fix7：进入静止立即挂真定时器（不依赖后续回调）
-                appContext?.let { scheduleHeartbeat(it) }
             }
         } else {
-            if (stillMode) {
-                log("movement resumed (moved=${moved.toInt()}m) -> active pace")
-                // fix7：退出静止必须取消闹钟，否则空转并与回调双发
-                cancelHeartbeat(appContext)
-            }
+            if (stillMode) log("movement resumed (moved=${moved.toInt()}m) -> active pace")
             stillCount = 0; stillMode = false
         }
         // 静止心跳 5 min 时间门控（与定时器共用 lastSentAt，先到者为准）：
@@ -566,6 +610,9 @@ object PeerLocNative {
             put("ts", System.currentTimeMillis().toDouble())
         }
         lastSentAt = SystemClock.elapsedRealtime()
+        // fix8：每次成功上报后把闹钟锚点前移到新的 lastSentAt + 5min
+        // （运动中也挂着——熄屏后没有回调时靠它续点）
+        maybeArmHeartbeat()
         maybeFlush()
     }
 
@@ -590,20 +637,49 @@ object PeerLocNative {
      * 也要把 latest 送出去（否则断档期间对方端「最后在线」冻结）。
      * 后端 `POST /api/peer/location` 对空 points 合法（`body.get('points') or []`
      * → 循环空转，只写 latest）。
+     *
+     * fix8：单飞 + 主线程快照。
+     * · 在途请求只允许一个（`flushing`）；在途期间的新请求只置 `flushPending`，
+     *   由收尾回调补发一轮——原实现会 spawn 多个线程取同一批，各自按
+     *   batch.length() 累加 `reportedCount`，导致卡面「已报」虚高。
+     * · `queue` 是 ArrayDeque，不能被主线程写、后台线程读。这里在 main
+     *   线程切片成 id 列表 + 已序列化的 payload 字符串，后台线程只见快照。
      */
     private fun flush() {
+        if (!FlushGate.canStart(flushing)) {
+            flushPending = true
+            log("flush skipped: in-flight -> pending")
+            return
+        }
         val urlBase = baseUrl ?: return
         val cookie = sessionCookie ?: return
         if (queue.isEmpty() && lastSent == null) return
-        val batch = JSONArray()
-        while (batch.length() < BATCH_MAX && queue.isNotEmpty()) batch.put(queue.first())
-        val latest = lastSent
-        val body = JSONObject().apply {
-            put("points", batch)
-            if (latest != null) put("latest", latest)
+
+        // ── main 线程快照（此后不再碰 queue / lastSent）──────────────
+        val n = minOf(BATCH_MAX, queue.size)
+        val ids = ArrayList<String>(n)
+        val pts = JSONArray()
+        var i = 0
+        for (p in queue) {
+            if (i++ >= n) break
+            ids.add(p.optString("id"))
+            pts.put(p)
         }
+        // lastSent 是会被重新赋值的可变对象 → 深拷贝一份字符串再解析
+        val latestCopy = lastSent?.let {
+            runCatching { JSONObject(it.toString()) }.getOrNull()
+        }
+        val payload = JSONObject().apply {
+            put("points", pts)
+            if (latestCopy != null) put("latest", latestCopy)
+        }.toString()
+
+        flushing = true
+        flushPending = false
         Thread {
             var ok = false
+            var accepted = 0
+            var selfHeal = false
             try {
                 val conn = URL("$urlBase/api/peer/location").openConnection() as HttpURLConnection
                 conn.requestMethod = "POST"
@@ -613,31 +689,53 @@ object PeerLocNative {
                 conn.setRequestProperty("Content-Type", "application/json")
                 conn.setRequestProperty("Cookie", cookie)
                 conn.setRequestProperty("X-Love-Space", "1")
-                OutputStreamWriter(conn.outputStream, Charsets.UTF_8).use { it.write(body.toString()) }
+                OutputStreamWriter(conn.outputStream, Charsets.UTF_8).use { it.write(payload) }
                 val code = conn.responseCode
                 ok = code in 200..299
-                if (!ok) {
+                if (ok) {
+                    // fix8：按服务端 accepted 计数（幂等 dup/非法行不计）
+                    val text = try {
+                        conn.inputStream.bufferedReader().use { it.readText() }
+                    } catch (_: Exception) {
+                        ""
+                    }
+                    accepted = FlushGate.parseAccepted(text)
+                } else {
                     lastError = "HTTP $code"
                     // 上报者开关关闭 422 → 端上自愈：停报清队列（提示词对齐修订 6）
-                    // fix7：本回调在**上报线程**上，stop() 会改 stillMode/lastSentAt
-                    // 等采集态——必须抛回主线程执行，避免与 onLocation/tick 竞争
-                    if (code == 422) {
-                        handler.post { queue.clear(); stop(); log("422 -> self-heal: stop & clear") }
-                    }
+                    if (code == 422) selfHeal = true
                 }
                 conn.disconnect()
             } catch (e: Exception) {
                 lastError = e.message ?: e.toString()
             }
+            // 收尾一律回 main 线程：先放锁，再按快照处理队列与计数
             handler.post {
-                if (ok) {
-                    repeat(batch.length()) { if (queue.isNotEmpty()) queue.removeFirst() }
-                    reportedCount += batch.length()
+                flushing = false
+                if (selfHeal) {
+                    queue.clear()
+                    stop()
+                    log("422 -> self-heal: stop & clear")
+                } else if (ok) {
+                    // 按快照 id 从队头移除（只删本次提交的；队头已变则停手）
+                    for (id in ids) {
+                        val head = queue.peekFirst() ?: break
+                        if (head.optString("id") != id) break
+                        queue.removeFirst()
+                    }
+                    reportedCount += accepted
                     lastFlushAt = SystemClock.elapsedRealtime()
-                    log("flush ok n=${batch.length()} (reported=$reportedCount, queue=${queue.size})")
+                    log("flush ok n=${ids.size} accepted=$accepted " +
+                        "(reported=$reportedCount, queue=${queue.size})")
                 } else {
                     log("flush fail (queue=${queue.size}) err=$lastError")
                 }
+                // 尾随补发：仅在成功路径（失败立即重试会在无网夜空转打点，
+                // 留给下一个 tick / 回调再发）
+                val tail = FlushGate.shouldTailFlush(
+                    flushPending, ok && !selfHeal, listeners.isNotEmpty())
+                flushPending = false
+                if (tail) flush()
             }
         }.start()
     }
@@ -753,6 +851,9 @@ internal object HeartbeatGate {
     /** 连续多少次「位移 <25 m」判定进入静止。 */
     const val STILL_CONFIRM_TIMES = 3
 
+    /** 锚点已过时最早多久后触发（防立刻连打）。 */
+    const val MIN_ARM_DELAY_MS = 1_000L
+
     /** 距上次上报是否已满一个心跳窗口（定时器与回调两路共用，先到者为准）。 */
     fun due(
         nowElapsed: Long,
@@ -767,12 +868,34 @@ internal object HeartbeatGate {
         confirmTimes: Int = STILL_CONFIRM_TIMES,
     ): Boolean = !alreadyStill && stillCount >= confirmTimes
 
-    /** tick 的退出条件：采集已停 / 已恢复行进 → 不产点也不续挂。 */
-    fun shouldEndArm(running: Boolean, stillMode: Boolean): Boolean = !running || !stillMode
+    /** 是否已有可复用定位（acc≤50 入点定位 或 latest 快照）——无历史不挂表。 */
+    fun hasHistory(hasAccepted: Boolean, hasSent: Boolean): Boolean = hasAccepted || hasSent
 
-    /** tick 是否该产点：运行中 + 静止 + 满窗口（三条全真）。 */
-    fun shouldEmitOnTick(running: Boolean, stillMode: Boolean, due: Boolean): Boolean =
-        running && stillMode && due
+    /** fix8 持续兜底：只要采集中且已有历史定位就一直挂表（不再要求 stillMode）。 */
+    fun shouldArm(running: Boolean, hasHistory: Boolean): Boolean = running && hasHistory
+
+    /** tick 的退出条件：采集已停（开关关闭 / 422 自愈 / stop）→ 收摊。 */
+    fun shouldEndArm(running: Boolean): Boolean = !running
+
+    /** tick 是否该产点：运行中 + 有历史 + 满窗口（三条全真）。 */
+    fun shouldEmitOnTick(running: Boolean, hasHistory: Boolean, due: Boolean): Boolean =
+        running && hasHistory && due
+
+    /**
+     * 下一次挂表的目标时刻（elapsed）：**恒以 `lastSentAt + 窗口` 为锚点**，
+     * 不按 tick 时刻累加（否则每次 tick 都把下一次推后 5 min，漂移累积）；
+     * 锚点已过去则取 `now + MIN_ARM_DELAY_MS` 立刻补一跳。
+     */
+    fun nextArmAt(
+        nowElapsed: Long,
+        lastSentAtElapsed: Long,
+        windowMs: Long = HEARTBEAT_MS,
+        minDelayMs: Long = MIN_ARM_DELAY_MS,
+    ): Long {
+        val anchor = lastSentAtElapsed + windowMs
+        val earliest = nowElapsed + minDelayMs
+        return if (anchor > earliest) anchor else earliest
+    }
 
     /**
      * 心跳点能否入轨迹（acc 口径）：只接受 acc ≤ [accLatestOnlyM] 的来源定位，
@@ -780,4 +903,56 @@ internal object HeartbeatGate {
      */
     fun heartbeatSourceAllowed(acc: Double, accLatestOnlyM: Double = 50.0): Boolean =
         acc <= accLatestOnlyM
+}
+
+/**
+ * fix8 flush 纯决策（JVM 单测覆盖）：单飞开关与 `accepted` 解析。
+ *
+ * 单飞的意义：旧实现每次入队 ≥5 条就 spawn 一个上报线程，多个线程取同一批，
+ * 各自 2xx 后都累加计数 → 「已报」虚高。这里把「能不能开跑」「收尾要不要补发」
+ * 「怎么读 accepted」三条判定抽成纯函数，避免以后再被随手改坏。
+ */
+internal object FlushGate {
+    /** 无在途请求才允许开跑。 */
+    fun canStart(flushing: Boolean): Boolean = !flushing
+
+    /**
+     * 收尾后是否补发一轮：有尾随请求 **且本次成功** **且仍在采集**。
+     * 失败不补发——无网时立即重试等于空转打点，交给下一个 tick/回调。
+     */
+    fun shouldTailFlush(pending: Boolean, succeeded: Boolean, running: Boolean): Boolean =
+        pending && succeeded && running
+
+    /**
+     * 解析 `POST /api/peer/location` 响应的 `accepted`
+     * （`app/main.py:1852` → `{'ok': True, 'accepted': <int>}`）。
+     *
+     * **刻意不用 `org.json.JSONObject`**：本对象是 JVM 单测的目标，而 android.jar
+     * 在单测里是 Stub——`JSONObject` 未配置 `returnDefaultValues` 时直接抛
+     * `Stub!`、配置后又返回 null，两种情况都会让「解析正确性」在无真机环境下
+     * 根本验证不了（CI 也跑不出结论）。响应形状由本仓后端固定（单个整数键），
+     * 这里按 `"accepted"` 后的数字做严格提取：
+     * 空体 / 非 JSON / 缺字段 / 负数 / 非数字一律 0，绝不抛异常。
+     */
+    fun parseAccepted(body: String?): Int {
+        if (body.isNullOrBlank()) return 0
+        val key = "\"accepted\""
+        val start = body.indexOf(key)
+        if (start < 0) return 0
+        var j = start + key.length
+        // 跳过 `:` 与空白（不同 JSON 序列化器的分隔符风格不同，均容忍）
+        while (j < body.length && (body[j] == ':' || body[j].isWhitespace())) j++
+        val sb = StringBuilder()
+        while (j < body.length) {
+            val c = body[j]
+            if (c == '-' || c.isDigit() || c == '"') {
+                if (c != '"') sb.append(c)
+                j++
+            } else {
+                break
+            }
+        }
+        val n = sb.toString().toIntOrNull() ?: return 0
+        return if (n > 0) n else 0
+    }
 }

@@ -1,11 +1,12 @@
 package cn.iepose.lovespace.love_space
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * 2.8.0 fix7 · 静止心跳纯决策单测（施工令「护栏」第 1–5 条的可测部分）。
+ * 2.8.0 fix7/fix8 · 静止心跳纯决策单测（施工令四·1 的可测部分）。
  *
  * 只测 [HeartbeatGate]（不碰 Android API）。AlarmManager 在真机 Doze 下
  * 是否准时、动态接收器是否收到广播，JVM 单测无法证明——那两条由真机
@@ -41,25 +42,42 @@ class HeartbeatGateTest {
         assertFalse(HeartbeatGate.shouldEnterStill(3, true))
     }
 
-    // ④ tick 退出条件：采集停 / 恢复行进 → 收摊（不产点、不续挂）
+    // ④ fix8 持续兜底：采集中且有历史定位就挂表；只有停采才收摊
     @Test
-    fun endArm_whenStoppedOrMoving() {
-        assertTrue(HeartbeatGate.shouldEndArm(false, true))
-        assertTrue(HeartbeatGate.shouldEndArm(false, false))
-        assertTrue(HeartbeatGate.shouldEndArm(true, false))
-        assertFalse(HeartbeatGate.shouldEndArm(true, true))
+    fun arm_requiresRunningAndHistory_onlyStopEndsIt() {
+        assertTrue(HeartbeatGate.shouldArm(true, true))
+        assertFalse(HeartbeatGate.shouldArm(false, true))
+        assertFalse(HeartbeatGate.shouldArm(true, false))
+        assertTrue(HeartbeatGate.shouldEndArm(false))
+        assertFalse(HeartbeatGate.shouldEndArm(true))
+        assertTrue(HeartbeatGate.hasHistory(true, false))
+        assertTrue(HeartbeatGate.hasHistory(false, true))
+        assertFalse(HeartbeatGate.hasHistory(false, false))
     }
 
-    // ⑤ tick 出点必须三条全真（运行中 + 静止 + 满窗口）
+    // ⑤ tick 出点必须三条全真（运行中 + 有历史 + 满窗口）；
+    //    关键：stillMode 不再参与——「刚移动完就息屏」也要能产点
     @Test
-    fun emitOnTick_needsAllThreeConditions() {
+    fun emitOnTick_needsRunningHistoryAndDue() {
         assertTrue(HeartbeatGate.shouldEmitOnTick(true, true, true))
         assertFalse(HeartbeatGate.shouldEmitOnTick(false, true, true))
         assertFalse(HeartbeatGate.shouldEmitOnTick(true, false, true))
         assertFalse(HeartbeatGate.shouldEmitOnTick(true, true, false))
     }
 
-    // ⑥ acc 口径：只有 ≤50 的来源定位能造心跳轨迹点，50–100 只许保鲜 latest
+    // ⑥ 续挂锚点 = lastSentAt + 窗口；锚点已过则 earliest = now + 1s（不漂移累加）
+    @Test
+    fun nextArmAt_anchorsOnLastSentAt_notOnNow() {
+        val last = 10_000L
+        assertEquals(last + win, HeartbeatGate.nextArmAt(last + 1_000L, last))
+        // tick 早到（被系统提前唤醒）：仍按锚点，不把下一次推后
+        assertEquals(last + win, HeartbeatGate.nextArmAt(last - 1_000L, last))
+        // 锚点已过：立刻补一跳，且不早于 now + minDelay
+        assertEquals(50_000L + HeartbeatGate.MIN_ARM_DELAY_MS,
+            HeartbeatGate.nextArmAt(50_000L, last))
+    }
+
+    // ⑦ acc 口径：只有 ≤50 的来源定位能造心跳轨迹点，50–100 只许保鲜 latest
     @Test
     fun heartbeatSource_onlyAcceptsPointTierAccuracy() {
         assertTrue(HeartbeatGate.heartbeatSourceAllowed(5.0))

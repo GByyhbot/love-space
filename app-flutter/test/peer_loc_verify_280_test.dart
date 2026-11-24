@@ -88,6 +88,19 @@ void main() {
       expect(kt.contains('QUEUE_MAX = 50'), isTrue);
       expect(kt.contains('BATCH_MAX = 5'), isTrue);
       expect(kt.contains('X-Love-Space'), isTrue);
+      // fix8：① flush 单飞（在途只允许一个，尾随补发）；② 「已报」按服务端
+      // accepted 累加（旧实现的 batch.length() 会把同一批重复计数 → 卡面虚高）；
+      // ③ 无回调兜底心跳（不再以 stillMode 为挂表前提）。纯逻辑细节由
+      // android/app/src/test 下的 HeartbeatGateTest / FlushGateTest 覆盖，
+      // 这里只钉形态，防被整体改回去。
+      expect(kt.contains('FlushGate.canStart(flushing)'), isTrue,
+          reason: 'flush 必须单飞：在途请求不许再开第二个线程');
+      expect(kt.contains('reportedCount += accepted'), isTrue,
+          reason: '「已报」按服务端 accepted 累加');
+      expect(kt.contains('reportedCount += batch.length()'), isFalse,
+          reason: '禁止回退到按本地批次长度计数（同批重发会重复计数）');
+      expect(kt.contains('maybeArmHeartbeat()'), isTrue,
+          reason: '无回调兜底：采集中且有历史定位就维持 5 min 闹钟');
       // 探针保留
       expect(kt.contains('receivedCount'), isTrue, reason: '回调实证探针保留');
       // fatal 落盘（原生侧）+ 导出
