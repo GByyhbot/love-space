@@ -5,6 +5,8 @@
 
 > **版本号规则（现行，覆盖早期按日期取值的做法）**：`versionCode` 手工维护、只升不降，改 `android-app/android/app/build.gradle` 一处；`versionName` 与 `capacitor.config.json` 的 `LoveSpaceApp/<版本>` UA 必须同号；CI 只按 tag 覆盖 `versionName`，不再推算 `versionCode`。三处一致性由 `scripts/check_apk_version.py --strict` 在构建前、tag 覆盖后、产物落地后各校验一次。下文第三节「versionCode 20261025」与第四节 v1.2.5 记录为历史事实，不随规则变更回填。
 
+> **2026-11-25 更新（审计 P2）**：上文提到的 `android-app/`（Capacitor 旧壳）与 `scripts/check_apk_version.py` 已随审计删除，"三处一致性由该脚本校验"不再适用。**现行版本护栏**：`app-flutter/test/version_naming_test.dart`（读 `pubspec.yaml` 断言名称严格等于由 versionCode 推导的公式、名称固定三段、个位恰好一位）+ `apk-release.yml` 的「注册层守卫（产物级 aapt）」。上文作为历史记录原样保留。
+
 ---
 
 ## 一、验收清单
