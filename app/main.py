@@ -467,6 +467,12 @@ def status():
     with connect() as c:
         count = c.execute('SELECT count(*) FROM users').fetchone()[0]
         backup = _backup_status(c)
+        # 审计 P2-3：维护活性与转码积压。11-23 那次「维护停摆 36h 无人知」
+        # 就是因为这两类信息在 status 上完全不可见。
+        from . import worker as _worker  # 延迟导入：main↔worker 避免模块级循环
+        maint = _worker.maintenance_state()
+        pending_media = c.execute(
+            "SELECT COUNT(*) FROM media WHERE status='pending'").fetchone()[0]
     return {'initialized': count > 0, 'paired': count == 2, 'setup_token_required': bool(os.getenv('SETUP_TOKEN')),
             'version': WEB_VERSION, 'build': BUILD_ID,
             'apk_version': APK_VERSION,
@@ -478,7 +484,11 @@ def status():
             'apk_url_direct': _apk_github_url(),
             'apk_proxy': APK_PROXY,
             'apk_notes': _apk_notes(),
-            **backup}
+            **backup,
+            # 维护活性（进程内状态，重启归零；started_at 非空 + last_maintenance_at
+            # 为空 = 刚起来没跑过；两者都非空但 last 很旧 = 停摆）
+            **maint,
+            'pending_media': pending_media}
 
 
 @app.get('/health')

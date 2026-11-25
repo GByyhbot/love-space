@@ -664,6 +664,57 @@ def _backup_step():
     _warn_if_backup_stale()
 
 
+# ── 维护活性快照（2026-11-25 审计 P2-3）───────────────────────────────
+# 为什么要有：2026-11-23 maintenance 停摆约 36h 无人知晓；2.8.2 的 P4 只覆盖
+# 「备份逾期 48h」，维护循环本身死没死，在 /api/status 上完全看不见。
+# 选型：进程内状态（不落 settings）——它描述的是「本进程」的活性，重启后归零
+# 才是正确语义：started_at 非空而 last_maintenance_at 为空 = 刚起来还没跑过；
+# 两者都非空但 last 很旧 = 真的停摆。落库反而会把上一进程的成绩带过来。
+_MAINT_STEPS = ('schedule', 'cleanup', 'peer_cleanup', 'backup')
+_MAINT_STATE = {
+    'started_at': time.time(),
+    'last_at': None,
+    'steps': {n: {'last_ok': None, 'last_error_at': None, 'last_error': ''}
+              for n in _MAINT_STEPS},
+}
+
+
+def _iso(ts):
+    if not isinstance(ts, (int, float)) or ts <= 0:
+        return None
+    return dt.datetime.fromtimestamp(float(ts), dt.timezone.utc).isoformat()
+
+
+def _mark_step_ok(name):
+    st = _MAINT_STATE['steps'].setdefault(
+        name, {'last_ok': None, 'last_error_at': None, 'last_error': ''})
+    st['last_ok'] = time.time()
+
+
+def _mark_step_failed(name, exc):
+    st = _MAINT_STATE['steps'].setdefault(
+        name, {'last_ok': None, 'last_error_at': None, 'last_error': ''})
+    st['last_error_at'] = time.time()
+    st['last_error'] = f'{type(exc).__name__}: {exc}'[:200]
+
+
+def maintenance_state():
+    """供 /api/status 读的快照。四步恒定存在（形状稳定），时间是 UTC ISO。"""
+    steps = {}
+    for n in _MAINT_STEPS:
+        st = _MAINT_STATE['steps'].get(n) or {}
+        steps[n] = {
+            'last_ok': _iso(st.get('last_ok')),
+            'last_error_at': _iso(st.get('last_error_at')),
+            'last_error': st.get('last_error') or '',
+        }
+    return {
+        'started_at': _iso(_MAINT_STATE['started_at']),
+        'last_maintenance_at': _iso(_MAINT_STATE['last_at']),
+        'maintenance_steps': steps,
+    }
+
+
 def maintenance():
     """每分钟一轮维护。
 
@@ -677,8 +728,15 @@ def maintenance():
                        ('backup', _backup_step)):
         try:
             step()
-        except Exception:
+        except Exception as exc:
+            # 审计 P2-3：失败也留痕到状态里（原日志不变，隔离语义不变）
+            _mark_step_failed(name, exc)
             log.exception('维护步骤 %s 失败（已隔离，不影响其余步骤）', name)
+        else:
+            _mark_step_ok(name)
+    # 整轮跑完才算「一轮完成」——某步失败也算完成（失败已单独留痕），
+    # 这样 last_maintenance_at 只衡量循环还转不转
+    _MAINT_STATE['last_at'] = time.time()
 
 
 def run(stop):
