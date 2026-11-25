@@ -1,6 +1,8 @@
 allprojects {
     repositories {
         google()
+        // 同上：镜像前置兜底 429，mavenCentral 保留（审计 P2-1）
+        maven("https://maven.aliyun.com/repository/central")
         mavenCentral()
     }
 }

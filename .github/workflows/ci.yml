@@ -127,13 +127,47 @@ jobs:
       - run: flutter pub get --enforce-lockfile
       - run: flutter analyze
       - run: flutter test
-      - run: flutter build apk --debug
+      # 2026-11-25（审计 P2-1）：外部仓库（Maven Central / Gradle 插件门户）会对
+      # CI 出口返回 429，导致依赖解析失败而非代码问题（run 45145668345 即此）。
+      # 这里只对「依赖解析类」失败重试**一次**，其它失败照旧立刻红，不许掩盖真问题。
+      - name: Build debug APK（依赖解析失败自动重试一次）
+        run: |
+          set +e
+          flutter build apk --debug > /tmp/apk1.log 2>&1
+          code=$?
+          tail -30 /tmp/apk1.log
+          if [ $code -ne 0 ]; then
+            if grep -qE "429|Too Many Requests|Could not resolve|Could not GET|Could not download" /tmp/apk1.log; then
+              echo "::warning::疑似外部仓库限流导致依赖解析失败，自动重试一次（上限 1）"
+              set -e
+              flutter build apk --debug
+            else
+              echo "::error::构建失败原因非依赖解析，不重试"
+              exit $code
+            fi
+          fi
       # 2.8.0 fix7：静止心跳判定（HeartbeatGate）的 JVM 单测——它在
       # android/app/src/test 下，不进 `flutter test` 的范围，必须单独跑；
       # 放在 build apk 之后，复用已解析的 Gradle 依赖与 local.properties。
       - name: 原生心跳单测（fix7）
         working-directory: app-flutter/android
-        run: ./gradlew :app:testDebugUnitTest --console=plain
+        # 同款重试口径：该步也是 gradle 依赖解析，历史上同样吃过 429
+        # （run 45321079375 / 45322134460）
+        run: |
+          set +e
+          ./gradlew :app:testDebugUnitTest --console=plain > /tmp/gw1.log 2>&1
+          code=$?
+          tail -30 /tmp/gw1.log
+          if [ $code -ne 0 ]; then
+            if grep -qE "429|Too Many Requests|Could not resolve|Could not GET|Could not download" /tmp/gw1.log; then
+              echo "::warning::疑似外部仓库限流，gradle 单测自动重试一次（上限 1）"
+              set -e
+              ./gradlew :app:testDebugUnitTest --console=plain
+            else
+              echo "::error::失败非依赖解析，不重试"
+              exit $code
+            fi
+          fi
       # 注册层守卫（产物级，2.8.0 第 0 步 fix5）：既有 peer_loc_verify /
       # peer_toggle_visibility 全程 mock 了 peer_loc/native，只测协议形状、
       # 测不到接线。这一步读**产物**的 AndroidManifest（aapt dump xmltree）

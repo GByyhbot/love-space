@@ -12,6 +12,11 @@ pluginManagement {
 
     repositories {
         google()
+        // 2026-11-25（审计 P2-1）：Maven Central 曾对 CI 返回 429 → Gradle 禁用仓库
+        // → apk 构建依赖解析失败（run 45145668345）。镜像前置、官方源保留兜底，
+        // 不许只剩镜像单点。阿里云本体在境内外出口实测 200 且 <200ms。
+        maven("https://maven.aliyun.com/repository/central")
+        maven("https://maven.aliyun.com/repository/gradle-plugin")
         mavenCentral()
         gradlePluginPortal()
     }
