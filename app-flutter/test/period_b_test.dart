@@ -582,7 +582,7 @@ void main() {
     Map<String, dynamic> episodeBody(String start, int length) =>
         <String, dynamic>{'start': start, 'length': length, 'cycle': 28};
 
-    testWidgets('月经来了（新）：POST {start,length:max(3,d.length),cycle}',
+    testWidgets('月经来了（新）：POST {start,length:1,cycle}（2.8.2 待确认模型）',
         (tester) async {
       final s = _Store();
       final c = _setupWidget(s);
@@ -593,7 +593,8 @@ void main() {
       expect(s.postBodies.length, 1);
       final body = s.postBodies.single['body'] as Map;
       expect(body['start'], _today());
-      expect(body['length'], 5, reason: '无记录 d.length=5，max(3,5)=5');
+      expect(body['length'], 1,
+          reason: '2.8.2：新建段只确认「今天来了」一天，不再用历史平均预填');
       expect(body['cycle'], 28);
       expect(body.containsKey('end'), isFalse);
       expect(c.read(chatToastProvider)?.text, '已记下这次经期');

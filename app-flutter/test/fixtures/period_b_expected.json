@@ -341,16 +341,16 @@
         "2026-06-09": {
           "classes": [
             "cal-day",
-            "ph-follicular"
+            "ph-fertile",
+            "ph-start"
           ],
-          "title": "卵泡期 · 点一下记这天",
-          "aria": "6 月 9 日，卵泡期 · 点一下记这天"
+          "title": "排卵期 · 点一下记这天",
+          "aria": "6 月 9 日，排卵期 · 点一下记这天"
         },
         "2026-06-10": {
           "classes": [
             "cal-day",
-            "ph-fertile",
-            "ph-start"
+            "ph-fertile"
           ],
           "title": "排卵期 · 点一下记这天",
           "aria": "6 月 10 日，排卵期 · 点一下记这天"
@@ -382,34 +382,34 @@
         "2026-06-14": {
           "classes": [
             "cal-day",
-            "ph-fertile"
+            "ph-fertile",
+            "ph-ovu"
           ],
-          "title": "排卵期 · 点一下记这天",
-          "aria": "6 月 14 日，排卵期 · 点一下记这天"
+          "title": "排卵期 · 排卵日 · 点一下记这天",
+          "aria": "6 月 14 日，排卵期 · 排卵日 · 点一下记这天"
         },
         "2026-06-15": {
           "classes": [
             "cal-day",
             "ph-fertile",
-            "ph-ovu",
             "picked"
           ],
-          "title": "排卵期 · 排卵日 · 点一下记这天",
-          "aria": "6 月 15 日，排卵期 · 排卵日 · 点一下记这天"
+          "title": "排卵期 · 点一下记这天",
+          "aria": "6 月 15 日，排卵期 · 点一下记这天"
         },
         "2026-06-16": {
           "classes": [
             "cal-day",
-            "ph-fertile"
+            "ph-luteal",
+            "ph-start"
           ],
-          "title": "排卵期 · 点一下记这天",
-          "aria": "6 月 16 日，排卵期 · 点一下记这天"
+          "title": "黄体期 · 点一下记这天",
+          "aria": "6 月 16 日，黄体期 · 点一下记这天"
         },
         "2026-06-17": {
           "classes": [
             "cal-day",
-            "ph-luteal",
-            "ph-start"
+            "ph-luteal"
           ],
           "title": "黄体期 · 点一下记这天",
           "aria": "6 月 17 日，黄体期 · 点一下记这天"
@@ -815,16 +815,16 @@
         "2026-08-04": {
           "classes": [
             "cal-day",
-            "ph-fertile",
-            "ph-start"
+            "ph-follicular"
           ],
-          "title": "排卵期 · 点一下记这天",
-          "aria": "8 月 4 日，排卵期 · 点一下记这天"
+          "title": "卵泡期 · 点一下记这天",
+          "aria": "8 月 4 日，卵泡期 · 点一下记这天"
         },
         "2026-08-05": {
           "classes": [
             "cal-day",
-            "ph-fertile"
+            "ph-fertile",
+            "ph-start"
           ],
           "title": "排卵期 · 点一下记这天",
           "aria": "8 月 5 日，排卵期 · 点一下记这天"
@@ -856,33 +856,33 @@
         "2026-08-09": {
           "classes": [
             "cal-day",
+            "ph-fertile"
+          ],
+          "title": "排卵期 · 点一下记这天",
+          "aria": "8 月 9 日，排卵期 · 点一下记这天"
+        },
+        "2026-08-10": {
+          "classes": [
+            "cal-day",
             "ph-fertile",
             "ph-ovu"
           ],
           "title": "排卵期 · 排卵日 · 点一下记这天",
-          "aria": "8 月 9 日，排卵期 · 排卵日 · 点一下记这天"
+          "aria": "8 月 10 日，排卵期 · 排卵日 · 点一下记这天"
         },
-        "2026-08-10": {
+        "2026-08-11": {
           "classes": [
             "cal-day",
             "ph-fertile"
           ],
           "title": "排卵期 · 点一下记这天",
-          "aria": "8 月 10 日，排卵期 · 点一下记这天"
-        },
-        "2026-08-11": {
-          "classes": [
-            "cal-day",
-            "ph-luteal",
-            "ph-start"
-          ],
-          "title": "黄体期 · 点一下记这天",
-          "aria": "8 月 11 日，黄体期 · 点一下记这天"
+          "aria": "8 月 11 日，排卵期 · 点一下记这天"
         },
         "2026-08-12": {
           "classes": [
             "cal-day",
-            "ph-luteal"
+            "ph-luteal",
+            "ph-start"
           ],
           "title": "黄体期 · 点一下记这天",
           "aria": "8 月 12 日，黄体期 · 点一下记这天"
@@ -969,10 +969,11 @@
         },
         "2026-08-23": {
           "classes": [
-            "cal-day"
+            "cal-day",
+            "ph-luteal"
           ],
-          "title": "还没有记录 · 点一下记这天",
-          "aria": "8 月 23 日，还没有记录 · 点一下记这天"
+          "title": "黄体期 · 点一下记这天",
+          "aria": "8 月 23 日，黄体期 · 点一下记这天"
         },
         "2026-08-24": {
           "classes": [
@@ -2241,7 +2242,7 @@
             "kind": "period",
             "body": {
               "start": "2026-11-14",
-              "length": 5,
+              "length": 1,
               "cycle": 28
             },
             "client_id": "uuid-fixed-8b"
@@ -2283,7 +2284,7 @@
             "kind": "period",
             "body": {
               "start": "2026-11-14",
-              "length": 5,
+              "length": 1,
               "cycle": 30
             },
             "client_id": "uuid-fixed-8b"
@@ -2778,10 +2779,10 @@
       "ringC": 194.8,
       "ringOffset": "153.9",
       "cyc": 34,
-      "title": "当前阶段：卵泡期",
-      "tip": "状态正好，适合一起出门走走",
-      "fertLevel": "中",
-      "fertDesc": "越接近排卵日越高",
+      "title": "当前阶段：经期",
+      "tip": "多休息、保暖",
+      "fertLevel": "低",
+      "fertDesc": "经期几乎不会受孕",
       "segs": [
         [
           "period",

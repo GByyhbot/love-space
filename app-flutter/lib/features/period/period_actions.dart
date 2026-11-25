@@ -75,10 +75,12 @@ PeriodWritePlan planStart(PeriodData d, String day,
       );
     }
   }
-  // `:90` 默认天数 `Math.max(3, d.length)`；**没有 end 键**。
+  // 2.8.2：新建段只记「今天来了」这一条事实 —— length=1。
+  // 旧实现 `Math.max(3, d.length)` 把历史平均预填进来，等于系统替用户宣布
+  // 「这次经期 5 天」，而这个自猜值又进了平均经期统计（自猜自统计）。
   final body = <String, dynamic>{
     'start': day,
-    'length': d.length < 3 ? 3 : d.length,
+    'length': 1,
     'cycle': d.cycle,
   };
   return PeriodWritePlan(
