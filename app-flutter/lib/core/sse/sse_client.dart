@@ -134,27 +134,11 @@ class SseClient extends Notifier<SseState> {
       sub = rsp.data!.stream.listen((chunk) {
         if (_disposed || !_running || !_foreground) { sub?.cancel(); return; }
         _touch();
-        carry += utf8.decode(chunk, allowMalformed: true);
-        final parts = carry.split('\n');
-        carry = parts.removeLast(); // 最后一行可能不完整，留回缓冲
-        for (final raw in parts) {
-          final line = raw.trim();
-          if (line.isEmpty) continue;
-          if (line.startsWith('retry:')) continue; // 已由常量约定
-          if (line.startsWith(':')) continue;      // ready/heartbeat 注释
-          if (line.startsWith('data:')) {
-            final body = line.substring(5).trim();
-            Map<String, dynamic>? j;
-            try { j = jsonDecode(body) as Map<String, dynamic>; } catch (_) {}
-            _eventsController.add(SseEvent(
-              raw: body,
-              chat: j?['chat'] == true,
-              other: j?['other'] == true,
-              refresh: j?['refresh'] == true,
-              typing: j?['typing'] == true,
-              peer: j?['peer'] == true,
-            ));
-          }
+        // 2.8.5：解析逻辑抽到 parseSseChunk（纯函数、可测），行为不变
+        final parsed = parseSseChunk(carry, utf8.decode(chunk, allowMalformed: true));
+        carry = parsed.carry;
+        for (final e in parsed.events) {
+          _eventsController.add(e);
         }
       }, onDone: () {
         _scheduleRetry('stream ended');
@@ -213,3 +197,42 @@ final sseProvider = NotifierProvider<SseClient, SseState>(SseClient.new);
 final sseEventsProvider = StreamProvider<SseEvent>((ref) {
   return ref.watch(sseProvider.notifier).events;
 });
+
+/// 一次帧解析的结果：剩下的半行（不完整尾巴）+ 本轮解析出的完整事件。
+class SseParseResult {
+  const SseParseResult(this.carry, this.events);
+  final String carry;
+  final List<SseEvent> events;
+}
+
+/// 纯函数：把新到的文本块并入缓冲，切出完整行并解析 `data:` 帧。
+///
+/// 2.8.5：原逻辑内联在 stream 监听闭包里（不可测），此处按审计 P2-7 抽出，
+/// **行为逐字等价**——同样的 trim、同样跳过 retry/注释/空行、同样对畸形
+/// JSON 容错（不产事件但不中断解析）。监听侧只负责喂块与派发事件。
+SseParseResult parseSseChunk(String carry, String chunk) {
+  final parts = (carry + chunk).split('\n');
+  final rest = parts.removeLast(); // 最后一行可能不完整，留回缓冲
+  final events = <SseEvent>[];
+  for (final raw in parts) {
+    final line = raw.trim();
+    if (line.isEmpty) continue;
+    if (line.startsWith('retry:')) continue; // 已由常量约定
+    if (line.startsWith(':')) continue; // ready/heartbeat 注释
+    if (!line.startsWith('data:')) continue;
+    final body = line.substring(5).trim();
+    Map<String, dynamic>? j;
+    try {
+      j = jsonDecode(body) as Map<String, dynamic>;
+    } catch (_) {}
+    events.add(SseEvent(
+      raw: body,
+      chat: j?['chat'] == true,
+      other: j?['other'] == true,
+      refresh: j?['refresh'] == true,
+      typing: j?['typing'] == true,
+      peer: j?['peer'] == true,
+    ));
+  }
+  return SseParseResult(rest, events);
+}
