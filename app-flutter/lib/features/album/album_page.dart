@@ -530,7 +530,7 @@ class _AlbumPageState extends ConsumerState<AlbumPage> {
       onRefresh: () => ref.read(albumControllerProvider.notifier).load(),
       child: GridView.builder(
         controller: _gridScroll, // 段 B：查看器翻页后预滚动，保证 Hero 落点
-        padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, Spacing.pageBottom),
         itemCount: items.length,
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: 3, mainAxisSpacing: 8, crossAxisSpacing: 8),
@@ -559,7 +559,7 @@ class _AlbumPageState extends ConsumerState<AlbumPage> {
     return RefreshIndicator(
       onRefresh: () => ref.read(albumControllerProvider.notifier).load(),
       child: ListView.builder(
-        padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, Spacing.pageBottom),
         itemCount: groups.length,
         itemBuilder: (_, gi) {
           final g = groups[gi];
@@ -640,7 +640,7 @@ class _AlbumPageState extends ConsumerState<AlbumPage> {
   Widget _skeleton(BuildContext context) {
     final c = Theme.of(context).colorScheme.surfaceContainerHighest;
     return GridView.builder(
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, Spacing.pageBottom),
       itemCount: 9,
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: 3, mainAxisSpacing: 8, crossAxisSpacing: 8),

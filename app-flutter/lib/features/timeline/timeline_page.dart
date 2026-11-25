@@ -383,6 +383,9 @@ class _TimelinePageState extends ConsumerState<TimelinePage> {
       child: ListView.builder(
         controller: _scroll,
         physics: const AlwaysScrollableScrollPhysics(),
+        // 2.8.4 缺陷二：底部留出 Dock（6+14+2+46+6 ≈ 74）+ 常规页边距，
+        // 使最后一条能完整滚到 Dock 上沿之上，不再被悬浮栏盖住
+        padding: const EdgeInsets.only(bottom: Spacing.pageBottom),
         // 🔴 G19 附带修复（原逻辑缺陷）：原 itemCount 只在 hasMore 或
         // loading&&!hasMore 时留尾槽，而「没有更多了」页脚要求
         // !hasMore && posts.isNotEmpty —— 恰好不占任何槽位 → 页脚在

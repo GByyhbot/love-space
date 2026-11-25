@@ -266,8 +266,10 @@ void main() {
           reason: '走正式 composer 而非旧的最小发布弹窗');
       expect(find.text('带图的悄悄话'), findsOneWidget,
           reason: '原消息文本已预填');
-      expect(find.text('media:img-1'), findsOneWidget);
-      expect(find.text('media:img-2'), findsOneWidget);
+      // 2.8.4 缺陷一：预填媒体不再把 id 当文件名露出（token 不许给用户看），
+      // 无元数据时统一显示「附件」，两个媒体各一条
+      expect(find.textContaining('media:'), findsNothing);
+      expect(find.text('附件'), findsNWidgets(2));
       expect(find.text('存草稿'), findsOneWidget,
           reason: 'post 态与时光页发布共用同一套草稿/暂存/幂等逻辑');
       expect(find.text('发布'), findsOneWidget);

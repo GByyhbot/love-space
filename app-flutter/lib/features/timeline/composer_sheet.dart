@@ -18,8 +18,11 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/chat/chat_media.dart';
-import '../../core/chat/chat_models.dart' show ChatLocalFile;
+import '../../core/chat/chat_models.dart' show ChatLocalFile, ChatMedia;
 import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
+import '../chat/media_bubble_widgets.dart' show MediaImageView, VideoCardView;
+import '../chat/voice_playback.dart' show voicePlaybackProvider;
+import 'image_viewer.dart' show ImageViewerPage;
 import '../chat/voice_recorder.dart';
 import 'composer_store.dart';
 import 'timeline_controller.dart';
@@ -68,8 +71,12 @@ Future<void> showComposerSheet(
 
 /// 一条待发媒体：先选本机文件 → 顺序上传拿 id → 发布进 body.media
 class ComposerMedia {
-  ComposerMedia({required this.localFile});
+  ComposerMedia({required this.localFile, this.mime = ''});
   final ChatLocalFile localFile;
+
+  /// 2.8.4：媒体 MIME。编辑态从 `record.media` 元数据带入，决定预览形态
+  /// （图片缩略图 / 视频封面 / 音频试听）；新建时为空，由扩展名兜底。
+  final String mime;
   String? uploadedId;
   double progress = 0; // 0..1（上传中）
 }
@@ -190,7 +197,7 @@ class _ComposerSheetState extends ConsumerState<ComposerSheet> {
       _content.text = widget.initialContent ?? '';
       for (final id in widget.initialMediaIds ?? const <String>[]) {
         _media.add(ComposerMedia(
-            localFile: ChatLocalFile(path: '', name: 'media:$id'))
+            localFile: ChatLocalFile(path: '', name: '附件'))
           ..uploadedId = id);
       }
     } else if (widget.initialAlbum != null && widget.initialAlbum!.isNotEmpty) {
@@ -227,11 +234,23 @@ class _ComposerSheetState extends ConsumerState<ComposerSheet> {
     final rawSong = r.body['song'];
     if (rawSong is Map) _song = Map<String, dynamic>.from(rawSong);
     final mids = (r.body['media'] as List?) ?? const [];
+    // 2.8.4 缺陷一：body.media 只有 id，原来把 id 塞进 name 当「文件名」显示，
+    // 于是编辑态只能看到 `media:fa719…` 这种 token 芯片、也点不开预览。
+    // 记录 JSON 的 `media` 字段本来就带 {id,mime,name}（serialize_many 组装），
+    // 拿它还原成与新建态同形态的附件项即可，不需要额外请求、后端零改。
+    final meta = <String, Map<String, dynamic>>{
+      for (final m in r.media)
+        if ((m['id'] ?? '').toString().isNotEmpty)
+          (m['id'] ?? '').toString(): m,
+    };
     for (final mid in mids) {
       final id = mid.toString();
       if (id.isEmpty) continue;
+      final m = meta[id];
+      final nm = (m?['name'] ?? '').toString();
       _media.add(ComposerMedia(
-          localFile: ChatLocalFile(path: '', name: 'media:$id'))
+          localFile: ChatLocalFile(path: '', name: nm.isEmpty ? '附件' : nm),
+          mime: (m?['mime'] ?? '').toString())
         ..uploadedId = id);
     }
     // 预填快照：只记录客户端建模的五个字段，作为「是否改动」的基准；
@@ -388,7 +407,7 @@ class _ComposerSheetState extends ConsumerState<ComposerSheet> {
       );
       if (picked != null && picked.isNotEmpty) {
         setState(() => _media.add(ComposerMedia(
-            localFile: ChatLocalFile(path: '', name: 'media:$picked'))
+            localFile: ChatLocalFile(path: '', name: '附件'))
           ..uploadedId = picked));
         _persistStore();
       }
@@ -1003,15 +1022,18 @@ class _ComposerSheetState extends ConsumerState<ComposerSheet> {
       const SizedBox(height: Spacing.gap),
       for (var i = 0; i < _media.length; i++)
         Container(
+          key: ValueKey('composer-media-$i'),
           margin: const EdgeInsets.only(bottom: 6),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
           decoration: BoxDecoration(
             color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
             borderRadius: BorderRadius.circular(AppRadius.sm),
           ),
           child: Row(children: [
-            Icon(Icons.attach_file_rounded, size: 16, color: theme.colorScheme.outline),
-            const SizedBox(width: 8),
+            // 2.8.4 缺陷一：预览区与新建态同形态（图片缩略图 / 视频封面 /
+            // 音频可试听），不再只给一个「token 芯片」
+            _mediaThumb(_media[i], theme),
+            const SizedBox(width: 10),
             Expanded(
               child: Column(crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min, children: [
@@ -1041,5 +1063,100 @@ class _ComposerSheetState extends ConsumerState<ComposerSheet> {
           ]),
         ),
     ];
+  }
+
+  /// 附件预览块（56×56）。已有媒体按 MIME 分三态：图片→缩略图+全屏查看、
+  /// 视频→封面+播放页、音频→试听按钮；本地新选且是图片时直接读文件预览。
+  Widget _mediaThumb(ComposerMedia m, ThemeData theme) {
+    const size = 56.0;
+    final id = (m.uploadedId ?? '').trim();
+    final mime = m.mime.isNotEmpty ? m.mime : _mimeFromName(m.localFile.name);
+
+    Widget box(Widget child) => ClipRRect(
+          borderRadius: BorderRadius.circular(AppRadius.sm),
+          child: SizedBox(width: size, height: size, child: child),
+        );
+
+    if (id.isNotEmpty) {
+      if (mime.startsWith('video/')) {
+        return box(VideoCardView(mid: id, size: size));
+      }
+      if (mime.startsWith('audio/')) {
+        return box(_ComposerAudioTile(mid: id));
+      }
+      // 图片；MIME 缺失时也按图片试（错了有占位兜底），至少比 token 强
+      // 用 GestureDetector 而非 InkWell：缩略图只有 56×56，涟漪意义不大，
+      // 且 InkWell 会拉 shaders/ink_sparkle（无资源环境下测试必炸）
+      return box(GestureDetector(
+        key: ValueKey('composer-media-open-$id'),
+        onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
+          builder: (_) => ImageViewerPage(
+            images: <ChatMedia>[
+              ChatMedia(id: id, name: m.localFile.name, mime: mime),
+            ],
+          ),
+        )),
+        child: MediaImageView(mid: id, size: size),
+      ));
+    }
+
+    // 本地新选（还没上传）：图片读文件，其余给类型图标
+    if (m.localFile.path.isNotEmpty && mime.startsWith('image/')) {
+      return box(Image.file(File(m.localFile.path),
+          fit: BoxFit.cover,
+          errorBuilder: (_, _, _) => _thumbPlaceholder(theme, Icons.image_outlined)));
+    }
+    return box(_thumbPlaceholder(
+        theme, mime.startsWith('video/') ? Icons.videocam_outlined : Icons.attach_file_rounded));
+  }
+
+  Widget _thumbPlaceholder(ThemeData theme, IconData icon) => Container(
+        color: theme.colorScheme.surfaceContainerHighest,
+        alignment: Alignment.center,
+        child: Icon(icon, size: 20, color: theme.colorScheme.outline),
+      );
+
+  /// 只有本地文件名可用时按扩展名猜 MIME（新建态场景兜底）。
+  String _mimeFromName(String name) {
+    final n = name.toLowerCase();
+    if (n.endsWith('.jpg') || n.endsWith('.jpeg') || n.endsWith('.png') ||
+        n.endsWith('.gif') || n.endsWith('.webp') || n.endsWith('.heic')) {
+      return 'image/*';
+    }
+    if (n.endsWith('.mp4') || n.endsWith('.mov') || n.endsWith('.m4v') ||
+        n.endsWith('.webm')) {
+      return 'video/*';
+    }
+    if (n.endsWith('.m4a') || n.endsWith('.mp3') || n.endsWith('.aac') ||
+        n.endsWith('.wav') || n.endsWith('.ogg')) {
+      return 'audio/*';
+    }
+    return '';
+  }
+}
+
+/// 编辑态音频附件的试听块：点击走全局语音播放器（与聊天气泡同一套控制器，
+/// 互斥播放由控制器保证）。
+class _ComposerAudioTile extends ConsumerWidget {
+  const _ComposerAudioTile({required this.mid});
+  final String mid;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final st = ref.watch(voicePlaybackProvider);
+    final playing = st.playing && st.playingMid == mid;
+    return InkWell(
+      key: ValueKey('composer-media-audio-$mid'),
+      onTap: () => ref.read(voicePlaybackProvider.notifier).toggle(mid),
+      child: Container(
+        color: Theme.of(context).colorScheme.primaryContainer,
+        alignment: Alignment.center,
+        child: Icon(
+          playing ? Icons.pause_circle_filled : Icons.play_circle_fill,
+          size: 26,
+          color: Theme.of(context).colorScheme.onPrimaryContainer,
+        ),
+      ),
+    );
   }
 }
