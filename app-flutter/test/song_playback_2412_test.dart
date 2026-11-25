@@ -129,7 +129,19 @@ void main() {
     expect(lock.contains('audio_service:'), isTrue);
     expect(lock.contains('just_audio_background'), isFalse,
         reason: 'lockfile 只减不漂移');
-    expect(lock.contains('https://pub.dev'), isFalse,
-        reason: 'lockfile 必须同源 pub.flutter-io.cn');
+    // 2026-11-26（依赖源切换）：原先这里钉死「不许出现 pub.dev」，切到官方源后
+    // 该断言必然误报。改为断言**同源不漂移**这个真正的不变量：lock 里所有
+    // hosted url 必须完全一致，且若环境里设了 PUB_HOSTED_URL，两者必须同源
+    // （CI 就是这么比的）。这样换源不需要再改测试，只有"锁定分成两个源"才红。
+    final urls = RegExp(r'url: "([^"]+)"')
+        .allMatches(lock)
+        .map((m) => m.group(1)!)
+        .toSet();
+    expect(urls.length, 1, reason: 'lockfile 必须单一同源，实际：$urls');
+    final envSrc = Platform.environment['PUB_HOSTED_URL'];
+    if (envSrc != null && envSrc.isNotEmpty) {
+      expect(urls.single, envSrc.replaceFirst(RegExp(r'/+$'), ''),
+          reason: 'lock 的源必须与 PUB_HOSTED_URL 同源（本地与 CI 同一口径）');
+    }
   });
 }
