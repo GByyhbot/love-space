@@ -15,14 +15,16 @@ import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:crypto/crypto.dart' as crypto;
 import 'package:open_filex/open_filex.dart';
 
 import '../../core/api/api_client.dart' show dioProvider;
 import '../../core/theme/tokens.dart';
 import '../chat/chat_toast.dart' show chatToastProvider;
 import 'update_service.dart';
+import 'update_trace.dart';
+import 'sha256_verifier.dart';
 
 Future<void> showUpdateSheet(
   BuildContext context, {
@@ -63,6 +65,13 @@ class _UpdateSheetState extends ConsumerState<_UpdateSheet> {
   CancelToken? _cancel;
   File? _apkFile;
 
+  /// 本次更新的全链路快照（失败时一键复制给排障用）
+  final UpdateTrace _trace = UpdateTrace(
+      traceId: DateTime.now().millisecondsSinceEpoch.toRadixString(36));
+
+  /// 失败主区域的简明原因（与 toast 解耦：这里要常驻可见）
+  String _failureText = '';
+
   @override
   void dispose() {
     // 用户中途关 sheet：取消下载并清理半成品（不许堆积）
@@ -92,8 +101,28 @@ class _UpdateSheetState extends ConsumerState<_UpdateSheet> {
     try {
       final dio = await ref.read(dioProvider.future);
       final target = await apkTargetFile(widget.release.appVersion);
+      // 期望校验值**先取**：取不到就不下 28MB，直接 fail-closed
+      final expected = await resolveExpectedSha256(dio, asset);
+      final shaSource = asset.digestHex != null
+          ? 'api_field'
+          : (expected != null ? 'sha256_asset' : 'none');
+      _trace.check['targetVersion'] = widget.release.appVersion;
+      _trace.check['selectedAssetName'] = asset.name;
+      _trace.currentVersion = _trace.currentVersion.isEmpty
+          ? widget.release.appVersion
+          : _trace.currentVersion;
+      if (expected == null) {
+        _failWith('verify', '未获取到安装包校验值（来源：$shaSource）');
+        return;
+      }
       _cancel = CancelToken();
       final outcome = await downloadApk(dio, asset, target,
+          trace: _trace,
+          expectedSha: expected,
+          shaSource: shaSource,
+          onVerifying: () {
+            if (mounted) setState(() => _phase = _Phase.verifying);
+          },
           onProgress: (received, total) {
         if (mounted) {
           setState(() {
@@ -120,28 +149,13 @@ class _UpdateSheetState extends ConsumerState<_UpdateSheet> {
       setState(() {
         _apkFile = outcome.file;
         _channel = outcome.channelUsed;
-        _phase = _Phase.verifying;
+        _phase = _Phase.readyToInstall;
       });
-      // ── 验签（硬性）：期望值优先取 API 资产 digest（零请求、不经
-      // 代理）；缺失回退 .sha256 直连。本地 SHA-256 对账不符 → 立即
-      // 删文件，禁止进入安装步（不许无校验安装）──
-      final expected = await resolveExpectedSha256(dio, asset);
-      final actual = expected == null || !_apkFile!.existsSync()
-          ? null
-          : crypto
-              .sha256
-              .convert(await _apkFile!.readAsBytes())
-              .toString();
-      if (expected == null || actual != expected) {
-        // 不一致 → 立即删文件，禁止进入安装步
-        if (_apkFile!.existsSync()) _apkFile!.deleteSync();
-        setState(() => _phase = _Phase.failed);
-        _toast('安装包校验失败，已删除，请稍后重试');
-        return;
-      }
-      if (!mounted) return;
-      setState(() => _phase = _Phase.readyToInstall);
       await _install();
+    } on PackageVerifyException catch (e) {
+      _failWith('verify',
+          '安装包校验失败（期望 ${shortSha(e.expected)} / 实际 ${shortSha(e.actual)}，'
+          '大小 ${humanSize(e.size)}）');
     } on DioException catch (e) {
       if (e.type == DioExceptionType.cancel) {
         _cleanupPartial();
@@ -158,19 +172,35 @@ class _UpdateSheetState extends ConsumerState<_UpdateSheet> {
     final f = _apkFile;
     if (f == null || !f.existsSync()) return;
     final result = await OpenFilex.open(f.path, type: 'application/vnd.android.package-archive');
+    _trace.install
+      ..['filePath'] = f.path
+      ..['resultType'] = result.type.name
+      ..['resultMessage'] = result.message;
     if (!mounted) return;
     if (result.type == ResultType.done) {
       // 安装界面拉起；用户取消系统安装不报错、不 nag
       Navigator.of(context).pop();
     } else {
-      _toast('请在系统设置里允许「安装未知应用」后再试');
+      // 透出枚举原值：permissionDenied / noAppToOpen / fileNotFound / unknown
+      // （旧实现一律提示「允许安装未知应用」，把 FileProvider 失败也说成权限问题）
+      _failWith('install', '调起安装失败（ResultType: ${result.type.name}）');
     }
   }
 
-  void _fail(String text) {
+  void _fail(String text) => _failWith('download', text);
+
+  /// 失败统一出口：记 Trace（阶段 + 原因）+ 常驻文案 + 清残包。
+  /// 不再只靠 toast —— toast 一闪而过，排障时需要能复查。
+  void _failWith(String stage, String text) {
     _cleanupPartial();
-    if (mounted) setState(() => _phase = _Phase.failed);
-    _toast(text);
+    _trace
+      ..failedStage = stage
+      ..failureReason = text;
+    if (!mounted) return;
+    setState(() {
+      _phase = _Phase.failed;
+      _failureText = text;
+    });
   }
 
   void _cleanupPartial() {
@@ -228,6 +258,39 @@ class _UpdateSheetState extends ConsumerState<_UpdateSheet> {
               ),
             ),
           ),
+          if (_phase == _Phase.failed && _failureText.isNotEmpty) ...[
+            const SizedBox(height: Spacing.gap),
+            Container(
+              key: const Key('update-failure-box'),
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.errorContainer.withValues(alpha: 0.5),
+                borderRadius: BorderRadius.circular(AppRadius.sm),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(_failureText, style: theme.textTheme.bodySmall),
+                  const SizedBox(height: 6),
+                  // 一键复制完整 JSON 快照（含脱敏后的 URL 与每次通道尝试）
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton.icon(
+                      key: const Key('update-copy-diag'),
+                      onPressed: () async {
+                        await Clipboard.setData(
+                            ClipboardData(text: _trace.toPrettyJson()));
+                        if (mounted) _toast('诊断信息已复制');
+                      },
+                      icon: const Icon(Icons.copy_all, size: 16),
+                      label: const Text('复制诊断信息'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
           if (_phase == _Phase.downloading) ...[
             const SizedBox(height: Spacing.gap),
             LinearProgressIndicator(

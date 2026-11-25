@@ -32,6 +32,10 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
+
+import 'channel_scheduler.dart';
+import 'update_trace.dart';
+import 'sha256_verifier.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/widgets.dart' show BuildContext;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -54,11 +58,10 @@ const String kShaAssetSuffix = '.sha256';
 /// 2.4.5 乙组第 5 项：ghfast.top 实测（2026-11-18，app-v2.4.4 真实资产
 /// URL）返回 403 不可用 → 按提示词「测速结果成立才加入」条款不加入候选列；
 /// 现有三家维持 2.4.3 实测顺序不变。实测表见交付摘要。
-const List<String> kProxyPrefixes = [
-  'https://gh-proxy.com/',
-  'https://ghproxy.net/',
-  'https://hub.gitmirror.com/',
-];
+/// 内置加速源已迁到 `channel_scheduler.dart`（修订一：删 ghfast.top /
+/// gh-proxy.org，`hub.gitmirror.com` 实测已死一并移除）。此别名保留给
+/// 既有测试与调用方，避免一次性大改引用面。
+List<String> get kProxyPrefixes => kBuiltinProxyTemplates;
 
 /// 自动检查节流窗口（6 小时）。
 const Duration kAutoCheckInterval = Duration(hours: 6);
@@ -109,9 +112,13 @@ class GithubAsset {
     required this.name,
     required this.url,
     this.digest = '',
+    this.size = 0,
   });
   final String name;
   final String url;
+
+  /// 资产字节数（API `size`；校验阶段用来对账「下到的够不够大」）
+  final int size;
 
   /// GitHub API 资产 digest（`sha256:<hex>`；老响应/无该字段 → 空串）。
   final String digest;
@@ -128,6 +135,7 @@ class GithubAsset {
         name: (j['name'] ?? '').toString(),
         url: (j['browser_download_url'] ?? '').toString(),
         digest: (j['digest'] ?? '').toString(),
+        size: (j['size'] as num?)?.toInt() ?? 0,
       );
 }
 
@@ -186,29 +194,90 @@ GithubRelease? pickLatestAppRelease(List<GithubRelease> releases) {
 
 /// ── GitHub 客户端（直连，无凭据）────────────────────────────────────
 
-Future<List<GithubRelease>> fetchReleases(Dio dio) async {
-  final r = await dio.get<List<dynamic>>(
-    kReleaseApi,
-    queryParameters: {'per_page': 30},
-    options: Options(
-      // GitHub API 要求 UA；显式声明与直连来源，避免被中间层剥掉
-      headers: {
-        'User-Agent': 'LoveSpaceApp-update-check',
-        'Accept': 'application/vnd.github+json',
-      },
-      // 用独立超时口径：检查轻量，10s 连接 + 15s 收发
-      connectTimeout: kConnectTimeout,
-      receiveTimeout: kStallWindow,
-      sendTimeout: kStallWindow,
-      // GitHub 是外部源，不落空间 cookie/拦截器影响
-      extra: {'update-source': 'github'},
-    ),
-  );
-  final list = r.data ?? const [];
-  return list
-      .whereType<Map>()
-      .map((e) => GithubRelease.fromJson(e.cast<String, dynamic>()))
-      .toList();
+/// 检查阶段单通道超时（修订页：收紧到 5–8s，别让用户干等）。
+const Duration kCheckChannelTimeout = Duration(seconds: 7);
+
+/// 拉 Releases 列表：**与下载共用同一套通道迭代**（同表、同切换判定）。
+///
+/// 以前这里只有一条直连 `api.github.com`，墙内一挂就没有第二条路——
+/// 而下载阶段早有「直连失败切代理」。现在两边一致：任一通道成功即停，
+/// 404/410 这类确定性错误立即终止（换线路也没用），403/5xx/网络异常换下一条。
+///
+/// ⚠️ 实测边界（2026-11-25）：加速源对 `api.github.com` 的支持并不稳定——
+/// `gh-proxy.com` 能代但常被它自己的共享限流打成 403，`ghproxy.net` 直接
+/// 回 403「Invalid input」。所以检查阶段的回退是**尽力而为**，不能指望它
+/// 像下载那样必成。
+Future<List<GithubRelease>> fetchReleases(Dio dio, {UpdateTrace? trace}) async {
+  final target = '$kReleaseApi?per_page=30';
+  final queue = buildChannelQueue();
+  Object? lastError;
+
+  for (var i = 0; i < queue.length; i++) {
+    final ch = queue[i];
+    final url = ch.urlFor(target);
+    final sw = Stopwatch()..start();
+    try {
+      final r = await dio.get<List<dynamic>>(
+        url,
+        options: Options(
+          // GitHub API 要求 UA；显式声明与直连来源，避免被中间层剥掉
+          headers: {
+            'User-Agent': 'LoveSpaceApp-update-check',
+            'Accept': 'application/vnd.github+json',
+          },
+          connectTimeout: kCheckChannelTimeout,
+          receiveTimeout: kCheckChannelTimeout,
+          sendTimeout: kCheckChannelTimeout,
+          // GitHub 是外部源，不落空间 cookie/拦截器影响
+          extra: {'update-source': 'github'},
+        ),
+      );
+      trace?.addAttempt(ChannelAttempt(
+        phase: 'check',
+        channel: ch.name,
+        channelType: ch.type.code,
+        isAutoFallback: i > 0,
+        url: url,
+        statusCode: r.statusCode ?? 200,
+        durationMs: sw.elapsedMilliseconds,
+      ));
+      final list = r.data ?? const [];
+      return list
+          .whereType<Map>()
+          .map((e) => GithubRelease.fromJson(e.cast<String, dynamic>()))
+          .toList();
+    } on DioException catch (e) {
+      final code = e.response?.statusCode;
+      trace?.addAttempt(ChannelAttempt(
+        phase: 'check',
+        channel: ch.name,
+        channelType: ch.type.code,
+        isAutoFallback: i > 0,
+        url: url,
+        statusCode: code,
+        durationMs: sw.elapsedMilliseconds,
+        error: e,
+      ));
+      final decision = decideSwitch(statusCode: code, error: e);
+      if (!decision.retryNext) {
+        // 404/410：目标确实不存在，换线路也白搭 —— 直接上抛
+        rethrow;
+      }
+      lastError = e;
+    } catch (e) {
+      trace?.addAttempt(ChannelAttempt(
+        phase: 'check',
+        channel: ch.name,
+        channelType: ch.type.code,
+        isAutoFallback: i > 0,
+        url: url,
+        durationMs: sw.elapsedMilliseconds,
+        error: e,
+      ));
+      lastError = e;
+    }
+  }
+  throw Exception('全部检查通道失败：${describeError(lastError)}');
 }
 
 /// ── 本地状态 ─────────────────────────────────────────────────────────
@@ -256,10 +325,34 @@ Future<void> purgeApkCache() async {
 
 /// ── 下载引擎（通道切换 + 进度 + 取止）────────────────────────────────
 
+/// 校验不一致：期望值与实际值都带上，弹窗要能直接展示前 8 位与文件大小。
+class PackageVerifyException implements Exception {
+  const PackageVerifyException({
+    required this.expected,
+    required this.actual,
+    required this.size,
+  });
+  final String expected;
+  final String actual;
+  final int size;
+
+  @override
+  String toString() => 'PackageVerifyException(expected: $expected, actual: $actual, size: $size)';
+}
+
 class DownloadOutcome {
-  const DownloadOutcome({required this.file, required this.channelUsed});
+  const DownloadOutcome({
+    required this.file,
+    required this.channelUsed,
+    this.channelIndex = 0,
+  });
   final File file;
-  final String channelUsed; // 直连 or 代理前缀（摘要/日志用）
+
+  /// 直连 or 加速源域名（摘要/日志用）
+  final String channelUsed;
+
+  /// 在候选表里的序号（0 = 首选），诊断时能看出是第几跳才成功
+  final int channelIndex;
 }
 
 /// 下载 APK：先直连 GitHub 资产 → 失败/过慢逐个切代理候选（换通道就
@@ -274,13 +367,16 @@ Future<DownloadOutcome> downloadApk(
   void Function(String label)? onChannelChange,
   CancelToken? cancelToken,
   SpeedProbeConfig speedProbe = SpeedProbeConfig.prod,
+  UpdateTrace? trace,
+  String? expectedSha,
+  String shaSource = '',
+  void Function()? onVerifying,
 }) async {
-  final channels = <String>[asset.url];
-  for (final p in kProxyPrefixes) {
-    channels.add('$p${asset.url}');
-  }
-  String labelOf(int i) =>
-      i == 0 ? '直连 GitHub' : '代理 ${kProxyPrefixes[i - 1]}';
+  // 与检查阶段同源：同一候选表、同一 URL 拼接规则（修订页 §三.3）
+  final queue = buildChannelQueue();
+  final channels = <String>[for (final c in queue) c.urlFor(asset.url)];
+  String labelOf(int i) => queue[i].name;
+  String typeOf(int i) => queue[i].type.code;
   Object? lastError;
   var i = 0;
   final slowSet = <int>{}; // 已判慢通道（防抖①：每通道只判一次）
@@ -298,9 +394,14 @@ Future<DownloadOutcome> downloadApk(
     }
   }
 
+  var round = 0; // finally 清理要按轮次扫 tmp，作用域提到 try 外
   try {
     while (true) {
-      final tmp = File('${target.path}.t$i');
+      // §三.4：先写 <target>.part，校验通过后才由调用方原子 rename。
+      // 🔴 tmp 名带「轮次」：收尾轮会回到 i=0，若复用同一路径，
+      // 上一轮被取消时还没落干净的分片会和新一轮内容混在一个文件里
+      //（实测出现过文件头是上一轮的字节）。每轮独立文件最稳。
+      final tmp = File('${target.path}.part.r$round.t$i');
       try {
         final ok = await _downloadVia(dio, channels[i], tmp,
             onProgress: onProgress,
@@ -312,17 +413,62 @@ Future<DownloadOutcome> downloadApk(
             },
             probe: speedProbe);
         if (ok) {
+          // §三.4：写 .part → 校验 → 原子 rename 成正式包；不一致立刻删残包
+          final part = File('${target.path}.part');
+          tryDelete(part);
+          await tmp.rename(part.path);
+          final size = part.existsSync() ? part.lengthSync() : 0;
+          if (expectedSha != null) {
+            onVerifying?.call();
+            final actual = await sha256OfFile(part.path);
+            if (trace != null) {
+              trace.artifact
+                ..['fileSize'] = size
+                ..['expectedSize'] = asset.size
+                ..['expectedSha'] = expectedSha
+                ..['actualSha'] = actual
+                ..['shaSource'] = shaSource;
+            }
+            if (actual != expectedSha) {
+              tryDelete(part); // 坏包不许留着让下次误复用
+              throw PackageVerifyException(
+                  expected: expectedSha, actual: actual, size: size);
+            }
+          }
           tryDelete(target);
-          await tmp.rename(target.path);
-          return DownloadOutcome(file: target, channelUsed: labelOf(i));
+          await part.rename(target.path);
+          trace?.addAttempt(ChannelAttempt(
+            phase: 'download',
+            channel: labelOf(i),
+            channelType: typeOf(i),
+            isAutoFallback: i > 0,
+            url: channels[i],
+            statusCode: 200,
+            bytesReceived: size,
+            durationMs: 0,
+          ));
+          return DownloadOutcome(
+              file: target, channelUsed: labelOf(i), channelIndex: i);
         }
         lastError = 'HTTP 非 200';
       } on DioException catch (e) {
         if (e.type == DioExceptionType.cancel) rethrow; // 用户取消直接上抛
         lastError = e;
       } catch (e) {
+        // 校验失败不是通道问题：换线路重下也没用，必须立刻上抛
+        if (e is PackageVerifyException) rethrow;
         lastError = e;
       }
+      // 失败留痕：字节数用于区分「一个字节没下到」与「下到一半被掐」
+      trace?.addAttempt(ChannelAttempt(
+        phase: 'download',
+        channel: labelOf(i),
+        channelType: typeOf(i),
+        isAutoFallback: i > 0,
+        url: channels[i],
+        bytesReceived: tmp.existsSync() ? tmp.lengthSync() : 0,
+        error: lastError,
+      ));
       tryDelete(tmp);
       if (finishRound) {
         throw Exception('全部下载通道失败：$lastError');
@@ -330,17 +476,22 @@ Future<DownloadOutcome> downloadApk(
       if (slowSet.length >= channels.length) {
         // 防抖②：全员皆慢 → 回直连（实测最快候选）禁判慢走完
         i = 0;
+        round++;
         finishRound = true;
         onChannelChange?.call('所有线路均较慢，正在以最快候选继续下载');
       } else {
         onChannelChange?.call(labelOf(i));
-        i = (i + 1) % channels.length;
+        final next = (i + 1) % channels.length;
+        if (next == 0) round++;
+        i = next;
       }
     }
   } finally {
     // 收尾：清全部通道 tmp（容忍式，句柄占用时残留由下次 purge 兑底）
-    for (var k = 0; k < channels.length; k++) {
-      tryDelete(File('${target.path}.t$k'));
+    for (var r = 0; r <= round; r++) {
+      for (var k = 0; k < channels.length; k++) {
+        tryDelete(File('${target.path}.part.r$r.t$k'));
+      }
     }
   }
 }
