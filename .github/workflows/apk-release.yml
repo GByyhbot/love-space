@@ -57,13 +57,17 @@ jobs:
       KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
       KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
       KEY_PASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
-      # 依赖锁定（2026-11-19 缺陷单定案）：pubspec.lock 的 hosted url 是
-      # pub.flutter-io.cn（本机用户级 PUB_HOSTED_URL 所写）；CI 不设该变量时
+      # 依赖锁定（2026-11-19 缺陷单定案）：pubspec.lock 的 hosted url 现为
+      # https://pub.dev（2026-11-26 依赖源切换，见下）；CI 不设该变量时
       # pub 视锁定为异源、全量重解析 → 上游新发版本直接漏进构建（11-18 深夜
       # jni 1.2.0/jni_flutter 1.1.0/dbus 0.8.1 发布，11-19 重打的包静默换芯
       # 致真机不可登录）。与本机同源设 PUB_HOSTED_URL → 锁定恢复生效；
       # pub get 加 --enforce-lockfile：锁定再无法满足时硬失败，不许静默重解析。
-      PUB_HOSTED_URL: https://pub.flutter-io.cn
+      PUB_HOSTED_URL: https://pub.dev
+      # 2026-11-26（依赖源切换）：pub.flutter-io.cn 归档端点服务端 502，
+      # 与 PUB_HOSTED_URL 同时切到官方源。铁律实质不变——本地与 CI 仍同源，
+      # 仍加 --enforce-lockfile；只是源从镜像换成官方。回退：两行 env 改回即退。
+      FLUTTER_STORAGE_BASE_URL: https://storage.googleapis.com
     steps:
       - uses: actions/checkout@v4
 

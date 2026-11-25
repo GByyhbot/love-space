@@ -107,10 +107,14 @@ jobs:
         working-directory: app-flutter
     env:
       # 依赖锁定（2026-11-19 缺陷单定案，同 apk-release.yml）：
-      # pubspec.lock 的 hosted url 是 pub.flutter-io.cn，CI 不设 PUB_HOSTED_URL
+      # pubspec.lock 的 hosted url 现为 pub.dev，CI 不设 PUB_HOSTED_URL
       # 时 pub 视锁定为异源、全量重解析 → 上游新版本静默漏进 CI；
       # 与本机同源 + --enforce-lockfile：锁定无法满足时硬失败不许静默重解析。
-      PUB_HOSTED_URL: https://pub.flutter-io.cn
+      PUB_HOSTED_URL: https://pub.dev
+      # 2026-11-26（依赖源切换）：pub.flutter-io.cn 归档端点服务端 502，
+      # 与 PUB_HOSTED_URL 同时切到官方源。铁律实质不变——本地与 CI 仍同源，
+      # 仍加 --enforce-lockfile；只是源从镜像换成官方。回退：两行 env 改回即退。
+      FLUTTER_STORAGE_BASE_URL: https://storage.googleapis.com
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -192,7 +196,11 @@ jobs:
         working-directory: app-flutter
     env:
       # 同 android job：与 pubspec.lock 的 hosted url 同源，锁定生效
-      PUB_HOSTED_URL: https://pub.flutter-io.cn
+      PUB_HOSTED_URL: https://pub.dev
+      # 2026-11-26（依赖源切换）：pub.flutter-io.cn 归档端点服务端 502，
+      # 与 PUB_HOSTED_URL 同时切到官方源。铁律实质不变——本地与 CI 仍同源，
+      # 仍加 --enforce-lockfile；只是源从镜像换成官方。回退：两行 env 改回即退。
+      FLUTTER_STORAGE_BASE_URL: https://storage.googleapis.com
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
