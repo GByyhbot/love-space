@@ -104,18 +104,16 @@ void main() {
   });
 
   group('候选列护栏（乙组第 5 项实测结论钉死）', () {
-    test('候选列维持三家、顺序不变；ghfast.top 实测 403 未加入', () {
+    test('候选列（ORD-UPDATER-HARDENING-01 修订一）：仅 gh-proxy.com + ghproxy.net', () {
       expect(kProxyPrefixes, [
         'https://gh-proxy.com/',
         'https://ghproxy.net/',
-        'https://hub.gitmirror.com/',
       ]);
-      expect(
-        kProxyPrefixes.any((p) => p.contains('ghfast.top')),
-        isFalse,
-        reason: 'ghfast.top 对真实资产 URL 返回 403（2026-11-18 实测），'
-            '按「测速结果成立才加入」条款不加入；本护栏防后续误加',
-      );
+      // 三条被明确剔除的，任何一个回来都要红
+      for (final banned in <String>['ghfast.top', 'gh-proxy.org', 'hub.gitmirror']) {
+        expect(kProxyPrefixes.any((p) => p.contains(banned)), isFalse,
+            reason: '$banned 已被 2026-11-25 修订一移除（分别因旧裁定 / 未验证 / 实测已死）');
+      }
     });
 
     test('通道顺序 = 直连在前、其后代理列', () {
