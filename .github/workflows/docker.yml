@@ -75,14 +75,24 @@ jobs:
       # 输出（main 推送 = 最近一个 v 标签的纯版本号；打 v* = 该标签版本号），
       # 此处禁止另算一份。sha-*/edge/小版本标签逻辑已删，历史旧标签保留
       # 在 registry 不清理、只是从此不再前进。
+      # 2.8.2 治本：**版本标签只许 tag 构建推送**。
+      # 旧实现在 main 推送时用 `git describe` 取到「上一个」版本号并推同名标签，
+      # 结果 2.8.1 发版时把 2.8.0 标签覆盖成了 2.8.1 的代码（回滚只剩 digest 可用）。
+      # 现在：tag 构建 → latest + X.Y.Z；main 推送 → 仅 edge（非版本标签）。
       - name: 计算镜像标签
         id: tags
         run: |
           set -euo pipefail
           OWNER="${GITHUB_REPOSITORY_OWNER,,}"   # ghcr 要求全小写
-          V="${{ steps.ver.outputs.version }}"
-          TAGS="ghcr.io/$OWNER/love-space:latest"
-          TAGS="$TAGS"$'\n'"ghcr.io/$OWNER/love-space:$V"
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            V="${GITHUB_REF_NAME#v}"
+            TAGS="ghcr.io/$OWNER/love-space:latest"$'\n'"ghcr.io/$OWNER/love-space:$V"
+            echo "模式：tag 构建（版本 ${V}）→ latest + ${V}"
+          else
+            # main 推送 / 手动触发：绝不触碰 latest 与任何版本标签
+            TAGS="ghcr.io/$OWNER/love-space:edge"
+            echo "模式：非 tag 构建（${GITHUB_REF_NAME}）→ 仅 edge，不动 latest/版本标签"
+          fi
           echo "tags<<EOF" >> "$GITHUB_OUTPUT"
           echo "$TAGS" >> "$GITHUB_OUTPUT"
           echo "EOF" >> "$GITHUB_OUTPUT"

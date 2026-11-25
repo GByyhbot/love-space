@@ -1,2846 +1,5616 @@
 {
-  "meta": {
-    "source": "static/period.js",
-    "generatedBy": "tool/gen_period_expected.js（一次性脚本，跑完即删；全文见定案文档）",
-    "method": "Node vm 把 period.js 源码与求值 IIFE 拼成同一 script 实跑；仅注入 recordsOf/today/PROBES/DAYNUM_INPUTS/DAYSTR_INPUTS；dayNum/dayStr/periodData/cyclePhases/periodEpisodeOf 均为 Web 原函数",
-    "functions": [
-      "periodData",
-      "periodEpisodeOf",
-      "cyclePhases",
-      "dayNum",
-      "dayStr"
-    ],
-    "today": "2026-11-14",
-    "ovuNormalization": "JS undefined ovu 归一为 false，phase/predicted 原样",
-    "fixedToday": "2026-11-14（三组夹具共用；Node mock today() 返回固定字符串，Dart 侧 periodData(records, today: ...) 显式传参，同一口径）",
-    "todaySweepMethod": "Node vm 实跑 static/period.js 的 periodData()，仅改注入的 today()，其余夹具原样；期望值非手算"
-  },
-  "cases": {
-    "multiCycle": {
-      "cycle": 28,
-      "length": 5,
-      "nextStart": 20717,
-      "nextStartIso": "2026-09-21",
-      "todayN": 20771,
-      "inWindow": false,
-      "dayOfPeriod": 0,
-      "untilNext": -54,
-      "estimated": false,
-      "lastLen": 5,
-      "gaps": [
-        27,
-        28,
-        29
-      ],
-      "itemCount": 4,
-      "episodes": [
-        {
-          "start": 20605,
-          "end": 20609,
-          "length": 5
-        },
-        {
-          "start": 20632,
-          "end": 20637,
-          "length": 6
-        },
-        {
-          "start": 20660,
-          "end": 20663,
-          "length": 4
-        },
-        {
-          "start": 20689,
-          "end": 20693,
-          "length": 5
-        }
-      ],
-      "dayInCycle": 28,
-      "todayPhase": {
-        "phase": "luteal",
-        "predicted": true,
-        "ovu": false
-      },
-      "phases": {
-        "2026-06-01": {
-          "phase": "period",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-06-02": {
-          "phase": "period",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-06-03": {
-          "phase": "period",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-06-04": {
-          "phase": "period",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-06-05": {
-          "phase": "period",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-06-06": {
-          "phase": "follicular",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-06-07": {
-          "phase": "follicular",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-06-08": {
-          "phase": "follicular",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-06-09": {
-          "phase": "follicular",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-06-10": {
-          "phase": "fertile",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-06-11": {
-          "phase": "fertile",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-06-12": {
-          "phase": "fertile",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-06-13": {
-          "phase": "fertile",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-06-14": {
-          "phase": "fertile",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-06-15": {
-          "phase": "fertile",
-          "predicted": false,
-          "ovu": true
-        },
-        "2026-06-16": {
-          "phase": "fertile",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-06-17": {
-          "phase": "luteal",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-06-18": {
-          "phase": "luteal",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-06-19": {
-          "phase": "luteal",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-06-20": {
-          "phase": "luteal",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-06-21": {
-          "phase": "luteal",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-06-22": {
-          "phase": "luteal",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-06-23": {
-          "phase": "luteal",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-06-24": {
-          "phase": "luteal",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-06-25": {
-          "phase": "luteal",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-06-26": {
-          "phase": "luteal",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-06-27": {
-          "phase": "luteal",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-06-28": {
-          "phase": "period",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-06-29": {
-          "phase": "period",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-06-30": {
-          "phase": "period",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-07-01": {
-          "phase": "period",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-07-02": {
-          "phase": "period",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-07-03": {
-          "phase": "period",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-07-04": {
-          "phase": "follicular",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-07-05": {
-          "phase": "follicular",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-07-06": {
-          "phase": "follicular",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-07-07": {
-          "phase": "fertile",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-07-08": {
-          "phase": "fertile",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-07-09": {
-          "phase": "fertile",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-07-10": {
-          "phase": "fertile",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-07-11": {
-          "phase": "fertile",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-07-12": {
-          "phase": "fertile",
-          "predicted": false,
-          "ovu": true
-        },
-        "2026-07-13": {
-          "phase": "fertile",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-07-14": {
-          "phase": "luteal",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-07-15": {
-          "phase": "luteal",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-07-16": {
-          "phase": "luteal",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-07-17": {
-          "phase": "luteal",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-07-18": {
-          "phase": "luteal",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-07-19": {
-          "phase": "luteal",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-07-20": {
-          "phase": "luteal",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-07-21": {
-          "phase": "luteal",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-07-22": {
-          "phase": "luteal",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-07-23": {
-          "phase": "luteal",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-07-24": {
-          "phase": "luteal",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-07-25": {
-          "phase": "luteal",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-07-26": {
-          "phase": "period",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-07-27": {
-          "phase": "period",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-07-28": {
-          "phase": "period",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-07-29": {
-          "phase": "period",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-07-30": {
-          "phase": "follicular",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-07-31": {
-          "phase": "follicular",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-08-01": {
-          "phase": "follicular",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-08-02": {
-          "phase": "follicular",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-08-03": {
-          "phase": "follicular",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-08-04": {
-          "phase": "fertile",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-08-05": {
-          "phase": "fertile",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-08-06": {
-          "phase": "fertile",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-08-07": {
-          "phase": "fertile",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-08-08": {
-          "phase": "fertile",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-08-09": {
-          "phase": "fertile",
-          "predicted": false,
-          "ovu": true
-        },
-        "2026-08-10": {
-          "phase": "fertile",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-08-11": {
-          "phase": "luteal",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-08-12": {
-          "phase": "luteal",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-08-13": {
-          "phase": "luteal",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-08-14": {
-          "phase": "luteal",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-08-15": {
-          "phase": "luteal",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-08-16": {
-          "phase": "luteal",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-08-17": {
-          "phase": "luteal",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-08-18": {
-          "phase": "luteal",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-08-19": {
-          "phase": "luteal",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-08-20": {
-          "phase": "luteal",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-08-21": {
-          "phase": "luteal",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-08-22": {
-          "phase": "luteal",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-08-24": {
-          "phase": "period",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-08-25": {
-          "phase": "period",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-08-26": {
-          "phase": "period",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-08-27": {
-          "phase": "period",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-08-28": {
-          "phase": "period",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-08-29": {
-          "phase": "follicular",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-08-30": {
-          "phase": "follicular",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-08-31": {
-          "phase": "follicular",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-09-01": {
-          "phase": "follicular",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-09-02": {
-          "phase": "fertile",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-09-03": {
-          "phase": "fertile",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-09-04": {
-          "phase": "fertile",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-09-05": {
-          "phase": "fertile",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-09-06": {
-          "phase": "fertile",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-09-07": {
-          "phase": "fertile",
-          "predicted": false,
-          "ovu": true
-        },
-        "2026-09-08": {
-          "phase": "fertile",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-09-09": {
-          "phase": "luteal",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-09-10": {
-          "phase": "luteal",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-09-11": {
-          "phase": "luteal",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-09-12": {
-          "phase": "luteal",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-09-13": {
-          "phase": "luteal",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-09-14": {
-          "phase": "luteal",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-09-15": {
-          "phase": "luteal",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-09-16": {
-          "phase": "luteal",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-09-17": {
-          "phase": "luteal",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-09-18": {
-          "phase": "luteal",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-09-19": {
-          "phase": "luteal",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-09-20": {
-          "phase": "luteal",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-09-21": {
-          "phase": "period",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-09-22": {
-          "phase": "period",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-09-23": {
-          "phase": "period",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-09-24": {
-          "phase": "period",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-09-25": {
-          "phase": "period",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-09-26": {
-          "phase": "follicular",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-09-27": {
-          "phase": "follicular",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-09-28": {
-          "phase": "follicular",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-09-29": {
-          "phase": "follicular",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-09-30": {
-          "phase": "fertile",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-10-01": {
-          "phase": "fertile",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-10-02": {
-          "phase": "fertile",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-10-03": {
-          "phase": "fertile",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-10-04": {
-          "phase": "fertile",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-10-05": {
-          "phase": "fertile",
-          "predicted": true,
-          "ovu": true
-        },
-        "2026-10-06": {
-          "phase": "fertile",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-10-07": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-10-08": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-10-09": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-10-10": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-10-11": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-10-12": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-10-13": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-10-14": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-10-15": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-10-16": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-10-17": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-10-18": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-10-19": {
-          "phase": "period",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-10-20": {
-          "phase": "period",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-10-21": {
-          "phase": "period",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-10-22": {
-          "phase": "period",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-10-23": {
-          "phase": "period",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-10-24": {
-          "phase": "follicular",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-10-25": {
-          "phase": "follicular",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-10-26": {
-          "phase": "follicular",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-10-27": {
-          "phase": "follicular",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-10-28": {
-          "phase": "fertile",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-10-29": {
-          "phase": "fertile",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-10-30": {
-          "phase": "fertile",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-10-31": {
-          "phase": "fertile",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-11-01": {
-          "phase": "fertile",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-11-02": {
-          "phase": "fertile",
-          "predicted": true,
-          "ovu": true
-        },
-        "2026-11-03": {
-          "phase": "fertile",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-11-04": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-11-05": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-11-06": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-11-07": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-11-08": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-11-09": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-11-10": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-11-11": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-11-12": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-11-13": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-11-14": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-11-15": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-11-16": {
-          "phase": "period",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-11-17": {
-          "phase": "period",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-11-18": {
-          "phase": "period",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-11-19": {
-          "phase": "period",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-11-20": {
-          "phase": "period",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-11-21": {
-          "phase": "follicular",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-11-22": {
-          "phase": "follicular",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-11-23": {
-          "phase": "follicular",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-11-24": {
-          "phase": "follicular",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-11-25": {
-          "phase": "fertile",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-11-26": {
-          "phase": "fertile",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-11-27": {
-          "phase": "fertile",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-11-28": {
-          "phase": "fertile",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-11-29": {
-          "phase": "fertile",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-11-30": {
-          "phase": "fertile",
-          "predicted": true,
-          "ovu": true
-        },
-        "2026-12-01": {
-          "phase": "fertile",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-12-02": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-12-03": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-12-04": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-12-05": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-12-06": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-12-07": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-12-08": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-12-09": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-12-10": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-12-11": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-12-12": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-12-13": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        }
-      },
-      "hits": [
-        {
-          "iso": "2026-06-01",
-          "n": 20605,
-          "hit": true,
-          "epStart": 20605,
-          "epEnd": 20609,
-          "epLength": 5,
-          "ownerId": "p1"
-        },
-        {
-          "iso": "2026-06-03",
-          "n": 20607,
-          "hit": true,
-          "epStart": 20605,
-          "epEnd": 20609,
-          "epLength": 5,
-          "ownerId": "p1"
-        },
-        {
-          "iso": "2026-06-05",
-          "n": 20609,
-          "hit": true,
-          "epStart": 20605,
-          "epEnd": 20609,
-          "epLength": 5,
-          "ownerId": "p1"
-        },
-        {
-          "iso": "2026-06-28",
-          "n": 20632,
-          "hit": true,
-          "epStart": 20632,
-          "epEnd": 20637,
-          "epLength": 6,
-          "ownerId": "p2"
-        },
-        {
-          "iso": "2026-07-01",
-          "n": 20635,
-          "hit": true,
-          "epStart": 20632,
-          "epEnd": 20637,
-          "epLength": 6,
-          "ownerId": "p2"
-        },
-        {
-          "iso": "2026-07-26",
-          "n": 20660,
-          "hit": true,
-          "epStart": 20660,
-          "epEnd": 20663,
-          "epLength": 4,
-          "ownerId": "p3"
-        },
-        {
-          "iso": "2026-08-24",
-          "n": 20689,
-          "hit": true,
-          "epStart": 20689,
-          "epEnd": 20693,
-          "epLength": 5,
-          "ownerId": "p4"
-        },
-        {
-          "iso": "2026-08-28",
-          "n": 20693,
-          "hit": true,
-          "epStart": 20689,
-          "epEnd": 20693,
-          "epLength": 5,
-          "ownerId": "p4"
-        },
-        {
-          "iso": "2026-08-29",
-          "n": 20694,
-          "hit": false
-        },
-        {
-          "iso": "2026-11-14",
-          "n": 20771,
-          "hit": false
-        },
-        {
-          "iso": "2026-05-31",
-          "n": 20604,
-          "hit": false
-        }
-      ],
-      "dayNumSamples": {
-        "1970-01-01": 0,
-        "2024-02-29": 19782,
-        "2026-01-01": 20454,
-        "2026-06-01": 20605,
-        "2026-11-14": 20771,
-        "2026-06-01T12:34:56": 20605
-      },
-      "dayStrSamples": {
-        "0": "1970-01-01",
-        "1": "1970-01-02",
-        "19875": "2024-06-01",
-        "20454": "2026-01-01",
-        "20678": "2026-08-13",
-        "-1": "1969-12-31"
-      }
+ "meta": {
+  "source": "static/period.js",
+  "generatedBy": "tests/gen_period_expected_282.mjs（2.8.2 待确认模型重生成；可重复运行）",
+  "method": "Node vm 把 period.js 源码与求值 IIFE 拼成同一 script 实跑；仅注入 recordsOf/today；dayNum/dayStr/periodData/cyclePhases/periodEpisodeOf 均为 Web 原函数",
+  "functions": [
+   "periodData",
+   "periodEpisodeOf",
+   "cyclePhases",
+   "dayNum",
+   "dayStr"
+  ],
+  "today": "2026-11-14",
+  "ovuNormalization": "ovu 缺省归一成 false；2.8.2 起每天另带 pending 标记",
+  "fixedToday": "2026-11-14（三组夹具共用；Node mock today() 返回固定字符串，Dart 侧 periodData(records, today: ...) 显式传参，同一口径）",
+  "todaySweepMethod": "Node vm 实跑 static/period.js 的 periodData()，仅改注入的 today()，其余夹具原样；期望值非手算"
+ },
+ "cases": {
+  "multiCycle": {
+   "cycle": 28,
+   "length": 5,
+   "nextStart": 20717,
+   "nextStartIso": "2026-09-21",
+   "todayN": 20771,
+   "inWindow": false,
+   "dayOfPeriod": 0,
+   "untilNext": -54,
+   "estimated": false,
+   "lastLen": 5,
+   "pending": null,
+   "gaps": [
+    27,
+    28,
+    29
+   ],
+   "itemCount": 4,
+   "episodes": [
+    {
+     "start": 20605,
+     "end": 20609,
+     "length": 5
     },
-    "singleNoGap": {
-      "cycle": 31,
-      "length": 6,
-      "nextStart": 20798,
-      "nextStartIso": "2026-12-11",
-      "todayN": 20771,
-      "inWindow": true,
-      "dayOfPeriod": 5,
-      "untilNext": 27,
-      "estimated": true,
-      "lastLen": 6,
-      "gaps": [],
-      "itemCount": 1,
-      "episodes": [
-        {
-          "start": 20767,
-          "end": 20772,
-          "length": 6
-        }
-      ],
-      "dayInCycle": 5,
-      "todayPhase": {
-        "phase": "period",
-        "predicted": false,
-        "ovu": false
-      },
-      "phases": {
-        "2026-11-10": {
-          "phase": "period",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-11-11": {
-          "phase": "period",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-11-12": {
-          "phase": "period",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-11-13": {
-          "phase": "period",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-11-14": {
-          "phase": "period",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-11-15": {
-          "phase": "period",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-11-16": {
-          "phase": "follicular",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-11-17": {
-          "phase": "follicular",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-11-18": {
-          "phase": "follicular",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-11-19": {
-          "phase": "follicular",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-11-20": {
-          "phase": "follicular",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-11-21": {
-          "phase": "follicular",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-11-22": {
-          "phase": "fertile",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-11-23": {
-          "phase": "fertile",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-11-24": {
-          "phase": "fertile",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-11-25": {
-          "phase": "fertile",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-11-26": {
-          "phase": "fertile",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-11-27": {
-          "phase": "fertile",
-          "predicted": false,
-          "ovu": true
-        },
-        "2026-11-28": {
-          "phase": "fertile",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-11-29": {
-          "phase": "luteal",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-11-30": {
-          "phase": "luteal",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-12-01": {
-          "phase": "luteal",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-12-02": {
-          "phase": "luteal",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-12-03": {
-          "phase": "luteal",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-12-04": {
-          "phase": "luteal",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-12-05": {
-          "phase": "luteal",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-12-06": {
-          "phase": "luteal",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-12-07": {
-          "phase": "luteal",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-12-08": {
-          "phase": "luteal",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-12-09": {
-          "phase": "luteal",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-12-10": {
-          "phase": "luteal",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-12-11": {
-          "phase": "period",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-12-12": {
-          "phase": "period",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-12-13": {
-          "phase": "period",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-12-14": {
-          "phase": "period",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-12-15": {
-          "phase": "period",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-12-16": {
-          "phase": "period",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-12-17": {
-          "phase": "follicular",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-12-18": {
-          "phase": "follicular",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-12-19": {
-          "phase": "follicular",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-12-20": {
-          "phase": "follicular",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-12-21": {
-          "phase": "follicular",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-12-22": {
-          "phase": "follicular",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-12-23": {
-          "phase": "fertile",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-12-24": {
-          "phase": "fertile",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-12-25": {
-          "phase": "fertile",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-12-26": {
-          "phase": "fertile",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-12-27": {
-          "phase": "fertile",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-12-28": {
-          "phase": "fertile",
-          "predicted": true,
-          "ovu": true
-        },
-        "2026-12-29": {
-          "phase": "fertile",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-12-30": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-12-31": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-01-01": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-01-02": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-01-03": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-01-04": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-01-05": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-01-06": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-01-07": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-01-08": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-01-09": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-01-10": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-01-11": {
-          "phase": "period",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-01-12": {
-          "phase": "period",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-01-13": {
-          "phase": "period",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-01-14": {
-          "phase": "period",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-01-15": {
-          "phase": "period",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-01-16": {
-          "phase": "period",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-01-17": {
-          "phase": "follicular",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-01-18": {
-          "phase": "follicular",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-01-19": {
-          "phase": "follicular",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-01-20": {
-          "phase": "follicular",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-01-21": {
-          "phase": "follicular",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-01-22": {
-          "phase": "follicular",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-01-23": {
-          "phase": "fertile",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-01-24": {
-          "phase": "fertile",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-01-25": {
-          "phase": "fertile",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-01-26": {
-          "phase": "fertile",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-01-27": {
-          "phase": "fertile",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-01-28": {
-          "phase": "fertile",
-          "predicted": true,
-          "ovu": true
-        },
-        "2027-01-29": {
-          "phase": "fertile",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-01-30": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-01-31": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-02-01": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-02-02": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-02-03": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-02-04": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-02-05": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-02-06": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-02-07": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-02-08": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-02-09": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-02-10": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-02-11": {
-          "phase": "period",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-02-12": {
-          "phase": "period",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-02-13": {
-          "phase": "period",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-02-14": {
-          "phase": "period",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-02-15": {
-          "phase": "period",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-02-16": {
-          "phase": "period",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-02-17": {
-          "phase": "follicular",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-02-18": {
-          "phase": "follicular",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-02-19": {
-          "phase": "follicular",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-02-20": {
-          "phase": "follicular",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-02-21": {
-          "phase": "follicular",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-02-22": {
-          "phase": "follicular",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-02-23": {
-          "phase": "fertile",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-02-24": {
-          "phase": "fertile",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-02-25": {
-          "phase": "fertile",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-02-26": {
-          "phase": "fertile",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-02-27": {
-          "phase": "fertile",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-02-28": {
-          "phase": "fertile",
-          "predicted": true,
-          "ovu": true
-        },
-        "2027-03-01": {
-          "phase": "fertile",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-03-02": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-03-03": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-03-04": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-03-05": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-03-06": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-03-07": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-03-08": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-03-09": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-03-10": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-03-11": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-03-12": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-03-13": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        }
-      },
-      "hits": [
-        {
-          "iso": "2026-11-09",
-          "n": 20766,
-          "hit": false
-        },
-        {
-          "iso": "2026-11-10",
-          "n": 20767,
-          "hit": true,
-          "epStart": 20767,
-          "epEnd": 20772,
-          "epLength": 6,
-          "ownerId": "s1"
-        },
-        {
-          "iso": "2026-11-11",
-          "n": 20768,
-          "hit": true,
-          "epStart": 20767,
-          "epEnd": 20772,
-          "epLength": 6,
-          "ownerId": "s1"
-        },
-        {
-          "iso": "2026-11-14",
-          "n": 20771,
-          "hit": true,
-          "epStart": 20767,
-          "epEnd": 20772,
-          "epLength": 6,
-          "ownerId": "s1"
-        },
-        {
-          "iso": "2026-11-15",
-          "n": 20772,
-          "hit": true,
-          "epStart": 20767,
-          "epEnd": 20772,
-          "epLength": 6,
-          "ownerId": "s1"
-        },
-        {
-          "iso": "2026-11-16",
-          "n": 20773,
-          "hit": false
-        },
-        {
-          "iso": "2026-12-11",
-          "n": 20798,
-          "hit": false
-        }
-      ],
-      "dayNumSamples": {
-        "1970-01-01": 0,
-        "2024-02-29": 19782,
-        "2026-01-01": 20454,
-        "2026-06-01": 20605,
-        "2026-11-14": 20771,
-        "2026-06-01T12:34:56": 20605
-      },
-      "dayStrSamples": {
-        "0": "1970-01-01",
-        "1": "1970-01-02",
-        "19875": "2024-06-01",
-        "20454": "2026-01-01",
-        "20678": "2026-08-13",
-        "-1": "1969-12-31"
-      }
+    {
+     "start": 20632,
+     "end": 20637,
+     "length": 6
     },
-    "fragmentMerge": {
-      "cycle": 30,
-      "length": 6,
-      "nextStart": 20757,
-      "nextStartIso": "2026-10-31",
-      "todayN": 20771,
-      "inWindow": false,
-      "dayOfPeriod": 0,
-      "untilNext": -14,
-      "estimated": false,
-      "lastLen": 5,
-      "gaps": [
-        30
-      ],
-      "itemCount": 5,
-      "episodes": [
-        {
-          "start": 20697,
-          "end": 20703,
-          "length": 7
-        },
-        {
-          "start": 20727,
-          "end": 20731,
-          "length": 5
-        }
-      ],
-      "dayInCycle": 30,
-      "todayPhase": {
-        "phase": "fertile",
-        "predicted": true,
-        "ovu": false
-      },
-      "phases": {
-        "2026-09-01": {
-          "phase": "period",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-09-02": {
-          "phase": "period",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-09-03": {
-          "phase": "period",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-09-04": {
-          "phase": "period",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-09-05": {
-          "phase": "period",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-09-06": {
-          "phase": "period",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-09-07": {
-          "phase": "period",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-09-08": {
-          "phase": "follicular",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-09-09": {
-          "phase": "follicular",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-09-10": {
-          "phase": "follicular",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-09-11": {
-          "phase": "follicular",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-09-12": {
-          "phase": "fertile",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-09-13": {
-          "phase": "fertile",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-09-14": {
-          "phase": "fertile",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-09-15": {
-          "phase": "fertile",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-09-16": {
-          "phase": "fertile",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-09-17": {
-          "phase": "fertile",
-          "predicted": false,
-          "ovu": true
-        },
-        "2026-09-18": {
-          "phase": "fertile",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-09-19": {
-          "phase": "luteal",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-09-20": {
-          "phase": "luteal",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-09-21": {
-          "phase": "luteal",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-09-22": {
-          "phase": "luteal",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-09-23": {
-          "phase": "luteal",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-09-24": {
-          "phase": "luteal",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-09-25": {
-          "phase": "luteal",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-09-26": {
-          "phase": "luteal",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-09-27": {
-          "phase": "luteal",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-09-28": {
-          "phase": "luteal",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-09-29": {
-          "phase": "luteal",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-09-30": {
-          "phase": "luteal",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-10-01": {
-          "phase": "period",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-10-02": {
-          "phase": "period",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-10-03": {
-          "phase": "period",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-10-04": {
-          "phase": "period",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-10-05": {
-          "phase": "period",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-10-06": {
-          "phase": "follicular",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-10-07": {
-          "phase": "follicular",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-10-08": {
-          "phase": "follicular",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-10-09": {
-          "phase": "follicular",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-10-10": {
-          "phase": "follicular",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-10-11": {
-          "phase": "follicular",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-10-12": {
-          "phase": "fertile",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-10-13": {
-          "phase": "fertile",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-10-14": {
-          "phase": "fertile",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-10-15": {
-          "phase": "fertile",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-10-16": {
-          "phase": "fertile",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-10-17": {
-          "phase": "fertile",
-          "predicted": false,
-          "ovu": true
-        },
-        "2026-10-18": {
-          "phase": "fertile",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-10-19": {
-          "phase": "luteal",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-10-20": {
-          "phase": "luteal",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-10-21": {
-          "phase": "luteal",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-10-22": {
-          "phase": "luteal",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-10-23": {
-          "phase": "luteal",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-10-24": {
-          "phase": "luteal",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-10-25": {
-          "phase": "luteal",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-10-26": {
-          "phase": "luteal",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-10-27": {
-          "phase": "luteal",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-10-28": {
-          "phase": "luteal",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-10-29": {
-          "phase": "luteal",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-10-30": {
-          "phase": "luteal",
-          "predicted": false,
-          "ovu": false
-        },
-        "2026-10-31": {
-          "phase": "period",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-11-01": {
-          "phase": "period",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-11-02": {
-          "phase": "period",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-11-03": {
-          "phase": "period",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-11-04": {
-          "phase": "period",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-11-05": {
-          "phase": "period",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-11-06": {
-          "phase": "follicular",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-11-07": {
-          "phase": "follicular",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-11-08": {
-          "phase": "follicular",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-11-09": {
-          "phase": "follicular",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-11-10": {
-          "phase": "follicular",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-11-11": {
-          "phase": "fertile",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-11-12": {
-          "phase": "fertile",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-11-13": {
-          "phase": "fertile",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-11-14": {
-          "phase": "fertile",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-11-15": {
-          "phase": "fertile",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-11-16": {
-          "phase": "fertile",
-          "predicted": true,
-          "ovu": true
-        },
-        "2026-11-17": {
-          "phase": "fertile",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-11-18": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-11-19": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-11-20": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-11-21": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-11-22": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-11-23": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-11-24": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-11-25": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-11-26": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-11-27": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-11-28": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-11-29": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-11-30": {
-          "phase": "period",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-12-01": {
-          "phase": "period",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-12-02": {
-          "phase": "period",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-12-03": {
-          "phase": "period",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-12-04": {
-          "phase": "period",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-12-05": {
-          "phase": "period",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-12-06": {
-          "phase": "follicular",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-12-07": {
-          "phase": "follicular",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-12-08": {
-          "phase": "follicular",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-12-09": {
-          "phase": "follicular",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-12-10": {
-          "phase": "follicular",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-12-11": {
-          "phase": "fertile",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-12-12": {
-          "phase": "fertile",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-12-13": {
-          "phase": "fertile",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-12-14": {
-          "phase": "fertile",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-12-15": {
-          "phase": "fertile",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-12-16": {
-          "phase": "fertile",
-          "predicted": true,
-          "ovu": true
-        },
-        "2026-12-17": {
-          "phase": "fertile",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-12-18": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-12-19": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-12-20": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-12-21": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-12-22": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-12-23": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-12-24": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-12-25": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-12-26": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-12-27": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-12-28": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-12-29": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-12-30": {
-          "phase": "period",
-          "predicted": true,
-          "ovu": false
-        },
-        "2026-12-31": {
-          "phase": "period",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-01-01": {
-          "phase": "period",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-01-02": {
-          "phase": "period",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-01-03": {
-          "phase": "period",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-01-04": {
-          "phase": "period",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-01-05": {
-          "phase": "follicular",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-01-06": {
-          "phase": "follicular",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-01-07": {
-          "phase": "follicular",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-01-08": {
-          "phase": "follicular",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-01-09": {
-          "phase": "follicular",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-01-10": {
-          "phase": "fertile",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-01-11": {
-          "phase": "fertile",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-01-12": {
-          "phase": "fertile",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-01-13": {
-          "phase": "fertile",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-01-14": {
-          "phase": "fertile",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-01-15": {
-          "phase": "fertile",
-          "predicted": true,
-          "ovu": true
-        },
-        "2027-01-16": {
-          "phase": "fertile",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-01-17": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-01-18": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-01-19": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-01-20": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-01-21": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-01-22": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-01-23": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-01-24": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-01-25": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-01-26": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-01-27": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        },
-        "2027-01-28": {
-          "phase": "luteal",
-          "predicted": true,
-          "ovu": false
-        }
-      },
-      "hits": [
-        {
-          "iso": "2026-08-31",
-          "n": 20696,
-          "hit": false
-        },
-        {
-          "iso": "2026-09-01",
-          "n": 20697,
-          "hit": true,
-          "epStart": 20697,
-          "epEnd": 20703,
-          "epLength": 7,
-          "ownerId": "f1"
-        },
-        {
-          "iso": "2026-09-02",
-          "n": 20698,
-          "hit": true,
-          "epStart": 20697,
-          "epEnd": 20703,
-          "epLength": 7,
-          "ownerId": "f1"
-        },
-        {
-          "iso": "2026-09-04",
-          "n": 20700,
-          "hit": true,
-          "epStart": 20697,
-          "epEnd": 20703,
-          "epLength": 7,
-          "ownerId": "f2"
-        },
-        {
-          "iso": "2026-09-06",
-          "n": 20702,
-          "hit": true,
-          "epStart": 20697,
-          "epEnd": 20703,
-          "epLength": 7,
-          "ownerId": "f3"
-        },
-        {
-          "iso": "2026-09-07",
-          "n": 20703,
-          "hit": true,
-          "epStart": 20697,
-          "epEnd": 20703,
-          "epLength": 7,
-          "ownerId": "f3"
-        },
-        {
-          "iso": "2026-09-08",
-          "n": 20704,
-          "hit": false
-        },
-        {
-          "iso": "2026-10-01",
-          "n": 20727,
-          "hit": true,
-          "epStart": 20727,
-          "epEnd": 20731,
-          "epLength": 5,
-          "ownerId": "f4"
-        },
-        {
-          "iso": "2026-10-03",
-          "n": 20729,
-          "hit": true,
-          "epStart": 20727,
-          "epEnd": 20731,
-          "epLength": 5,
-          "ownerId": "f5"
-        },
-        {
-          "iso": "2026-10-05",
-          "n": 20731,
-          "hit": true,
-          "epStart": 20727,
-          "epEnd": 20731,
-          "epLength": 5,
-          "ownerId": "f5"
-        },
-        {
-          "iso": "2026-10-06",
-          "n": 20732,
-          "hit": false
-        }
-      ],
-      "dayNumSamples": {
-        "1970-01-01": 0,
-        "2024-02-29": 19782,
-        "2026-01-01": 20454,
-        "2026-06-01": 20605,
-        "2026-11-14": 20771,
-        "2026-06-01T12:34:56": 20605
-      },
-      "dayStrSamples": {
-        "0": "1970-01-01",
-        "1": "1970-01-02",
-        "19875": "2024-06-01",
-        "20454": "2026-01-01",
-        "20678": "2026-08-13",
-        "-1": "1969-12-31"
-      }
+    {
+     "start": 20660,
+     "end": 20663,
+     "length": 4
+    },
+    {
+     "start": 20689,
+     "end": 20693,
+     "length": 5
     }
-  },
-  "dayNumSamples": {
+   ],
+   "dayInCycle": 28,
+   "todayPhase": {
+    "phase": "luteal",
+    "predicted": true,
+    "ovu": false
+   },
+   "phases": {
+    "2026-11-16": {
+     "phase": "period",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-11-17": {
+     "phase": "period",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-11-18": {
+     "phase": "period",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-11-19": {
+     "phase": "period",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-11-20": {
+     "phase": "period",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-11-21": {
+     "phase": "follicular",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-11-22": {
+     "phase": "follicular",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-11-23": {
+     "phase": "follicular",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-11-24": {
+     "phase": "follicular",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-11-25": {
+     "phase": "fertile",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-11-26": {
+     "phase": "fertile",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-11-27": {
+     "phase": "fertile",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-11-28": {
+     "phase": "fertile",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-11-29": {
+     "phase": "fertile",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-11-30": {
+     "phase": "fertile",
+     "predicted": true,
+     "ovu": true,
+     "pending": false
+    },
+    "2026-12-01": {
+     "phase": "fertile",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-12-02": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-12-03": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-12-04": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-12-05": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-12-06": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-12-07": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-12-08": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-12-09": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-12-10": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-12-11": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-12-12": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-12-13": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-10-19": {
+     "phase": "period",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-10-20": {
+     "phase": "period",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-10-21": {
+     "phase": "period",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-10-22": {
+     "phase": "period",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-10-23": {
+     "phase": "period",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-10-24": {
+     "phase": "follicular",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-10-25": {
+     "phase": "follicular",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-10-26": {
+     "phase": "follicular",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-10-27": {
+     "phase": "follicular",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-10-28": {
+     "phase": "fertile",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-10-29": {
+     "phase": "fertile",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-10-30": {
+     "phase": "fertile",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-10-31": {
+     "phase": "fertile",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-11-01": {
+     "phase": "fertile",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-11-02": {
+     "phase": "fertile",
+     "predicted": true,
+     "ovu": true,
+     "pending": false
+    },
+    "2026-11-03": {
+     "phase": "fertile",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-11-04": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-11-05": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-11-06": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-11-07": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-11-08": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-11-09": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-11-10": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-11-11": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-11-12": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-11-13": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-11-14": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-11-15": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-09-21": {
+     "phase": "period",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-09-22": {
+     "phase": "period",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-09-23": {
+     "phase": "period",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-09-24": {
+     "phase": "period",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-09-25": {
+     "phase": "period",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-09-26": {
+     "phase": "follicular",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-09-27": {
+     "phase": "follicular",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-09-28": {
+     "phase": "follicular",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-09-29": {
+     "phase": "follicular",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-09-30": {
+     "phase": "fertile",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-10-01": {
+     "phase": "fertile",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-10-02": {
+     "phase": "fertile",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-10-03": {
+     "phase": "fertile",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-10-04": {
+     "phase": "fertile",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-10-05": {
+     "phase": "fertile",
+     "predicted": true,
+     "ovu": true,
+     "pending": false
+    },
+    "2026-10-06": {
+     "phase": "fertile",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-10-07": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-10-08": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-10-09": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-10-10": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-10-11": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-10-12": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-10-13": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-10-14": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-10-15": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-10-16": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-10-17": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-10-18": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-06-01": {
+     "phase": "period",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-06-02": {
+     "phase": "period",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-06-03": {
+     "phase": "period",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-06-04": {
+     "phase": "period",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-06-05": {
+     "phase": "period",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-06-06": {
+     "phase": "follicular",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-06-07": {
+     "phase": "follicular",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-06-08": {
+     "phase": "follicular",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-06-09": {
+     "phase": "fertile",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-06-10": {
+     "phase": "fertile",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-06-11": {
+     "phase": "fertile",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-06-12": {
+     "phase": "fertile",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-06-13": {
+     "phase": "fertile",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-06-14": {
+     "phase": "fertile",
+     "predicted": false,
+     "ovu": true,
+     "pending": false
+    },
+    "2026-06-15": {
+     "phase": "fertile",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-06-16": {
+     "phase": "luteal",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-06-17": {
+     "phase": "luteal",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-06-18": {
+     "phase": "luteal",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-06-19": {
+     "phase": "luteal",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-06-20": {
+     "phase": "luteal",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-06-21": {
+     "phase": "luteal",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-06-22": {
+     "phase": "luteal",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-06-23": {
+     "phase": "luteal",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-06-24": {
+     "phase": "luteal",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-06-25": {
+     "phase": "luteal",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-06-26": {
+     "phase": "luteal",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-06-27": {
+     "phase": "luteal",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-06-28": {
+     "phase": "period",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-06-29": {
+     "phase": "period",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-06-30": {
+     "phase": "period",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-07-01": {
+     "phase": "period",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-07-02": {
+     "phase": "period",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-07-03": {
+     "phase": "period",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-07-04": {
+     "phase": "follicular",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-07-05": {
+     "phase": "follicular",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-07-06": {
+     "phase": "follicular",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-07-07": {
+     "phase": "fertile",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-07-08": {
+     "phase": "fertile",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-07-09": {
+     "phase": "fertile",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-07-10": {
+     "phase": "fertile",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-07-11": {
+     "phase": "fertile",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-07-12": {
+     "phase": "fertile",
+     "predicted": false,
+     "ovu": true,
+     "pending": false
+    },
+    "2026-07-13": {
+     "phase": "fertile",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-07-14": {
+     "phase": "luteal",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-07-15": {
+     "phase": "luteal",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-07-16": {
+     "phase": "luteal",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-07-17": {
+     "phase": "luteal",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-07-18": {
+     "phase": "luteal",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-07-19": {
+     "phase": "luteal",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-07-20": {
+     "phase": "luteal",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-07-21": {
+     "phase": "luteal",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-07-22": {
+     "phase": "luteal",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-07-23": {
+     "phase": "luteal",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-07-24": {
+     "phase": "luteal",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-07-25": {
+     "phase": "luteal",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-07-26": {
+     "phase": "period",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-07-27": {
+     "phase": "period",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-07-28": {
+     "phase": "period",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-07-29": {
+     "phase": "period",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-07-30": {
+     "phase": "follicular",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-07-31": {
+     "phase": "follicular",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-08-01": {
+     "phase": "follicular",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-08-02": {
+     "phase": "follicular",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-08-03": {
+     "phase": "follicular",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-08-04": {
+     "phase": "follicular",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-08-05": {
+     "phase": "fertile",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-08-06": {
+     "phase": "fertile",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-08-07": {
+     "phase": "fertile",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-08-08": {
+     "phase": "fertile",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-08-09": {
+     "phase": "fertile",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-08-10": {
+     "phase": "fertile",
+     "predicted": false,
+     "ovu": true,
+     "pending": false
+    },
+    "2026-08-11": {
+     "phase": "fertile",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-08-12": {
+     "phase": "luteal",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-08-13": {
+     "phase": "luteal",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-08-14": {
+     "phase": "luteal",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-08-15": {
+     "phase": "luteal",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-08-16": {
+     "phase": "luteal",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-08-17": {
+     "phase": "luteal",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-08-18": {
+     "phase": "luteal",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-08-19": {
+     "phase": "luteal",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-08-20": {
+     "phase": "luteal",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-08-21": {
+     "phase": "luteal",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-08-22": {
+     "phase": "luteal",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-08-23": {
+     "phase": "luteal",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-08-24": {
+     "phase": "period",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-08-25": {
+     "phase": "period",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-08-26": {
+     "phase": "period",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-08-27": {
+     "phase": "period",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-08-28": {
+     "phase": "period",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-08-29": {
+     "phase": "follicular",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-08-30": {
+     "phase": "follicular",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-08-31": {
+     "phase": "follicular",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-09-01": {
+     "phase": "follicular",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-09-02": {
+     "phase": "fertile",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-09-03": {
+     "phase": "fertile",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-09-04": {
+     "phase": "fertile",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-09-05": {
+     "phase": "fertile",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-09-06": {
+     "phase": "fertile",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-09-07": {
+     "phase": "fertile",
+     "predicted": false,
+     "ovu": true,
+     "pending": false
+    },
+    "2026-09-08": {
+     "phase": "fertile",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-09-09": {
+     "phase": "luteal",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-09-10": {
+     "phase": "luteal",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-09-11": {
+     "phase": "luteal",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-09-12": {
+     "phase": "luteal",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-09-13": {
+     "phase": "luteal",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-09-14": {
+     "phase": "luteal",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-09-15": {
+     "phase": "luteal",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-09-16": {
+     "phase": "luteal",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-09-17": {
+     "phase": "luteal",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-09-18": {
+     "phase": "luteal",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-09-19": {
+     "phase": "luteal",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-09-20": {
+     "phase": "luteal",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    }
+   },
+   "hits": [
+    {
+     "iso": "2026-05-31",
+     "n": 20604,
+     "hit": false
+    },
+    {
+     "iso": "2026-06-01",
+     "n": 20605,
+     "hit": true,
+     "epStart": 20605,
+     "epEnd": 20609,
+     "epLength": 5,
+     "ownerId": "p1"
+    },
+    {
+     "iso": "2026-06-02",
+     "n": 20606,
+     "hit": true,
+     "epStart": 20605,
+     "epEnd": 20609,
+     "epLength": 5,
+     "ownerId": "p1"
+    },
+    {
+     "iso": "2026-06-03",
+     "n": 20607,
+     "hit": true,
+     "epStart": 20605,
+     "epEnd": 20609,
+     "epLength": 5,
+     "ownerId": "p1"
+    },
+    {
+     "iso": "2026-06-04",
+     "n": 20608,
+     "hit": true,
+     "epStart": 20605,
+     "epEnd": 20609,
+     "epLength": 5,
+     "ownerId": "p1"
+    },
+    {
+     "iso": "2026-06-05",
+     "n": 20609,
+     "hit": true,
+     "epStart": 20605,
+     "epEnd": 20609,
+     "epLength": 5,
+     "ownerId": "p1"
+    },
+    {
+     "iso": "2026-06-06",
+     "n": 20610,
+     "hit": false
+    },
+    {
+     "iso": "2026-06-07",
+     "n": 20611,
+     "hit": false
+    },
+    {
+     "iso": "2026-06-08",
+     "n": 20612,
+     "hit": false
+    },
+    {
+     "iso": "2026-06-09",
+     "n": 20613,
+     "hit": false
+    },
+    {
+     "iso": "2026-06-10",
+     "n": 20614,
+     "hit": false
+    },
+    {
+     "iso": "2026-06-11",
+     "n": 20615,
+     "hit": false
+    },
+    {
+     "iso": "2026-06-12",
+     "n": 20616,
+     "hit": false
+    },
+    {
+     "iso": "2026-06-13",
+     "n": 20617,
+     "hit": false
+    },
+    {
+     "iso": "2026-06-14",
+     "n": 20618,
+     "hit": false
+    },
+    {
+     "iso": "2026-06-15",
+     "n": 20619,
+     "hit": false
+    },
+    {
+     "iso": "2026-06-16",
+     "n": 20620,
+     "hit": false
+    },
+    {
+     "iso": "2026-06-17",
+     "n": 20621,
+     "hit": false
+    },
+    {
+     "iso": "2026-06-18",
+     "n": 20622,
+     "hit": false
+    },
+    {
+     "iso": "2026-06-19",
+     "n": 20623,
+     "hit": false
+    },
+    {
+     "iso": "2026-06-20",
+     "n": 20624,
+     "hit": false
+    },
+    {
+     "iso": "2026-06-21",
+     "n": 20625,
+     "hit": false
+    },
+    {
+     "iso": "2026-06-22",
+     "n": 20626,
+     "hit": false
+    },
+    {
+     "iso": "2026-06-23",
+     "n": 20627,
+     "hit": false
+    },
+    {
+     "iso": "2026-06-24",
+     "n": 20628,
+     "hit": false
+    },
+    {
+     "iso": "2026-06-25",
+     "n": 20629,
+     "hit": false
+    },
+    {
+     "iso": "2026-06-26",
+     "n": 20630,
+     "hit": false
+    },
+    {
+     "iso": "2026-06-27",
+     "n": 20631,
+     "hit": false
+    },
+    {
+     "iso": "2026-06-28",
+     "n": 20632,
+     "hit": true,
+     "epStart": 20632,
+     "epEnd": 20637,
+     "epLength": 6,
+     "ownerId": "p2"
+    },
+    {
+     "iso": "2026-06-29",
+     "n": 20633,
+     "hit": true,
+     "epStart": 20632,
+     "epEnd": 20637,
+     "epLength": 6,
+     "ownerId": "p2"
+    },
+    {
+     "iso": "2026-06-30",
+     "n": 20634,
+     "hit": true,
+     "epStart": 20632,
+     "epEnd": 20637,
+     "epLength": 6,
+     "ownerId": "p2"
+    },
+    {
+     "iso": "2026-07-01",
+     "n": 20635,
+     "hit": true,
+     "epStart": 20632,
+     "epEnd": 20637,
+     "epLength": 6,
+     "ownerId": "p2"
+    },
+    {
+     "iso": "2026-07-02",
+     "n": 20636,
+     "hit": true,
+     "epStart": 20632,
+     "epEnd": 20637,
+     "epLength": 6,
+     "ownerId": "p2"
+    },
+    {
+     "iso": "2026-07-03",
+     "n": 20637,
+     "hit": true,
+     "epStart": 20632,
+     "epEnd": 20637,
+     "epLength": 6,
+     "ownerId": "p2"
+    },
+    {
+     "iso": "2026-07-04",
+     "n": 20638,
+     "hit": false
+    },
+    {
+     "iso": "2026-07-05",
+     "n": 20639,
+     "hit": false
+    },
+    {
+     "iso": "2026-07-06",
+     "n": 20640,
+     "hit": false
+    },
+    {
+     "iso": "2026-07-07",
+     "n": 20641,
+     "hit": false
+    },
+    {
+     "iso": "2026-07-08",
+     "n": 20642,
+     "hit": false
+    },
+    {
+     "iso": "2026-07-09",
+     "n": 20643,
+     "hit": false
+    },
+    {
+     "iso": "2026-07-10",
+     "n": 20644,
+     "hit": false
+    },
+    {
+     "iso": "2026-07-11",
+     "n": 20645,
+     "hit": false
+    },
+    {
+     "iso": "2026-07-12",
+     "n": 20646,
+     "hit": false
+    },
+    {
+     "iso": "2026-07-13",
+     "n": 20647,
+     "hit": false
+    },
+    {
+     "iso": "2026-07-14",
+     "n": 20648,
+     "hit": false
+    },
+    {
+     "iso": "2026-07-15",
+     "n": 20649,
+     "hit": false
+    },
+    {
+     "iso": "2026-07-16",
+     "n": 20650,
+     "hit": false
+    },
+    {
+     "iso": "2026-07-17",
+     "n": 20651,
+     "hit": false
+    },
+    {
+     "iso": "2026-07-18",
+     "n": 20652,
+     "hit": false
+    },
+    {
+     "iso": "2026-07-19",
+     "n": 20653,
+     "hit": false
+    },
+    {
+     "iso": "2026-07-20",
+     "n": 20654,
+     "hit": false
+    },
+    {
+     "iso": "2026-07-21",
+     "n": 20655,
+     "hit": false
+    },
+    {
+     "iso": "2026-07-22",
+     "n": 20656,
+     "hit": false
+    },
+    {
+     "iso": "2026-07-23",
+     "n": 20657,
+     "hit": false
+    },
+    {
+     "iso": "2026-07-24",
+     "n": 20658,
+     "hit": false
+    },
+    {
+     "iso": "2026-07-25",
+     "n": 20659,
+     "hit": false
+    },
+    {
+     "iso": "2026-07-26",
+     "n": 20660,
+     "hit": true,
+     "epStart": 20660,
+     "epEnd": 20663,
+     "epLength": 4,
+     "ownerId": "p3"
+    },
+    {
+     "iso": "2026-07-27",
+     "n": 20661,
+     "hit": true,
+     "epStart": 20660,
+     "epEnd": 20663,
+     "epLength": 4,
+     "ownerId": "p3"
+    },
+    {
+     "iso": "2026-07-28",
+     "n": 20662,
+     "hit": true,
+     "epStart": 20660,
+     "epEnd": 20663,
+     "epLength": 4,
+     "ownerId": "p3"
+    },
+    {
+     "iso": "2026-07-29",
+     "n": 20663,
+     "hit": true,
+     "epStart": 20660,
+     "epEnd": 20663,
+     "epLength": 4,
+     "ownerId": "p3"
+    },
+    {
+     "iso": "2026-07-30",
+     "n": 20664,
+     "hit": false
+    },
+    {
+     "iso": "2026-07-31",
+     "n": 20665,
+     "hit": false
+    },
+    {
+     "iso": "2026-08-01",
+     "n": 20666,
+     "hit": false
+    },
+    {
+     "iso": "2026-08-02",
+     "n": 20667,
+     "hit": false
+    },
+    {
+     "iso": "2026-08-03",
+     "n": 20668,
+     "hit": false
+    },
+    {
+     "iso": "2026-08-04",
+     "n": 20669,
+     "hit": false
+    },
+    {
+     "iso": "2026-08-05",
+     "n": 20670,
+     "hit": false
+    },
+    {
+     "iso": "2026-08-06",
+     "n": 20671,
+     "hit": false
+    },
+    {
+     "iso": "2026-08-07",
+     "n": 20672,
+     "hit": false
+    },
+    {
+     "iso": "2026-08-08",
+     "n": 20673,
+     "hit": false
+    },
+    {
+     "iso": "2026-08-09",
+     "n": 20674,
+     "hit": false
+    },
+    {
+     "iso": "2026-08-10",
+     "n": 20675,
+     "hit": false
+    },
+    {
+     "iso": "2026-08-11",
+     "n": 20676,
+     "hit": false
+    },
+    {
+     "iso": "2026-08-12",
+     "n": 20677,
+     "hit": false
+    },
+    {
+     "iso": "2026-08-13",
+     "n": 20678,
+     "hit": false
+    },
+    {
+     "iso": "2026-08-14",
+     "n": 20679,
+     "hit": false
+    },
+    {
+     "iso": "2026-08-15",
+     "n": 20680,
+     "hit": false
+    },
+    {
+     "iso": "2026-08-16",
+     "n": 20681,
+     "hit": false
+    },
+    {
+     "iso": "2026-08-17",
+     "n": 20682,
+     "hit": false
+    },
+    {
+     "iso": "2026-08-18",
+     "n": 20683,
+     "hit": false
+    },
+    {
+     "iso": "2026-08-19",
+     "n": 20684,
+     "hit": false
+    },
+    {
+     "iso": "2026-08-20",
+     "n": 20685,
+     "hit": false
+    },
+    {
+     "iso": "2026-08-21",
+     "n": 20686,
+     "hit": false
+    },
+    {
+     "iso": "2026-08-22",
+     "n": 20687,
+     "hit": false
+    },
+    {
+     "iso": "2026-08-23",
+     "n": 20688,
+     "hit": false
+    },
+    {
+     "iso": "2026-08-24",
+     "n": 20689,
+     "hit": true,
+     "epStart": 20689,
+     "epEnd": 20693,
+     "epLength": 5,
+     "ownerId": "p4"
+    },
+    {
+     "iso": "2026-08-25",
+     "n": 20690,
+     "hit": true,
+     "epStart": 20689,
+     "epEnd": 20693,
+     "epLength": 5,
+     "ownerId": "p4"
+    },
+    {
+     "iso": "2026-08-26",
+     "n": 20691,
+     "hit": true,
+     "epStart": 20689,
+     "epEnd": 20693,
+     "epLength": 5,
+     "ownerId": "p4"
+    },
+    {
+     "iso": "2026-08-27",
+     "n": 20692,
+     "hit": true,
+     "epStart": 20689,
+     "epEnd": 20693,
+     "epLength": 5,
+     "ownerId": "p4"
+    },
+    {
+     "iso": "2026-08-28",
+     "n": 20693,
+     "hit": true,
+     "epStart": 20689,
+     "epEnd": 20693,
+     "epLength": 5,
+     "ownerId": "p4"
+    },
+    {
+     "iso": "2026-08-29",
+     "n": 20694,
+     "hit": false
+    },
+    {
+     "iso": "2026-08-30",
+     "n": 20695,
+     "hit": false
+    },
+    {
+     "iso": "2026-08-31",
+     "n": 20696,
+     "hit": false
+    },
+    {
+     "iso": "2026-09-01",
+     "n": 20697,
+     "hit": false
+    },
+    {
+     "iso": "2026-09-02",
+     "n": 20698,
+     "hit": false
+    },
+    {
+     "iso": "2026-09-03",
+     "n": 20699,
+     "hit": false
+    },
+    {
+     "iso": "2026-09-04",
+     "n": 20700,
+     "hit": false
+    },
+    {
+     "iso": "2026-09-05",
+     "n": 20701,
+     "hit": false
+    },
+    {
+     "iso": "2026-09-06",
+     "n": 20702,
+     "hit": false
+    },
+    {
+     "iso": "2026-09-07",
+     "n": 20703,
+     "hit": false
+    },
+    {
+     "iso": "2026-09-08",
+     "n": 20704,
+     "hit": false
+    },
+    {
+     "iso": "2026-09-09",
+     "n": 20705,
+     "hit": false
+    },
+    {
+     "iso": "2026-09-10",
+     "n": 20706,
+     "hit": false
+    },
+    {
+     "iso": "2026-09-11",
+     "n": 20707,
+     "hit": false
+    },
+    {
+     "iso": "2026-09-12",
+     "n": 20708,
+     "hit": false
+    },
+    {
+     "iso": "2026-09-13",
+     "n": 20709,
+     "hit": false
+    },
+    {
+     "iso": "2026-09-14",
+     "n": 20710,
+     "hit": false
+    },
+    {
+     "iso": "2026-09-15",
+     "n": 20711,
+     "hit": false
+    },
+    {
+     "iso": "2026-09-16",
+     "n": 20712,
+     "hit": false
+    },
+    {
+     "iso": "2026-09-17",
+     "n": 20713,
+     "hit": false
+    },
+    {
+     "iso": "2026-09-18",
+     "n": 20714,
+     "hit": false
+    },
+    {
+     "iso": "2026-09-19",
+     "n": 20715,
+     "hit": false
+    },
+    {
+     "iso": "2026-09-20",
+     "n": 20716,
+     "hit": false
+    },
+    {
+     "iso": "2026-09-21",
+     "n": 20717,
+     "hit": false
+    },
+    {
+     "iso": "2026-09-22",
+     "n": 20718,
+     "hit": false
+    },
+    {
+     "iso": "2026-09-23",
+     "n": 20719,
+     "hit": false
+    },
+    {
+     "iso": "2026-09-24",
+     "n": 20720,
+     "hit": false
+    },
+    {
+     "iso": "2026-09-25",
+     "n": 20721,
+     "hit": false
+    },
+    {
+     "iso": "2026-09-26",
+     "n": 20722,
+     "hit": false
+    },
+    {
+     "iso": "2026-09-27",
+     "n": 20723,
+     "hit": false
+    },
+    {
+     "iso": "2026-09-28",
+     "n": 20724,
+     "hit": false
+    },
+    {
+     "iso": "2026-09-29",
+     "n": 20725,
+     "hit": false
+    },
+    {
+     "iso": "2026-09-30",
+     "n": 20726,
+     "hit": false
+    },
+    {
+     "iso": "2026-10-01",
+     "n": 20727,
+     "hit": false
+    },
+    {
+     "iso": "2026-10-02",
+     "n": 20728,
+     "hit": false
+    },
+    {
+     "iso": "2026-10-03",
+     "n": 20729,
+     "hit": false
+    },
+    {
+     "iso": "2026-10-04",
+     "n": 20730,
+     "hit": false
+    },
+    {
+     "iso": "2026-10-05",
+     "n": 20731,
+     "hit": false
+    },
+    {
+     "iso": "2026-10-06",
+     "n": 20732,
+     "hit": false
+    },
+    {
+     "iso": "2026-10-07",
+     "n": 20733,
+     "hit": false
+    },
+    {
+     "iso": "2026-10-08",
+     "n": 20734,
+     "hit": false
+    },
+    {
+     "iso": "2026-10-09",
+     "n": 20735,
+     "hit": false
+    },
+    {
+     "iso": "2026-10-10",
+     "n": 20736,
+     "hit": false
+    },
+    {
+     "iso": "2026-10-11",
+     "n": 20737,
+     "hit": false
+    },
+    {
+     "iso": "2026-10-12",
+     "n": 20738,
+     "hit": false
+    },
+    {
+     "iso": "2026-10-13",
+     "n": 20739,
+     "hit": false
+    },
+    {
+     "iso": "2026-10-14",
+     "n": 20740,
+     "hit": false
+    },
+    {
+     "iso": "2026-10-15",
+     "n": 20741,
+     "hit": false
+    },
+    {
+     "iso": "2026-10-16",
+     "n": 20742,
+     "hit": false
+    },
+    {
+     "iso": "2026-10-17",
+     "n": 20743,
+     "hit": false
+    },
+    {
+     "iso": "2026-10-18",
+     "n": 20744,
+     "hit": false
+    },
+    {
+     "iso": "2026-10-19",
+     "n": 20745,
+     "hit": false
+    },
+    {
+     "iso": "2026-10-20",
+     "n": 20746,
+     "hit": false
+    },
+    {
+     "iso": "2026-10-21",
+     "n": 20747,
+     "hit": false
+    },
+    {
+     "iso": "2026-10-22",
+     "n": 20748,
+     "hit": false
+    },
+    {
+     "iso": "2026-10-23",
+     "n": 20749,
+     "hit": false
+    },
+    {
+     "iso": "2026-10-24",
+     "n": 20750,
+     "hit": false
+    },
+    {
+     "iso": "2026-10-25",
+     "n": 20751,
+     "hit": false
+    },
+    {
+     "iso": "2026-10-26",
+     "n": 20752,
+     "hit": false
+    },
+    {
+     "iso": "2026-10-27",
+     "n": 20753,
+     "hit": false
+    },
+    {
+     "iso": "2026-10-28",
+     "n": 20754,
+     "hit": false
+    },
+    {
+     "iso": "2026-10-29",
+     "n": 20755,
+     "hit": false
+    },
+    {
+     "iso": "2026-10-30",
+     "n": 20756,
+     "hit": false
+    },
+    {
+     "iso": "2026-10-31",
+     "n": 20757,
+     "hit": false
+    },
+    {
+     "iso": "2026-11-01",
+     "n": 20758,
+     "hit": false
+    },
+    {
+     "iso": "2026-11-02",
+     "n": 20759,
+     "hit": false
+    },
+    {
+     "iso": "2026-11-03",
+     "n": 20760,
+     "hit": false
+    },
+    {
+     "iso": "2026-11-04",
+     "n": 20761,
+     "hit": false
+    },
+    {
+     "iso": "2026-11-05",
+     "n": 20762,
+     "hit": false
+    },
+    {
+     "iso": "2026-11-06",
+     "n": 20763,
+     "hit": false
+    },
+    {
+     "iso": "2026-11-07",
+     "n": 20764,
+     "hit": false
+    },
+    {
+     "iso": "2026-11-08",
+     "n": 20765,
+     "hit": false
+    },
+    {
+     "iso": "2026-11-09",
+     "n": 20766,
+     "hit": false
+    },
+    {
+     "iso": "2026-11-10",
+     "n": 20767,
+     "hit": false
+    },
+    {
+     "iso": "2026-11-11",
+     "n": 20768,
+     "hit": false
+    },
+    {
+     "iso": "2026-11-12",
+     "n": 20769,
+     "hit": false
+    },
+    {
+     "iso": "2026-11-13",
+     "n": 20770,
+     "hit": false
+    },
+    {
+     "iso": "2026-11-14",
+     "n": 20771,
+     "hit": false
+    },
+    {
+     "iso": "2026-11-15",
+     "n": 20772,
+     "hit": false
+    },
+    {
+     "iso": "2026-11-16",
+     "n": 20773,
+     "hit": false
+    },
+    {
+     "iso": "2026-11-17",
+     "n": 20774,
+     "hit": false
+    },
+    {
+     "iso": "2026-11-18",
+     "n": 20775,
+     "hit": false
+    },
+    {
+     "iso": "2026-11-19",
+     "n": 20776,
+     "hit": false
+    },
+    {
+     "iso": "2026-11-20",
+     "n": 20777,
+     "hit": false
+    },
+    {
+     "iso": "2026-11-21",
+     "n": 20778,
+     "hit": false
+    },
+    {
+     "iso": "2026-11-22",
+     "n": 20779,
+     "hit": false
+    },
+    {
+     "iso": "2026-11-23",
+     "n": 20780,
+     "hit": false
+    },
+    {
+     "iso": "2026-11-24",
+     "n": 20781,
+     "hit": false
+    },
+    {
+     "iso": "2026-11-25",
+     "n": 20782,
+     "hit": false
+    },
+    {
+     "iso": "2026-11-26",
+     "n": 20783,
+     "hit": false
+    },
+    {
+     "iso": "2026-11-27",
+     "n": 20784,
+     "hit": false
+    },
+    {
+     "iso": "2026-11-28",
+     "n": 20785,
+     "hit": false
+    },
+    {
+     "iso": "2026-11-29",
+     "n": 20786,
+     "hit": false
+    },
+    {
+     "iso": "2026-11-30",
+     "n": 20787,
+     "hit": false
+    },
+    {
+     "iso": "2026-12-01",
+     "n": 20788,
+     "hit": false
+    },
+    {
+     "iso": "2026-12-02",
+     "n": 20789,
+     "hit": false
+    },
+    {
+     "iso": "2026-12-03",
+     "n": 20790,
+     "hit": false
+    },
+    {
+     "iso": "2026-12-04",
+     "n": 20791,
+     "hit": false
+    },
+    {
+     "iso": "2026-12-05",
+     "n": 20792,
+     "hit": false
+    },
+    {
+     "iso": "2026-12-06",
+     "n": 20793,
+     "hit": false
+    },
+    {
+     "iso": "2026-12-07",
+     "n": 20794,
+     "hit": false
+    },
+    {
+     "iso": "2026-12-08",
+     "n": 20795,
+     "hit": false
+    },
+    {
+     "iso": "2026-12-09",
+     "n": 20796,
+     "hit": false
+    },
+    {
+     "iso": "2026-12-10",
+     "n": 20797,
+     "hit": false
+    },
+    {
+     "iso": "2026-12-11",
+     "n": 20798,
+     "hit": false
+    },
+    {
+     "iso": "2026-12-12",
+     "n": 20799,
+     "hit": false
+    },
+    {
+     "iso": "2026-12-13",
+     "n": 20800,
+     "hit": false
+    }
+   ],
+   "dayNumSamples": {
     "1970-01-01": 0,
     "2024-02-29": 19782,
     "2026-01-01": 20454,
     "2026-06-01": 20605,
     "2026-11-14": 20771,
     "2026-06-01T12:34:56": 20605
-  },
-  "dayStrSamples": {
+   },
+   "dayStrSamples": {
     "0": "1970-01-01",
     "1": "1970-01-02",
     "19875": "2024-06-01",
     "20454": "2026-01-01",
     "20678": "2026-08-13",
     "-1": "1969-12-31"
+   }
   },
-  "fallback28": {
-    "cycle": 28,
-    "nextStart": 20795,
-    "nextStartIso": "2026-12-08"
-  },
-  "todaySweep": [
+  "singleNoGap": {
+   "cycle": 31,
+   "length": 6,
+   "nextStart": 20798,
+   "nextStartIso": "2026-12-11",
+   "todayN": 20771,
+   "inWindow": true,
+   "dayOfPeriod": 5,
+   "untilNext": 27,
+   "estimated": true,
+   "lastLen": 6,
+   "pending": null,
+   "gaps": [],
+   "itemCount": 1,
+   "episodes": [
     {
-      "today": "2026-11-09",
-      "cycle": 31,
-      "nextStart": 20798,
-      "nextStartIso": "2026-12-11",
-      "todayN": 20766,
-      "inWindow": false,
-      "dayOfPeriod": 0,
-      "untilNext": 32,
-      "estimated": true
-    },
-    {
-      "today": "2026-11-10",
-      "cycle": 31,
-      "nextStart": 20798,
-      "nextStartIso": "2026-12-11",
-      "todayN": 20767,
-      "inWindow": true,
-      "dayOfPeriod": 1,
-      "untilNext": 31,
-      "estimated": true
-    },
-    {
-      "today": "2026-11-14",
-      "cycle": 31,
-      "nextStart": 20798,
-      "nextStartIso": "2026-12-11",
-      "todayN": 20771,
-      "inWindow": true,
-      "dayOfPeriod": 5,
-      "untilNext": 27,
-      "estimated": true
-    },
-    {
-      "today": "2026-11-15",
-      "cycle": 31,
-      "nextStart": 20798,
-      "nextStartIso": "2026-12-11",
-      "todayN": 20772,
-      "inWindow": true,
-      "dayOfPeriod": 6,
-      "untilNext": 26,
-      "estimated": true
-    },
-    {
-      "today": "2026-11-16",
-      "cycle": 31,
-      "nextStart": 20798,
-      "nextStartIso": "2026-12-11",
-      "todayN": 20773,
-      "inWindow": false,
-      "dayOfPeriod": 0,
-      "untilNext": 25,
-      "estimated": true
-    },
-    {
-      "today": "2026-12-11",
-      "cycle": 31,
-      "nextStart": 20798,
-      "nextStartIso": "2026-12-11",
-      "todayN": 20798,
-      "inWindow": false,
-      "dayOfPeriod": 0,
-      "untilNext": 0,
-      "estimated": true
+     "start": 20767,
+     "end": 20772,
+     "length": 6
     }
-  ]
+   ],
+   "dayInCycle": 5,
+   "todayPhase": {
+    "phase": "period",
+    "predicted": false,
+    "ovu": false
+   },
+   "phases": {
+    "2027-02-11": {
+     "phase": "period",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-02-12": {
+     "phase": "period",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-02-13": {
+     "phase": "period",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-02-14": {
+     "phase": "period",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-02-15": {
+     "phase": "period",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-02-16": {
+     "phase": "period",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-02-17": {
+     "phase": "follicular",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-02-18": {
+     "phase": "follicular",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-02-19": {
+     "phase": "follicular",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-02-20": {
+     "phase": "follicular",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-02-21": {
+     "phase": "follicular",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-02-22": {
+     "phase": "follicular",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-02-23": {
+     "phase": "fertile",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-02-24": {
+     "phase": "fertile",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-02-25": {
+     "phase": "fertile",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-02-26": {
+     "phase": "fertile",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-02-27": {
+     "phase": "fertile",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-02-28": {
+     "phase": "fertile",
+     "predicted": true,
+     "ovu": true,
+     "pending": false
+    },
+    "2027-03-01": {
+     "phase": "fertile",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-03-02": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-03-03": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-03-04": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-03-05": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-03-06": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-03-07": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-03-08": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-03-09": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-03-10": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-03-11": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-03-12": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-03-13": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-01-11": {
+     "phase": "period",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-01-12": {
+     "phase": "period",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-01-13": {
+     "phase": "period",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-01-14": {
+     "phase": "period",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-01-15": {
+     "phase": "period",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-01-16": {
+     "phase": "period",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-01-17": {
+     "phase": "follicular",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-01-18": {
+     "phase": "follicular",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-01-19": {
+     "phase": "follicular",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-01-20": {
+     "phase": "follicular",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-01-21": {
+     "phase": "follicular",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-01-22": {
+     "phase": "follicular",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-01-23": {
+     "phase": "fertile",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-01-24": {
+     "phase": "fertile",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-01-25": {
+     "phase": "fertile",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-01-26": {
+     "phase": "fertile",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-01-27": {
+     "phase": "fertile",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-01-28": {
+     "phase": "fertile",
+     "predicted": true,
+     "ovu": true,
+     "pending": false
+    },
+    "2027-01-29": {
+     "phase": "fertile",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-01-30": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-01-31": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-02-01": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-02-02": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-02-03": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-02-04": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-02-05": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-02-06": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-02-07": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-02-08": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-02-09": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-02-10": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-12-11": {
+     "phase": "period",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-12-12": {
+     "phase": "period",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-12-13": {
+     "phase": "period",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-12-14": {
+     "phase": "period",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-12-15": {
+     "phase": "period",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-12-16": {
+     "phase": "period",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-12-17": {
+     "phase": "follicular",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-12-18": {
+     "phase": "follicular",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-12-19": {
+     "phase": "follicular",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-12-20": {
+     "phase": "follicular",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-12-21": {
+     "phase": "follicular",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-12-22": {
+     "phase": "follicular",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-12-23": {
+     "phase": "fertile",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-12-24": {
+     "phase": "fertile",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-12-25": {
+     "phase": "fertile",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-12-26": {
+     "phase": "fertile",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-12-27": {
+     "phase": "fertile",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-12-28": {
+     "phase": "fertile",
+     "predicted": true,
+     "ovu": true,
+     "pending": false
+    },
+    "2026-12-29": {
+     "phase": "fertile",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-12-30": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-12-31": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-01-01": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-01-02": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-01-03": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-01-04": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-01-05": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-01-06": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-01-07": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-01-08": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-01-09": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-01-10": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-11-10": {
+     "phase": "period",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-11-11": {
+     "phase": "period",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-11-12": {
+     "phase": "period",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-11-13": {
+     "phase": "period",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-11-14": {
+     "phase": "period",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-11-15": {
+     "phase": "period",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-11-16": {
+     "phase": "follicular",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-11-17": {
+     "phase": "follicular",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-11-18": {
+     "phase": "follicular",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-11-19": {
+     "phase": "follicular",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-11-20": {
+     "phase": "follicular",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-11-21": {
+     "phase": "follicular",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-11-22": {
+     "phase": "fertile",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-11-23": {
+     "phase": "fertile",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-11-24": {
+     "phase": "fertile",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-11-25": {
+     "phase": "fertile",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-11-26": {
+     "phase": "fertile",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-11-27": {
+     "phase": "fertile",
+     "predicted": false,
+     "ovu": true,
+     "pending": false
+    },
+    "2026-11-28": {
+     "phase": "fertile",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-11-29": {
+     "phase": "luteal",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-11-30": {
+     "phase": "luteal",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-12-01": {
+     "phase": "luteal",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-12-02": {
+     "phase": "luteal",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-12-03": {
+     "phase": "luteal",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-12-04": {
+     "phase": "luteal",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-12-05": {
+     "phase": "luteal",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-12-06": {
+     "phase": "luteal",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-12-07": {
+     "phase": "luteal",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-12-08": {
+     "phase": "luteal",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-12-09": {
+     "phase": "luteal",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-12-10": {
+     "phase": "luteal",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    }
+   },
+   "hits": [
+    {
+     "iso": "2026-11-09",
+     "n": 20766,
+     "hit": false
+    },
+    {
+     "iso": "2026-11-10",
+     "n": 20767,
+     "hit": true,
+     "epStart": 20767,
+     "epEnd": 20772,
+     "epLength": 6,
+     "ownerId": "s1"
+    },
+    {
+     "iso": "2026-11-11",
+     "n": 20768,
+     "hit": true,
+     "epStart": 20767,
+     "epEnd": 20772,
+     "epLength": 6,
+     "ownerId": "s1"
+    },
+    {
+     "iso": "2026-11-12",
+     "n": 20769,
+     "hit": true,
+     "epStart": 20767,
+     "epEnd": 20772,
+     "epLength": 6,
+     "ownerId": "s1"
+    },
+    {
+     "iso": "2026-11-13",
+     "n": 20770,
+     "hit": true,
+     "epStart": 20767,
+     "epEnd": 20772,
+     "epLength": 6,
+     "ownerId": "s1"
+    },
+    {
+     "iso": "2026-11-14",
+     "n": 20771,
+     "hit": true,
+     "epStart": 20767,
+     "epEnd": 20772,
+     "epLength": 6,
+     "ownerId": "s1"
+    },
+    {
+     "iso": "2026-11-15",
+     "n": 20772,
+     "hit": true,
+     "epStart": 20767,
+     "epEnd": 20772,
+     "epLength": 6,
+     "ownerId": "s1"
+    },
+    {
+     "iso": "2026-11-16",
+     "n": 20773,
+     "hit": false
+    },
+    {
+     "iso": "2026-11-17",
+     "n": 20774,
+     "hit": false
+    },
+    {
+     "iso": "2026-11-18",
+     "n": 20775,
+     "hit": false
+    },
+    {
+     "iso": "2026-11-19",
+     "n": 20776,
+     "hit": false
+    },
+    {
+     "iso": "2026-11-20",
+     "n": 20777,
+     "hit": false
+    },
+    {
+     "iso": "2026-11-21",
+     "n": 20778,
+     "hit": false
+    },
+    {
+     "iso": "2026-11-22",
+     "n": 20779,
+     "hit": false
+    },
+    {
+     "iso": "2026-11-23",
+     "n": 20780,
+     "hit": false
+    },
+    {
+     "iso": "2026-11-24",
+     "n": 20781,
+     "hit": false
+    },
+    {
+     "iso": "2026-11-25",
+     "n": 20782,
+     "hit": false
+    },
+    {
+     "iso": "2026-11-26",
+     "n": 20783,
+     "hit": false
+    },
+    {
+     "iso": "2026-11-27",
+     "n": 20784,
+     "hit": false
+    },
+    {
+     "iso": "2026-11-28",
+     "n": 20785,
+     "hit": false
+    },
+    {
+     "iso": "2026-11-29",
+     "n": 20786,
+     "hit": false
+    },
+    {
+     "iso": "2026-11-30",
+     "n": 20787,
+     "hit": false
+    },
+    {
+     "iso": "2026-12-01",
+     "n": 20788,
+     "hit": false
+    },
+    {
+     "iso": "2026-12-02",
+     "n": 20789,
+     "hit": false
+    },
+    {
+     "iso": "2026-12-03",
+     "n": 20790,
+     "hit": false
+    },
+    {
+     "iso": "2026-12-04",
+     "n": 20791,
+     "hit": false
+    },
+    {
+     "iso": "2026-12-05",
+     "n": 20792,
+     "hit": false
+    },
+    {
+     "iso": "2026-12-06",
+     "n": 20793,
+     "hit": false
+    },
+    {
+     "iso": "2026-12-07",
+     "n": 20794,
+     "hit": false
+    },
+    {
+     "iso": "2026-12-08",
+     "n": 20795,
+     "hit": false
+    },
+    {
+     "iso": "2026-12-09",
+     "n": 20796,
+     "hit": false
+    },
+    {
+     "iso": "2026-12-10",
+     "n": 20797,
+     "hit": false
+    },
+    {
+     "iso": "2026-12-11",
+     "n": 20798,
+     "hit": false
+    },
+    {
+     "iso": "2026-12-12",
+     "n": 20799,
+     "hit": false
+    },
+    {
+     "iso": "2026-12-13",
+     "n": 20800,
+     "hit": false
+    },
+    {
+     "iso": "2026-12-14",
+     "n": 20801,
+     "hit": false
+    },
+    {
+     "iso": "2026-12-15",
+     "n": 20802,
+     "hit": false
+    },
+    {
+     "iso": "2026-12-16",
+     "n": 20803,
+     "hit": false
+    },
+    {
+     "iso": "2026-12-17",
+     "n": 20804,
+     "hit": false
+    },
+    {
+     "iso": "2026-12-18",
+     "n": 20805,
+     "hit": false
+    },
+    {
+     "iso": "2026-12-19",
+     "n": 20806,
+     "hit": false
+    },
+    {
+     "iso": "2026-12-20",
+     "n": 20807,
+     "hit": false
+    },
+    {
+     "iso": "2026-12-21",
+     "n": 20808,
+     "hit": false
+    },
+    {
+     "iso": "2026-12-22",
+     "n": 20809,
+     "hit": false
+    },
+    {
+     "iso": "2026-12-23",
+     "n": 20810,
+     "hit": false
+    },
+    {
+     "iso": "2026-12-24",
+     "n": 20811,
+     "hit": false
+    },
+    {
+     "iso": "2026-12-25",
+     "n": 20812,
+     "hit": false
+    },
+    {
+     "iso": "2026-12-26",
+     "n": 20813,
+     "hit": false
+    },
+    {
+     "iso": "2026-12-27",
+     "n": 20814,
+     "hit": false
+    },
+    {
+     "iso": "2026-12-28",
+     "n": 20815,
+     "hit": false
+    },
+    {
+     "iso": "2026-12-29",
+     "n": 20816,
+     "hit": false
+    },
+    {
+     "iso": "2026-12-30",
+     "n": 20817,
+     "hit": false
+    },
+    {
+     "iso": "2026-12-31",
+     "n": 20818,
+     "hit": false
+    },
+    {
+     "iso": "2027-01-01",
+     "n": 20819,
+     "hit": false
+    },
+    {
+     "iso": "2027-01-02",
+     "n": 20820,
+     "hit": false
+    },
+    {
+     "iso": "2027-01-03",
+     "n": 20821,
+     "hit": false
+    },
+    {
+     "iso": "2027-01-04",
+     "n": 20822,
+     "hit": false
+    },
+    {
+     "iso": "2027-01-05",
+     "n": 20823,
+     "hit": false
+    },
+    {
+     "iso": "2027-01-06",
+     "n": 20824,
+     "hit": false
+    },
+    {
+     "iso": "2027-01-07",
+     "n": 20825,
+     "hit": false
+    },
+    {
+     "iso": "2027-01-08",
+     "n": 20826,
+     "hit": false
+    },
+    {
+     "iso": "2027-01-09",
+     "n": 20827,
+     "hit": false
+    },
+    {
+     "iso": "2027-01-10",
+     "n": 20828,
+     "hit": false
+    },
+    {
+     "iso": "2027-01-11",
+     "n": 20829,
+     "hit": false
+    },
+    {
+     "iso": "2027-01-12",
+     "n": 20830,
+     "hit": false
+    },
+    {
+     "iso": "2027-01-13",
+     "n": 20831,
+     "hit": false
+    },
+    {
+     "iso": "2027-01-14",
+     "n": 20832,
+     "hit": false
+    },
+    {
+     "iso": "2027-01-15",
+     "n": 20833,
+     "hit": false
+    },
+    {
+     "iso": "2027-01-16",
+     "n": 20834,
+     "hit": false
+    },
+    {
+     "iso": "2027-01-17",
+     "n": 20835,
+     "hit": false
+    },
+    {
+     "iso": "2027-01-18",
+     "n": 20836,
+     "hit": false
+    },
+    {
+     "iso": "2027-01-19",
+     "n": 20837,
+     "hit": false
+    },
+    {
+     "iso": "2027-01-20",
+     "n": 20838,
+     "hit": false
+    },
+    {
+     "iso": "2027-01-21",
+     "n": 20839,
+     "hit": false
+    },
+    {
+     "iso": "2027-01-22",
+     "n": 20840,
+     "hit": false
+    },
+    {
+     "iso": "2027-01-23",
+     "n": 20841,
+     "hit": false
+    },
+    {
+     "iso": "2027-01-24",
+     "n": 20842,
+     "hit": false
+    },
+    {
+     "iso": "2027-01-25",
+     "n": 20843,
+     "hit": false
+    },
+    {
+     "iso": "2027-01-26",
+     "n": 20844,
+     "hit": false
+    },
+    {
+     "iso": "2027-01-27",
+     "n": 20845,
+     "hit": false
+    },
+    {
+     "iso": "2027-01-28",
+     "n": 20846,
+     "hit": false
+    },
+    {
+     "iso": "2027-01-29",
+     "n": 20847,
+     "hit": false
+    },
+    {
+     "iso": "2027-01-30",
+     "n": 20848,
+     "hit": false
+    },
+    {
+     "iso": "2027-01-31",
+     "n": 20849,
+     "hit": false
+    },
+    {
+     "iso": "2027-02-01",
+     "n": 20850,
+     "hit": false
+    },
+    {
+     "iso": "2027-02-02",
+     "n": 20851,
+     "hit": false
+    },
+    {
+     "iso": "2027-02-03",
+     "n": 20852,
+     "hit": false
+    },
+    {
+     "iso": "2027-02-04",
+     "n": 20853,
+     "hit": false
+    },
+    {
+     "iso": "2027-02-05",
+     "n": 20854,
+     "hit": false
+    },
+    {
+     "iso": "2027-02-06",
+     "n": 20855,
+     "hit": false
+    },
+    {
+     "iso": "2027-02-07",
+     "n": 20856,
+     "hit": false
+    },
+    {
+     "iso": "2027-02-08",
+     "n": 20857,
+     "hit": false
+    },
+    {
+     "iso": "2027-02-09",
+     "n": 20858,
+     "hit": false
+    },
+    {
+     "iso": "2027-02-10",
+     "n": 20859,
+     "hit": false
+    },
+    {
+     "iso": "2027-02-11",
+     "n": 20860,
+     "hit": false
+    },
+    {
+     "iso": "2027-02-12",
+     "n": 20861,
+     "hit": false
+    },
+    {
+     "iso": "2027-02-13",
+     "n": 20862,
+     "hit": false
+    },
+    {
+     "iso": "2027-02-14",
+     "n": 20863,
+     "hit": false
+    },
+    {
+     "iso": "2027-02-15",
+     "n": 20864,
+     "hit": false
+    },
+    {
+     "iso": "2027-02-16",
+     "n": 20865,
+     "hit": false
+    },
+    {
+     "iso": "2027-02-17",
+     "n": 20866,
+     "hit": false
+    },
+    {
+     "iso": "2027-02-18",
+     "n": 20867,
+     "hit": false
+    },
+    {
+     "iso": "2027-02-19",
+     "n": 20868,
+     "hit": false
+    },
+    {
+     "iso": "2027-02-20",
+     "n": 20869,
+     "hit": false
+    },
+    {
+     "iso": "2027-02-21",
+     "n": 20870,
+     "hit": false
+    },
+    {
+     "iso": "2027-02-22",
+     "n": 20871,
+     "hit": false
+    },
+    {
+     "iso": "2027-02-23",
+     "n": 20872,
+     "hit": false
+    },
+    {
+     "iso": "2027-02-24",
+     "n": 20873,
+     "hit": false
+    },
+    {
+     "iso": "2027-02-25",
+     "n": 20874,
+     "hit": false
+    },
+    {
+     "iso": "2027-02-26",
+     "n": 20875,
+     "hit": false
+    },
+    {
+     "iso": "2027-02-27",
+     "n": 20876,
+     "hit": false
+    },
+    {
+     "iso": "2027-02-28",
+     "n": 20877,
+     "hit": false
+    },
+    {
+     "iso": "2027-03-01",
+     "n": 20878,
+     "hit": false
+    },
+    {
+     "iso": "2027-03-02",
+     "n": 20879,
+     "hit": false
+    },
+    {
+     "iso": "2027-03-03",
+     "n": 20880,
+     "hit": false
+    },
+    {
+     "iso": "2027-03-04",
+     "n": 20881,
+     "hit": false
+    },
+    {
+     "iso": "2027-03-05",
+     "n": 20882,
+     "hit": false
+    },
+    {
+     "iso": "2027-03-06",
+     "n": 20883,
+     "hit": false
+    },
+    {
+     "iso": "2027-03-07",
+     "n": 20884,
+     "hit": false
+    },
+    {
+     "iso": "2027-03-08",
+     "n": 20885,
+     "hit": false
+    },
+    {
+     "iso": "2027-03-09",
+     "n": 20886,
+     "hit": false
+    },
+    {
+     "iso": "2027-03-10",
+     "n": 20887,
+     "hit": false
+    },
+    {
+     "iso": "2027-03-11",
+     "n": 20888,
+     "hit": false
+    },
+    {
+     "iso": "2027-03-12",
+     "n": 20889,
+     "hit": false
+    },
+    {
+     "iso": "2027-03-13",
+     "n": 20890,
+     "hit": false
+    }
+   ],
+   "dayNumSamples": {
+    "1970-01-01": 0,
+    "2024-02-29": 19782,
+    "2026-01-01": 20454,
+    "2026-06-01": 20605,
+    "2026-11-14": 20771,
+    "2026-06-01T12:34:56": 20605
+   },
+   "dayStrSamples": {
+    "0": "1970-01-01",
+    "1": "1970-01-02",
+    "19875": "2024-06-01",
+    "20454": "2026-01-01",
+    "20678": "2026-08-13",
+    "-1": "1969-12-31"
+   }
+  },
+  "fragmentMerge": {
+   "cycle": 30,
+   "length": 6,
+   "nextStart": 20757,
+   "nextStartIso": "2026-10-31",
+   "todayN": 20771,
+   "inWindow": false,
+   "dayOfPeriod": 0,
+   "untilNext": -14,
+   "estimated": false,
+   "lastLen": 5,
+   "pending": null,
+   "gaps": [
+    30
+   ],
+   "itemCount": 5,
+   "episodes": [
+    {
+     "start": 20697,
+     "end": 20703,
+     "length": 7
+    },
+    {
+     "start": 20727,
+     "end": 20731,
+     "length": 5
+    }
+   ],
+   "dayInCycle": 30,
+   "todayPhase": {
+    "phase": "fertile",
+    "predicted": true,
+    "ovu": false
+   },
+   "phases": {
+    "2026-12-30": {
+     "phase": "period",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-12-31": {
+     "phase": "period",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-01-01": {
+     "phase": "period",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-01-02": {
+     "phase": "period",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-01-03": {
+     "phase": "period",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-01-04": {
+     "phase": "period",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-01-05": {
+     "phase": "follicular",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-01-06": {
+     "phase": "follicular",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-01-07": {
+     "phase": "follicular",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-01-08": {
+     "phase": "follicular",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-01-09": {
+     "phase": "follicular",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-01-10": {
+     "phase": "fertile",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-01-11": {
+     "phase": "fertile",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-01-12": {
+     "phase": "fertile",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-01-13": {
+     "phase": "fertile",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-01-14": {
+     "phase": "fertile",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-01-15": {
+     "phase": "fertile",
+     "predicted": true,
+     "ovu": true,
+     "pending": false
+    },
+    "2027-01-16": {
+     "phase": "fertile",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-01-17": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-01-18": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-01-19": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-01-20": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-01-21": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-01-22": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-01-23": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-01-24": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-01-25": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-01-26": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-01-27": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2027-01-28": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-11-30": {
+     "phase": "period",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-12-01": {
+     "phase": "period",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-12-02": {
+     "phase": "period",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-12-03": {
+     "phase": "period",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-12-04": {
+     "phase": "period",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-12-05": {
+     "phase": "period",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-12-06": {
+     "phase": "follicular",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-12-07": {
+     "phase": "follicular",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-12-08": {
+     "phase": "follicular",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-12-09": {
+     "phase": "follicular",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-12-10": {
+     "phase": "follicular",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-12-11": {
+     "phase": "fertile",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-12-12": {
+     "phase": "fertile",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-12-13": {
+     "phase": "fertile",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-12-14": {
+     "phase": "fertile",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-12-15": {
+     "phase": "fertile",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-12-16": {
+     "phase": "fertile",
+     "predicted": true,
+     "ovu": true,
+     "pending": false
+    },
+    "2026-12-17": {
+     "phase": "fertile",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-12-18": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-12-19": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-12-20": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-12-21": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-12-22": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-12-23": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-12-24": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-12-25": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-12-26": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-12-27": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-12-28": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-12-29": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-10-31": {
+     "phase": "period",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-11-01": {
+     "phase": "period",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-11-02": {
+     "phase": "period",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-11-03": {
+     "phase": "period",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-11-04": {
+     "phase": "period",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-11-05": {
+     "phase": "period",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-11-06": {
+     "phase": "follicular",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-11-07": {
+     "phase": "follicular",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-11-08": {
+     "phase": "follicular",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-11-09": {
+     "phase": "follicular",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-11-10": {
+     "phase": "follicular",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-11-11": {
+     "phase": "fertile",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-11-12": {
+     "phase": "fertile",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-11-13": {
+     "phase": "fertile",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-11-14": {
+     "phase": "fertile",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-11-15": {
+     "phase": "fertile",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-11-16": {
+     "phase": "fertile",
+     "predicted": true,
+     "ovu": true,
+     "pending": false
+    },
+    "2026-11-17": {
+     "phase": "fertile",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-11-18": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-11-19": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-11-20": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-11-21": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-11-22": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-11-23": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-11-24": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-11-25": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-11-26": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-11-27": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-11-28": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-11-29": {
+     "phase": "luteal",
+     "predicted": true,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-09-01": {
+     "phase": "period",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-09-02": {
+     "phase": "period",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-09-03": {
+     "phase": "period",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-09-04": {
+     "phase": "period",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-09-05": {
+     "phase": "period",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-09-06": {
+     "phase": "period",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-09-07": {
+     "phase": "period",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-09-08": {
+     "phase": "follicular",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-09-09": {
+     "phase": "follicular",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-09-10": {
+     "phase": "follicular",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-09-11": {
+     "phase": "follicular",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-09-12": {
+     "phase": "fertile",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-09-13": {
+     "phase": "fertile",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-09-14": {
+     "phase": "fertile",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-09-15": {
+     "phase": "fertile",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-09-16": {
+     "phase": "fertile",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-09-17": {
+     "phase": "fertile",
+     "predicted": false,
+     "ovu": true,
+     "pending": false
+    },
+    "2026-09-18": {
+     "phase": "fertile",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-09-19": {
+     "phase": "luteal",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-09-20": {
+     "phase": "luteal",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-09-21": {
+     "phase": "luteal",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-09-22": {
+     "phase": "luteal",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-09-23": {
+     "phase": "luteal",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-09-24": {
+     "phase": "luteal",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-09-25": {
+     "phase": "luteal",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-09-26": {
+     "phase": "luteal",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-09-27": {
+     "phase": "luteal",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-09-28": {
+     "phase": "luteal",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-09-29": {
+     "phase": "luteal",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-09-30": {
+     "phase": "luteal",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-10-01": {
+     "phase": "period",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-10-02": {
+     "phase": "period",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-10-03": {
+     "phase": "period",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-10-04": {
+     "phase": "period",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-10-05": {
+     "phase": "period",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-10-06": {
+     "phase": "follicular",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-10-07": {
+     "phase": "follicular",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-10-08": {
+     "phase": "follicular",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-10-09": {
+     "phase": "follicular",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-10-10": {
+     "phase": "follicular",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-10-11": {
+     "phase": "follicular",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-10-12": {
+     "phase": "fertile",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-10-13": {
+     "phase": "fertile",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-10-14": {
+     "phase": "fertile",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-10-15": {
+     "phase": "fertile",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-10-16": {
+     "phase": "fertile",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-10-17": {
+     "phase": "fertile",
+     "predicted": false,
+     "ovu": true,
+     "pending": false
+    },
+    "2026-10-18": {
+     "phase": "fertile",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-10-19": {
+     "phase": "luteal",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-10-20": {
+     "phase": "luteal",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-10-21": {
+     "phase": "luteal",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-10-22": {
+     "phase": "luteal",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-10-23": {
+     "phase": "luteal",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-10-24": {
+     "phase": "luteal",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-10-25": {
+     "phase": "luteal",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-10-26": {
+     "phase": "luteal",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-10-27": {
+     "phase": "luteal",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-10-28": {
+     "phase": "luteal",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-10-29": {
+     "phase": "luteal",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    },
+    "2026-10-30": {
+     "phase": "luteal",
+     "predicted": false,
+     "ovu": false,
+     "pending": false
+    }
+   },
+   "hits": [
+    {
+     "iso": "2026-08-31",
+     "n": 20696,
+     "hit": false
+    },
+    {
+     "iso": "2026-09-01",
+     "n": 20697,
+     "hit": true,
+     "epStart": 20697,
+     "epEnd": 20703,
+     "epLength": 7,
+     "ownerId": "f1"
+    },
+    {
+     "iso": "2026-09-02",
+     "n": 20698,
+     "hit": true,
+     "epStart": 20697,
+     "epEnd": 20703,
+     "epLength": 7,
+     "ownerId": "f1"
+    },
+    {
+     "iso": "2026-09-03",
+     "n": 20699,
+     "hit": true,
+     "epStart": 20697,
+     "epEnd": 20703,
+     "epLength": 7,
+     "ownerId": "f1"
+    },
+    {
+     "iso": "2026-09-04",
+     "n": 20700,
+     "hit": true,
+     "epStart": 20697,
+     "epEnd": 20703,
+     "epLength": 7,
+     "ownerId": "f2"
+    },
+    {
+     "iso": "2026-09-05",
+     "n": 20701,
+     "hit": true,
+     "epStart": 20697,
+     "epEnd": 20703,
+     "epLength": 7,
+     "ownerId": "f2"
+    },
+    {
+     "iso": "2026-09-06",
+     "n": 20702,
+     "hit": true,
+     "epStart": 20697,
+     "epEnd": 20703,
+     "epLength": 7,
+     "ownerId": "f3"
+    },
+    {
+     "iso": "2026-09-07",
+     "n": 20703,
+     "hit": true,
+     "epStart": 20697,
+     "epEnd": 20703,
+     "epLength": 7,
+     "ownerId": "f3"
+    },
+    {
+     "iso": "2026-09-08",
+     "n": 20704,
+     "hit": false
+    },
+    {
+     "iso": "2026-09-09",
+     "n": 20705,
+     "hit": false
+    },
+    {
+     "iso": "2026-09-10",
+     "n": 20706,
+     "hit": false
+    },
+    {
+     "iso": "2026-09-11",
+     "n": 20707,
+     "hit": false
+    },
+    {
+     "iso": "2026-09-12",
+     "n": 20708,
+     "hit": false
+    },
+    {
+     "iso": "2026-09-13",
+     "n": 20709,
+     "hit": false
+    },
+    {
+     "iso": "2026-09-14",
+     "n": 20710,
+     "hit": false
+    },
+    {
+     "iso": "2026-09-15",
+     "n": 20711,
+     "hit": false
+    },
+    {
+     "iso": "2026-09-16",
+     "n": 20712,
+     "hit": false
+    },
+    {
+     "iso": "2026-09-17",
+     "n": 20713,
+     "hit": false
+    },
+    {
+     "iso": "2026-09-18",
+     "n": 20714,
+     "hit": false
+    },
+    {
+     "iso": "2026-09-19",
+     "n": 20715,
+     "hit": false
+    },
+    {
+     "iso": "2026-09-20",
+     "n": 20716,
+     "hit": false
+    },
+    {
+     "iso": "2026-09-21",
+     "n": 20717,
+     "hit": false
+    },
+    {
+     "iso": "2026-09-22",
+     "n": 20718,
+     "hit": false
+    },
+    {
+     "iso": "2026-09-23",
+     "n": 20719,
+     "hit": false
+    },
+    {
+     "iso": "2026-09-24",
+     "n": 20720,
+     "hit": false
+    },
+    {
+     "iso": "2026-09-25",
+     "n": 20721,
+     "hit": false
+    },
+    {
+     "iso": "2026-09-26",
+     "n": 20722,
+     "hit": false
+    },
+    {
+     "iso": "2026-09-27",
+     "n": 20723,
+     "hit": false
+    },
+    {
+     "iso": "2026-09-28",
+     "n": 20724,
+     "hit": false
+    },
+    {
+     "iso": "2026-09-29",
+     "n": 20725,
+     "hit": false
+    },
+    {
+     "iso": "2026-09-30",
+     "n": 20726,
+     "hit": false
+    },
+    {
+     "iso": "2026-10-01",
+     "n": 20727,
+     "hit": true,
+     "epStart": 20727,
+     "epEnd": 20731,
+     "epLength": 5,
+     "ownerId": "f4"
+    },
+    {
+     "iso": "2026-10-02",
+     "n": 20728,
+     "hit": true,
+     "epStart": 20727,
+     "epEnd": 20731,
+     "epLength": 5,
+     "ownerId": "f5"
+    },
+    {
+     "iso": "2026-10-03",
+     "n": 20729,
+     "hit": true,
+     "epStart": 20727,
+     "epEnd": 20731,
+     "epLength": 5,
+     "ownerId": "f5"
+    },
+    {
+     "iso": "2026-10-04",
+     "n": 20730,
+     "hit": true,
+     "epStart": 20727,
+     "epEnd": 20731,
+     "epLength": 5,
+     "ownerId": "f5"
+    },
+    {
+     "iso": "2026-10-05",
+     "n": 20731,
+     "hit": true,
+     "epStart": 20727,
+     "epEnd": 20731,
+     "epLength": 5,
+     "ownerId": "f5"
+    },
+    {
+     "iso": "2026-10-06",
+     "n": 20732,
+     "hit": false
+    },
+    {
+     "iso": "2026-10-07",
+     "n": 20733,
+     "hit": false
+    },
+    {
+     "iso": "2026-10-08",
+     "n": 20734,
+     "hit": false
+    },
+    {
+     "iso": "2026-10-09",
+     "n": 20735,
+     "hit": false
+    },
+    {
+     "iso": "2026-10-10",
+     "n": 20736,
+     "hit": false
+    },
+    {
+     "iso": "2026-10-11",
+     "n": 20737,
+     "hit": false
+    },
+    {
+     "iso": "2026-10-12",
+     "n": 20738,
+     "hit": false
+    },
+    {
+     "iso": "2026-10-13",
+     "n": 20739,
+     "hit": false
+    },
+    {
+     "iso": "2026-10-14",
+     "n": 20740,
+     "hit": false
+    },
+    {
+     "iso": "2026-10-15",
+     "n": 20741,
+     "hit": false
+    },
+    {
+     "iso": "2026-10-16",
+     "n": 20742,
+     "hit": false
+    },
+    {
+     "iso": "2026-10-17",
+     "n": 20743,
+     "hit": false
+    },
+    {
+     "iso": "2026-10-18",
+     "n": 20744,
+     "hit": false
+    },
+    {
+     "iso": "2026-10-19",
+     "n": 20745,
+     "hit": false
+    },
+    {
+     "iso": "2026-10-20",
+     "n": 20746,
+     "hit": false
+    },
+    {
+     "iso": "2026-10-21",
+     "n": 20747,
+     "hit": false
+    },
+    {
+     "iso": "2026-10-22",
+     "n": 20748,
+     "hit": false
+    },
+    {
+     "iso": "2026-10-23",
+     "n": 20749,
+     "hit": false
+    },
+    {
+     "iso": "2026-10-24",
+     "n": 20750,
+     "hit": false
+    },
+    {
+     "iso": "2026-10-25",
+     "n": 20751,
+     "hit": false
+    },
+    {
+     "iso": "2026-10-26",
+     "n": 20752,
+     "hit": false
+    },
+    {
+     "iso": "2026-10-27",
+     "n": 20753,
+     "hit": false
+    },
+    {
+     "iso": "2026-10-28",
+     "n": 20754,
+     "hit": false
+    },
+    {
+     "iso": "2026-10-29",
+     "n": 20755,
+     "hit": false
+    },
+    {
+     "iso": "2026-10-30",
+     "n": 20756,
+     "hit": false
+    },
+    {
+     "iso": "2026-10-31",
+     "n": 20757,
+     "hit": false
+    },
+    {
+     "iso": "2026-11-01",
+     "n": 20758,
+     "hit": false
+    },
+    {
+     "iso": "2026-11-02",
+     "n": 20759,
+     "hit": false
+    },
+    {
+     "iso": "2026-11-03",
+     "n": 20760,
+     "hit": false
+    },
+    {
+     "iso": "2026-11-04",
+     "n": 20761,
+     "hit": false
+    },
+    {
+     "iso": "2026-11-05",
+     "n": 20762,
+     "hit": false
+    },
+    {
+     "iso": "2026-11-06",
+     "n": 20763,
+     "hit": false
+    },
+    {
+     "iso": "2026-11-07",
+     "n": 20764,
+     "hit": false
+    },
+    {
+     "iso": "2026-11-08",
+     "n": 20765,
+     "hit": false
+    },
+    {
+     "iso": "2026-11-09",
+     "n": 20766,
+     "hit": false
+    },
+    {
+     "iso": "2026-11-10",
+     "n": 20767,
+     "hit": false
+    },
+    {
+     "iso": "2026-11-11",
+     "n": 20768,
+     "hit": false
+    },
+    {
+     "iso": "2026-11-12",
+     "n": 20769,
+     "hit": false
+    },
+    {
+     "iso": "2026-11-13",
+     "n": 20770,
+     "hit": false
+    },
+    {
+     "iso": "2026-11-14",
+     "n": 20771,
+     "hit": false
+    },
+    {
+     "iso": "2026-11-15",
+     "n": 20772,
+     "hit": false
+    },
+    {
+     "iso": "2026-11-16",
+     "n": 20773,
+     "hit": false
+    },
+    {
+     "iso": "2026-11-17",
+     "n": 20774,
+     "hit": false
+    },
+    {
+     "iso": "2026-11-18",
+     "n": 20775,
+     "hit": false
+    },
+    {
+     "iso": "2026-11-19",
+     "n": 20776,
+     "hit": false
+    },
+    {
+     "iso": "2026-11-20",
+     "n": 20777,
+     "hit": false
+    },
+    {
+     "iso": "2026-11-21",
+     "n": 20778,
+     "hit": false
+    },
+    {
+     "iso": "2026-11-22",
+     "n": 20779,
+     "hit": false
+    },
+    {
+     "iso": "2026-11-23",
+     "n": 20780,
+     "hit": false
+    },
+    {
+     "iso": "2026-11-24",
+     "n": 20781,
+     "hit": false
+    },
+    {
+     "iso": "2026-11-25",
+     "n": 20782,
+     "hit": false
+    },
+    {
+     "iso": "2026-11-26",
+     "n": 20783,
+     "hit": false
+    },
+    {
+     "iso": "2026-11-27",
+     "n": 20784,
+     "hit": false
+    },
+    {
+     "iso": "2026-11-28",
+     "n": 20785,
+     "hit": false
+    },
+    {
+     "iso": "2026-11-29",
+     "n": 20786,
+     "hit": false
+    },
+    {
+     "iso": "2026-11-30",
+     "n": 20787,
+     "hit": false
+    },
+    {
+     "iso": "2026-12-01",
+     "n": 20788,
+     "hit": false
+    },
+    {
+     "iso": "2026-12-02",
+     "n": 20789,
+     "hit": false
+    },
+    {
+     "iso": "2026-12-03",
+     "n": 20790,
+     "hit": false
+    },
+    {
+     "iso": "2026-12-04",
+     "n": 20791,
+     "hit": false
+    },
+    {
+     "iso": "2026-12-05",
+     "n": 20792,
+     "hit": false
+    },
+    {
+     "iso": "2026-12-06",
+     "n": 20793,
+     "hit": false
+    },
+    {
+     "iso": "2026-12-07",
+     "n": 20794,
+     "hit": false
+    },
+    {
+     "iso": "2026-12-08",
+     "n": 20795,
+     "hit": false
+    },
+    {
+     "iso": "2026-12-09",
+     "n": 20796,
+     "hit": false
+    },
+    {
+     "iso": "2026-12-10",
+     "n": 20797,
+     "hit": false
+    },
+    {
+     "iso": "2026-12-11",
+     "n": 20798,
+     "hit": false
+    },
+    {
+     "iso": "2026-12-12",
+     "n": 20799,
+     "hit": false
+    },
+    {
+     "iso": "2026-12-13",
+     "n": 20800,
+     "hit": false
+    },
+    {
+     "iso": "2026-12-14",
+     "n": 20801,
+     "hit": false
+    },
+    {
+     "iso": "2026-12-15",
+     "n": 20802,
+     "hit": false
+    },
+    {
+     "iso": "2026-12-16",
+     "n": 20803,
+     "hit": false
+    },
+    {
+     "iso": "2026-12-17",
+     "n": 20804,
+     "hit": false
+    },
+    {
+     "iso": "2026-12-18",
+     "n": 20805,
+     "hit": false
+    },
+    {
+     "iso": "2026-12-19",
+     "n": 20806,
+     "hit": false
+    },
+    {
+     "iso": "2026-12-20",
+     "n": 20807,
+     "hit": false
+    },
+    {
+     "iso": "2026-12-21",
+     "n": 20808,
+     "hit": false
+    },
+    {
+     "iso": "2026-12-22",
+     "n": 20809,
+     "hit": false
+    },
+    {
+     "iso": "2026-12-23",
+     "n": 20810,
+     "hit": false
+    },
+    {
+     "iso": "2026-12-24",
+     "n": 20811,
+     "hit": false
+    },
+    {
+     "iso": "2026-12-25",
+     "n": 20812,
+     "hit": false
+    },
+    {
+     "iso": "2026-12-26",
+     "n": 20813,
+     "hit": false
+    },
+    {
+     "iso": "2026-12-27",
+     "n": 20814,
+     "hit": false
+    },
+    {
+     "iso": "2026-12-28",
+     "n": 20815,
+     "hit": false
+    },
+    {
+     "iso": "2026-12-29",
+     "n": 20816,
+     "hit": false
+    },
+    {
+     "iso": "2026-12-30",
+     "n": 20817,
+     "hit": false
+    },
+    {
+     "iso": "2026-12-31",
+     "n": 20818,
+     "hit": false
+    },
+    {
+     "iso": "2027-01-01",
+     "n": 20819,
+     "hit": false
+    },
+    {
+     "iso": "2027-01-02",
+     "n": 20820,
+     "hit": false
+    },
+    {
+     "iso": "2027-01-03",
+     "n": 20821,
+     "hit": false
+    },
+    {
+     "iso": "2027-01-04",
+     "n": 20822,
+     "hit": false
+    },
+    {
+     "iso": "2027-01-05",
+     "n": 20823,
+     "hit": false
+    },
+    {
+     "iso": "2027-01-06",
+     "n": 20824,
+     "hit": false
+    },
+    {
+     "iso": "2027-01-07",
+     "n": 20825,
+     "hit": false
+    },
+    {
+     "iso": "2027-01-08",
+     "n": 20826,
+     "hit": false
+    },
+    {
+     "iso": "2027-01-09",
+     "n": 20827,
+     "hit": false
+    },
+    {
+     "iso": "2027-01-10",
+     "n": 20828,
+     "hit": false
+    },
+    {
+     "iso": "2027-01-11",
+     "n": 20829,
+     "hit": false
+    },
+    {
+     "iso": "2027-01-12",
+     "n": 20830,
+     "hit": false
+    },
+    {
+     "iso": "2027-01-13",
+     "n": 20831,
+     "hit": false
+    },
+    {
+     "iso": "2027-01-14",
+     "n": 20832,
+     "hit": false
+    },
+    {
+     "iso": "2027-01-15",
+     "n": 20833,
+     "hit": false
+    },
+    {
+     "iso": "2027-01-16",
+     "n": 20834,
+     "hit": false
+    },
+    {
+     "iso": "2027-01-17",
+     "n": 20835,
+     "hit": false
+    },
+    {
+     "iso": "2027-01-18",
+     "n": 20836,
+     "hit": false
+    },
+    {
+     "iso": "2027-01-19",
+     "n": 20837,
+     "hit": false
+    },
+    {
+     "iso": "2027-01-20",
+     "n": 20838,
+     "hit": false
+    },
+    {
+     "iso": "2027-01-21",
+     "n": 20839,
+     "hit": false
+    },
+    {
+     "iso": "2027-01-22",
+     "n": 20840,
+     "hit": false
+    },
+    {
+     "iso": "2027-01-23",
+     "n": 20841,
+     "hit": false
+    },
+    {
+     "iso": "2027-01-24",
+     "n": 20842,
+     "hit": false
+    },
+    {
+     "iso": "2027-01-25",
+     "n": 20843,
+     "hit": false
+    },
+    {
+     "iso": "2027-01-26",
+     "n": 20844,
+     "hit": false
+    },
+    {
+     "iso": "2027-01-27",
+     "n": 20845,
+     "hit": false
+    },
+    {
+     "iso": "2027-01-28",
+     "n": 20846,
+     "hit": false
+    }
+   ],
+   "dayNumSamples": {
+    "1970-01-01": 0,
+    "2024-02-29": 19782,
+    "2026-01-01": 20454,
+    "2026-06-01": 20605,
+    "2026-11-14": 20771,
+    "2026-06-01T12:34:56": 20605
+   },
+   "dayStrSamples": {
+    "0": "1970-01-01",
+    "1": "1970-01-02",
+    "19875": "2024-06-01",
+    "20454": "2026-01-01",
+    "20678": "2026-08-13",
+    "-1": "1969-12-31"
+   }
+  }
+ },
+ "dayNumSamples": {
+  "1970-01-01": 0,
+  "2024-02-29": 19782,
+  "2026-01-01": 20454,
+  "2026-06-01": 20605,
+  "2026-11-14": 20771,
+  "2026-06-01T12:34:56": 20605
+ },
+ "dayStrSamples": {
+  "0": "1970-01-01",
+  "1": "1970-01-02",
+  "19875": "2024-06-01",
+  "20454": "2026-01-01",
+  "20678": "2026-08-13",
+  "-1": "1969-12-31"
+ },
+ "fallback28": {
+  "cycle": 28,
+  "nextStart": 20795,
+  "nextStartIso": "2026-12-08"
+ },
+ "todaySweep": [
+  {
+   "today": "2026-11-09",
+   "cycle": 31,
+   "nextStart": 20798,
+   "nextStartIso": "2026-12-11",
+   "todayN": 20766,
+   "inWindow": false,
+   "dayOfPeriod": 0,
+   "untilNext": 32,
+   "estimated": true
+  },
+  {
+   "today": "2026-11-10",
+   "cycle": 31,
+   "nextStart": 20798,
+   "nextStartIso": "2026-12-11",
+   "todayN": 20767,
+   "inWindow": true,
+   "dayOfPeriod": 1,
+   "untilNext": 31,
+   "estimated": true
+  },
+  {
+   "today": "2026-11-14",
+   "cycle": 31,
+   "nextStart": 20798,
+   "nextStartIso": "2026-12-11",
+   "todayN": 20771,
+   "inWindow": true,
+   "dayOfPeriod": 5,
+   "untilNext": 27,
+   "estimated": true
+  },
+  {
+   "today": "2026-11-15",
+   "cycle": 31,
+   "nextStart": 20798,
+   "nextStartIso": "2026-12-11",
+   "todayN": 20772,
+   "inWindow": true,
+   "dayOfPeriod": 6,
+   "untilNext": 26,
+   "estimated": true
+  },
+  {
+   "today": "2026-11-16",
+   "cycle": 31,
+   "nextStart": 20798,
+   "nextStartIso": "2026-12-11",
+   "todayN": 20773,
+   "inWindow": false,
+   "dayOfPeriod": 0,
+   "untilNext": 25,
+   "estimated": true
+  },
+  {
+   "today": "2026-12-11",
+   "cycle": 31,
+   "nextStart": 20798,
+   "nextStartIso": "2026-12-11",
+   "todayN": 20798,
+   "inWindow": false,
+   "dayOfPeriod": 0,
+   "untilNext": 0,
+   "estimated": true
+  }
+ ]
 }

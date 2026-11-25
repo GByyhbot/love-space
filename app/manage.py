@@ -24,7 +24,7 @@ def main():
 
     if args.command == 'backup':
         from .backups import create_backup
-        path = create_backup()
+        path = create_backup(anchor='manual')
         print('备份完成:', path)
     elif args.command == 'restore':
         from .backups import restore_backup

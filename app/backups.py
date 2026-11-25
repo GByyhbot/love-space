@@ -210,7 +210,18 @@ def _estimate_backup_bytes(backups_dir: Path) -> int:
     return media_total + 10 * 1048576 + 50 * 1048576
 
 
-def create_backup():
+def create_backup(anchor='manual'):
+    """生成一份全量加密备份。
+
+    [anchor] 决定这份备份推进哪个门控锚点（2.8.2 锚点分离）：
+    · `'auto'`   —— 只有后台自动备份这么传，写 `last_backup`；
+    · `'manual'` —— 默认值。管理端「立即备份」/CLI/部署脚本都算手动，
+                   写 `last_backup_manual`，**不推自动锚**。
+
+    旧实现只有一个锚点、任何来源都推，结果部署备份把自动备份的到期时间一路
+    后推（2026-11-24/25 实证：5 次部署备份让自动备份整整延后两天）。默认给
+    `'manual'` 是刻意的：新增调用方忘了传参也不会污染自动门控。
+    """
     with storage_lock:
         password = backup_password()
         if not password:
@@ -286,7 +297,7 @@ def create_backup():
                     for old in sorted(folder.glob('backup-*'), reverse=True)[7:]:
                         old.unlink()
                 with connect() as c:
-                    db.set_setting(c, 'last_backup', now())
+                    db.set_setting(c, 'last_backup' if anchor == 'auto' else 'last_backup_manual', now())
                 return target
             finally:
                 temp_target.unlink(missing_ok=True)

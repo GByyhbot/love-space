@@ -438,10 +438,35 @@ def apk_download(direct: int = 0):
     return RedirectResponse(url, status_code=302)
 
 
+def _iso_or_null(ts):
+    if not isinstance(ts, (int, float)) or ts <= 0:
+        return None
+    return dt.datetime.fromtimestamp(float(ts), dt.timezone.utc).isoformat()
+
+
+def _backup_status(c):
+    """2.8.2 P3：把备份门控摊开给人看。
+
+    没有这几个字段时，判断「自动备份还活着吗」只能去 ls 备份目录猜相位
+    ——2026-11-24 就是这么误判成「两天都漏跑」的。
+    """
+    auto = db.setting(c, 'last_backup')
+    manual = db.setting(c, 'last_backup_manual')
+    stamps = [float(v) for v in (auto, manual) if isinstance(v, (int, float)) and v > 0]
+    newest = max(stamps) if stamps else None
+    return {
+        'last_backup': _iso_or_null(auto),            # 自动锚（门控唯一依据）
+        'last_backup_manual': _iso_or_null(manual),   # 最近一次手动备份
+        'next_due': _iso_or_null(float(auto) + 86400) if isinstance(auto, (int, float)) and auto > 0 else None,
+        'backup_age_hours': round((time.time() - newest) / 3600, 1) if newest else None,
+    }
+
+
 @app.get('/api/status')
 def status():
     with connect() as c:
         count = c.execute('SELECT count(*) FROM users').fetchone()[0]
+        backup = _backup_status(c)
     return {'initialized': count > 0, 'paired': count == 2, 'setup_token_required': bool(os.getenv('SETUP_TOKEN')),
             'version': WEB_VERSION, 'build': BUILD_ID,
             'apk_version': APK_VERSION,
@@ -452,7 +477,8 @@ def status():
             'apk_has_local': _APK_STATIC_FILE.exists(),
             'apk_url_direct': _apk_github_url(),
             'apk_proxy': APK_PROXY,
-            'apk_notes': _apk_notes()}
+            'apk_notes': _apk_notes(),
+            **backup}
 
 
 @app.get('/health')
@@ -3341,7 +3367,7 @@ def backup(request: Request, user=Depends(current_user)):
     rate_limit(request, 'backup', 5, 300)
     from .backups import BackupRefused, create_backup
     try:
-        path = create_backup()
+        path = create_backup(anchor='manual')
     except BackupRefused:
         raise HTTPException(503, '服务器未配置备份密码，已拒绝生成明文备份；请联系管理员设置 BACKUP_PASSWORD')
     except Exception as exc:

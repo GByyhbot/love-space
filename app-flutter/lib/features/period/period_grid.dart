@@ -32,6 +32,7 @@ class PeriodDayCell {
     required this.phase,
     required this.predicted,
     required this.ovu,
+    this.pending = false,
     required this.isStart,
     required this.hasRec,
     required this.hasLog,
@@ -52,6 +53,9 @@ class PeriodDayCell {
   /// 阶段名（period / follicular / fertile / luteal），null = 无阶段。
   final String? phase;
   final bool predicted;
+
+  /// 2.8.2：这一天属于「经期（待确认）」区间（`PeriodPending`）。
+  final bool pending;
   final bool ovu;
   final bool isStart;
   final bool hasRec;
@@ -69,6 +73,7 @@ class PeriodDayCell {
         'cal-day',
         if (phase != null) 'ph-$phase',
         if (phase != null && predicted) 'ph-pred',
+        if (phase != null && pending) 'ph-pending',
         if (phase != null && ovu) 'ph-ovu',
         if (phase != null && isStart) 'ph-start',
         if (isToday) 'is-today',
@@ -169,7 +174,8 @@ PeriodMonthGridData buildPeriodMonthGrid({
     // `:189` tip 逐字（顺序：阶段名 / 排卵日 / 记录点 / 记过或点一下）。
     final parts = <String>[
       ph != null
-          ? '${phaseNames[ph.phase] ?? ph.phase}${ph.predicted ? '（预测）' : ''}'
+          ? '${phaseNames[ph.phase] ?? ph.phase}'
+              '${ph.pending ? '（待确认）' : ph.predicted ? '（预测）' : ''}'
           : '还没有记录',
       if (ph != null && ph.ovu) '排卵日',
       if (rec) '这次经期的第一天',
@@ -183,6 +189,7 @@ PeriodMonthGridData buildPeriodMonthGrid({
       phase: ph?.phase,
       predicted: ph?.predicted ?? false,
       ovu: ph?.ovu ?? false,
+      pending: ph?.pending ?? false,
       isStart: isStart,
       hasRec: rec,
       hasLog: log,

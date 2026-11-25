@@ -591,11 +591,9 @@ def cleanup():
             pass
 
 
-def maintenance():
-    schedule()
-    cleanup()
-    # 2.8.0 定位守护：peer 轨迹/事件 15 天滚动删除（拍板口径；created 索引，
-    # 无匹配行时代价接近零）
+def _peer_cleanup_step():
+    """2.8.0 定位守护：peer 轨迹/事件 15 天滚动删除（拍板口径；created 索引，
+    无匹配行时代价接近零）。"""
     with connect() as c:
         peer.cleanup_expired(c, now())
         # 观察行（2.8.0 修复令四）：本条只用于证明清理步骤确实执行（删除 0 条
@@ -603,14 +601,43 @@ def maintenance():
         # 用 WARNING 是因为容器内 root logger 为 WARNING、应用 logger 未配级别，
         # log.info 不会落进 docker logs（实测：投放夹入库的 info 从未出现）。
         log.warning('维护：peer 滚动清理已执行')
+
+
+def _warn_if_backup_stale():
+    """2.8.2 P4：距最后一次成功备份（自动或手动）超过 48 小时 → 每天提醒一次。
+
+    2026-11-23 的教训是「静默」比「缺失」更贵：备份块压根没执行，而失败告警
+    代码本身就在那个块里，于是两天没人知道。这条检查放在**块外**、由独立的
+    维护步骤调用，确保即便备份本体再也跑不起来，也得有人被吵到。
+    """
     with connect() as c:
-        last = db.setting(c, 'last_backup', now())
-        if db.setting(c, 'last_backup') is None:
-            db.set_setting(c, 'last_backup', last - 86400)
+        newest = max(float(db.setting(c, 'last_backup') or 0),
+                     float(db.setting(c, 'last_backup_manual') or 0))
+        if not newest or now() - newest < 2 * 86400:
+            return
+        day = dt.datetime.now(dt.timezone.utc).date().isoformat()
+        hours = int((now() - newest) / 3600)
+        db.notice(c, 'backup', f'已有 {hours} 小时没有成功备份，请检查备份密码与存储空间',
+                  dedupe='backup-stale:' + day)
+
+
+def _backup_step():
+    """自动备份门控（2.8.2 锚点分离）。
+
+    · 门控只看 `last_backup`——只有**自动**备份会推进它；
+    · 手动备份（管理端/CLI/部署脚本）写 `last_backup_manual`，不再顺延自动到期；
+    · 失败/拒做退避 1 小时（不能每分钟重试，2026-11-07 磁盘被残包吃满 31G）；
+    · 末尾跑一次逾期告警，与备份本体解耦。
+    """
+    with connect() as c:
+        last = db.setting(c, 'last_backup')
         initialized = c.execute('SELECT count(*) FROM users').fetchone()[0] > 0
+        if last is None:
+            last = now() - 86400
+            db.set_setting(c, 'last_backup', last)
     if initialized and now() - last >= 86400:
         try:
-            create_backup()
+            create_backup(anchor='auto')
         except BackupRefused as exc:
             # 没设口令 / 磁盘不足 —— 配置或环境问题，不是故障；每天提醒一次，别刷屏
             log.warning('%s', exc)
@@ -634,6 +661,24 @@ def maintenance():
                 day = dt.datetime.now(dt.timezone.utc).date().isoformat()
                 db.notice(c, 'backup', f'自动备份失败（{type(exc).__name__}），请检查存储和目录权限',
                           dedupe='backup-failed:' + day)
+    _warn_if_backup_stale()
+
+
+def maintenance():
+    """每分钟一轮维护。
+
+    🔴 2.8.2 P0：每一步独立 try/except —— 谁炸谁留痕，绝不连累后面的步骤。
+    2026-11-23 的实证：`peer.cleanup_expired` 缺 import 抛 NameError，
+    其后的备份块整整 36 小时没执行过，而告警代码就在那个块里，全程静默。
+    """
+    for name, step in (('schedule', schedule),
+                       ('cleanup', cleanup),
+                       ('peer_cleanup', _peer_cleanup_step),
+                       ('backup', _backup_step)):
+        try:
+            step()
+        except Exception:
+            log.exception('维护步骤 %s 失败（已隔离，不影响其余步骤）', name)
 
 
 def run(stop):

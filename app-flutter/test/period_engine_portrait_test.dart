@@ -81,6 +81,9 @@ void _checkCase(String name, Map<String, dynamic> c, Map<String, dynamic> e) {
     expect(got.predicted, v['predicted'],
         reason: '$name · ${entry.key} predicted');
     expect(got.ovu, v['ovu'], reason: '$name · ${entry.key} ovu 标记');
+    // 2.8.2：待确认标记也要与 Web 逐日一致
+    expect(got.pending, v['pending'] ?? false,
+        reason: '$name · ${entry.key} pending 标记');
   }
 
   // ── 状态摘要另两项（也必须来自引擎，不许页面另写一套）────────────

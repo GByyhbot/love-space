@@ -85,9 +85,10 @@ async function periodStart(day){
    toast('已经把这次经期接到今天');await refresh();return;
   }
  }
- // 经期长度的默认值取历史平均，但不低于 3 天：中途截短过一次之后，
- // 平均值会被拉到 1–2 天，下次新建就会变成一个荒唐的"两天经期"。
- const body={start:day,length:Math.max(3,d.length),cycle:d.cycle};
+ // 2.8.2 待确认模型：新建段只记「今天来了」这一条事实，length=1。
+ // 旧实现用 Math.max(3,d.length) 把历史平均预填进来，等于系统替用户宣布
+ // 「这次经期 5 天」——而这个自猜值又进了平均经期统计，自猜自统计。
+ const body={start:day,length:1,cycle:d.cycle};
  await post('/records',{kind:'period',body,client_id:uuid()});
  toast('已记下这次经期');await refresh();
 }
@@ -126,8 +127,31 @@ function periodData(){
  for(let i=1;i<episodes.length;i++){const g=episodes[i].start-episodes[i-1].start;if(g>=15&&g<=60)gaps.push(g);}
  const lastEp=episodes[episodes.length-1]||null;
  const avg=gaps.length?Math.round(gaps.reduce((a,b)=>a+b,0)/gaps.length):(lastEp?.rec.body.cycle||28);
- const length=episodes.length?Math.round(episodes.reduce((s,e)=>s+e.length,0)/episodes.length):5;
  const todayN=dayNum(today());
+ /* 2.8.2 待确认模型（无数据结构改动，全部靠既有字段推断）：
+    length 从此只代表「已确认天数」，不再代表结束事实。定稿判据：
+    ① 非最后一段 —— 下一段开始即定稿；
+    ② 最后一段的更新日期 > 已确认结束日 —— 用户点过「月经走了」/改过长度；
+    ③ 待确认超 7 天（今天 > 确认末+7）—— 自动定稿，不许无限挂着。
+    未定稿的最后一段不参与「平均经期」，杜绝自猜自统计。 */
+ const PENDING_MAX_DAYS=7;
+ const confirmedEnd=lastEp?lastEp.start+lastEp.length-1:null;
+ /* 定稿判据（2026-11-25 主人裁定）：段记录的**更新日期**晚于其已确认结束日
+    （start+length−1）⇒ 已定稿，不再进待确认。日界按空间时区 UTC+8（与 dayNum
+    的 UTC 日序对齐）。四种情形：
+     ① 点「月经走了」：length 止于昨天、更新日=今天 > 结束日 → 定稿，待确认消失；
+     ② 点「月经又来了」延长：结束日被推到更新日之后 → 不定稿，之后日子越过新
+        结束日，待确认能正常恢复（所以不能用「更新过即定稿」）；
+     ③ 只记日记录（流量/症状）走的是独立日记录行，不触碰段记录 → 无副作用；
+     ④ 新建段当天 length=1、结束日=更新日 → 不定稿，第二天起正常进待确认。 */
+ const updDay=lastEp&&lastEp.rec&&lastEp.rec.updated
+   ?Math.floor((Number(lastEp.rec.updated)+8*3600)/86400):null;
+ const lastEdited=updDay!=null&&confirmedEnd!=null&&updDay>confirmedEnd;
+ const lastFresh=!!lastEp&&!lastEdited&&todayN>confirmedEnd&&todayN<=confirmedEnd+PENDING_MAX_DAYS;
+ const pending=lastFresh?{start:lastEp.start,confirmedEnd,end:todayN,
+   days:todayN-lastEp.start+1,ep:lastEp}:null;
+ const settled=episodes.filter(e=>e!==lastEp||!lastFresh);
+ const length=settled.length?Math.round(settled.reduce((s,e)=>s+e.length,0)/settled.length):5;
  const startN=lastEp?lastEp.start:null;
  const nextStart=startN!=null?startN+avg:null;
  /* 判断"今天在不在经期里"必须用这次记录的实际天数，不能用平均天数：
@@ -135,7 +159,8 @@ function periodData(){
    这里同样取合并后的段长，否则最后几天被拆成碎片时"经期第 N 天"会提前结束。 */
  const lastLen=lastEp?lastEp.length:5;
  const inWindow=startN!=null&&todayN>=startN&&todayN<startN+lastLen;
- return {items,episodes,gaps,cycle:avg,length,last:lastEp?lastEp.rec:null,lastEp,lastLen,nextStart,todayN,inWindow,
+ return {items,episodes,gaps,cycle:avg,length,last:lastEp?lastEp.rec:null,lastEp,lastLen,
+  nextStart,todayN,inWindow,pending,
   dayOfPeriod:inWindow?todayN-startN+1:0,untilNext:nextStart!=null?nextStart-todayN:null,
   estimated:gaps.length===0};
 }
@@ -144,9 +169,18 @@ function periodData(){
    （隔一天才又「月经又来了」），改长度也改在正确的那一行上。 */
 function periodEpisodeOf(d,n){
  const ep=(d.episodes||[]).find(e=>n>=e.start&&n<=e.end);
- if(!ep)return null;
- const owner=ep.frags.filter(r=>dayNum(r.body.start)<=n).pop()||ep.frags[0];
- return {ep,owner};
+ if(ep){
+  const owner=ep.frags.filter(r=>dayNum(r.body.start)<=n).pop()||ep.frags[0];
+  return {ep,owner};
+ }
+ // 2.8.2：待确认天数（确认末+1 .. 今天）也算落在最后一段里——
+ // 否则这几天点「月经走了」会提示「这天本来就不在经期里」，操作落不到该段。
+ const pg=d.pending;
+ if(pg&&d.lastEp&&n>d.lastEp.end&&n<=pg.end){
+  const frags=d.lastEp.frags||[];
+  return {ep:d.lastEp,owner:frags[frags.length-1]||frags[0],pending:true};
+ }
+ return null;
 }
 /* 美柚式四阶段：月经期 / 卵泡期 / 排卵期 / 黄体期
    锚点是每次月经开始日，排卵日按"下次月经前 14 天"推（黄体期长度相对固定），
@@ -154,18 +188,33 @@ function periodEpisodeOf(d,n){
 const PHASE_NAMES={period:'月经期',follicular:'卵泡期',fertile:'排卵期',luteal:'黄体期'};
 function cyclePhases(d){
  const map={};
- const mark=(s,len,predicted)=>{
-  const ovu=s+d.cycle-14;
+ // [cyc] = 这一期的周期长度。2.8.2 起实际段传入「到下一段开始日的实际天数」，
+ // 所以黄体期尾巴正好顶到下一段前一天 —— 补掉「预测 21 来、实际 22 才来，
+ // 21 号变白格」那个洞（旧实现每段都按平均周期涂，段与段之间无人负责）。
+ const mark=(s,len,predicted,cyc)=>{
+  const cycle=Math.max(1,Math.round(cyc||d.cycle||28));
+  // 周期过短时排卵日会落进经期里，把卵泡期挤成负数区间；夹一下，宁可卵泡期 0 天
+  const ovu=Math.max(s+len,s+cycle-14);
   const put=(n,phase)=>{if(n>=0)map[dayStr(n)]={phase,predicted};};
   for(let i=0;i<len;i++)put(s+i,'period');
   for(let i=s+len;i<=ovu-6;i++)put(i,'follicular');
   for(let i=ovu-5;i<=ovu+1;i++)put(i,'fertile');
-  for(let i=ovu+2;i<s+d.cycle;i++)put(i,'luteal');
+  for(let i=ovu+2;i<s+cycle;i++)put(i,'luteal');
   const k=dayStr(ovu);if(map[k])map[k].ovu=true;
  };
  // 先铺预测（远的先写），再用实际记录覆盖 —— 有真实数据时永远以真实为准
- if(d.nextStart!=null)for(let k=2;k>=0;k--)mark(d.nextStart+d.cycle*k,d.length,true);
- d.episodes.forEach(e=>mark(e.start,e.length,false));
+ if(d.nextStart!=null)for(let k=2;k>=0;k--)mark(d.nextStart+d.cycle*k,d.length,true,d.cycle);
+ const eps=d.episodes||[];
+ eps.forEach((e,i)=>{
+  const next=eps[i+1];
+  mark(e.start,e.length,false,next?Math.max(1,next.start-e.start):d.cycle);
+ });
+ // 待确认天数：经期色 + 待确认标记（不是「预测」虚边 —— 它已经来了，只是没人确认走没走）
+ if(d.pending&&d.lastEp){
+  for(let i=d.lastEp.end+1;i<=d.pending.end;i++){
+   if(i>=0)map[dayStr(i)]={phase:'period',predicted:false,pending:true};
+  }
+ }
  return map;
 }
 function todayPhase(d){const ph=cyclePhases(d)[today()];return ph||null;}
@@ -185,8 +234,8 @@ function periodMonthGrid(y,m,d){
   const isStart=!!ph&&ph.phase!==prevPhase;
   prevPhase=ph?ph.phase:'';
   // 格子里不再写短标签：经期是实心粉、排卵期是连续紫底，标签只会把那一行撑高
-  const cls=ph?` ph-${ph.phase}${ph.predicted?' ph-pred':''}${ph.ovu?' ph-ovu':''}${isStart?' ph-start':''}`:'';
-  const parts=[ph?`${PHASE_NAMES[ph.phase]}${ph.predicted?'（预测）':''}`:'还没有记录',ph&&ph.ovu?'排卵日':'',rec?'这次经期的第一天':'',log?'这天记过身体情况':'点一下记这天'].filter(Boolean);
+  const cls=ph?` ph-${ph.phase}${ph.predicted?' ph-pred':''}${ph.pending?' ph-pending':''}${ph.ovu?' ph-ovu':''}${isStart?' ph-start':''}`:'';
+  const parts=[ph?`${PHASE_NAMES[ph.phase]}${ph.pending?'（待确认）':ph.predicted?'（预测）':''}`:'还没有记录',ph&&ph.ovu?'排卵日':'',rec?'这次经期的第一天':'',log?'这天记过身体情况':'点一下记这天'].filter(Boolean);
   const tip=parts.join(' · ');
   cells.push(`<button type="button" class="cal-day${cls}${iso===todayS?' is-today':''}${rec?' has-rec':''}${log?' has-log':''}${iso===picked?' picked':''}" data-action="period-day" data-day="${iso}" title="${tip}" aria-label="${m} 月 ${v} 日，${tip}"><span class="cal-num">${v}</span><span class="cal-dots"></span></button>`);
  }
@@ -291,7 +340,7 @@ function phaseBar(d){
    原来这里只显示一周、下面再摆一份双月日历，等于同一件事看两遍；现在合成一张，整月铺开。 */
 function periodTopCard(d){
  const day=state.periodDay||today(),y=Number(day.slice(0,4)),m=Number(day.slice(5,7));
- return `<div class="cal-bar"><div class="cal-bar-title"><strong>${m} 月</strong><span>${y} 年</span></div><div class="cal-bar-nav"><button type="button" class="cal-nav" data-action="period-month" data-delta="-1" aria-label="上个月">‹</button><button type="button" class="cal-today" data-action="period-pick" data-day="${today()}">今天</button><button type="button" class="cal-nav" data-action="period-month" data-delta="1" aria-label="下个月">›</button></div></div>${periodMonthGrid(y,m,d)}<p class="period-legend"><span class="lg-pill p-period">月经期</span><span class="lg-pill p-pred">预测经期</span><span class="lg-pill p-fertile">排卵期</span><span class="lg-pill p-ovu"><i></i>排卵日</span></p>`;
+ return `<div class="cal-bar"><div class="cal-bar-title"><strong>${m} 月</strong><span>${y} 年</span></div><div class="cal-bar-nav"><button type="button" class="cal-nav" data-action="period-month" data-delta="-1" aria-label="上个月">‹</button><button type="button" class="cal-today" data-action="period-pick" data-day="${today()}">今天</button><button type="button" class="cal-nav" data-action="period-month" data-delta="1" aria-label="下个月">›</button></div></div>${periodMonthGrid(y,m,d)}<p class="period-legend"><span class="lg-pill p-period">月经期</span><span class="lg-pill p-pending">经期（待确认）</span><span class="lg-pill p-pred">预测经期</span><span class="lg-pill p-fertile">排卵期</span><span class="lg-pill p-ovu"><i></i>排卵日</span></p>`;
 }
 /* 选中那天的记录卡：一行一项，点开底部弹层选，选完立刻存。
    「月经来了 是/否」不是普通字段——它决定这天算不算经期，所以单独一行的分段按钮。 */
@@ -305,7 +354,7 @@ function periodLogCard(day){
   return `<button type="button" class="plog-row" data-action="period-log" data-field="${key}" data-day="${day}"><span class="plog-ico">${ico}</span><span class="plog-name">${name}</span><span class="plog-val">${esc(text)}</span>${text?'<span class="plog-add ghost">›</span>':`<span class="plog-add">${icon('plus')}</span>`}</button>`;
  }).join('');
  return `<section class="card period-log">
-  <div class="plog-head"><div><strong>${head}</strong><small>${on?`经期第 ${n-hit.ep.start+1} 天`:'记下这一天，周期会更准'}</small></div>${ep?`<button type="button" class="link-btn" data-action="edit-record" data-id="${ep.id}">改经期长度</button>`:''}</div>
+  <div class="plog-head"><div><strong>${head}</strong><small>${on?`经期第 ${n-hit.ep.start+1} 天${hit.pending?'（待确认）':''}`:'记下这一天，周期会更准'}</small></div>${ep?`<button type="button" class="link-btn" data-action="edit-record" data-id="${ep.id}">改经期长度</button>`:''}</div>
   <div class="plog-row"><span class="plog-ico">🩸</span><span class="plog-name">经期</span>${on
    ?`<span class="plog-seg"><button type="button" class="seg-btn outline" data-action="period-end" data-day="${day}">月经走了</button><button type="button" class="seg-btn" data-action="period-more" data-day="${day}">月经又来了</button></span>`
    :`<span class="plog-seg"><button type="button" class="seg-btn primary" data-action="period-start" data-day="${day}">月经来了</button></span>`}</div>
@@ -485,7 +534,7 @@ function periodPage(){
  const d=periodData(),day=state.periodDay||today();
  /* 生理期不分「我的 / 她的」：两个人共同维护同一条周期，页面长得一样，谁记的都算数。 */
  const hero=d.items.length
-  ?`<section class="card period-hero">${cycleHero(d,state.me.user.name)}<p class="meta">下次预计 ${Number(dayStr(d.nextStart).slice(5,7))} 月 ${Number(dayStr(d.nextStart).slice(8))} 日${d.estimated?'（参考值）':''} · ${d.untilNext>=0?`还有 ${d.untilNext} 天`:`已推迟 ${-d.untilNext} 天`}</p>${phaseBar(d)}<div class="stats-hero" style="grid-template-columns:repeat(3,minmax(0,1fr));margin:14px 0 0"><div class="stat-card"><span>平均周期</span><strong>${d.cycle}<em>天</em></strong></div><div class="stat-card"><span>平均经期</span><strong>${d.length}<em>天</em></strong></div><div class="stat-card"><span>记录天数</span><strong>${periodDayRows().length}<em>天</em></strong></div></div></section>`
+  ?`<section class="card period-hero">${cycleHero(d,state.me.user.name)}<p class="meta">下次预计 ${Number(dayStr(d.nextStart).slice(5,7))} 月 ${Number(dayStr(d.nextStart).slice(8))} 日${d.estimated?'（参考值）':''} · ${d.untilNext>=0?`还有 ${d.untilNext} 天`:`已推迟 ${-d.untilNext} 天`}</p>${d.pending?`<div class="period-pending"><span class="pp-txt">经期第 ${d.pending.days} 天（待确认）</span><span class="plog-seg"><button type="button" class="seg-btn outline" data-action="period-end" data-day="${today()}">月经走了</button><button type="button" class="seg-btn" data-action="period-more" data-day="${today()}">月经又来了</button></span></div>`:''}${phaseBar(d)}<div class="stats-hero" style="grid-template-columns:repeat(3,minmax(0,1fr));margin:14px 0 0"><div class="stat-card"><span>平均周期</span><strong>${d.cycle}<em>天</em></strong></div><div class="stat-card"><span>平均经期</span><strong>${d.length}<em>天</em></strong></div><div class="stat-card"><span>记录天数</span><strong>${periodDayRows().length}<em>天</em></strong></div></div></section>`
   :`<section class="card"><div class="section-heading"><h2>🌸 开始记录</h2></div><p class="meta">点下面「月经来了 · 是」，把这次的第一天记下来；之后每天顺手记一点，周期会越来越准。谁记都行，两个人看到的是同一份。</p></section>`;
  /* 顺序：主视觉卡 → 整月日历 → 当天记录。日历只留这一份，下面不再重复 */
  const top=`<section class="card period-top-card">${periodTopCard(d)}</section>`;

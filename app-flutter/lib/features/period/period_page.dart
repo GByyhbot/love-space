@@ -230,6 +230,25 @@ class _PeriodPageState extends ConsumerState<PeriodPage> {
           // `:488` 下次预计（月/日 + 参考值 + 还有/已推迟）
           Text(heroNextLine(d),
               style: theme.textTheme.bodySmall?.copyWith(color: cs.outline)),
+          // 2.8.2 待确认：经期该结束却没人确认 —— 说清现在算第几天，
+          // 操作入口在下方「今天」日卡（月经走了 / 月经又来了）
+          if (d.pending != null) ...[
+            const SizedBox(height: 10),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: periodStageColor(context).withValues(alpha: 0.10),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: periodStageColor(context)),
+              ),
+              child: Text(
+                  '经期第 ${d.pending!.days} 天（待确认）：走了就点下方「月经走了」，还在就点「月经又来了」',
+                  style: theme.textTheme.labelSmall?.copyWith(
+                      color: periodStageColor(context),
+                      fontWeight: FontWeight.w700)),
+            ),
+          ],
           const SizedBox(height: 12),
           // phaseBar `:281-289`：四段相对天数权重 + 今天游标
           _phaseBar(context, segs, cursor, ph?.phase),
@@ -457,6 +476,9 @@ class _PeriodPageState extends ConsumerState<PeriodPage> {
           // 0xFF7E57C2/0xFF9575CD 两套紫并存。
           Wrap(spacing: 10, runSpacing: 4, children: [
             _legend(context, cs, periodStageColor(context), '月经期'),
+            // 2.8.2：待确认用虚线边一眼区分「已来但未定稿」
+            _legend(context, cs, periodStageColor(context), '经期（待确认）',
+                dashed: true),
             _legend(context, cs, periodStageColor(context), '预测经期'),
             _legend(context, cs, fertileStageColor(context), '排卵期'),
             _legend(context, cs, fertileStageColor(context), '排卵日',
@@ -495,16 +517,23 @@ class _PeriodPageState extends ConsumerState<PeriodPage> {
   }
 
   Widget _legend(BuildContext context, ColorScheme cs, Color color, String label,
-      {bool dot = false}) =>
+      {bool dot = false, bool dashed = false}) =>
       Row(mainAxisSize: MainAxisSize.min, children: [
         Container(
           width: 12,
           height: 12,
           decoration: BoxDecoration(
-            color: dot ? Colors.transparent : color.withValues(alpha: 0.55),
+            // 2.8.2 待确认：浅底 + 虚线边（与「预测经期」的纯浅底区分开）
+            color: dot
+                ? Colors.transparent
+                : color.withValues(alpha: dashed ? 0.18 : 0.55),
             shape: dot ? BoxShape.circle : BoxShape.rectangle,
             borderRadius: dot ? null : BorderRadius.circular(3),
-            border: dot ? Border.all(color: color, width: 2) : null,
+            border: dot
+                ? Border.all(color: color, width: 2)
+                : dashed
+                    ? Border.all(color: color, width: 1)
+                    : null,
           ),
         ),
         const SizedBox(width: 4),
@@ -648,6 +677,7 @@ class _PeriodPageState extends ConsumerState<PeriodPage> {
                     const SizedBox(height: 2),
                     Text(on
                         ? '经期第 ${n - hit.ep.start + 1} 天'
+                            '${hit.pending ? '（待确认）' : ''}'
                         : '记下这一天，周期会更准',
                         style: theme.textTheme.bodySmall
                             ?.copyWith(color: cs.outline)),

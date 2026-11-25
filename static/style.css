@@ -1640,10 +1640,17 @@ body.cal-full{overflow:hidden;height:100dvh}
 .cal-day:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
 .cal-day.ph-pred{opacity:.9}
 .cal-day.ph-period.ph-pred{background:transparent;border:1px dashed var(--period)}
+/* 2.8.2 待确认天数：经期色打底（它确实来了）+ 虚线内边（尚未定稿） */
+.cal-day.ph-period.ph-pending{background:var(--period-soft);border:1px dashed var(--period);box-shadow:none}
+.cal-day.ph-period.ph-pending span:first-child{color:var(--period-ink);font-weight:700}
+.period-pending{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin:12px 0 0;padding:10px 12px;border-radius:14px;border:1px dashed var(--period);background:var(--period-soft)}
+.period-pending .pp-txt{font-size:var(--fs-sm);font-weight:700;color:var(--period-ink)}
 .cal-day.ph-fertile.ph-ovu::after{content:'';position:absolute;bottom:4px;width:7px;height:7px;border-radius:50%;background:var(--fertile);box-shadow:0 0 0 2px rgba(var(--fertile-rgb),.25)}
 .period-legend{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin:10px 0 0}
 .lg-pill{display:inline-flex;align-items:center;justify-content:center;gap:5px;height:26px;padding:0 12px;border-radius:999px;font-size:var(--fs-sm);font-weight:600;color:var(--ink);border:1px solid transparent;line-height:1;box-sizing:border-box;white-space:nowrap}
 .lg-pill.p-period{background:var(--period-soft);color:var(--period-ink);border-color:var(--period)}
+/* 2.8.2 待确认：已来、未有人确认结束 —— 底色同经期，但要一眼看出「还没定稿」 */
+.lg-pill.p-pending{background:transparent;color:var(--period-ink);border:1px dashed var(--period)}
 .lg-pill.p-follicular{background:rgba(var(--green-rgb),.26)}
 .lg-pill.p-fertile{background:rgba(var(--fertile-rgb),.34)}
 .lg-pill.p-luteal{background:rgba(var(--amber-rgb),.28)}

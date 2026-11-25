@@ -42,8 +42,10 @@ def test_maintenance_runs_with_peer_cleanup(monkeypatch):
 
     monkeypatch.setattr(peer, 'cleanup_expired', spy)
     # 备份落盘打桩：只记录，不写包（磁盘细节可 mock，调用链不 mock）
+    # 2.8.2 起 create_backup 带 anchor 参数，桩必须接住，否则 TypeError 会被
+    # maintenance 的步骤隔离吞掉，护栏就假绿了。
     backups = []
-    monkeypatch.setattr(worker, 'create_backup', lambda: backups.append(1))
+    monkeypatch.setattr(worker, 'create_backup', lambda anchor='manual': backups.append(anchor))
 
     # 修复前此行必抛 NameError: name 'peer' is not defined
     worker.maintenance()

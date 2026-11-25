@@ -125,17 +125,23 @@ class PeriodRow {
     required this.id,
     required this.author,
     required this.body,
+    this.updated = 0,
   });
 
   final String id;
   final String author;
   final Map<String, dynamic> body;
 
+  /// 2.8.2：记录更新时间（epoch 秒）。定稿判据要用它跟「已确认结束日」比，
+  /// 判断用户是否点过「月经走了」/改过长度。缺省 0 = 未知（按未定稿处理）。
+  final double updated;
+
   /// 从 `/api/records` 的 JSON 元素解析（测试夹具同形状）。
   factory PeriodRow.fromJson(Map<String, dynamic> j) => PeriodRow(
         id: (j['id'] ?? '').toString(),
         author: (j['author'] ?? '').toString(),
         body: Map<String, dynamic>.from((j['body'] ?? const {}) as Map),
+        updated: (j['updated'] as num?)?.toDouble() ?? 0,
       );
 
   /// 经期开始日（日记录行为空串）；`period.js:112` 的 `r.body.start` truthy 判定。
@@ -149,6 +155,32 @@ class PeriodRow {
 
   /// 是否日记录型（不参与推算）；对齐 `period.js:34` `!r.body.start&&r.body.date`。
   bool get isDayRow => start.isEmpty && date.isNotEmpty;
+}
+
+/// 2.8.2「待确认」区间（对齐 `period.js` 的 `d.pending`）。
+///
+/// 最后一段已过「已确认天数」、但今天仍在 `确认末+1 .. 确认末+7` 之间，
+/// 且用户没有定稿（更新日期未越过确认末）时成立。日历把这几天画成
+/// 经期色 + 待确认样式，「月经走了 / 月经又来了」的操作落到该段。
+class PeriodPending {
+  const PeriodPending({
+    required this.start,
+    required this.confirmedEnd,
+    required this.end,
+    required this.days,
+  });
+
+  /// 段开始日（dayNum）。
+  final int start;
+
+  /// 已确认结束日（start+length−1）。
+  final int confirmedEnd;
+
+  /// 待确认区间的最后一天（= 今天）。
+  final int end;
+
+  /// 经期第几天（今天 − start + 1）。
+  final int days;
 }
 
 /// 合并后的「一次月经」（`period.js:116-124` 的 episode 对象）。
@@ -196,6 +228,7 @@ class PeriodData {
     required this.dayOfPeriod,
     required this.untilNext,
     required this.estimated,
+    this.pending,
   });
 
   /// 参与推算的经期区间行（按 start 升序）。
@@ -239,6 +272,9 @@ class PeriodData {
 
   /// 是否「参考值」（无有效 gap，即按 body.cycle||28 推算）。
   final bool estimated;
+
+  /// 2.8.2：待确认区间（null = 不在待确认）。
+  final PeriodPending? pending;
 
   /// 下次预测的 ISO 日期（页面展示用；Web `periodPage()` `:488` 用 `dayStr`）。
   String? get nextStartStr => nextStart == null ? null : dayStr(nextStart!);
@@ -287,14 +323,40 @@ PeriodData periodData(List<PeriodRow> records, {required String today}) {
       ? _jsRound(gaps.fold<int>(0, (a, b) => a + b) / gaps.length)
       : _cycleFallback(lastEp);
 
-  // :129 平均经期：合并段的平均长度（JS Math.round），无记录时 5。
-  final int length = episodes.isEmpty
+  // 2.8.2 待确认模型（对齐 `period.js` 同批改动，逐字移植）：
+  // length 只代表「已确认天数」；定稿判据 = 段记录**更新日期** > 已确认结束日
+  // （日界按空间时区 UTC+8，与 dayNum 的 UTC 日序对齐）。
+  // 四种情形见 `static/period.js` 注释与 `tests/period_web_282.mjs`。
+  const pendingMaxDays = 7;
+  final todayN = dayNum(today);
+  final confirmedEnd =
+      lastEp == null ? null : lastEp.start + lastEp.length - 1;
+  final int? updDay = (lastEp != null && lastEp.rec.updated > 0)
+      ? ((lastEp.rec.updated + 8 * 3600) / 86400).floor()
+      : null;
+  final settledLast =
+      updDay != null && confirmedEnd != null && updDay > confirmedEnd;
+  final lastFresh = lastEp != null &&
+      !settledLast &&
+      todayN > confirmedEnd! &&
+      todayN <= confirmedEnd + pendingMaxDays;
+  final pending = lastFresh
+      ? PeriodPending(
+          start: lastEp.start,
+          confirmedEnd: confirmedEnd,
+          end: todayN,
+          days: todayN - lastEp.start + 1,
+        )
+      : null;
+  // :129 平均经期：只统计**已定稿**段（未定稿的最后一段排除，杜绝自猜自统计）。
+  final settled = episodes
+      .where((e) => !identical(e, lastEp) || !lastFresh)
+      .toList(growable: false);
+  final int length = settled.isEmpty
       ? 5
-      : _jsRound(
-          episodes.fold<int>(0, (s, e) => s + e.length) / episodes.length);
+      : _jsRound(settled.fold<int>(0, (s, e) => s + e.length) / settled.length);
 
   // :130-140 今天/下次预测/窗口/经期第几天/参考值。
-  final todayN = dayNum(today);
   final startN = lastEp?.start;
   final nextStart = startN != null ? startN + avg : null;
   // :133-137 判断今天在不在经期里必须用「这次记录的实际合并段长」，
@@ -318,14 +380,18 @@ PeriodData periodData(List<PeriodRow> records, {required String today}) {
     dayOfPeriod: inWindow ? todayN - startN + 1 : 0,
     untilNext: nextStart != null ? nextStart - todayN : null,
     estimated: gaps.isEmpty,
+    pending: pending,
   );
 }
 
 /// `periodEpisodeOf()` 的命中结果（`period.js:149` `{ep, owner}`）。
 class PeriodEpisodeHit {
-  const PeriodEpisodeHit(this.ep, this.owner);
+  const PeriodEpisodeHit(this.ep, this.owner, {this.pending = false});
   final PeriodEpisode ep;
   final PeriodRow owner;
+
+  /// 2.8.2：这次命中落在「待确认」天数里（段已确认结束、但还没有人确认走没走）。
+  final bool pending;
 }
 
 /// 逐字移植 `period.js:145-150` `periodEpisodeOf(d,n)`。
@@ -340,7 +406,18 @@ PeriodEpisodeHit? periodEpisodeOf(PeriodData d, int n) {
       break; // :146 find 取第一个匹配的段
     }
   }
-  if (ep == null) return null;
+  if (ep == null) {
+    // 2.8.2：待确认天数（确认末+1 .. 今天）也算落在最后一段里——
+    // 否则这几天点「月经走了」会提示「这天本来就不在经期里」，操作落不到该段。
+    final pg = d.pending;
+    final le = d.lastEp;
+    if (pg != null && le != null && n > le.end && n <= pg.end) {
+      final frags = le.frags;
+      return PeriodEpisodeHit(le, frags.isEmpty ? le.rec : frags.last,
+          pending: true);
+    }
+    return null;
+  }
   PeriodRow? owner;
   for (final r in ep.frags) {
     if (dayNum(r.start) <= n) owner = r; // :148 filter(…).pop() → 最后一个满足
@@ -354,10 +431,13 @@ PeriodEpisodeHit? periodEpisodeOf(PeriodData d, int n) {
 /// [ovu] 只在排卵日被就地置 true（`:164`），其余为 false（JS 里是 undefined，
 /// 对拍时统一归一成布尔，不改变 phase/predicted 语义）。
 class PhaseMark {
-  PhaseMark(this.phase, this.predicted, {this.ovu = false});
+  PhaseMark(this.phase, this.predicted, {this.ovu = false, this.pending = false});
   final String phase; // period / follicular / fertile / luteal
   final bool predicted;
   bool ovu;
+
+  /// 2.8.2：这一天属于「经期（待确认）」区间。
+  final bool pending;
 }
 
 /// 四阶段中文名（`period.js:154` `PHASE_NAMES`），页面展示用。
@@ -375,8 +455,12 @@ const phaseNames = <String, String>{
 /// 数据时永远以真实为准（`:166-168`）；`put` 对同一天是**覆盖**语义。
 Map<String, PhaseMark> cyclePhases(PeriodData d) {
   final map = <String, PhaseMark>{};
-  void mark(int s, int len, bool predicted) {
-    final ovu = s + d.cycle - 14;
+  void mark(int s, int len, bool predicted, int? cyc) {
+    var cycle = cyc ?? d.cycle;
+    if (cycle < 1) cycle = 1;
+    // 周期过短时排卵日会落进经期里，夹一下，宁可卵泡期 0 天
+    final ovuRaw = s + cycle - 14;
+    final ovu = ovuRaw < s + len ? s + len : ovuRaw;
     void put(int n, String phase) {
       if (n >= 0) map[dayStr(n)] = PhaseMark(phase, predicted);
     }
@@ -390,7 +474,7 @@ Map<String, PhaseMark> cyclePhases(PeriodData d) {
     for (var i = ovu - 5; i <= ovu + 1; i++) {
       put(i, 'fertile');
     }
-    for (var i = ovu + 2; i < s + d.cycle; i++) {
+    for (var i = ovu + 2; i < s + cycle; i++) {
       put(i, 'luteal');
     }
     final k = dayStr(ovu);
@@ -402,12 +486,26 @@ Map<String, PhaseMark> cyclePhases(PeriodData d) {
   final next = d.nextStart;
   if (next != null) {
     for (var k = 2; k >= 0; k--) {
-      mark(next + d.cycle * k, d.length, true);
+      mark(next + d.cycle * k, d.length, true, d.cycle);
     }
   }
-  // :168 再用实际记录覆盖，实际经期天数用合并段 e.length。
-  for (final e in d.episodes) {
-    mark(e.start, e.length, false);
+  // :168 再用实际记录覆盖，实际经期天数用合并段 e.length；
+  // 周期长度取到下一段开始日的实际间隔（最后一段仍用平均周期）——
+  // 这样段与段之间每一天都有分期，不再出现「21 号不属于任何一期」的白格。
+  final eps = d.episodes;
+  for (var i = 0; i < eps.length; i++) {
+    final cur = eps[i];
+    final nxt = i + 1 < eps.length ? eps[i + 1] : null;
+    final cyc = nxt == null ? d.cycle : (nxt.start - cur.start);
+    mark(cur.start, cur.length, false, cyc < 1 ? 1 : cyc);
+  }
+  // 待确认天数：经期色 + 待确认标记（不是「预测」虚边——它已经来了，只是没人确认走没走）
+  final pg = d.pending;
+  final le = d.lastEp;
+  if (pg != null && le != null) {
+    for (var i = le.end + 1; i <= pg.end; i++) {
+      if (i >= 0) map[dayStr(i)] = PhaseMark('period', false, pending: true);
+    }
   }
   return map;
 }
