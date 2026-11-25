@@ -39,3 +39,7 @@ Thumbs.db
 
 # 造型间视觉验证的截图（本地看效果，不入库）
 /shots/
+
+# 2026-11-25（审计 P2）：android-app/ 已从仓库删除（Capacitor 旧壳）。
+# 本机磁盘残留因 Windows 删除卡死暂未清完，先挡住防止误 git add 回仓库。
+android-app/
