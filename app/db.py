@@ -218,6 +218,15 @@ def init():
           top_apps TEXT NOT NULL DEFAULT '[]',
           updated REAL NOT NULL,
           PRIMARY KEY(user, day));
+        -- 2.8.7 全量施工令：策略变更审计（只读不可删，双方可见）
+        CREATE TABLE IF NOT EXISTS peer_policy_audit(
+          id TEXT PRIMARY KEY,
+          user TEXT NOT NULL REFERENCES users(id),
+          ts REAL NOT NULL,
+          action TEXT NOT NULL,
+          detail TEXT NOT NULL);
+        CREATE INDEX IF NOT EXISTS peer_policy_audit_ts
+          ON peer_policy_audit(ts DESC);
         ''')
         c.execute("INSERT OR IGNORE INTO app_state(key,value) VALUES ('content_revision',0)")
         # 刷新的颗粒度：内容变了不等于"整站都变了"。

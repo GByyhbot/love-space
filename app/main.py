@@ -35,6 +35,7 @@ from . import db
 from . import asr as asr_mod
 from . import notice_title
 from . import peer
+from . import peer_agg
 from . import report_routes
 from . import rev_cache
 from . import importers
@@ -1908,8 +1909,18 @@ def peer_location(request: Request, body: dict = Body(default=...),
         raise HTTPException(422, f'轨迹点一次最多 {peer.LOCATION_BATCH_MAX} 条')
     with connect() as c:
         c.execute('BEGIN IMMEDIATE')
-        if not peer.load_settings(c, user['id'])['location']:
+    with connect() as c:
+        c.execute('BEGIN IMMEDIATE')
+        policy = peer.load_policy(c, user['id'])
+        halt = peer.halt_state(policy)
+        if halt['halted']:
+            raise HTTPException(
+                422, '报备已关闭' if halt['reason'] == 'off' else '报备已暂停')
+        if policy.get('location_level') == 'off':
             raise HTTPException(422, '定位共享已关闭，请先在守护设置中开启')
+        # street 档：落库前**网格化**（服务端兜底版，端侧已先圆整一次）——
+        # 「仅街区」就不该在库里留下原始坐标，哪怕是防意外的第二道。
+        street = policy.get('location_level') == 'street'
         accepted = 0
         for pt in points:
             pid = str(pt.get('id') or '')
@@ -1920,15 +1931,21 @@ def peer_location(request: Request, body: dict = Body(default=...),
                             (pid,)).fetchone()
             if dup:
                 continue  # client_id 幂等：补传重发不落重复点
+            plat, plng = float(pt['lat']), float(pt['lng'])
+            if street:
+                plat, plng = peer_agg.grid_round(plat), peer_agg.grid_round(plng)
             c.execute('INSERT INTO peer_location_points'
                       '(id,user,ts,lat,lng,acc,speed,backfill,created) '
                       'VALUES (?,?,?,?,?,?,?,?,?)',
-                      (pid, user['id'], float(pt['ts']), float(pt['lat']),
-                       float(pt['lng']), pt.get('acc'), pt.get('speed'),
+                      (pid, user['id'], float(pt['ts']), plat,
+                       plng, pt.get('acc'), pt.get('speed'),
                        1 if pt.get('backfill') else 0, now()))
             accepted += 1
         latest = body.get('latest')
         if isinstance(latest, dict) and isinstance(latest.get('lat'), (int, float)):
+            llat, llng = float(latest['lat']), float(latest['lng'])
+            if street:
+                llat, llng = peer_agg.grid_round(llat), peer_agg.grid_round(llng)
             c.execute('INSERT INTO peer_location_latest'
                       '(user,lat,lng,acc,speed,battery,charging,net,wifi,updated) '
                       'VALUES (?,?,?,?,?,?,?,?,?,?) '
@@ -1936,7 +1953,7 @@ def peer_location(request: Request, body: dict = Body(default=...),
                       'lng=excluded.lng,acc=excluded.acc,speed=excluded.speed,'
                       'battery=excluded.battery,charging=excluded.charging,'
                       'net=excluded.net,wifi=excluded.wifi,updated=excluded.updated',
-                      (user['id'], float(latest['lat']), float(latest['lng']),
+                      (user['id'], llat, llng,
                        latest.get('acc'), latest.get('speed'),
                        latest.get('battery'), latest.get('charging'),
                        latest.get('net'), latest.get('wifi'), now()))
@@ -1998,37 +2015,58 @@ def peer_sos(request: Request, user=Depends(current_user)):
 
 @app.get('/api/peer/status')
 def peer_status(user=Depends(current_user)):
-    """双方最新状态 + 四类共享开关 + 对方关闭态明示（对等口径 3.5：
-    关闭态明确返回，不给空白/假故障）。"""
+    """双方最新状态 + 四类共享开关 + 分档政策 + 对方关闭态明示。
+
+    2.8.7 全量：对方**停用**（全局关闭/暂停中）→ `peer.halted` 明示，且
+    快照里的敏感字段按对方 policy 裁剪后下发（网络/电量/正在使用）。
+    """
     with connect() as c:
         mine = peer.load_settings(c, user['id'])
         pid = peer.peer_partner(c, user['id'])
         theirs = peer.load_settings(c, pid)
+        my_policy = peer.load_policy(c, user['id'])
+        peer_policy = peer.load_policy(c, pid)
         rows = c.execute('SELECT * FROM peer_location_latest WHERE user IN (?,?)',
                          (user['id'], pid)).fetchall()
         by_user = {r['user']: dict(r) for r in rows}
         peer_rev = c.execute(
             "SELECT value FROM app_state WHERE key='peer_revision'").fetchone()[0]
+        current_app = peer_agg.current_app(c, pid, peer_policy)
     mine_row = by_user.get(user['id'])
     peer_row = by_user.get(pid)
+    halt = peer.halt_state(peer_policy)
+    if halt['halted']:
+        # 停用期间不返回任何历史敏感字段（只留关闭态所需的元信息）
+        peer_row = None
+        current_app = None
+    else:
+        if peer_row:
+            peer_row = peer.trim_snapshot(peer_row, peer_policy)
     return {
         'revision': int(peer_rev),
-        'mine': {'settings': mine,
+        'mine': {'settings': mine, 'policy': my_policy,
                  'location': mine_row, 'enabled': mine['location']},
-        'peer': {'settings': theirs,
+        'peer': {'settings': theirs, 'policy': peer_policy,
                  'location': peer_row,
-                 # 对等口径：关闭态明示（不空白/不假故障）
                  'enabled': theirs['location'],
-                 'closed_off': not theirs['location']},
+                 'closed_off': not theirs['location'],
+                 'halted': halt,
+                 'current_app': current_app,
+                 # 对等口径：关闭态明示（不空白/不假故障）
+                 },
     }
 
 
 @app.get('/api/peer/track')
 def peer_track(date: str = '', user=Depends(current_user)):
-    """按日双方轨迹点（轨迹页回放；对方 track 关闭 → closed_off 明示）。"""
+    """按日双方轨迹（轨迹页回放）。
+
+    2.8.7 全量：按**各自属主**的 policy 裁剪——
+    exact 给点列/距离/停留/分段；street 只给网格化停留点与街区级最新位置
+    （**无点列**）；off 沿用既有 `closed_off`；停用给 `halted`。
+    """
     with connect() as c:
-        tz_default = ZoneInfo((db.setting(c, 'space') or {}).get(
-            'timezone', 'Asia/Shanghai'))
+        tz_default = peer_agg.space_tz(c)
     day = date or dt.datetime.now(tz_default).strftime('%Y-%m-%d')
     if not re.fullmatch(r'\d{4}-\d{2}-\d{2}', day):
         raise HTTPException(422, '日期格式应为 YYYY-MM-DD')
@@ -2036,24 +2074,21 @@ def peer_track(date: str = '', user=Depends(current_user)):
         mine_on = peer.load_settings(c, user['id'])['track']
         pid = peer.peer_partner(c, user['id'])
         theirs_on = peer.load_settings(c, pid)['track']
-        # day 边界按本地时区换算 unix 区间
-        tz = ZoneInfo((db.setting(c, 'space') or {}).get('timezone',
-                                                        'Asia/Shanghai'))
-        start = dt.datetime.strptime(day, '%Y-%m-%d').replace(tzinfo=tz).timestamp()
-        end = start + 86400
-        rows = []
-        if mine_on:
-            rows += [dict(r, mine=True) for r in c.execute(
-                'SELECT ts,lat,lng,acc,speed,backfill FROM peer_location_points '
-                'WHERE user=? AND ts>=? AND ts<? ORDER BY ts', (user['id'], start, end))]
-        peer_rows = []
-        if theirs_on:
-            peer_rows = [dict(r) for r in c.execute(
-                'SELECT ts,lat,lng,acc,speed,backfill FROM peer_location_points '
-                'WHERE user=? AND ts>=? AND ts<? ORDER BY ts', (pid, start, end))]
-    return {'date': day,
-            'mine': rows,
-            'peer': {'closed_off': not theirs_on, 'points': peer_rows}}
+        my_policy = peer.load_policy(c, user['id'])
+        peer_policy = peer.load_policy(c, pid)
+        mine_halt = peer.halt_state(my_policy)
+        peer_halt = peer.halt_state(peer_policy)
+        mine_body = (peer_agg.empty_track()
+                     if (not mine_on or mine_halt['halted'])
+                     else peer_agg.track_for(c, user['id'], day, my_policy))
+        peer_body = (peer_agg.empty_track()
+                     if (not theirs_on or peer_halt['halted'])
+                     else peer_agg.track_for(c, pid, day, peer_policy))
+    return {
+        'date': day,
+        'mine': {'closed_off': not mine_on, 'halted': mine_halt, **mine_body},
+        'peer': {'closed_off': not theirs_on, 'halted': peer_halt, **peer_body},
+    }
 
 
 @app.get('/api/peer/state-daily')
@@ -2076,12 +2111,16 @@ def peer_state_daily(date: str = '', user=Depends(current_user)):
         mine_on = peer.load_settings(c, user['id'])['events']
         pid = peer.peer_partner(c, user['id'])
         theirs_on = peer.load_settings(c, pid)['events']
+        peer_policy = peer.load_policy(c, pid)
+        halt = peer.halt_state(peer_policy)
         row = c.execute(
             'SELECT screen_sec, unlocks FROM peer_usage_daily '
             'WHERE user=? AND day=?', (user['id'], day)).fetchone()
         peer_row = c.execute(
             'SELECT screen_sec, unlocks FROM peer_usage_daily '
             'WHERE user=? AND day=?', (pid, day)).fetchone()
+    usage_off = peer_policy.get('usage_level') == 'off'
+    peer_hidden = (not theirs_on) or usage_off or halt['halted']
     return {
         'date': day,
         'mine': {
@@ -2090,16 +2129,72 @@ def peer_state_daily(date: str = '', user=Depends(current_user)):
             'unlocks': int(row['unlocks']) if row else 0,
         },
         'peer': {
-            'closed_off': not theirs_on,
-            'screen_sec': int(peer_row['screen_sec']) if (theirs_on and peer_row) else 0,
-            'unlocks': int(peer_row['unlocks']) if (theirs_on and peer_row) else 0,
+            'closed_off': peer_hidden,
+            'halted': halt,
+            'screen_sec': (int(peer_row['screen_sec'])
+                           if (not peer_hidden and peer_row) else 0),
+            'unlocks': (int(peer_row['unlocks'])
+                        if (not peer_hidden and peer_row) else 0),
         },
     }
 
 
+@app.get('/api/peer/usage-daily')
+def peer_usage_daily(date: str = '', user=Depends(current_user)):
+    """按日双方应用使用汇总（手机页数据源；按属主 policy 裁剪）。
+
+    停止/关闭 → 各自 `halted` / `closed_off` 明示；screen_only 只给亮屏与
+    解锁；top5 档只给排行不给会话流；network 档控 SSID；全部同源同数
+    （亮屏/解锁复用 `peer_usage_daily`，不造第二套口径）。
+    """
+    with connect() as c:
+        tz_default = peer_agg.space_tz(c)
+    day = date or dt.datetime.now(tz_default).strftime('%Y-%m-%d')
+    if not re.fullmatch(r'\d{4}-\d{2}-\d{2}', day):
+        raise HTTPException(422, '日期格式应为 YYYY-MM-DD')
+    with connect() as c:
+        pid = peer.peer_partner(c, user['id'])
+        my_policy = peer.load_policy(c, user['id'])
+        peer_policy = peer.load_policy(c, pid)
+        mine_body, mine_off = peer_agg.usage_daily_for(c, user['id'], day, my_policy)
+        peer_body, peer_off = peer_agg.usage_daily_for(c, pid, day, peer_policy)
+        peer_current = peer_agg.current_app(c, pid, peer_policy)
+    mine_halt = peer.halt_state(my_policy)
+    peer_halt = peer.halt_state(peer_policy)
+    return {
+        'date': day,
+        'mine': {
+            'closed_off': mine_off or mine_halt['halted'],
+            'halted': mine_halt,
+            **(mine_body if not (mine_off or mine_halt['halted']) else {}),
+        },
+        'peer': {
+            'closed_off': peer_off or peer_halt['halted'],
+            'halted': peer_halt,
+            'current_app': (None if (peer_off or peer_halt['halted'])
+                            else peer_current),
+            **(peer_body if not (peer_off or peer_halt['halted']) else {}),
+        },
+    }
+
+
+@app.get('/api/peer/policy-audit')
+def peer_policy_audit(limit: int = 100, user=Depends(current_user)):
+    """双方策略变更流水（只读、不可删；倒序，上限 100 条）。"""
+    cap = max(1, min(int(limit or 100), 200))
+    with connect() as c:
+        pid = peer.peer_partner(c, user['id'])
+        rows = peer.list_policy_audit(c, cap)
+    return {
+        'items': [dict(r, mine=r['user'] == user['id']) for r in rows],
+        'peer_id': pid,
+    }
+
+
+
 @app.get('/api/peer/events')
 def peer_events_list(date: str = '', user=Depends(current_user)):
-    """按日双方报备事件流（动态流页；对方 events 关闭 → closed_off 明示）。"""
+    """按日双方报备事件流（动态流页；按属主 policy 裁剪，停用/关闭明示）。"""
     with connect() as c:
         tz_default = ZoneInfo((db.setting(c, 'space') or {}).get(
             'timezone', 'Asia/Shanghai'))
@@ -2110,6 +2205,8 @@ def peer_events_list(date: str = '', user=Depends(current_user)):
         mine_on = peer.load_settings(c, user['id'])['events']
         pid = peer.peer_partner(c, user['id'])
         theirs_on = peer.load_settings(c, pid)['events']
+        peer_policy = peer.load_policy(c, pid)
+        halt = peer.halt_state(peer_policy)
         tz = ZoneInfo((db.setting(c, 'space') or {}).get('timezone',
                                                         'Asia/Shanghai'))
         start = dt.datetime.strptime(day, '%Y-%m-%d').replace(tzinfo=tz).timestamp()
@@ -2126,32 +2223,44 @@ def peer_events_list(date: str = '', user=Depends(current_user)):
                 item['mine'] = True
                 rows.append(item)
         peer_rows = []
-        if theirs_on:
-            peer_rows = [peer.serialize_peer_event(r) for r in c.execute(
-                'SELECT id,user,type,ts,summary,pushed,created,source,scene,'
-                'note,place_name,client_id,ack_by,ack_emoji,ack_at,payload '
-                'FROM peer_events '
-                'WHERE user=? AND ts>=? AND ts<? ORDER BY ts DESC',
-                (pid, start, end))]
+        if theirs_on and not halt['halted']:
+            for r in c.execute(
+                    'SELECT id,user,type,ts,summary,pushed,created,source,scene,'
+                    'note,place_name,client_id,ack_by,ack_emoji,ack_at,payload '
+                    'FROM peer_events '
+                    'WHERE user=? AND ts>=? AND ts<? ORDER BY ts DESC',
+                    (pid, start, end)):
+                item = peer.trim_event(peer.serialize_peer_event(r), peer_policy)
+                if item is not None:
+                    peer_rows.append(item)
     return {'date': day,
             'mine': rows,
-            'peer': {'closed_off': not theirs_on, 'events': peer_rows}}
+            'peer': {'closed_off': (not theirs_on) or halt['halted'],
+                     'halted': halt,
+                     'events': peer_rows}}
 
 
 @app.get('/api/peer/settings')
 def peer_settings_get(user=Depends(current_user)):
+    """四类共享开关 + 分档 policy（v2；老客户端只读前四个键，行为不变）。"""
     with connect() as c:
-        return peer.load_settings(c, user['id'])
+        return {**peer.load_settings(c, user['id']),
+                'policy': peer.load_policy(c, user['id'])}
 
 
 @app.put('/api/peer/settings')
 def peer_settings_put(body: dict = Body(default=...), user=Depends(current_user)):
-    """四类共享开关（location/track/events/usage）各自独立。"""
+    """四类共享开关（location/track/events/usage）+ 分档 policy 各自独立。
+
+    2.8.7：policy 为事实源、四开关是投影（映射表见 `peer.SWITCH_MAP_DOC`）；
+    每次策略变更落一行审计（双方可读、不可删），并把变更写进对方动态流。
+    """
     with connect() as c:
         c.execute('BEGIN IMMEDIATE')
-        saved = peer.save_settings(c, user['id'], body or {})
+        saved, changes, _rev = peer.save_settings_with_audit(
+            c, user['id'], body or {})
         _bump_peer(c)
-    return saved
+    return {**saved, 'changes': [d for _, d in changes]}
 
 
 @app.post('/api/asr')

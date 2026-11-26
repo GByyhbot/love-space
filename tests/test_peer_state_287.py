@@ -237,7 +237,8 @@ def test_state_daily_endpoint_shape(client_a, client_b):
     j = r.json()
     assert set(j) == {'date', 'mine', 'peer'}
     assert set(j['mine']) == {'screen_sec', 'unlocks'}
-    assert set(j['peer']) == {'closed_off', 'screen_sec', 'unlocks'}
+    # 2.8.7 全量：peer 多一个 halted（停用/暂停明示）
+    assert set(j['peer']) == {'closed_off', 'screen_sec', 'unlocks', 'halted'}
     assert j['mine']['screen_sec'] >= 30
 
 
@@ -323,36 +324,20 @@ def test_manual_report_payload_ignored(client_a):
     assert ev['payload'] == {}, '主动报备不该带上状态载荷'
 
 
-def test_no_usage_fence_backend():
-    """围栏：本阶段后端不得写 top_apps、不得读 usage 开关（源码级证据）。
+def test_usage_fence_replaced_by_masking_rule():
+    """围栏替换（2026-11-27 机主令解除 usage 围栏，换成脱敏硬约束）。
 
-    状态事件的副作用只允许碰 screen_sec / unlocks 两列；usage 四键里的
-    usage 键在本阶段保持未消费（红线 3）。
+    旧断言「后端不得消费 top_apps/usage」已被本令作废，这里改为**新红线**：
+    ① 哨兵常量存在且服务端真在用（源码级）；
+    ② 脱敏事件的 summary 只许出现「其他应用」，绝不出现真实包名（行为）。
     """
     import pathlib
-    import re
-
-    def strip_block_strings(src):
-        """把三引号块（docstring）替换成等量空行，保留行号，避免说明文字被当证据。"""
-        src = re.sub(r'"""[\s\S]*?"""',
-                     lambda m: '\n' * m.group(0).count('\n'), src)
-        return re.sub(r"'''[\s\S]*?'''",
-                      lambda m: '\n' * m.group(0).count('\n'), src)
 
     root = pathlib.Path(__file__).resolve().parents[1] / 'app'
-    hits = []
-    for f in root.glob('*.py'):
-        text = strip_block_strings(f.read_text(encoding='utf-8'))
-        for i, raw in enumerate(text.splitlines(), 1):
-            line = raw.split('#', 1)[0]          # 行注释不算证据，先剥掉
-            if not line.strip():
-                continue
-            # 建表/迁移/读取列清单允许出现；写 top_apps 或读 usage 开关不允许
-            if 'top_apps' in line and not any(
-                    k in line for k in ('CREATE TABLE', 'DEFAULT', 'peer_usage_daily',
-                                        'SELECT', 'PRAGMA')):
-                hits.append(f'{f.name}:{i}: {raw.strip()}')
-            if ("['usage']" in line or "\"usage\"" in line) \
-                    and 'SHARE_KEYS' not in line:
-                hits.append(f'{f.name}:{i}: {raw.strip()}')
-    assert hits == [], f'本阶段不许消费 usage/top_apps，越界处：{hits}'
+    src = (root / 'peer.py').read_text(encoding='utf-8')
+    assert peer.SENSITIVE_MASK_PKG == 'masked.other'
+    assert peer.SENSITIVE_MASK_NAME == '其他应用'
+    assert 'SENSITIVE_MASK_NAME' in src, 'summary 必须用哨兵名，不能用客户端传来的 app'
+    # masked 时 pkg 必须被改写为哨兵（源码级：校验函数里显式赋值）
+    assert "pkg = SENSITIVE_MASK_PKG" in src
+    assert "app = SENSITIVE_MASK_NAME" in src

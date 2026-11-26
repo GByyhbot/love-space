@@ -142,13 +142,27 @@ def test_peer_sos_strong_push(client_a):
 
 
 def test_peer_settings_roundtrip(client_a):
+    """四开关契约不回退；2.8.7 起响应多一个 policy（映射表逐条断言）。"""
     r = client_a.get('/api/peer/settings', headers=HEADERS).json()
-    assert r == {'location': True, 'track': True,
-                 'events': True, 'usage': True}, '缺省全开'
+    assert {k: r[k] for k in peer.SHARE_KEYS} == {
+        'location': True, 'track': True, 'events': True,
+        'usage': True}, '缺省全开'
+    # 迁移口径：全开 → 最高档（不许反过来默认全开）
+    assert r['policy']['location_level'] == 'exact'
+    assert r['policy']['usage_level'] == 'full'
+    assert r['policy']['app_level'] == 'stream'
+    assert r['policy']['network_level'] == 'ssid'
+
     r = client_a.put('/api/peer/settings', headers=HEADERS,
                      json={'location': False, 'usage': False}).json()
-    assert r == {'location': False, 'track': True,
-                 'events': True, 'usage': False}
+    assert {k: r[k] for k in peer.SHARE_KEYS} == {
+        'location': False, 'track': True,
+        'events': True, 'usage': False}
+    # 老客户端只带四开关 → 反推出档位（关了就 off）
+    assert r['policy']['location_level'] == 'off'
+    assert r['policy']['usage_level'] == 'off'
+    assert r['policy']['app_level'] == 'off'
+    assert r['policy']['network_level'] == 'ssid'
     r = client_a.get('/api/peer/settings', headers=HEADERS).json()
     assert r['location'] is False and r['usage'] is False
 

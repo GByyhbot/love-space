@@ -55,13 +55,19 @@ def create_report(body: ReportIn, u=Depends(security.current_user)):
         if not peer.load_settings(c, user_id)['events']:
             raise HTTPException(status_code=422, detail='报备事件共享已关闭')
 
-        # 状态事件分支：与主动报备共用同一通道与 client_id 幂等，但写入
-        # type='state.*' / source='auto'，不写通知中心（状态事件默认不推送）。
+        # 状态/使用事件分支：与主动报备共用同一通道与 client_id 幂等，但写入
+        # type='state.*' / 'usage.*'、source='auto'，不写通知中心（低电量提醒除外）。
         if body.kind:
-            if body.kind not in peer.STATE_KINDS:
+            if body.kind not in peer.STATE_KINDS + peer.USAGE_KINDS:
                 raise HTTPException(422, f'未知事件类型：{body.kind}')
+            # 写侧闸门（第一道）：按**属主** policy 拒收越档遥测。
+            # 手动报备不受此闸门影响（暂停/关闭期间照常可发）。
+            reason = peer.telemetry_allowed(
+                body.kind, body.payload, peer.load_policy(c, user_id))
+            if reason:
+                raise HTTPException(422, reason)
             try:
-                payload = peer.validate_state_payload(body.kind, body.payload)
+                payload = peer.validate_telemetry(body.kind, body.payload)
             except ValueError as e:
                 raise HTTPException(422, str(e))
             event, created, rev = peer.create_state_event(
