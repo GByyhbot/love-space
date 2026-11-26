@@ -27,7 +27,6 @@ import 'package:go_router/go_router.dart';
 import '../../core/api/api_client.dart' as api;
 import '../../core/ui/hold_to_confirm.dart' show HoldToConfirmButton;
 import '../../core/sse/sse_client.dart';
-import '../../core/together/together_data.dart';
 import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
 import '../personal/personal_controller.dart';
 import 'period_actions.dart';
@@ -35,7 +34,6 @@ import 'period_colors.dart';
 import 'period_rows.dart';
 import 'period_controller.dart';
 import 'period_engine.dart';
-import 'period_form.dart';
 import 'period_grid.dart';
 import 'period_meta.dart';
 import 'period_sheets.dart';
@@ -96,12 +94,6 @@ class _PeriodPageState extends ConsumerState<PeriodPage> {
     return Scaffold(
       // 🔴 automaticallyImplyLeading 不关：返回按钮 + 系统手势都能回上一页。
       appBar: AppBar(title: const Text('生理期')),
-      floatingActionButton: FloatingActionButton.extended(
-        tooltip: '记一次经期（详细表单）',
-        onPressed: () => _openEpisodeForm(null, selected, d, today),
-        icon: const Icon(Icons.edit_note_rounded),
-        label: const Text('记一次经期'),
-      ),
       body: RefreshIndicator(
         onRefresh: () => ref.read(periodControllerProvider.notifier).load(),
         child: ListView(
@@ -242,7 +234,7 @@ class _PeriodPageState extends ConsumerState<PeriodPage> {
                 border: Border.all(color: periodStageColor(context)),
               ),
               child: Text(
-                  '经期第 ${d.pending!.days} 天（待确认）：走了就点下方「月经走了」，还在就点「月经又来了」',
+                  '经期第 ${d.pending!.days} 天（待确认）：走了就点上面「月经走了」，还在就点「还在经期」',
                   style: theme.textTheme.labelSmall?.copyWith(
                       color: periodStageColor(context),
                       fontWeight: FontWeight.w700)),
@@ -816,7 +808,6 @@ class _PeriodPageState extends ConsumerState<PeriodPage> {
         '${int.parse(day.substring(8, 10))} 日';
     final isToday = day == today;
     final head = isToday ? '$dateLabel · 今天' : '$dateLabel · 历史记录';
-    final ownerRecord = hit == null ? null : _recordById(hit.owner.id);
 
     return Card(
       margin: const EdgeInsets.only(top: 12),
@@ -838,12 +829,6 @@ class _PeriodPageState extends ConsumerState<PeriodPage> {
                             ?.copyWith(color: cs.outline)),
                   ]),
             ),
-            if (ownerRecord != null)
-              TextButton(
-                onPressed: () =>
-                    _openEpisodeForm(ownerRecord, day, d, today),
-                child: const Text('改经期长度'),
-              ),
           ]),
           const SizedBox(height: Spacing.gap),
           // 经期四动作（走了 / 又来了 / 来了）—— 全程无 end 键。
@@ -884,6 +869,7 @@ class _PeriodPageState extends ConsumerState<PeriodPage> {
                 ),
             ] else if (isToday)
               FilledButton(
+                key: const Key('period-log-start'),
                 onPressed: _busy
                     ? null
                     : () => _runAction(
@@ -894,6 +880,7 @@ class _PeriodPageState extends ConsumerState<PeriodPage> {
               )
             else
               OutlinedButton(
+                key: const Key('period-log-start'),
                 onPressed: _busy
                     ? null
                     : () => _runAction(
@@ -951,14 +938,7 @@ class _PeriodPageState extends ConsumerState<PeriodPage> {
     );
   }
 
-  TogetherRecord? _recordById(String id) {
-    for (final r in ref.read(periodControllerProvider).records) {
-      if (r.id == id) return r;
-    }
-    return null;
-  }
 
-  /// 执行四动作计划（7-C 错误通道：失败只发 error tone，不发成功通知）。
   Future<void> _runAction(
       PeriodWritePlan Function() build, String actionName) async {
     if (_busy) return;
@@ -998,23 +978,6 @@ class _PeriodPageState extends ConsumerState<PeriodPage> {
     }
   }
 
-  Future<void> _openEpisodeForm(TogetherRecord? record, String selected,
-      PeriodData d, String today) async {
-    // 2.4.1 通则 A：表单从居中弹窗改底部 sheet（PeriodFormDialog 已 sheet 化）。
-    await showModalBottomSheet<bool>(
-      context: context,
-      isScrollControlled: true,
-      builder: (_) => PeriodFormDialog(
-        record: record,
-        presetDay: selected,
-        defaultLength: d.length,
-        defaultCycle: d.cycle,
-        today: today,
-      ),
-    );
-  }
-
-  // ── symBlock：症状统计（periodPage :493-499） ─────────────────────────
 
   Widget _symptomBlock(
       BuildContext context, PeriodData d, List<PeriodRow> rows) {
@@ -1072,7 +1035,6 @@ class _PeriodPageState extends ConsumerState<PeriodPage> {
       final authorLabel = author == uid ? '我' : 'TA';
       final chips = episodeSymptoms(ep);
       final words = episodeWords(ep);
-      final firstRecord = _recordById(ep.frags.first.id);
       final subtitle = <String>[
         '共 ${ep.length} 天 · ${endIso.substring(5)} 结束',
         if (details > 0) '记了 $details 天细节',
@@ -1108,15 +1070,13 @@ class _PeriodPageState extends ConsumerState<PeriodPage> {
                   ),
                   PopupMenuButton<String>(
                     tooltip: '更多操作',
+                    // 2.8.7 段四：整段编辑表单已删，「编辑」入口一并去掉；
+                    // 只保留删整次（令：点段内沿用走了/还在 + 删段）。
                     itemBuilder: (_) => const [
-                      PopupMenuItem(value: 'edit', child: Text('编辑')),
                       PopupMenuItem(
                           value: 'delete', child: Text('删除这次')),
                     ],
                     onSelected: (v) {
-                      if (v == 'edit' && firstRecord != null) {
-                        _openEpisodeForm(firstRecord, startIso, d, today);
-                      }
                       if (v == 'delete') _confirmDeleteEpisode(ep);
                     },
                   ),

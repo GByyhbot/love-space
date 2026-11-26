@@ -192,18 +192,14 @@ void main() {
       expect(src.contains('showFormSheet'), isTrue,
           reason: '$f 录入表单套同一外壳（showFormSheet）');
     }
-    // period_form 自带 sheet 外壳（经周期章双呈现机制不经共用骨架）：
-    // 抓手+圆钮+玻璃栏 + 调用点 showModalBottomSheet
-    final periodForm =
-        codeOnly(File('lib/features/period/period_form.dart')
-            .readAsStringSync());
-    expect(periodForm.contains('GlassActionBar('), isTrue,
-        reason: 'period_form 表单套同一玻璃栏外壳');
-    expect(periodForm.contains('Icons.close_rounded'), isTrue);
+    // 2.8.7 段四：`period_form.dart` 整段编辑表单已删（改走日历点选），
+    // 原来针对它与 period_page 里 sheet 调用点的两条断言随之取消；
+    // period 页仍在用的 9 字段日记录弹层（period_sheets）另有用例覆盖。
     final periodPage =
         codeOnly(File('lib/features/period/period_page.dart')
             .readAsStringSync());
-    expect(periodPage.contains('showModalBottomSheet<bool>('), isTrue);
+    expect(periodPage.contains('showPeriodLogSheet('), isTrue,
+        reason: '日记录弹层仍在（逐日条目未动）');
   });
 
   // ── 通则 B：原生下拉全仓清零 ──────────────────────────────────────

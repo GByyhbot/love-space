@@ -301,74 +301,8 @@ void main() {
     });
   });
 
-  // ── ⑤ periodForm body 形状（:824-826） ─────────────────────────────
-  group('periodForm :809-833', () {
-    test('提交 body 恰为 {start,length,cycle,flow?,symptoms,content}', () {
-      final body = periodFormBody(
-        start: '2026-11-10',
-        lengthText: '6',
-        cycleText: '30',
-        flowText: '3',
-        symptoms: const <String>['腰酸', '腹痛'],
-        content: '这次特别难受',
-        defaultCycle: 28,
-      );
-      expect(body.keys.toSet(),
-          {'start', 'length', 'cycle', 'flow', 'symptoms', 'content'});
-      expect(body['start'], '2026-11-10');
-      expect(body['length'], 6);
-      expect(body['cycle'], 30);
-      expect(body['flow'], 3);
-      expect(body['symptoms'], ['腰酸', '腹痛']);
-      expect(body['content'], '这次特别难受');
-      expect(body.containsKey('end'), isFalse);
-      expect(body.containsKey('date'), isFalse);
-      expect(body.containsKey('client_id'), isFalse);
-    });
-
-    test('flow 不记 / length 空回落 5 / cycle 空回落 d.cycle / flow 老数据映射', () {
-      final body = periodFormBody(
-        start: '2026-11-10',
-        lengthText: '',
-        cycleText: '',
-        flowText: '',
-        symptoms: const <String>[],
-        content: '',
-        defaultCycle: 31,
-      );
-      expect(body['length'], 5);
-      expect(body['cycle'], 31);
-      expect(body.containsKey('flow'), isFalse);
-      expect(body['symptoms'], <String>[]);
-      expect(body['content'], '');
-      // periodForm :815 老数据「少/中/多」→ 2/3/4（表单预填映射）。
-      for (final pair in const [
-        ['少', 2],
-        ['中', 3],
-        ['多', 4],
-      ]) {
-        final v = pair[0] as String;
-        final num = int.tryParse(v);
-        expect(num ?? const {'少': 2, '中': 3, '多': 4}[v], pair[1]);
-      }
-    });
-
-    test('有记录 PUT 不带 client_id / 无记录 POST 带 client_id', () {
-      final body = <String, dynamic>{'start': '2026-11-10'};
-      final put = planSaveEpisodeForm(
-          recordId: 'r1', body: body, clientId: 'cid');
-      expect(put.kind, PeriodWriteKind.put);
-      expect(put.path, '/records/r1');
-      expect(put.clientId, isNull);
-      expect(put.message, '已记下这次');
-      final post = planSaveEpisodeForm(
-          recordId: null, body: body, clientId: 'cid');
-      expect(post.kind, PeriodWriteKind.post);
-      expect(post.clientId, 'cid');
-      expect(_planShape(post)['writes'][0]['data']['client_id'], 'cid');
-    });
-  });
-
+  // 2.8.7 段四：整段编辑表单已删，原 `periodForm` 三条用例（body 形状 /
+  // length 与 cycle 回落 / PUT-POST 分支）随表单一并移除——它们只验证表单自身。
   test('常量表逐字：9 字段顺序 / 20 症状 / 受孕三档 / 免责带句号', () {
     expect(periodLogFields.map((f) => f[0]).toList(), [
       'flow', 'color', 'pain', 'sex', 'symptoms', 'mood', 'weight',

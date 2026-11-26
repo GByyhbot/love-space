@@ -26,8 +26,7 @@ import 'package:love_space/core/api/api_client.dart' as api;
 import 'package:love_space/core/sse/sse_client.dart'
     show SseEvent, sseEventsProvider;
 import 'package:love_space/core/together/together_data.dart';
-import 'package:love_space/features/chat/chat_toast.dart'
-    show ChatToastHost, ChatToastTone, chatToastProvider;
+import 'package:love_space/features/chat/chat_toast.dart' show ChatToastHost;
 import 'package:love_space/features/personal/personal_controller.dart';
 import 'package:love_space/features/period/period_controller.dart';
 import 'package:love_space/features/period/period_engine.dart';
@@ -322,57 +321,6 @@ void main() {
       expect(d.length, 5);
     });
 
-    test('新建经期：body 形状 + client_id 由表单生成一次、失败重试复用同值',
-        () async {
-      final s = _Store();
-      final adapter = _adapterFor(s);
-      final dio = Dio(BaseOptions(
-        baseUrl: 'https://test.local',
-        validateStatus: api.validateAppStatus,
-      ))..httpClientAdapter = adapter;
-      final c = ProviderContainer(overrides: [
-        api.dioProvider.overrideWith((ref) async => dio),
-        sseEventsProvider.overrideWith((ref) => const Stream<SseEvent>.empty()),
-        personalCurrentUserProvider.overrideWith((ref) => s.uid),
-      ]);
-      addTearDown(c.dispose);
-      final ctrl = c.read(periodControllerProvider.notifier);
-      s.postStatus = 422;
-      const cid = 'fl-fixed-one-time';
-      final args = {
-        'start': '2026-11-10',
-        'length': 6,
-        'cycle': 31,
-        'content': '这次来得早',
-        'clientId': cid,
-      };
-      final err1 = await ctrl.addEpisode(
-          start: args['start'] as String,
-          length: args['length'] as int,
-          cycle: args['cycle'] as int,
-          content: args['content'] as String,
-          clientId: args['clientId'] as String);
-      expect(err1, s.postDetail, reason: '4xx 作为成功 Response，原文透传');
-      s.postStatus = 200;
-      final err2 = await ctrl.addEpisode(
-          start: args['start'] as String,
-          length: args['length'] as int,
-          cycle: args['cycle'] as int,
-          content: args['content'] as String,
-          clientId: args['clientId'] as String);
-      expect(err2, isNull);
-      expect(s.postBodies.length, 2);
-      for (final b in s.postBodies) {
-        expect(b['kind'], 'period');
-        expect(b['client_id'], cid, reason: '失败重试必须复用同一个 client_id');
-        final body = b['body'] as Map;
-        expect(body['start'], '2026-11-10');
-        expect(body['length'], 6);
-        expect(body['cycle'], 31);
-        expect(body.containsKey('end'), isFalse, reason: '绝不虚构 end 键');
-        expect(body.containsKey('date'), isFalse);
-      }
-    });
 
     test('新建日记录：body 有 date、无 start、无 end', () async {
       final s = _Store();
@@ -602,55 +550,6 @@ void main() {
       await _flush(tester);
     });
 
-    testWidgets('表单失败：顶部通知 + 表单内联原文双呈现、不 pop、输入保留、不重试',
-        (tester) async {
-      final s = _Store();
-      s.postStatus = 422;
-      s.postDetail = '周期需在 15–60 天、经期需在 1–15 天之间';
-      final adapter = _adapterFor(s);
-      final dio = Dio(BaseOptions(
-        baseUrl: 'https://test.local',
-        validateStatus: api.validateAppStatus,
-      ))..httpClientAdapter = adapter;
-      final c = ProviderContainer(overrides: [
-        api.dioProvider.overrideWith((ref) async => dio),
-        sseEventsProvider.overrideWith((ref) => const Stream<SseEvent>.empty()),
-        personalCurrentUserProvider.overrideWith((ref) => s.uid),
-      ]);
-      addTearDown(c.dispose);
-      await _pump(tester, c);
-
-      // 8-B：FAB 直接打开 periodForm（presetDay = 日历选中日），标题逐字。
-      await tester.tap(find.byType(FloatingActionButton));
-      await tester.pumpAndSettle();
-      expect(find.text('记录这次经期'), findsOneWidget,
-          reason: 'periodForm :809 标题逐字');
-      // 输入保留：往「想说的话」里写点东西，失败后应还在。
-      await tester.enterText(find.byType(TextFormField).at(3), '保留的输入');
-      await tester.tap(find.text('保存'));
-      await tester.pumpAndSettle();
-
-      expect(find.text(s.postDetail), findsOneWidget,
-          reason: '表单内联原文');
-      expect(find.textContaining(s.postDetail).evaluate().length,
-          greaterThanOrEqualTo(2),
-          reason: '内联 + 顶部通知双呈现');
-      expect(c.read(chatToastProvider)?.text, '保存失败：${s.postDetail}');
-      expect(c.read(chatToastProvider)?.tone, ChatToastTone.error,
-          reason: '失败绝不能发成功通知');
-      expect(find.text('已记下这次'), findsNothing);
-      expect(find.text('记录这次经期'), findsOneWidget, reason: '失败不 pop');
-      expect(find.text('保留的输入'), findsOneWidget, reason: '输入保留');
-      expect(s.postCalls, 1, reason: '不自动重试');
-
-      // 再点一次：client_id 必须复用同一个值（表单 State initState 生成一次）。
-      await tester.tap(find.text('保存'));
-      await tester.pumpAndSettle();
-      expect(s.postCalls, 2);
-      final cids = s.postBodies.map((b) => b['client_id']).toSet();
-      expect(cids.length, 1, reason: '失败重试带同一个 client_id');
-      await _flush(tester);
-    });
 
     testWidgets('D6：对方 author 的日记录与历史卡菜单都无作者门槛',
         (tester) async {
@@ -664,9 +563,10 @@ void main() {
       expect(menus, findsWidgets);
       await tester.tap(menus.first);
       await tester.pumpAndSettle();
-      expect(find.text('编辑'), findsOneWidget);
+      // 2.8.7 段四：整段编辑表单已删 → 菜单里只剩「删除这次」，编辑入口一并消失
+      expect(find.text('编辑'), findsNothing, reason: '段四已删编辑入口');
       expect(find.text('删除这次'), findsOneWidget,
-          reason: '删整次走 period-del-episode 的 ids');
+          reason: '删整次仍走 period-del-episode 的 ids（对所有人开放）');
       await _flush(tester);
     });
   });
@@ -698,10 +598,18 @@ void main() {
         'planMore',
         'periodWarnings',
         'showPeriodLogSheet',
-        'PeriodFormDialog',
         'periodHeadingSub',
       ]) {
         expect(page.contains(required), isTrue, reason: '8-B $required 应落地');
+      }
+      // 2.8.7 段四：整段编辑表单已删，页面里不许再出现它的任何痕迹
+      for (final gone in [
+        'PeriodFormDialog',
+        'period_form.dart',
+        '_openEpisodeForm',
+        '记一次经期',
+      ]) {
+        expect(page.contains(gone), isFalse, reason: '段四已删：$gone 不应再出现');
       }
       // 🔴 段 C 已落地：数据分析入口是活卡，context.push('/period/analysis')。
       // 只检查代码行（文档注释里也会提到这些字面量）。

@@ -199,60 +199,6 @@ PeriodWritePlan planSaveDay({
   );
 }
 
-/// `periodForm :818-829` 的提交 body（逐字 `:824-826`）。
-///
-/// [flowText] 为下拉值（'' = 不记）；[lengthText]/[cycleText] 为输入框原文；
-/// [defaultCycle] 取引擎 `d.cycle`（`:824` `Number(f.get('cycle')||d.cycle)`）。
-Map<String, dynamic> periodFormBody({
-  required String start,
-  required String lengthText,
-  required String cycleText,
-  required String flowText,
-  required List<String> symptoms,
-  required String content,
-  required int defaultCycle,
-}) {
-  return <String, dynamic>{
-    'start': start,
-    'length': _formNumber(lengthText, 5),
-    'cycle': _formNumber(cycleText, defaultCycle),
-    if (flowText.isNotEmpty) 'flow': int.tryParse(flowText) ?? 0,
-    'symptoms': List<String>.from(symptoms),
-    'content': content,
-    // 🔴 无 date、无 end、无 client_id（client_id 是记录顶层字段）。
-  };
-}
-
-/// `Number(f.get('x')||fallback)`（空串 → fallback）。
-int _formNumber(String raw, int fallback) {
-  if (raw.isEmpty) return fallback;
-  final n = num.tryParse(raw);
-  return n == null || n.isNaN ? fallback : n.toInt();
-}
-
-/// `periodForm :827-828`：有记录 PUT（**不带 client_id**）/ 无记录 POST（带）。
-PeriodWritePlan planSaveEpisodeForm({
-  required String? recordId,
-  required Map<String, dynamic> body,
-  required String clientId,
-}) {
-  if (recordId != null) {
-    return PeriodWritePlan(
-      kind: PeriodWriteKind.put,
-      path: '/records/$recordId',
-      body: body,
-      message: '已记下这次',
-    );
-  }
-  return PeriodWritePlan(
-    kind: PeriodWriteKind.post,
-    path: '/records',
-    body: body,
-    clientId: clientId,
-    message: '已记下这次',
-  );
-}
-
 /// `app.js:2507-2510` 删整次：对该 episode 的**全部碎片** id 逐个 DELETE。
 /// 回收站不会自动删除、可随时恢复，恢复接已有通用 `PersonalController.restore`。
 List<String> deleteEpisodeIds(PeriodEpisode ep) =>
