@@ -4,6 +4,7 @@ import android.Manifest
 import android.app.AlarmManager
 import android.app.AppOpsManager
 import android.app.PendingIntent
+import android.app.usage.UsageEvents
 import android.app.usage.UsageStatsManager
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -765,14 +766,18 @@ object PeerLocNative {
             null
         } ?: return 0
 
+        // UsageEvents 的游标 API 是 hasNextEvent() / getNextEvent(out)——
+        // 不是 Cursor 的 hasNext()/nextEvent()（CI 实测 unresolved）。
         val raw = ArrayList<UsageGates.Raw>()
-        while (events.hasNext()) {
-            val e = events.nextEvent() ?: break
-            val kind = e.eventType
+        val ev = UsageEvents.Event()
+        while (events.hasNextEvent()) {
+            if (!events.getNextEvent(ev)) break
+            val kind = ev.eventType
             if (kind != UsageGates.EVENT_RESUMED && kind != UsageGates.EVENT_PAUSED) continue
-            val pkg = e.packageName ?: continue
+            val pkg = ev.packageName ?: continue
             if (isExcluded(ctx, pkg)) continue
-            raw.add(UsageGates.Raw(pkg, e.timeStamp, kind == UsageGates.EVENT_RESUMED))
+            raw.add(UsageGates.Raw(pkg, ev.timeStamp,
+                kind == UsageGates.EVENT_RESUMED))
         }
         raw.sortBy { it.ts }
 
