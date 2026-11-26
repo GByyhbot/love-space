@@ -116,8 +116,8 @@ class WallpaperSheetState extends ConsumerState<WallpaperSheet> {
                 crossAxisCount: 3, mainAxisSpacing: 4, crossAxisSpacing: 4),
             itemCount: list.length,
             itemBuilder: (ctx, i) => Consumer(builder: (ctx, ref, _) {
-              final base = ref.watch(chatBaseProvider).valueOrNull;
-              final headers = ref.watch(mediaCookieHeadersProvider).valueOrNull;
+              final base = ref.watch(chatBaseProvider).value;
+              final headers = ref.watch(mediaCookieHeadersProvider).value;
               return InkWell(
                 onTap: () => Navigator.pop(ctx, list[i].id),
                 child: base == null
@@ -221,8 +221,8 @@ class WallpaperSheetState extends ConsumerState<WallpaperSheet> {
                   label: label,
                   selected: _bg == key,
                   media: key == 'photo' ? _media : '',
-                  base: ref.watch(chatBaseProvider).valueOrNull,
-                  headers: ref.watch(mediaCookieHeadersProvider).valueOrNull,
+                  base: ref.watch(chatBaseProvider).value,
+                  headers: ref.watch(mediaCookieHeadersProvider).value,
                   onTap: () => key == 'photo'
                       ? (_media.isEmpty ? _pickPhoto() : _pickFromLibrary())
                       : setState(() => _bg = key),

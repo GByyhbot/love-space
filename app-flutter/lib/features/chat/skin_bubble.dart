@@ -94,7 +94,7 @@ class _SkinBubbleState extends ConsumerState<SkinBubble> {
   }
 
   Future<ui.Image?> _ensureImage() async {
-    final headers = ref.watch(mediaCookieHeadersProvider).valueOrNull;
+    final headers = ref.watch(mediaCookieHeadersProvider).value;
     if (_loader == null || _loadedUrl != widget.url) {
       _loadedUrl = widget.url;
       _loader = SkinImageCache.load(widget.url,

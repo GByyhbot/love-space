@@ -101,7 +101,7 @@ class HomePage extends ConsumerWidget {
 
     // 2.4.3 双卡显隐：onThisDayProvider 就绪且存在往年今日记录才渲染
     // 历史卡（加载未完成先不渲染，无假卡闪烁；失败静默同形）。
-    final showOtdCard = ref.watch(onThisDayProvider).valueOrNull?.any(
+    final showOtdCard = ref.watch(onThisDayProvider).value?.any(
           (g) => !g.isToday && g.items.isNotEmpty,
         ) ??
         false;
@@ -147,7 +147,7 @@ class HomePage extends ConsumerWidget {
             _Hero(
               me: me,
               list: list,
-              dashboard: ref.watch(dashboardProvider).valueOrNull,
+              dashboard: ref.watch(dashboardProvider).value,
               onGoTab: onGoTab,
             ),
             const SizedBox(height: 12), // hero margin-bottom 12（:1407）
@@ -1291,9 +1291,9 @@ class _HomeCover extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final cover = (me.spaceRaw['cover'] ?? '').toString();
     if (cover.isEmpty) return const SizedBox.shrink();
-    final base = ref.watch(chatBaseProvider).valueOrNull;
+    final base = ref.watch(chatBaseProvider).value;
     if (base == null) return const SizedBox.shrink();
-    final headers = ref.watch(mediaCookieHeadersProvider).valueOrNull;
+    final headers = ref.watch(mediaCookieHeadersProvider).value;
     final pos = me.spaceRaw['cover_pos'];
     final x = pos is Map
         ? (num.tryParse((pos['x'] ?? 50).toString()) ?? 50)

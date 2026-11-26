@@ -53,8 +53,8 @@ class _ImageViewerPageState extends ConsumerState<ImageViewerPage> {
   late int _index = widget.initialIndex.clamp(0, widget.images.length - 1);
   bool _saving = false;
 
-  String get _base => ref.watch(chatBaseProvider).valueOrNull ?? '';
-  Map<String, String>? get _headers => ref.watch(mediaCookieHeadersProvider).valueOrNull;
+  String get _base => ref.watch(chatBaseProvider).value ?? '';
+  Map<String, String>? get _headers => ref.watch(mediaCookieHeadersProvider).value;
 
   ChatMedia get _current => widget.images[_index];
 

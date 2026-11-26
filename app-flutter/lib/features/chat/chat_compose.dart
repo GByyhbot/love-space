@@ -1246,7 +1246,7 @@ class _StickerDock extends ConsumerWidget {
         },
       );
     }
-    final base = ref.watch(chatBaseProvider).valueOrNull;
+    final base = ref.watch(chatBaseProvider).value;
     if (base == null) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -1284,7 +1284,7 @@ class _StickerDock extends ConsumerWidget {
 
   Widget _mineGrid(BuildContext context, WidgetRef ref) {
     final stickers = ref.watch(myStickersProvider);
-    final base = ref.watch(chatBaseProvider).valueOrNull;
+    final base = ref.watch(chatBaseProvider).value;
     final me = ref.watch(authProvider.notifier).me;
     if (stickers.isEmpty) {
       // 空态逐字对齐 Web stickerTabHTML('mine')
@@ -1338,7 +1338,7 @@ class _StickerDock extends ConsumerWidget {
                       imageUrl: url,
                       httpHeaders: ref
                           .watch(mediaCookieHeadersProvider)
-                          .valueOrNull,
+                          .value,
                       fit: BoxFit.contain,
                       placeholder: (_, _) => const SizedBox(),
                       errorWidget: (_, _, _) => const SizedBox(),

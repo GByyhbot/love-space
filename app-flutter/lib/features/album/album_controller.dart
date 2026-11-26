@@ -7,6 +7,8 @@
 library;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+// 3.x：StateProvider 移到 legacy 入口（官方保留兼容，行为不变）
+import 'package:flutter_riverpod/legacy.dart';
 
 import '../../core/api/api_client.dart' as api;
 import '../../core/album/album_data.dart';

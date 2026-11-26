@@ -10,6 +10,8 @@
 library;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+// 3.x：StateProvider 移到 legacy 入口（官方保留兼容，行为不变）
+import 'package:flutter_riverpod/legacy.dart';
 
 /// 铃铛角标计数（服务端 `me.unread`）。
 final systemUnreadProvider = StateProvider<int>((_) => 0);

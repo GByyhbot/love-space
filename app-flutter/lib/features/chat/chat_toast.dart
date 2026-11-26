@@ -10,6 +10,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+// 3.x：StateProvider 移到 legacy 入口（官方保留兼容，行为不变）
+import 'package:flutter_riverpod/legacy.dart';
 import '../../core/theme/motion.dart';
 
 // ── 录音手势意图（纯函数，可单测）──────────────────────────────────────

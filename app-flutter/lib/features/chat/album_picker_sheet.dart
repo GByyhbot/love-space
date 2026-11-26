@@ -251,11 +251,11 @@ class _AlbumThumb extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final base = ref.watch(chatBaseProvider).valueOrNull;
+    final base = ref.watch(chatBaseProvider).value;
     if (base == null) {
       return Container(width: size, height: size, color: Theme.of(context).colorScheme.surfaceContainerHighest);
     }
-    final headers = ref.watch(mediaCookieHeadersProvider).valueOrNull;
+    final headers = ref.watch(mediaCookieHeadersProvider).value;
     return CachedNetworkImage(
       imageUrl: mediaUrl(base, mid),
       httpHeaders: headers,

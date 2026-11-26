@@ -212,7 +212,7 @@ class OnThisDayCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final groups = ref.watch(onThisDayProvider).valueOrNull;
+    final groups = ref.watch(onThisDayProvider).value;
     // 显隐规则（硬性）：当前日期在往年没有任何符合口径的记录 → 整卡不渲染
     // （不占位不留空卡）。判定用「往年今日」数据，不是「今天有没有记录」。
     final previews = groups == null ? const <(OnThisDayGroup, Record)>[] : pastTodayItems(groups);
@@ -296,7 +296,7 @@ class YearbookCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final yb = ref.watch(yearbookProvider).valueOrNull;
+    final yb = ref.watch(yearbookProvider).value;
     // 加载未完成先不渲染（无假卡闪烁）；数据到位后恒渲染（全零也显示）。
     if (yb == null) return const SizedBox.shrink();
     final theme = Theme.of(context);

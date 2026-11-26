@@ -449,13 +449,13 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
       body: Stack(children: [
         // 背景层：按完整视口高度固定铺满（头部/输入栏压图上，对齐 Web .chat-panel）。
         // 高度不随 body 压缩变化，键盘弹出/收起时图片位置与裁剪保持不变。
-        if (wp.isPhoto && ref.watch(chatBaseProvider).valueOrNull != null) ...[
+        if (wp.isPhoto && ref.watch(chatBaseProvider).value != null) ...[
           ChatWallpaperFrame(
             viewportHeight: fullHeight,
             child: Builder(builder: (context) {
-              final base = ref.watch(chatBaseProvider).valueOrNull!;
+              final base = ref.watch(chatBaseProvider).value!;
               final url = mediaUrl(base, wp.media);
-              final headers = ref.watch(mediaCookieHeadersProvider).valueOrNull;
+              final headers = ref.watch(mediaCookieHeadersProvider).value;
               // 低频缓存（item 5）：壁纸落盘 + 槽位删旧留新（URL 含 mid，换图即换键）
               // ignore: discarded_futures
               LowFreqCache.retainLatest('wallpaper:${me.user.id}', url, headers: headers);
@@ -923,7 +923,7 @@ class _BubbleRow extends ConsumerWidget {
         ? me.user
         : (me.byId(record.author) ??
             SpaceUser(id: record.author, name: '?', username: ''));
-    final base = ref.watch(chatBaseProvider).valueOrNull;
+    final base = ref.watch(chatBaseProvider).value;
 
     // 贴纸：整条无气泡（对齐 Web chat-sticker），按分侧对齐
     if (visual.sticker != null) {
@@ -1306,10 +1306,10 @@ class _ChatAvatarState extends ConsumerState<_ChatAvatar> {
     final size = widget.size;
     final id = widget.user.avatar;
     // 低频缓存（item 5）：头像走 LowFreqCacheManager 落盘 + 槽位删旧留新
-    if (id.isNotEmpty && ref.watch(chatBaseProvider).valueOrNull != null) {
-      final base = ref.watch(chatBaseProvider).valueOrNull!;
+    if (id.isNotEmpty && ref.watch(chatBaseProvider).value != null) {
+      final base = ref.watch(chatBaseProvider).value!;
       final url = mediaUrl(base, id);
-      final headers = ref.watch(mediaCookieHeadersProvider).valueOrNull;
+      final headers = ref.watch(mediaCookieHeadersProvider).value;
       // ignore: discarded_futures
       LowFreqCache.retainLatest('avatar:${widget.user.id}', url, headers: headers);
       return ClipOval(

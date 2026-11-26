@@ -71,7 +71,10 @@ Future<void> main() async {
   // 「接管全局 platform + 只许单 AudioPlayer」模型与本 App 多 player 不兼容）。
   // 歌曲专用 handler 持全 App 唯一歌曲 player，通知/锁屏广播为单一事实源；
   // 语音家族/选歌试听回归普通 just_audio，互不相干；失败不影响主链。
-  final container = ProviderContainer();
+  // 3.x：默认开启「失败自动重试」（指数退避最多 10 次）。本项目错误提示与
+  // 重试策略全在 UI/服务层显式做，provider 层再自动重试会推迟错误呈现、
+  // 并放大后端压力 → 这里显式关掉，保持 2.x 语义（返回 null = 不重试）。
+  final container = ProviderContainer(retry: (_, _) => null);
   // 2.4.15：init 成败与错误原文必须落盘可见（设置页「关于」区渲染），
   // 禁止裸 catch 吞错——2.4.14 真机「零媒体会话零报错」即吞错所致。
   try {

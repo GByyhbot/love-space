@@ -80,14 +80,14 @@ class MediaImageView extends ConsumerWidget {
     final h = height ?? size;
     final radius =
         borderRadius ?? BorderRadius.circular(AppRadius.sm);
-    final base = ref.watch(chatBaseProvider).valueOrNull;
+    final base = ref.watch(chatBaseProvider).value;
     if (base == null) {
       final placeholder = MediaPlaceholder(size: w, height: h);
       return borderRadius == null
           ? placeholder
           : ClipRRect(borderRadius: radius, child: placeholder);
     }
-    final headers = ref.watch(mediaCookieHeadersProvider).valueOrNull;
+    final headers = ref.watch(mediaCookieHeadersProvider).value;
     return ClipRRect(
       borderRadius: radius,
       child: CachedNetworkImage(
@@ -112,9 +112,9 @@ class VideoCardView extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final base = ref.watch(chatBaseProvider).valueOrNull;
+    final base = ref.watch(chatBaseProvider).value;
     if (base == null) return MediaPlaceholder(label: '[视频]', size: size);
-    final headers = ref.watch(mediaCookieHeadersProvider).valueOrNull;
+    final headers = ref.watch(mediaCookieHeadersProvider).value;
     return InkWell(
       borderRadius: BorderRadius.circular(AppRadius.sm),
       onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
@@ -310,7 +310,7 @@ class StickerView extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final base = ref.watch(chatBaseProvider).valueOrNull;
+    final base = ref.watch(chatBaseProvider).value;
     if (base == null) return const MediaPlaceholder(label: '[贴纸]');
     final url = sticker.mid != null
         ? mediaUrl(base, sticker.mid!)
@@ -320,10 +320,10 @@ class StickerView extends ConsumerWidget {
       return StickerVideoView(
           url: url,
           headers:
-              sticker.mid != null ? ref.watch(mediaCookieHeadersProvider).valueOrNull : null);
+              sticker.mid != null ? ref.watch(mediaCookieHeadersProvider).value : null);
     }
     final headers = sticker.mid != null
-        ? ref.watch(mediaCookieHeadersProvider).valueOrNull
+        ? ref.watch(mediaCookieHeadersProvider).value
         : null; // 公开静态无需 Cookie
     return ClipRRect(
       borderRadius: BorderRadius.circular(AppRadius.sm),
@@ -454,8 +454,8 @@ class _SongCardViewState extends ConsumerState<SongCardView> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final base = ref.watch(chatBaseProvider).valueOrNull;
-    final headers = ref.watch(mediaCookieHeadersProvider).valueOrNull;
+    final base = ref.watch(chatBaseProvider).value;
+    final headers = ref.watch(mediaCookieHeadersProvider).value;
     final engine = ref.watch(songPlaybackProvider);
     final playing = _isCurrent && engine.playing;
     final loading = _isCurrent && engine.loading;

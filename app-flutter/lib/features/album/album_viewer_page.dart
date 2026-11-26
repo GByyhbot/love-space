@@ -78,9 +78,9 @@ class _AlbumViewerPageState extends ConsumerState<AlbumViewerPage> {
   static const double _swipeThreshold = 80.0;
   static const double _maxScale = 5.0;
 
-  String get _base => ref.watch(chatBaseProvider).valueOrNull ?? '';
+  String get _base => ref.watch(chatBaseProvider).value ?? '';
   Map<String, String>? get _headers =>
-      ref.watch(mediaCookieHeadersProvider).valueOrNull;
+      ref.watch(mediaCookieHeadersProvider).value;
 
   /// 缩放态：放大超过 1× 即视为「已放大」，解锁单指平移、锁翻页/下拉。
   bool get _zoomed => _scale > 1.01;

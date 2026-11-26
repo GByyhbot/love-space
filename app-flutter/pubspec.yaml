@@ -38,7 +38,10 @@ dependencies:
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
   # ── 方案 v2 阶段 1 定版选型 ──
-  flutter_riverpod: ^2.5.1
+    # 2026-11-26（依赖专题第 3 步）：2.6.1→3.4.3。必须显式钉 <3.5.0——
+  # 3.5.0 新增 material_ui/cupertino_ui 依赖（同 go_router 18 的坑），
+  # 而 `^3.4.3` 语义到 <4.0.0，实测会解析到 3.5.0。
+  flutter_riverpod: '>=3.4.3 <3.5.0'
     # 2026-11-26（依赖专题第 2 步）：14.8.1→17.5.0，上限钉 <18。
   # 18.0.0 起迁到 material_ui/cupertino_ui，其 isMaterialApp 用 material_ui 的
   # MaterialApp 做类型判定；本工程用 flutter/material（SDK 3.47.9 无 material_ui），

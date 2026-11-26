@@ -179,7 +179,7 @@ class _BubbleSkinSheetState extends ConsumerState<BubbleSkinSheet> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final base = ref.watch(chatBaseProvider).valueOrNull;
+    final base = ref.watch(chatBaseProvider).value;
     final total = _groups.fold<int>(0, (n, g) => n + g.count);
     // sheet 模式固定 68% 屏高；embedded（设置独立页）由 Scaffold body
     // 有界高度撑满，不固定高（Column + Expanded 直接可用）。
@@ -314,7 +314,7 @@ class _BubbleSkinSheetState extends ConsumerState<BubbleSkinSheet> {
             style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.outline)),
       );
     }
-    final headers = ref.watch(mediaCookieHeadersProvider).valueOrNull;
+    final headers = ref.watch(mediaCookieHeadersProvider).value;
     return GridView.builder(
       controller: _gridController,
       padding: const EdgeInsets.all(8),

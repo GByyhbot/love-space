@@ -166,8 +166,8 @@ class _AlbumPageState extends ConsumerState<AlbumPage> {
   /// 每张相册卡带 ⋯ 菜单（改名/删除）；点卡进入该相册；点「全部照片」回到全部。
   Widget _albumCoverRow(BuildContext context, AlbumState st) {
     final theme = Theme.of(context);
-    final base = ref.watch(chatBaseProvider).valueOrNull ?? '';
-    final headers = ref.watch(mediaCookieHeadersProvider).valueOrNull;
+    final base = ref.watch(chatBaseProvider).value ?? '';
+    final headers = ref.watch(mediaCookieHeadersProvider).value;
     final controller = ref.read(albumControllerProvider.notifier);
     final cards = <Widget>[
       _allPhotosCard(theme, st.selectedAlbum.isEmpty, () => controller.selectAlbum('')),
@@ -671,8 +671,8 @@ class _Thumb extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final base = ref.watch(chatBaseProvider).valueOrNull ?? '';
-    final headers = ref.watch(mediaCookieHeadersProvider).valueOrNull;
+    final base = ref.watch(chatBaseProvider).value ?? '';
+    final headers = ref.watch(mediaCookieHeadersProvider).value;
     if (item.isVideo) {
       return _VideoThumb(
           item: item, base: base, headers: headers, coverPicking: coverPicking);

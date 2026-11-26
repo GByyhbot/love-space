@@ -47,8 +47,8 @@ class _CoverPageState extends ConsumerState<CoverPage> {
     final me = ref.watch(authProvider.notifier).me;
     // 预览：已选字节优先（未保存先行变化），否则当前封面网络图，无则占位。
     final bytes = _pickedBytes;
-    final base = ref.watch(chatBaseProvider).valueOrNull;
-    final headers = ref.watch(mediaCookieHeadersProvider).valueOrNull;
+    final base = ref.watch(chatBaseProvider).value;
+    final headers = ref.watch(mediaCookieHeadersProvider).value;
     Widget previewImage;
     if (bytes != null) {
       previewImage = Image.memory(bytes, fit: BoxFit.cover);

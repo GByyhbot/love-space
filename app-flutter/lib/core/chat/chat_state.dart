@@ -10,6 +10,8 @@ library;
 import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+// 3.x：StateProvider 移到 legacy 入口（官方保留兼容，行为不变）
+import 'package:flutter_riverpod/legacy.dart';
 
 import '../api/api_client.dart';
 import 'chat_db.dart';

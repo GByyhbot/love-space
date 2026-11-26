@@ -426,9 +426,9 @@ class _SongSheetState extends ConsumerState<_SongSheet> {
   }
 
   Widget _cover(MusicSearchResult it, ThemeData theme) {
-    final base = ref.watch(chatBaseProvider).valueOrNull;
+    final base = ref.watch(chatBaseProvider).value;
     if (base == null || it.art.isEmpty) return _noteIcon(theme);
-    final headers = ref.watch(mediaCookieHeadersProvider).valueOrNull;
+    final headers = ref.watch(mediaCookieHeadersProvider).value;
     return ClipRRect(
       borderRadius: BorderRadius.circular(8),
       child: CachedNetworkImage(

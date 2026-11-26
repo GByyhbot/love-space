@@ -171,9 +171,9 @@ class _ReportCapsuleBarState extends ConsumerState<ReportCapsuleBar> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    final presets = ref.watch(reportPresetsProvider).valueOrNull ??
+    final presets = ref.watch(reportPresetsProvider).value ??
         kDefaultReportPresets;
-    final latest = ref.watch(reportTodayPeerProvider).valueOrNull;
+    final latest = ref.watch(reportTodayPeerProvider).value;
 
     // 触发③：SSE 重连成功（断线期间可能有漏事件）→ 补发 + 刷最近一条
     ref.listen(sseProvider, (prev, next) {

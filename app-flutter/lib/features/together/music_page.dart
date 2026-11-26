@@ -138,7 +138,7 @@ class _MusicPageState extends ConsumerState<MusicPage> {
   @override
   Widget build(BuildContext context) {
     final st = ref.watch(togetherControllerProvider);
-    final base = ref.watch(chatBaseProvider).valueOrNull ?? '';
+    final base = ref.watch(chatBaseProvider).value ?? '';
     final me = ref.watch(authProvider.notifier).me;
     final songs = ref.read(togetherControllerProvider.notifier).recordsOf('music');
     final theme = Theme.of(context);

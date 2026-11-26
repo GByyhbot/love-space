@@ -58,8 +58,8 @@ class _AvatarMediaState extends ConsumerState<AvatarMedia> {
   /// 单槽位预取：换头像（mid 变）时新图落盘并删上一版缓存；
   /// 同 URL 命中本地缓存时 retainLatest 直接返回，不再重复拉。
   void _prime() {
-    final base = ref.read(chatBaseProvider).valueOrNull;
-    final headers = ref.read(mediaCookieHeadersProvider).valueOrNull;
+    final base = ref.read(chatBaseProvider).value;
+    final headers = ref.read(mediaCookieHeadersProvider).value;
     final id = widget.avatarId;
     if (id.isEmpty || base == null || base.isEmpty) return;
     Future.microtask(() => LowFreqCache.retainLatest(
@@ -89,8 +89,8 @@ class _AvatarMediaState extends ConsumerState<AvatarMedia> {
     final cs = Theme.of(context).colorScheme;
     final id = widget.avatarId;
     if (id.isEmpty) return _fallback();
-    final base = ref.watch(chatBaseProvider).valueOrNull;
-    final headers = ref.watch(mediaCookieHeadersProvider).valueOrNull;
+    final base = ref.watch(chatBaseProvider).value;
+    final headers = ref.watch(mediaCookieHeadersProvider).value;
     if (base == null || base.isEmpty) return _fallback();
     return ClipOval(
       child: SizedBox(

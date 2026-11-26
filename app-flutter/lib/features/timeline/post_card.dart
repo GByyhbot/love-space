@@ -500,8 +500,8 @@ class _CardAvatar extends ConsumerWidget {
     final theme = Theme.of(context);
     const size = 34.0;
     final id = user.avatar;
-    if (id.isNotEmpty && ref.watch(chatBaseProvider).valueOrNull != null) {
-      final base = ref.watch(chatBaseProvider).valueOrNull!;
+    if (id.isNotEmpty && ref.watch(chatBaseProvider).value != null) {
+      final base = ref.watch(chatBaseProvider).value!;
       // 2.4.1 第 7 项④：头像加约 1.5px 白色低透明细描边。
       return Container(
         decoration: BoxDecoration(
@@ -514,7 +514,7 @@ class _CardAvatar extends ConsumerWidget {
         child: ClipOval(
         child: CachedNetworkImage(
           imageUrl: mediaUrl(base, id),
-          httpHeaders: ref.watch(mediaCookieHeadersProvider).valueOrNull,
+          httpHeaders: ref.watch(mediaCookieHeadersProvider).value,
           cacheManager: ref.watch(lowFreqCacheManagerProvider),
           width: size,
           height: size,
