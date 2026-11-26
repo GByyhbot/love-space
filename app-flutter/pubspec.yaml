@@ -54,7 +54,12 @@ dependencies:
   cached_network_image: ^3.4.1
   # 头像/媒体选取（阶段 2 账号页头像上传先用，阶段 4 媒体全面使用）
   image_picker: ^1.1.2
-  file_picker: ^8.1.2
+    # 2026-11-26（依赖专题第 1 步收尾）：8.3.7→9.2.3（区间 >=9.2.1 <10.0.0）。
+  # 为什么不用 ^：显式区间更硬。为什么止于 9.x：10.x 起 Android 实现从 Java 改
+  # Kotlin 且自带 KGP 1.8.22，与 Gradle 9.3.1 / AGP 9.1 / Kotlin 2.4 不兼容
+  # （11.0.3 实测构建期 GeneratedPluginRegistrant 找不到 FilePickerPlugin）；
+  # 9.x 是 Java 实现，且 FilePicker.platform / withData 与 8.x 同形 → 代码零改动。
+  file_picker: '>=9.2.1 <10.0.0'
   # 本地缓存选 drift（SQLite/类型安全）：聊天与 records 是强结构数据，需要条件查询与游标分页，
   # 与服务端 records 模型对齐；理由按方案要求在脚手架提交说明中注明
   drift: ^2.20.0
