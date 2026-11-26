@@ -331,7 +331,8 @@ class _MusicPageState extends ConsumerState<MusicPage> {
   /// 选本地音频 → 上传 → 建记录（body.media=[mid]，Web musicForm 同构）。
   Future<void> _pickAndUpload() async {
     try {
-      final picked = await FilePicker.platform.pickFiles(
+      // 11.0.3 起 `FilePicker.platform` getter 已移除，pickFiles 是静态方法
+      final picked = await FilePicker.pickFiles(
         type: FileType.custom,
         allowedExtensions: _musicUploadExts,
         withData: true,
