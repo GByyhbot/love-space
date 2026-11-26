@@ -1250,7 +1250,9 @@ internal object StateGates {
         count > 0 && windowStartMs > 0L && nowMs - windowStartMs >= UNLOCK_WINDOW_MS
 
     fun screenSessionSec(startedAtMs: Long, nowMs: Long): Int {
-        if (startedAtMs <= 0L) return 0
+        // 只把负数当「无会话」：0 是合法时间戳（测试与冷启动），用它当哨兵会
+        // 把 0→120s 的真实会话算成 0（本单测第一版就是这么红的）。
+        if (startedAtMs < 0L) return 0
         return ((nowMs - startedAtMs) / 1000L).toInt()
     }
 }
