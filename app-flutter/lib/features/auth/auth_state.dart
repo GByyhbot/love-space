@@ -108,6 +108,9 @@ class AuthNotifier extends Notifier<AuthPhase> {
         final dio = await ref.read(dioProvider.future);
         stage = 'GET /api/me';
         final r = await dio.get('/api/me');
+        // 3.x：Ref 销毁后再用会抛（2.x 静默放过）。容器已销毁就直接收工，
+        // 下方 ref.read/invalidate 与 me 赋值全部跳过。
+        if (!ref.mounted) return false;
         stage = '解析 me 响应';
         if (r.statusCode != 200) return false;
         final j = r.data as Map<String, dynamic>;
@@ -147,6 +150,7 @@ class AuthNotifier extends Notifier<AuthPhase> {
         return true;
       });
       final ok = await steps.timeout(AppConfig.bootstrapDeadline);
+      if (!ref.mounted) return; // 3.x：await 回来后先确认容器还活着
       if (ok) {
         state = AuthPhase.authed;
       } else {
@@ -155,9 +159,11 @@ class AuthNotifier extends Notifier<AuthPhase> {
       }
     } on TimeoutException {
       debugPrint('[bootstrap] ${sw.elapsed} 超时兜底：卡在 [$stage] → 降级登录页可重试');
+      if (!ref.mounted) return;
       state = AuthPhase.out;
     } catch (e) {
       debugPrint('[bootstrap] ${sw.elapsed} 失败：[$stage] $e → 登录页');
+      if (!ref.mounted) return;
       state = AuthPhase.out;
     }
   }
@@ -294,6 +300,7 @@ class AuthNotifier extends Notifier<AuthPhase> {
       // 不弹错（此时更需要登出成功），注释留痕不静默漏改。
       writeResponseError(r);
     } catch (_) {}
+    if (!ref.mounted) return; // 3.x：登出期间容器可能已销毁，别再碰 ref/state
     me = null;
     state = AuthPhase.out;
     // 🔴 P0-1 ② 换号隐私：根 ProviderScope 跨登录存活、NotifierProvider 非
