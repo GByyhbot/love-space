@@ -88,6 +88,8 @@ import 'package:dio/dio.dart';
 import '_hold_helper.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+// 3.x：StateProvider/StateController 等移到 legacy 入口
+import 'package:flutter_riverpod/legacy.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:love_space/core/api/api_client.dart' as api;
