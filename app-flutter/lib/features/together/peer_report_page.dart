@@ -12,8 +12,12 @@
 /// 重拉（不弹提示、不打断操作）。失败 = 「状态未知」+ 重试；允许灰显上次
 /// 成功数据，但必须标注其时间戳——不许把旧值当实时。
 ///
-/// 明确不做：地图与轨迹（后续阶段）、报备提醒/推送、后端改动、设置页验证卡
-/// 的任何改动（本页只读复用其数据源）。
+/// 2.8.7 第三段（纯呈现，后端零改动）：页首「TA 的状态」卡（电量/充电、网络、
+/// 最后活跃含 6 小时失联警示、今日使用）+ 「今日时间线」（竖线串起状态变化与
+/// 报备）。取不到的项整行不显示，一行都没有则整卡不显示——绝不拿 0 糊弄。
+///
+/// 明确不做：地图与轨迹回放、分档开关、应用使用记录（`top_apps`）、后端改动、
+/// 设置页验证卡的任何改动（本页只读复用其数据源）。
 library;
 
 import 'package:flutter/material.dart';
@@ -23,6 +27,7 @@ import '../../core/api/api_client.dart' as api;
 import '../../core/peer/peer_locator.dart';
 import '../../core/peer/peer_report_api.dart';
 import '../../core/peer/peer_report_data.dart';
+import '../../core/peer/peer_status_card.dart';
 import '../../core/peer/state_event_text.dart';
 import '../../core/sse/sse_client.dart';
 import '../../core/theme/tokens.dart';
@@ -224,6 +229,8 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage> {
                 onRetry: _load,
               )
             else ...[
+              // 对方状态卡（顶部）：取不到的项整行不出现，一行都没有则整卡不出现
+              ..._statusSection(theme, cs, d),
               _sectionTitle(theme, 'TA 的报备'),
               const SizedBox(height: Spacing.gap),
               _peerBlock(theme, cs, d),
@@ -276,6 +283,36 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage> {
         ),
       );
 
+  /// 对方状态卡（报备页顶部）：电量/充电、网络、最后活跃、今日使用。
+  ///
+  /// 口径全在 [buildPeerStatusCard] 里（纯函数，已单测）：这里只排版，
+  /// **不做任何兜底计算**——取不到就整行没有，一行都没有就整卡没有。
+  List<Widget> _statusSection(ThemeData theme, ColorScheme cs, PeerReport d) {
+    final card = buildPeerStatusCard(peer: d.status.peer, daily: _stateDaily);
+    if (card == null) return const <Widget>[];
+    return [
+      _sectionTitle(theme, 'TA 的状态'),
+      const SizedBox(height: Spacing.gap),
+      _card(
+        cs,
+        key: const Key('peer-status-card'),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          for (final r in card.rows)
+            _kv(
+              theme,
+              cs,
+              r.label,
+              r.value,
+              key: Key('peer-card-${r.id}'),
+              // 「长时间无更新」用警示色：只是颜色，文案本身已写明
+              warn: r.warn,
+            ),
+        ]),
+      ),
+      const SizedBox(height: 16),
+    ];
+  }
+
   Widget _peerBlock(ThemeData theme, ColorScheme cs, PeerReport d) {
     final p = d.status.peer;
     final closedOff = d.status.peerClosedOff;
@@ -296,23 +333,9 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage> {
             padding: EdgeInsets.symmetric(vertical: 24),
           )
         else ...[
+          // 电量/充电、网络、状态新鲜度、今日亮屏已上移到顶部「TA 的状态」卡，
+          // 本块只管「报备」本身：时间、位置、距离、点数（不再重复同一批数字）
           _kv(theme, cs, '最近报备', _timeLine(p.updated)),
-          _kv(theme, cs, '电量与充电',
-              '${batteryText(p.battery)} · ${chargingText(p.charging)}'),
-          _kv(theme, cs, '网络类型', netText(p.net)),
-          // 2.8.7：状态事件最后一次刷新快照的时刻——定位停了但状态还在动时，
-          // 靠这一行说明「电量和网络仍是新鲜的」（state_updated 与 updated 分开）
-          if (p.stateUpdated case final su?)
-            _kv(theme, cs, '状态更新', _timeLine(su)),
-          // 今日亮屏/解锁：拿不到或不适用就整行不显示（不显示 0 / 不估算）
-          if (_stateDaily case final sd?)
-            if (peerScreenLine(
-                  sd.peerClosedOff,
-                  sd.peerScreenSec,
-                  sd.peerUnlocks,
-                )
-                case final line?)
-              _kv(theme, cs, '今日亮屏', line),
           _kv(theme, cs, '位置（GCJ-02）', coordText(p)),
           // 距离行：任一方无坐标则整行不渲染（不显示 0 / 不估算）
           if (distanceLine(d.status.mine, p) case final line?)
@@ -360,12 +383,14 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage> {
     );
   }
 
-  /// 今日事件流一节：仅 `manual_report` 渲染报备卡与回应按钮，
-  /// 自动事件维持简行（不许混淆两种来源）。
+  /// 今日时间线：状态变化与报备按时间排成一条竖线。
+  ///
+  /// 条目形态**沿用既有两种**（手填报备=卡片+回应区，自动/状态=简行），
+  /// 不发明新组件；本方法只加一条竖线与圆点，把两者串成一条线。
   List<Widget> _eventsSection(ThemeData theme, ColorScheme cs) {
     final day = _day;
     final out = <Widget>[
-      _sectionTitle(theme, '今日事件流'),
+      _sectionTitle(theme, '今日时间线'),
       const SizedBox(height: Spacing.gap),
     ];
     if (day == null) {
@@ -414,18 +439,66 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage> {
       ));
       return out;
     }
-    for (final e in day.events) {
-      out.add(_eventCard(theme, cs, e));
-      out.add(const SizedBox(height: Spacing.gap));
-    }
+    out.add(_timeline(theme, cs, day.events));
     return out;
+  }
+
+  /// 竖线 + 圆点。线用 Stack 的 Positioned 一次性铺满整列（不用
+  /// IntrinsicHeight 逐条测量，长列表也不掉帧）。
+  Widget _timeline(
+    ThemeData theme,
+    ColorScheme cs,
+    List<PeerEventItem> events,
+  ) {
+    // 排序的权威在 `sortEventsForTimeline`（fetch 时已排）；这里只渲染，
+    // 不再二次排序，避免两处口径漂移。
+    return Stack(children: [
+      Positioned(
+        left: 7,
+        top: 12,
+        bottom: 12,
+        child: Container(width: 1, color: cs.outlineVariant),
+      ),
+      Column(children: [
+        for (final e in events)
+          Padding(
+            padding: const EdgeInsets.only(bottom: Spacing.gap),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(
+                  width: 15,
+                  child: Padding(
+                    // 圆点对齐各自形态的标题行：卡片有 16 内边距，简行只有 2
+                    padding: EdgeInsets.only(top: e.isManualReport ? 22 : 6),
+                    child: Align(
+                      alignment: Alignment.topCenter,
+                      child: Container(
+                        width: 8,
+                        height: 8,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: e.isManualReport
+                              ? cs.primary
+                              : cs.outlineVariant,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                Expanded(child: _eventCard(theme, cs, e)),
+              ],
+            ),
+          ),
+      ]),
+    ]);
   }
 
   Widget _eventCard(ThemeData theme, ColorScheme cs, PeerEventItem e) {
     if (!e.isManualReport) {
       // 自动事件：简行（时间 + 摘要），无回应按钮。
-      // 2.8.7：状态事件后端 summary 为空 → 文案从 payload 生成（纯函数，可单测）
-      final line = e.isStateEvent ? stateEventText(e) : e.summary;
+      // 文案优先用服务器现成中文；空则按 payload/类型兜底，绝不出空行。
+      final line = timelineEventText(e);
       return Padding(
         key: Key('report-event-${e.id}'),
         padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
@@ -482,7 +555,7 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage> {
           const SizedBox(width: 6),
           Expanded(
             child: Text(
-              e.summary,
+              timelineEventText(e),
               style: theme.textTheme.titleSmall?.copyWith(
                 fontWeight: FontWeight.w700,
               ),
@@ -555,7 +628,8 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage> {
     );
   }
 
-  Widget _card(ColorScheme cs, {required Widget child}) => Container(
+  Widget _card(ColorScheme cs, {required Widget child, Key? key}) => Container(
+        key: key,
         width: double.infinity,
         padding: const EdgeInsets.all(Spacing.cardPad),
         decoration: BoxDecoration(
@@ -571,10 +645,18 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage> {
       ? '未知'
       : '${relativeTimeZh(updated)} · ${absoluteTimeZh(updated)}';
 
-  Widget _kv(ThemeData theme, ColorScheme cs, String label, String value) =>
+  Widget _kv(
+    ThemeData theme,
+    ColorScheme cs,
+    String label,
+    String value, {
+    Key? key,
+    bool warn = false,
+  }) =>
       Padding(
         padding: const EdgeInsets.symmetric(vertical: 5),
         child: Row(
+          key: key,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             SizedBox(
@@ -584,7 +666,12 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage> {
                       ?.copyWith(color: cs.outline)),
             ),
             Expanded(
-              child: Text(value, style: theme.textTheme.bodyMedium),
+              child: Text(
+                value,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: warn ? cs.error : null,
+                ),
+              ),
             ),
           ],
         ),

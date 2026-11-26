@@ -156,7 +156,8 @@ void main() {
     expect(find.text('TA 的报备'), findsOneWidget);
     expect(find.text('我的报备'), findsOneWidget);
     expect(find.text('82% · 未充电'), findsOneWidget, reason: '电量与充电原值呈现');
-    expect(find.text('cell'), findsOneWidget, reason: '网络类型原值呈现');
+    // 2.8.7 第三段：网络改由顶部状态卡呈现，按口径说人话（不再暴露 cell 原值）
+    expect(find.text('移动数据'), findsOneWidget, reason: '移动数据说人话');
     expect(find.text('39.916300, 116.397200'), findsOneWidget,
         reason: '坐标按 GCJ-02 原值展示');
     expect(find.text('今日报备'), findsOneWidget, reason: '接口给得出就显示');
@@ -222,9 +223,9 @@ void main() {
     expect(find.text('TA 的报备'), findsOneWidget);
     expect(find.textContaining('距我约'), findsNothing);
     expect(find.text('距离'), findsNothing);
-    // 对方字段照常渲染
-    expect(find.text('cell'), findsNothing); // 本用例 peer net 为默认 wifi
-    expect(find.text('wifi'), findsOneWidget);
+    // 对方字段照常渲染（2.8.7：网络在顶部状态卡里按口径呈现）
+    expect(find.text('移动数据'), findsNothing); // 本用例 peer net 为默认 wifi
+    expect(find.text('Wi-Fi（home）'), findsOneWidget);
   });
 
   test('⑤ Haversine：已知两点量级正确 + 单位自适应', () {

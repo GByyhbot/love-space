@@ -236,6 +236,17 @@ class PeerEventItem {
       );
 }
 
+/// 时间线排序：时间倒序（新的在上）；**同秒按 id 倒序**做稳定兜底——
+/// 服务端同秒多行时若不兜底，刷新一次顺序就可能跳变。
+List<PeerEventItem> sortEventsForTimeline(Iterable<PeerEventItem> items) {
+  final list = items.toList(growable: false);
+  list.sort((a, b) {
+    final byTs = b.ts.compareTo(a.ts);
+    return byTs != 0 ? byTs : b.id.compareTo(a.id);
+  });
+  return list;
+}
+
 /// 当日合并事件流：mine 与 peer.events 合并为单一时间序（ts 降序）。
 class PeerEventsDay {
   const PeerEventsDay({
@@ -525,7 +536,7 @@ Future<PeerEventsDay> fetchPeerEvents(Dio dio, {String date = ''}) async {
     final item = PeerEventItem.fromJson(e);
     if (item.id.isNotEmpty) theirs.add(item);
   }
-  final merged = [...mine, ...theirs]..sort((a, b) => b.ts.compareTo(a.ts));
+  final merged = sortEventsForTimeline([...mine, ...theirs]);
   return PeerEventsDay(
     date: (j['date'] ?? date).toString(),
     events: merged,

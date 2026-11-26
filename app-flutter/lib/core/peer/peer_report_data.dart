@@ -244,9 +244,6 @@ String batteryText(int? battery) => battery == null ? '未知' : '$battery%';
 String chargingText(bool? charging) =>
     charging == null ? '未知' : (charging ? '充电中' : '未充电');
 
-/// 网络类型展示：原值呈现（wifi / cell / none）。
-String netText(String? net) => (net == null || net.isEmpty) ? '未知' : net;
-
 /// 经纬度展示（GCJ-02，6 位小数 ≈ 0.1m 级，够「最近一点」用）。
 String coordText(PeerLatest? l) {
   if (l?.lat == null || l?.lng == null) return '未知';

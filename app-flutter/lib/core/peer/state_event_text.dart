@@ -6,6 +6,22 @@ library;
 
 import 'peer_report_api.dart';
 
+/// 时间线里一条事件的文案（**任何情况下都不许返回空串**）。
+///
+/// 优先级按施工令：**服务器现成的中文**（`summary`，空白行事故已由后端
+/// `state_summary` 修掉）→ 状态事件按 `payload` 生成 → 按类型兜底。
+/// 手填报备没有 summary 时退到备注，再不济给一句「报备」。
+String timelineEventText(PeerEventItem e) {
+  final s = e.summary.trim();
+  if (s.isNotEmpty) return s;
+  if (e.isStateEvent) return stateEventText(e); // 内含 payload→类型 双兜底
+  if (e.isManualReport) {
+    final note = e.note.trim();
+    return note.isEmpty ? '报备' : note;
+  }
+  return '有一条动态';
+}
+
 /// 状态事件的一行文案（简行用）。
 ///
 /// 未知类型回落到后端 `summary`（旧后端/未来新类型都不会出现空白行）。
