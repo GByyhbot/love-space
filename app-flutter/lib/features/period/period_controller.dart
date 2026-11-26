@@ -43,6 +43,7 @@ import '../../core/api/api_client.dart' as api;
 import '../../core/together/together_data.dart';
 import 'period_actions.dart';
 import 'period_engine.dart';
+import 'period_rows.dart';
 
 /// 显式单 kind（走 `only_period` 短路；见文件头「拉取方式与理由」）。
 const String periodKind = 'period';
@@ -281,10 +282,7 @@ class PeriodController extends Notifier<PeriodState> {
 
   /// 引擎入参形状（`{id, author, body}`）。页面与弹层共用同一份快照，
   /// 保证 `periodData` / `planSaveDay` 看到的数据完全同源。
-  List<PeriodRow> get periodRows => <PeriodRow>[
-        for (final r in state.records)
-          PeriodRow(id: r.id, author: r.author, body: r.body),
-      ];
+  List<PeriodRow> get periodRows => periodRowsOf(state.records);
 
   /// 执行 [PeriodWritePlan]（由 `period_actions.dart` 的纯函数产出）。
   ///

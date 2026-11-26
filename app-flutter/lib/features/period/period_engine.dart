@@ -229,7 +229,15 @@ class PeriodData {
     required this.untilNext,
     required this.estimated,
     this.pending,
+    this.settledLast = false,
   });
+
+  /// 末段是否已「定稿」（记录更新时间晚于确认结束日 = 用户点过「月经走了」）。
+  ///
+  /// 原有判定在 `periodData()` 里是局部变量；2.8.7 起暴露出来供
+  /// ① P0 回归断言（点完之后必须为 true）② 页面区分「待确认 / 历史」身份。
+  /// **判定逻辑本身一行未改**。
+  final bool settledLast;
 
   /// 参与推算的经期区间行（按 start 升序）。
   final List<PeriodRow> items;
@@ -381,6 +389,7 @@ PeriodData periodData(List<PeriodRow> records, {required String today}) {
     untilNext: nextStart != null ? nextStart - todayN : null,
     estimated: gaps.isEmpty,
     pending: pending,
+    settledLast: settledLast,
   );
 }
 

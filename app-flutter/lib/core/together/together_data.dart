@@ -23,6 +23,7 @@ class TogetherRecord {
     required this.body,
     required this.author,
     this.created = 0,
+    this.updated = 0,
     this.answers = const [],
     this.answerCount = 0,
     this.checks = const [],
@@ -37,6 +38,13 @@ class TogetherRecord {
   final Map<String, dynamic> body;
   final String author;
   final double created; // 服务端 created 时间戳（秒），列表排序用
+
+  /// 服务端 updated 时间戳（秒）；0 = 未知。
+  ///
+  /// 2.8.7 P0：生理期「待确认」定稿判据要用它（记录更新时间晚于确认结束日 =
+  /// 用户点过「月经走了」）。此前本类没声明该字段，两处 PeriodRow 构造只能
+  /// 落到默认 0 → settledLast 恒 false → 点完「月经走了」关不掉待确认态。
+  final double updated;
   /// 软删时间戳（秒）；0 = 未删除。回收站列表展示「X 删除」用（段 7-B）。
   final double deleted;
 
@@ -79,6 +87,7 @@ class TogetherRecord {
       body: Map<String, dynamic>.from(rawBody.cast<String, dynamic>()),
       author: (j['author'] ?? '').toString(),
       created: (j['created'] as num?)?.toDouble() ?? 0,
+      updated: (j['updated'] as num?)?.toDouble() ?? 0,
       answers: strMaps(j['answers']),
       answerCount: (j['answer_count'] as num?)?.toInt() ?? 0,
       checks: strMaps(j['checks']),

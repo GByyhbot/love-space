@@ -32,6 +32,7 @@ import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
 import '../personal/personal_controller.dart';
 import 'period_actions.dart';
 import 'period_colors.dart';
+import 'period_rows.dart';
 import 'period_controller.dart';
 import 'period_engine.dart';
 import 'period_form.dart';
@@ -76,10 +77,8 @@ class _PeriodPageState extends ConsumerState<PeriodPage> {
     final utcNow = DateTime.now().toUtc();
     final today = spaceTodayIso(utcNow);
     final nowTime = nowTimeOf(utcNow);
-    final rows = <PeriodRow>[
-      for (final r in st.records)
-        PeriodRow(id: r.id, author: r.author, body: r.body),
-    ];
+    // 统一构造（含 updated）：漏传 updated 会让待确认永远关不掉（见 period_rows.dart）
+    final rows = periodRowsOf(st.records);
     final d = periodData(rows, today: today);
     final selected = _selectedDay ?? today;
     final grid = buildPeriodMonthGrid(
