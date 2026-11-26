@@ -77,8 +77,7 @@ class _Adapter implements HttpClientAdapter {
 }
 
 /// 「今天」= 段开始日的次日（待确认窗口内）
-const String START_ISO = '2026-11-20';
-const String NOW_ISO = '2026-11-21T12:00:00+08:00';
+const String kStartIso = '2026-11-20';
 
 ProviderContainer _setup(_Store s) {
   final dio = Dio(BaseOptions(
@@ -132,9 +131,9 @@ _Store _pendingStore() => _Store([
         'id': 'p1',
         'kind': 'period',
         'author': 'u1',
-        'body': {'start': START_ISO, 'length': 1},
-        'created': _ts('${START_ISO}T09:00:00+08:00'),
-        'updated': _ts('${START_ISO}T09:00:00+08:00'),
+        'body': {'start': kStartIso, 'length': 1},
+        'created': _ts('${kStartIso}T09:00:00+08:00'),
+        'updated': _ts('${kStartIso}T09:00:00+08:00'),
       },
     ]);
 
