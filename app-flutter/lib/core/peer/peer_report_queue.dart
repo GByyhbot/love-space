@@ -61,6 +61,12 @@ class PendingReport {
   /// 状态事件的结构化载荷；主动报备恒为 null。
   final Map<String, Object?>? payload;
 
+  /// 遥测类（`state.*` / `usage.*`）：暂停时可不补报；手动报备永远保留。
+  bool get isTelemetry {
+    if (kind.isEmpty) return false;
+    return kind.startsWith('state.') || kind.startsWith('usage.');
+  }
+
   static PendingReport? fromJson(Object? raw) {
     if (raw is! Map) return null;
     final j = raw.cast<String, dynamic>();
@@ -210,6 +216,22 @@ class ReportOutbox {
     final items = (await load()).where((e) => e.clientId != clientId).toList();
     await save(items);
   }
+
+  /// 清掉全部**遥测类**待发条目（`state.*` / `usage.*`），保留手动报备。
+  ///
+  /// 用途：暂停/完全关闭报备生效时，队列里还没发出去的遥测不许补报——
+  /// 恢复后也不补（方案册 §4.1 隐私暂停原则）。返回清掉的条数。
+  Future<int> clearTelemetry() async {
+    final items = await load();
+    final kept = items.where((e) => !e.isTelemetry).toList(growable: false);
+    final removed = items.length - kept.length;
+    if (removed > 0) await save(kept);
+    return removed;
+  }
+
+  /// 队列里的遥测条数（暂停态展示 / 测试断言用）。
+  Future<int> telemetryCount() async =>
+      (await load()).where((e) => e.isTelemetry).length;
 
   /// 串行补发。**进锁即返回 skipped 的那一批什么都不做**（防三路并发重入）。
   Future<FlushResult> flush(Dio dio) async {

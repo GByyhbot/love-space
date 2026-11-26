@@ -2,7 +2,9 @@ package cn.iepose.lovespace.love_space
 
 import android.Manifest
 import android.app.AlarmManager
+import android.app.AppOpsManager
 import android.app.PendingIntent
+import android.app.usage.UsageStatsManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -18,6 +20,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.provider.Settings
 import androidx.core.content.ContextCompat
 import io.flutter.plugin.common.MethodChannel
 import org.json.JSONArray
@@ -191,6 +194,23 @@ object PeerLocNative {
                     result.success(toggleState(context, args?.get("enable") == true))
                 }
                 "stateStatus" -> result.success(stateStatus())
+                // ── 2.8.7 全量：应用使用采集（UsageStats）＋ 分档策略执行 ──
+                // 采集同样不新建服务：queryEvents 骑既有唤醒点（心跳 tick /
+                // 熄屏 / Dart 回前台拉一次），只把会话投给 Dart 入队。
+                "toggleUsage" -> {
+                    val args = call.arguments() as? Map<*, *>
+                    result.success(toggleUsage(context, args?.get("enable") == true))
+                }
+                "usageStatus" -> result.success(usageStatus(context))
+                "openUsageSettings" -> result.success(openUsageSettings(context))
+                "pullUsage" -> result.success(pullUsage(context))
+                "applyPolicy" -> {
+                    val args = call.arguments() as? Map<*, *>
+                    @Suppress("UNCHECKED_CAST")
+                    val policy = (args?.get("policy") as? Map<*, *>)
+                        ?.entries?.associate { it.key.toString() to it.value }
+                    result.success(applyPolicy(context, policy ?: emptyMap()))
+                }
                 "status" -> result.success(status())
                 "exportFatal" -> result.success(exportFatalLog())
                 // ── 2.8.0 fix6 B3：电池优化豁免（设置卡入口）──────────
@@ -434,9 +454,15 @@ object PeerLocNative {
     @Synchronized
     fun toggleState(context: Context, enable: Boolean): Map<String, Any?> {
         val ctx = context.applicationContext ?: context.applicationContext
+        stateRequested = enable
         if (!enable) {
             stopStateCollection()
             return mapOf("ok" to true, "detail" to stateStatus())
+        }
+        // 停用期间开关想开也不采（恢复由 applyPolicy 统一拉起）
+        if (policyHalted) {
+            return mapOf("ok" to false, "reason" to "halted",
+                "detail" to stateStatus())
         }
         startStateCollection(ctx)
         return mapOf("ok" to (stateReceiver != null), "detail" to stateStatus())
@@ -535,6 +561,267 @@ object PeerLocNative {
         log("state collection stopped (windows cleared, not flushed)")
     }
 
+    // ── 应用使用采集（2.8.7 全量）──────────────────────────────────────
+    // 形态：queryEvents 增量游标 + 跨调用保留的「进行中会话」；拉取只发生在
+    // 既有唤醒点（心跳 tick / 熄屏 / Dart 回前台），**没有新定时器、没有 FGS**。
+    // 脱敏在入队之前：命中 policy 的敏感包名 → 哨兵 masked.other。
+
+    private var usageEnabled = false
+    private var usageEmitted = 0
+    private var usageCursorMs = 0L
+    private var usageOpenPkg = ""
+    private var usageOpenStart = 0L
+    private var maskedPkgs: Set<String> = emptySet()
+    private var foldShort = true
+    private var usageFull = true     // usage_level == full/...（非 off）
+    private var appStream = true     // app_level == stream（只有这档发「正在使用」）
+    private var policyHalted = false
+    private var stateRequested = false
+    private var lastNowPkg = ""
+    private var lastNowEmitMs = 0L
+    private var launcherPkg: String? = null
+
+    private fun prefs(ctx: Context) =
+        ctx.getSharedPreferences("peer_usage", Context.MODE_PRIVATE)
+
+    private fun loadUsageState(ctx: Context) {
+        val p = prefs(ctx)
+        usageCursorMs = p.getLong("cursor", 0L)
+        usageOpenPkg = p.getString("open_pkg", "") ?: ""
+        usageOpenStart = p.getLong("open_start", 0L)
+        lastNowPkg = p.getString("now_pkg", "") ?: ""
+        lastNowEmitMs = p.getLong("now_ms", 0L)
+    }
+
+    private fun saveUsageState(ctx: Context) {
+        prefs(ctx).edit()
+            .putLong("cursor", usageCursorMs)
+            .putString("open_pkg", usageOpenPkg)
+            .putLong("open_start", usageOpenStart)
+            .putString("now_pkg", lastNowPkg)
+            .putLong("now_ms", lastNowEmitMs)
+            .apply()
+    }
+
+    /** `PACKAGE_USAGE_STATS` 是否已授权（AppOps 口径，各 ROM 一致）。 */
+    fun hasUsageAccess(ctx: Context): Boolean = try {
+        val appOps = ctx.getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
+        val mode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            appOps.unsafeCheckOpNoThrow(
+                AppOpsManager.OPSTR_GET_USAGE_STATS,
+                android.os.Process.myUid(), ctx.packageName)
+        } else {
+            @Suppress("DEPRECATION")
+            appOps.checkOpNoThrow(
+                AppOpsManager.OPSTR_GET_USAGE_STATS,
+                android.os.Process.myUid(), ctx.packageName)
+        }
+        mode == AppOpsManager.MODE_ALLOWED
+    } catch (e: Exception) {
+        log("usage access check failed: ${e.message}")
+        false
+    }
+
+    fun usageStatus(ctx: Context): Map<String, Any?> = mapOf(
+        "granted" to hasUsageAccess(ctx),
+        "enabled" to usageEnabled,
+        "emitted" to usageEmitted,
+        "cursor" to usageCursorMs)
+
+    /** 跳系统「使用情况访问」页（授权只能用户自己在系统页点）。 */
+    fun openUsageSettings(ctx: Context): Boolean = try {
+        val intent = Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        ctx.startActivity(intent)
+        true
+    } catch (e: Exception) {
+        log("open usage settings failed: ${e.message}")
+        false
+    }
+
+    @Synchronized
+    fun toggleUsage(ctx: Context, enable: Boolean): Map<String, Any?> {
+        val c = ctx.applicationContext ?: ctx
+        if (!enable) {
+            usageEnabled = false
+            log("usage collection stopped")
+            return mapOf("ok" to true, "detail" to usageStatus(c))
+        }
+        if (policyHalted) {
+            return mapOf("ok" to false, "reason" to "halted",
+                "detail" to usageStatus(c))
+        }
+        if (!hasUsageAccess(c)) {
+            // 未授权不报错、不弹窗：状态里如实说「未授权」，采集不启动
+            return mapOf("ok" to false, "reason" to "no_permission",
+                "detail" to usageStatus(c))
+        }
+        loadUsageState(c)
+        usageEnabled = true
+        log("usage collection started, cursor=$usageCursorMs")
+        return mapOf("ok" to true, "detail" to usageStatus(c))
+    }
+
+    /** 手动拉一次（Dart 在 App 回前台/进页面时调用）。返回本次投递的会话数。 */
+    fun pullUsage(ctx: Context): Map<String, Any?> {
+        val c = ctx.applicationContext ?: ctx
+        val n = drainUsage(c)
+        return mapOf("sessions" to n, "detail" to usageStatus(c))
+    }
+
+    /**
+     * 分档策略下发：启停采集 + 脱敏清单 + 折叠开关 + 定位网格化。
+     *
+     * 停用（global_off / 暂停未到期）→ 停状态与使用采集（**不 flush**）。
+     */
+    @Synchronized
+    fun applyPolicy(ctx: Context, policy: Map<String, Any?>): Map<String, Any?> {
+        val c = ctx.applicationContext ?: ctx
+        val globalOff = policy["global_off"] == true
+        val until = (policy["paused_until"] as? Number)?.toDouble() ?: 0.0
+        val pausedNow = until > System.currentTimeMillis() / 1000.0
+        policyHalted = globalOff || pausedNow
+
+        @Suppress("UNCHECKED_CAST")
+        val pkgs = (policy["sensitive_pkgs"] as? List<*>) ?: emptyList<Any?>()
+        maskedPkgs = pkgs.mapNotNull { it?.toString() }.filter { it.isNotEmpty() }.toSet()
+        foldShort = policy["fold_short"] != false
+        usageFull = (policy["usage_level"] ?: "full") != "off"
+        appStream = (policy["app_level"] ?: "stream") == "stream"
+        val appOff = (policy["app_level"] ?: "stream") == "off"
+        val locLevel = (policy["location_level"] ?: "exact").toString()
+        gridStreet = locLevel == "street"
+
+        if (policyHalted) {
+            stopStateCollection()
+            usageEnabled = false
+        } else {
+            if (stateRequested) startStateCollection(c)
+            if (usageFull && !appOff && hasUsageAccess(c)) {
+                loadUsageState(c)
+                usageEnabled = true
+            } else {
+                usageEnabled = false
+            }
+        }
+        log("policy applied: halted=$policyHalted masked=${maskedPkgs.size} " +
+            "fold=$foldShort usage=$usageEnabled street=$gridStreet")
+        return mapOf("ok" to true, "halted" to policyHalted,
+            "usage" to usageEnabled, "street" to gridStreet)
+    }
+
+    /** 定位是否处于「仅街区」档（落点前圆整，服务端还会再兜一次）。 */
+    private var gridStreet = false
+
+    /**
+     * 拉一次增量使用事件并投递。
+     *
+     * 只投**已闭合**的会话（`usage.session`）与「正在使用」（`usage.now`）。
+     * 进行中的会话不按「end=now」反复上报：服务端 client_id 幂等是「已存在即
+     * 忽略」，改不了数（反而可能双计），当前应用由 usage.now 表达。
+     */
+    private fun drainUsage(ctx: Context): Int {
+        if (!usageEnabled || policyHalted) return 0
+        val now = System.currentTimeMillis()
+        val from = if (usageCursorMs > 0) usageCursorMs else now - 6 * 3600_000L
+        val usm = ctx.getSystemService(Context.USAGE_STATS_SERVICE) as? UsageStatsManager
+            ?: return 0
+        val events = try {
+            usm.queryEvents(from, now)
+        } catch (e: Exception) {
+            log("queryEvents failed: ${e.message}")
+            return 0
+        } ?: return 0
+
+        val raw = ArrayList<UsageGates.Raw>()
+        while (events.hasNext()) {
+            val e = events.nextEvent() ?: break
+            val kind = e.eventType
+            if (kind != UsageGates.EVENT_RESUMED && kind != UsageGates.EVENT_PAUSED) continue
+            val pkg = e.packageName ?: continue
+            if (isExcluded(ctx, pkg)) continue
+            raw.add(UsageGates.Raw(pkg, e.timeStamp, kind == UsageGates.EVENT_RESUMED))
+        }
+        raw.sortBy { it.ts }
+
+        val open = UsageGates.sanitizeOpen(
+            if (usageOpenPkg.isNotEmpty() && usageOpenStart > 0)
+                UsageGates.Open(usageOpenPkg, usageOpenStart) else null, now)
+        val paired = UsageGates.pairIncremental(open, raw)
+
+        var emitted = 0
+        for (s in paired.sessions) {
+            val sec = s.durSec
+            if (sec <= 0) continue
+            if (UsageGates.shouldDrop(sec, foldShort)) continue // 端侧折叠：不入队
+            val (pkg, masked) = UsageGates.mask(s.pkg, maskedPkgs)
+            emitUsage("usage.session", mapOf(
+                "pkg" to pkg,
+                "app" to if (masked) UsageGates.MASK_APP else labelOf(ctx, s.pkg),
+                "masked" to masked,
+                "start" to s.start / 1000.0,
+                "end" to s.end / 1000.0,
+                "dur" to sec))
+            emitted += 1
+        }
+
+        val running = paired.open
+        if (running != null && appStream) {
+            val (pkg, masked) = UsageGates.mask(running.pkg, maskedPkgs)
+            if (UsageGates.shouldEmitNow(lastNowPkg, lastNowEmitMs, pkg, now)) {
+                emitUsage("usage.now", mapOf(
+                    "pkg" to pkg,
+                    "app" to if (masked) UsageGates.MASK_APP else labelOf(ctx, running.pkg),
+                    "masked" to masked,
+                    "since" to running.start / 1000.0))
+                lastNowPkg = pkg
+                lastNowEmitMs = now
+                emitted += 1
+            }
+        }
+
+        usageOpenPkg = paired.open?.pkg ?: ""
+        usageOpenStart = paired.open?.start ?: 0L
+        usageCursorMs = UsageGates.advanceCursor(usageCursorMs, paired.maxTs, now)
+        saveUsageState(ctx)
+        if (emitted > 0) log("usage drained: $emitted, cursor=$usageCursorMs")
+        return emitted
+    }
+
+    /** 自身 / 桌面 launcher / SystemUI 不记（照令文 §2.2 排除项）。 */
+    private fun isExcluded(ctx: Context, pkg: String): Boolean {
+        if (pkg == ctx.packageName) return true
+        if (pkg == "com.android.systemui") return true
+        val home = launcherPkg ?: try {
+            val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
+            val ri = ctx.packageManager.resolveActivity(intent, PackageManager.MATCH_DEFAULT_ONLY)
+            ri?.activityInfo?.packageName
+        } catch (_: Exception) {
+            null
+        }?.also { launcherPkg = it }
+        return home != null && pkg == home
+    }
+
+    /** 应用名（解析不到就用包名，不编名字）。 */
+    private fun labelOf(ctx: Context, pkg: String): String = try {
+        val pm = ctx.packageManager
+        val info = pm.getApplicationInfo(pkg, 0)
+        pm.getApplicationLabel(info).toString()
+    } catch (e: Exception) {
+        pkg
+    }
+
+    private fun emitUsage(kind: String, payload: Map<String, Any?>) {
+        val messenger = stateMessenger ?: return
+        try {
+            MethodChannel(messenger, CHANNEL)
+                .invokeMethod("onUsageSample", mapOf("kind" to kind, "payload" to payload))
+            usageEmitted += 1
+        } catch (e: Exception) {
+            log("emitUsage failed: ${e.message}")
+        }
+    }
+
     /** 电量：Δ≥2%（与**上次已报值**比）或充电翻转才报，60s 防抖。 */
     private fun onBattery(intent: Intent) {
         val level = intent.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, -1)
@@ -595,6 +882,8 @@ object PeerLocNative {
             if (sec > 0) emitState("state.screen", mapOf("session_sec" to sec, "on" to false))
         }
         drainUnlockIfDue()
+        // 使用会话的唤醒点之一（令文 §2.2：骑既有唤醒点，不新增定时器）
+        appContext?.let { drainUsage(it) }
     }
 
     /** 10 分钟窗口聚合：借解锁/熄屏事件自然触发，不新增定时器。 */
@@ -705,6 +994,8 @@ object PeerLocNative {
     private fun onHeartbeatTick() {
         heartbeatArmed = false
         heartbeatTicks++
+        // 使用会话的唤醒点之二：心跳 tick（既有静止心跳，不新增定时器）
+        appContext?.let { runCatching { drainUsage(it) } }
         val ctx = appContext
         val running = listeners.isNotEmpty()
         val hasHistory = HeartbeatGate.hasHistory(lastAccepted != null, lastSent != null)
@@ -850,6 +1141,16 @@ object PeerLocNative {
     }
 
     private fun enqueue(point: JSONObject) {
+        // 「仅街区」档：入队前就把坐标圆整到 0.005°（≈500m）——
+        // 端侧先行是隐私优先，服务端还会再兜一次（两道都不许漏）。
+        if (gridStreet) {
+            try {
+                point.put("lat", UsageGates.gridRound(point.getDouble("lat")))
+                point.put("lng", UsageGates.gridRound(point.getDouble("lng")))
+            } catch (e: Exception) {
+                log("grid round failed: ${e.message}")
+            }
+        }
         while (queue.size >= QUEUE_MAX) { queue.removeFirst(); log("queue overflow -> drop oldest") }
         queue.addLast(point)
         log("enqueued (n=${queue.size})")

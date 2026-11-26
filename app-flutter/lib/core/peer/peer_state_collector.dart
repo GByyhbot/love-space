@@ -13,6 +13,7 @@ library;
 import 'package:dio/dio.dart';
 import 'package:flutter/services.dart';
 
+import 'peer_policy.dart';
 import 'peer_report_api.dart';
 import 'peer_report_queue.dart';
 
@@ -24,29 +25,40 @@ int _seq = 0;
 /// 已安装 handler 标记：MethodChannel 只允许一个 handler，重复安装会顶掉旧的。
 bool _installed = false;
 
-/// 安装状态样本 handler（App 启动时调用一次）。
+/// 最近一次下发给原生的 policy（避免重复下发；null = 还没下发过）。
+PeerPolicy? _appliedPolicy;
+
+/// 安装样本 handler（App 启动时调用一次）。
 ///
-/// 收到样本 → 入队 → 立刻冲一次。冲刷失败不抛（队列会保留，等下次触发），
-/// 这样原生投递永远不会因为网络问题而"看起来失败"。
+/// 两类样本走同一条通道、同一个队列：
+/// · `onStateSample` —— 电量/网络/解锁/亮屏；
+/// · `onUsageSample` —— 应用会话 / 正在使用（2.8.7 全量，`usage.*`）。
+///
+/// 收到样本 → 脱敏复核 → 入队 → 立刻冲一次。冲刷失败不抛（队列会保留），
+/// 这样原生投递永远不会因为网络问题而「看起来失败」。
 void installStateSampleHandler({
   required Future<Dio> Function() dio,
 }) {
   if (_installed) return;
   _installed = true;
   _stateChannel.setMethodCallHandler((MethodCall call) async {
-    if (call.method != 'onStateSample') return null;
+    if (call.method != 'onStateSample' && call.method != 'onUsageSample') {
+      return null;
+    }
     final args = (call.arguments as Map?)?.cast<Object?, Object?>();
     final kind = (args?['kind'] ?? '').toString();
     final rawPayload = args?['payload'];
     if (kind.isEmpty || rawPayload is! Map) return null;
 
-    final payload = rawPayload.cast<String, Object?>();
+    final payload = sanitizeTelemetryPayload(kind, rawPayload.cast<String, Object?>());
+    if (payload == null) return null; // 脱敏失败/载荷非法：宁可丢一条，也不出设备
     final now = DateTime.now();
     try {
       await reportOutbox.enqueue(PendingReport(
-        // 状态事件没有 scene（后端 scene 语义只属主动报备）
+        // 遥测事件没有 scene（后端 scene 语义只属主动报备）
         scene: '',
-        clientId: 'state-${now.microsecondsSinceEpoch}-${_seq++}',
+        clientId: '${kind.replaceAll('.', '-')}-'
+            '${now.microsecondsSinceEpoch}-${_seq++}',
         createdAt: now.millisecondsSinceEpoch / 1000,
         kind: kind,
         payload: payload,
@@ -59,6 +71,46 @@ void installStateSampleHandler({
     return null;
   });
 }
+
+/// 端侧最后一道脱敏/校验（**入队之前**执行，与原生脱敏互为双保险）。
+///
+/// 🔴 真实包名永不出设备：命中的包名在这里被改写为哨兵；若原生漏了脱敏
+/// （或旧版本原生没有脱敏逻辑），这里按 policy 的敏感清单再兜一次。
+/// 返回 null = 本条不上报（宁可丢一条，也不许把敏感包名送出去）。
+Map<String, Object?>? sanitizeTelemetryPayload(
+  String kind,
+  Map<String, Object?> payload, {
+  PeerPolicy? policy,
+}) {
+  if (!kind.startsWith('usage.')) return payload;
+  final pol = policy ?? _appliedPolicy ?? PeerPolicy.defaults;
+  final masked = payload['masked'] == true;
+  final pkg = (payload['pkg'] ?? '').toString();
+  final app = (payload['app'] ?? '').toString();
+  if (masked) {
+    // 已声明脱敏：包名必须已经是哨兵，否则一律拦掉（服务端也会 422）
+    if (pkg.isNotEmpty && pkg != kMaskedPkg) return null;
+    return {
+      ...payload,
+      'pkg': kMaskedPkg,
+      'app': kMaskedAppName,
+    };
+  }
+  if (pkg.isNotEmpty && pol.sensitivePkgs.contains(pkg)) {
+    return {
+      ...payload,
+      'pkg': kMaskedPkg,
+      'app': kMaskedAppName,
+      'masked': true,
+    };
+  }
+  if (app.isEmpty) return null;
+  return payload;
+}
+
+/// 脱敏哨兵（与服务端 `SENSITIVE_MASK_PKG/NAME` 逐字同源）。
+const String kMaskedPkg = 'masked.other';
+const String kMaskedAppName = '其他应用';
 
 /// 把「events 共享开关」同步给原生采集器。
 ///
@@ -75,7 +127,73 @@ Future<bool> syncStateCollection({required bool eventsOn}) async {
   }
 }
 
-/// 冷启动自举：装 handler + 读一次共享开关并同步采集态。
+/// 把分档 policy 下发给原生（采集端据此启停与脱敏）。
+///
+/// 🔴 停用（完全关闭 / 暂停中）生效时同步**清掉队列里的遥测条目**：
+/// 恢复后不补报这段（方案册 §4.1）；手动报备条目保留。
+/// 幂等：与上次下发的 policy 相同则只做一次（[force] 可强制）。
+Future<bool> applyPeerPolicy(PeerPolicy policy, {bool force = false}) async {
+  final changed = force || _appliedPolicy != policy;
+  _appliedPolicy = policy;
+  var ok = false;
+  if (changed) {
+    try {
+      final r = await _stateChannel.invokeMethod<Map<Object?, Object?>>(
+        'applyPolicy',
+        {'policy': policy.toJson()},
+      );
+      ok = r?['ok'] == true;
+    } catch (_) {
+      // 旧包/通道未注册：不炸主链（服务端裁剪仍是第二道防线）
+    }
+  }
+  if (policy.isHalted) {
+    await reportOutbox.clearTelemetry();
+  }
+  return ok;
+}
+
+/// 拉一次应用会话增量（骑既有唤醒点：回前台/切页时调用，不新增定时器）。
+Future<int> pullUsageSamples() async {
+  try {
+    final r = await _stateChannel
+        .invokeMethod<Map<Object?, Object?>>('pullUsage');
+    final n = r?['sessions'];
+    return n is int ? n : 0;
+  } catch (_) {
+    return 0;
+  }
+}
+
+/// 应用使用授权状态（`PACKAGE_USAGE_STATS`，AppOps 检测）。
+///
+/// 返回 `{granted, enabled, supported}`；通道不可用一律按「未授权」处理。
+Future<Map<String, Object?>> usagePermissionStatus() async {
+  try {
+    final r = await _stateChannel
+        .invokeMethod<Map<Object?, Object?>>('usageStatus');
+    if (r == null) return const {'granted': false, 'enabled': false};
+    return {
+      'granted': r['granted'] == true,
+      'enabled': r['enabled'] == true,
+      'supported': r['supported'] != false,
+    };
+  } catch (_) {
+    return const {'granted': false, 'enabled': false, 'supported': true};
+  }
+}
+
+/// 跳系统「使用情况访问」授权页（用户在系统页手动授权，App 不催）。
+Future<bool> openUsageAccessSettings() async {
+  try {
+    final r = await _stateChannel.invokeMethod<bool>('openUsageSettings');
+    return r == true;
+  } catch (_) {
+    return false;
+  }
+}
+
+/// 冷启动自举：装 handler + 读一次设置（四开关 + policy）并同步。
 ///
 /// 失败静默（未登录/网络差时不该弹错）；进入报备页与设置页保存后还会再同步。
 Future<void> peerStateCollectionAutoStart({
@@ -85,6 +203,7 @@ Future<void> peerStateCollectionAutoStart({
   try {
     final settings = await fetchPeerSettings(await dio());
     await syncStateCollection(eventsOn: settings.events);
+    await applyPeerPolicy(settings.policy);
   } catch (_) {
     // 未登录 / 网络不可用：保持原生默认（未开），下次进页面再同步
   }

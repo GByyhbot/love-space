@@ -25,6 +25,8 @@ import 'package:dio/dio.dart';
 
 import '../api/api_client.dart';
 import '../chat/chat_repository.dart' show newChatClientId;
+import 'peer_policy.dart' show PeerPolicy;
+
 
 /// client_id 生成：**盘线复用** chat 发消息同款（`chat_repository.newChatClientId`
 /// = uuid v4，与 Web `uuid()` 同口径），不自创随机串。
@@ -406,6 +408,7 @@ class PeerShareSettings {
     this.track = true,
     this.events = true,
     this.usage = true,
+    this.policy = PeerPolicy.defaults,
   });
 
   /// 实时位置共享。
@@ -420,6 +423,9 @@ class PeerShareSettings {
   /// 设备使用报告共享（后续版本接入）。
   final bool usage;
 
+  /// 2.8.7 全量：分档 policy（单一事实源，四开关是它的投影）。
+  final PeerPolicy policy;
+
   /// 全开（仅作 `copyWith` 基线与测试用，**不得**用作加载失败时的兜底渲染）。
   static const PeerShareSettings allOn = PeerShareSettings();
 
@@ -432,6 +438,7 @@ class PeerShareSettings {
       track: pick('track'),
       events: pick('events'),
       usage: pick('usage'),
+      policy: PeerPolicy.fromJson(j['policy']),
     );
   }
 
@@ -440,20 +447,23 @@ class PeerShareSettings {
     bool? track,
     bool? events,
     bool? usage,
+    PeerPolicy? policy,
   }) =>
       PeerShareSettings(
         location: location ?? this.location,
         track: track ?? this.track,
         events: events ?? this.events,
         usage: usage ?? this.usage,
+        policy: policy ?? this.policy,
       );
 
-  /// 🔴 恒 4 键（见类注释），顺序与后端 `SHARE_KEYS` 一致。
+  /// 🔴 恒 4 键 + policy（见类注释），顺序与后端 `SHARE_KEYS` 一致。
   Map<String, Object?> toJson() => {
         'location': location,
         'track': track,
         'events': events,
         'usage': usage,
+        'policy': policy.toJson(),
       };
 
   @override
@@ -462,15 +472,17 @@ class PeerShareSettings {
       other.location == location &&
       other.track == track &&
       other.events == events &&
-      other.usage == usage;
+      other.usage == usage &&
+      other.policy == policy;
 
   @override
-  int get hashCode => Object.hash(location, track, events, usage);
+  int get hashCode =>
+      Object.hash(location, track, events, usage, policy);
 
   @override
   String toString() =>
       'PeerShareSettings(location:$location, track:$track, '
-      'events:$events, usage:$usage)';
+      'events:$events, usage:$usage, policy:$policy)';
 }
 
 /// 读本人四项共享开关（失败抛 [PeerApiException]，**不回落全开**——
@@ -512,6 +524,53 @@ Future<PeerStateDaily> fetchStateDaily(Dio dio, {String date = ''}) async {
   final raw = r.data;
   if (raw is! Map) throw const PeerApiException(genericErrorText);
   return PeerStateDaily.fromJson(raw.cast<String, dynamic>());
+}
+
+/// 一条策略变更审计（双方流水，只读不可删）。
+class PeerPolicyAuditItem {
+  const PeerPolicyAuditItem({
+    required this.id,
+    required this.ts,
+    required this.action,
+    required this.detail,
+    this.mine = false,
+  });
+
+  final String id;
+  final double ts;
+  final String action;
+
+  /// 服务端生成的人话文案（如「把软件记录调为仅 Top5」）——直接显示，不翻译。
+  final String detail;
+  final bool mine;
+
+  static PeerPolicyAuditItem? fromJson(Object? raw) {
+    if (raw is! Map) return null;
+    final j = raw.cast<String, dynamic>();
+    final detail = (j['detail'] ?? '').toString();
+    if (detail.isEmpty) return null;
+    return PeerPolicyAuditItem(
+      id: (j['id'] ?? '').toString(),
+      ts: (j['ts'] as num?)?.toDouble() ?? 0,
+      action: (j['action'] ?? '').toString(),
+      detail: detail,
+      mine: j['mine'] == true,
+    );
+  }
+}
+
+/// 读双方策略变更流水（倒序，上限 100 条；失败抛 [PeerApiException]）。
+Future<List<PeerPolicyAuditItem>> fetchPolicyAudit(Dio dio) async {
+  final r = await dio.get('/api/peer/policy-audit');
+  final err = writeResponseError(r);
+  if (err != null) throw PeerApiException(err);
+  final raw = r.data;
+  if (raw is! Map) throw const PeerApiException(genericErrorText);
+  final items = (raw['items'] as List?) ?? const [];
+  return items
+      .map(PeerPolicyAuditItem.fromJson)
+      .whereType<PeerPolicyAuditItem>()
+      .toList(growable: false);
 }
 
 /// 当日事件流（默认服务端时区的「今天」；传 [date] 可指定 yyyy-MM-dd）。
