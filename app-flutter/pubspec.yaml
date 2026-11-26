@@ -47,11 +47,7 @@ dependencies:
   cached_network_image: ^3.4.1
   # 头像/媒体选取（阶段 2 账号页头像上传先用，阶段 4 媒体全面使用）
   image_picker: ^1.1.2
-    # 2026-11-26（专题令裁定 A）：8.3.7→11，止于 11.0.3。上限钉 <12：12.0.0 起
-  # 改联邦架构，windows_file_picker 定死 win32 ^6.3.0，与 flutter_secure_storage 9
-  # （其 windows 实现 3.1.2 是最后一版 3.x，钉 win32 ^5）结构性冲突。
-  # 本步 lock 由 CI 生成（lockgen 临时工作流），本地三源均拉不下包。
-  file_picker: ^11.0.3
+  file_picker: ^8.1.2
   # 本地缓存选 drift（SQLite/类型安全）：聊天与 records 是强结构数据，需要条件查询与游标分页，
   # 与服务端 records 模型对齐；理由按方案要求在脚手架提交说明中注明
   drift: ^2.20.0
