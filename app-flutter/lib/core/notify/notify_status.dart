@@ -5,7 +5,6 @@
 /// 设置页「关于」区渲染「通知服务状态」行。不新增后端接口。
 library;
 
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 // 3.x：StateProvider 移到 legacy 入口（官方保留兼容，行为不变）
 import 'package:flutter_riverpod/legacy.dart';
 

@@ -4,7 +4,6 @@
 /// 「系统媒体播放器：已就绪 / 未就绪（+错误摘要）」。生产禁止裸 catch 吞错。
 library;
 
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 // 3.x：StateProvider 移到 legacy 入口（官方保留兼容，行为不变）
 import 'package:flutter_riverpod/legacy.dart';
 

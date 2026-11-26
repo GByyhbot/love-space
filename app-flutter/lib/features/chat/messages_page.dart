@@ -14,6 +14,8 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+// 3.x：StateController 也在 legacy 入口
+import 'package:flutter_riverpod/legacy.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/ui/hold_to_confirm.dart' show HoldToConfirmButton;
