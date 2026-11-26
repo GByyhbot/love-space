@@ -21,6 +21,7 @@ import 'package:go_router/go_router.dart';
 import 'package:love_space/core/api/api_client.dart' as api;
 import 'package:love_space/core/sse/sse_client.dart';
 import 'package:love_space/features/chat/chat_toast.dart' show ChatToastHost;
+import 'package:love_space/features/period/period_engine.dart';
 import 'package:love_space/features/period/period_page.dart';
 import 'package:love_space/features/personal/personal_controller.dart';
 
@@ -242,13 +243,13 @@ void main() {
 
   group('③ 点选段内日子 → 走了 / 还在经期 / 删段', () {
     testWidgets('段内日子显示「月经走了」+「还在经期」，且能删整次', (tester) async {
-      // 造一段覆盖「今天」的经期（用真实今天，保证是段内）
-      final now = DateTime.now();
-      String iso(DateTime d) => '${d.year}-${d.month.toString().padLeft(2, '0')}-'
-          '${d.day.toString().padLeft(2, '0')}';
+      // 造一段覆盖「今天」的经期。🔴「今天」必须用**空间时区**（+8）算：
+      // 页面用的是 spaceTodayIso，CI 在 UTC 跑，UTC 16:00 后两者差一天，
+      // 用本机 now() 会在那个时段稳定假红（2026-11-27 实测）。
+      final todayIso = spaceTodayIso(DateTime.now().toUtc());
       // 段从**昨天**开始：今天就是第 2 天，此时「月经走了」走 PUT 改 length
       // （若是段首日，Web/App 都走 DELETE 整条——那是另一种正确语义）
-      final startIso = iso(now.subtract(const Duration(days: 1)));
+      final startIso = dayStr(dayNum(todayIso) - 1);
       final s = _Store([
         {
           'id': 'ep-1',
