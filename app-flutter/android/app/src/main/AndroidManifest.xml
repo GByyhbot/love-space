@@ -36,6 +36,10 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"/>
     <!-- 2.4.14 audio_service 官方要求：媒体播放唤醒锁 -->
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
+    <!-- 2.8.7 全量：应用使用统计（PACKAGE_USAGE_STATS 走 AppOps 特殊授权，
+         用户在系统「使用情况访问」页手动给；不弹窗催、不给就采集不启动） -->
+    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS"
+        tools:ignore="ProtectedPermissions"/>
     <application
         android:label="love_space"
         android:name="${applicationName}"
@@ -122,6 +126,12 @@
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
+        </intent>
+        <!-- 2.8.7：敏感软件多选要枚举「有启动器入口」的应用名（包可见性声明，
+             不用 QUERY_ALL_PACKAGES 那种敏感全量权限） -->
+        <intent>
+            <action android:name="android.intent.action.MAIN"/>
+            <category android:name="android.intent.category.LAUNCHER"/>
         </intent>
     </queries>
 </manifest>

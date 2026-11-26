@@ -755,11 +755,14 @@ object PeerLocNative {
         val from = if (usageCursorMs > 0) usageCursorMs else now - 6 * 3600_000L
         val usm = ctx.getSystemService(Context.USAGE_STATS_SERVICE) as? UsageStatsManager
             ?: return 0
+        // 注意写法：catch 分支给 null，再统一 `?: return 0`。
+        // 把 `return 0` 塞进 try 表达式后面接 elvis 会让 Kotlin 推断成非目标类型
+        // （CI 实测 Unresolved reference 'hasNext'）。
         val events = try {
             usm.queryEvents(from, now)
         } catch (e: Exception) {
             log("queryEvents failed: ${e.message}")
-            return 0
+            null
         } ?: return 0
 
         val raw = ArrayList<UsageGates.Raw>()
