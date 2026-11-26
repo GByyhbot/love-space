@@ -611,8 +611,9 @@ void main() {
       ]);
       final c = _setupWidget(s);
       await _pump(tester, c);
-      await tester.ensureVisible(find.text('月经走了'));
-      await tester.tap(find.text('月经走了'));
+      // 2.8.7：Hero 卡内也有「月经走了」（文案重复）→ 按 Key 点日志卡那个
+      await tester.ensureVisible(find.byKey(const Key('period-log-end')));
+      await tester.tap(find.byKey(const Key('period-log-end')));
       await tester.pumpAndSettle();
       expect(s.putBodies.length, 1);
       final body = s.putBodies.single['body'] as Map;
@@ -632,8 +633,9 @@ void main() {
       ]);
       final c = _setupWidget(s);
       await _pump(tester, c);
-      await tester.ensureVisible(find.text('月经走了'));
-      await tester.tap(find.text('月经走了'));
+      // 2.8.7：Hero 卡内也有「月经走了」（文案重复）→ 按 Key 点日志卡那个
+      await tester.ensureVisible(find.byKey(const Key('period-log-end')));
+      await tester.tap(find.byKey(const Key('period-log-end')));
       await tester.pumpAndSettle();
       expect(s.deletedIds, ['ep1'], reason: '首日 s===n → DELETE');
       expect(s.putBodies, isEmpty);

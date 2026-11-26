@@ -558,7 +558,8 @@ void main() {
           reason: '8-B 受孕概率三档（不给百分比）');
       expect(find.text('按日历推算，仅供参考，不能作为避孕依据。'), findsOneWidget,
           reason: '免责原文逐字、带句号');
-      expect(find.text('月经走了'), findsOneWidget,
+      // 2.8.7：Hero 卡内也放了「月经走了」，文案不再唯一 → 按 Key 定位日志卡按钮
+      expect(find.byKey(const Key('period-log-end')), findsOneWidget,
           reason: '今天在经期窗口内 → 四动作走了/又来了');
       expect(find.text('月经又来了'), findsOneWidget);
       expect(find.byTooltip('上个月'), findsOneWidget,

@@ -251,6 +251,16 @@ class _PeriodPageState extends ConsumerState<PeriodPage> {
           const SizedBox(height: 12),
           // phaseBar `:281-289`：四段相对天数权重 + 今天游标
           _phaseBar(context, segs, cursor, ph?.phase),
+          const SizedBox(height: 10),
+          // 2.8.7 令三·2：预测依据（0 样本默认 / 有样本校准次数 / 超期推迟）
+          Text(
+            _predictionBasis(d),
+            key: const Key('period-prediction-basis'),
+            style: theme.textTheme.labelSmall?.copyWith(color: cs.outline),
+          ),
+          const SizedBox(height: 10),
+          // 2.8.7 令三·2：主操作直接放在 Hero 卡内（经期中/待确认 → 走了+还在；否则 → 今天来了）
+          _heroActions(context, d, today),
           const SizedBox(height: 14),
           // `:488` 三联统计（记录天数 = 日记录行数）
           Row(children: [
@@ -261,6 +271,62 @@ class _PeriodPageState extends ConsumerState<PeriodPage> {
         ]),
       ),
     );
+  }
+
+  /// 预测依据一句话（令三·2）：超期 > 0 样本 > 默认估算。
+  String _predictionBasis(PeriodData d) {
+    if (d.overdueDays > 0) return '预计已推迟 ${d.overdueDays} 天';
+    if (d.predictionSampleCount <= 0) return '默认估算 · 周期 ${d.cycle} 天';
+    final spread = d.cycleSpread == null ? '' : '（±${d.cycleSpread} 天）';
+    return '基于近 ${d.predictionSampleCount} 次校准 · 周期 ${d.cycle} 天$spread';
+  }
+
+  /// Hero 卡内主操作（复用 _runAction / _busy 防连点）。
+  Widget _heroActions(BuildContext context, PeriodData d, String today) {
+    final inPeriod = d.inWindow || d.pending != null;
+    if (!inPeriod) {
+      return SizedBox(
+        width: double.infinity,
+        child: FilledButton.icon(
+          key: const Key('period-hero-start'),
+          onPressed: _busy
+              ? null
+              : () => _runAction(
+                    () => planStart(d, today, clientId: api.newClientId()),
+                    '今天来了',
+                  ),
+          icon: const Icon(Icons.water_drop, size: 18),
+          label: const Text('今天来了'),
+        ),
+      );
+    }
+    final days = d.pending != null
+        ? d.pending!.days
+        : (d.dayOfPeriod > 0 ? d.dayOfPeriod : 1);
+    return Row(children: [
+      Expanded(
+        child: FilledButton(
+          key: const Key('period-hero-end'),
+          onPressed: _busy
+              ? null
+              : () => _runActionWithMessage(
+                    () => planEnd(d, today),
+                    '已结束本次经期（共 $days 天）',
+                  ),
+          child: const Text('月经走了'),
+        ),
+      ),
+      const SizedBox(width: 8),
+      Expanded(
+        child: OutlinedButton(
+          key: const Key('period-hero-more'),
+          onPressed: _busy
+              ? null
+              : () => _runAction(() => planMore(d, today), '还在经期'),
+          child: const Text('还在经期'),
+        ),
+      ),
+    ]);
   }
 
   Widget _heroStat(
@@ -473,16 +539,24 @@ class _PeriodPageState extends ConsumerState<PeriodPage> {
           // Web「浅粉虚线=推算」同源浅化；p-pred 底 rgba(period,.06) :1655）；
           // 排卵日与排卵期同用 --fertile（style.css:61/:1511），消灭原
           // 0xFF7E57C2/0xFF9575CD 两套紫并存。
-          Wrap(spacing: 10, runSpacing: 4, children: [
-            _legend(context, cs, periodStageColor(context), '月经期'),
-            // 2.8.2：待确认用虚线边一眼区分「已来但未定稿」
-            _legend(context, cs, periodStageColor(context), '经期（待确认）',
-                dashed: true),
-            _legend(context, cs, periodStageColor(context), '预测经期'),
-            _legend(context, cs, fertileStageColor(context), '排卵期'),
-            _legend(context, cs, fertileStageColor(context), '排卵日',
-                dot: true),
-          ]),
+          // 2.8.7 令三·1：**一行紧凑图例**，只留四态主项（实记/待确认/预测/排卵易孕）。
+          // 四态样式各自与日历格子一一对应：实心 = 实记、虚框 = 待确认、
+          // 点框 = 预测、圆环 = 排卵易孕。宽屏不换行、393 宽也放得下。
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Row(
+              key: const Key('period-legend'),
+              children: [
+                _legendChip(context, cs, _LegendKind.actual, '实记'),
+                const SizedBox(width: 12),
+                _legendChip(context, cs, _LegendKind.pending, '待确认'),
+                const SizedBox(width: 12),
+                _legendChip(context, cs, _LegendKind.predicted, '预测'),
+                const SizedBox(width: 12),
+                _legendChip(context, cs, _LegendKind.fertile, '排卵易孕'),
+              ],
+            ),
+          ),
         ]),
       ),
     );
@@ -515,33 +589,73 @@ class _PeriodPageState extends ConsumerState<PeriodPage> {
         crossAxisAlignment: CrossAxisAlignment.stretch, children: rows);
   }
 
-  Widget _legend(BuildContext context, ColorScheme cs, Color color, String label,
-      {bool dot = false, bool dashed = false}) =>
-      Row(mainAxisSize: MainAxisSize.min, children: [
-        Container(
-          width: 12,
-          height: 12,
+  /// 一行紧凑图例的单项（四态各一种形状，与日历格子同源同色）。
+  Widget _legendChip(
+      BuildContext context, ColorScheme cs, _LegendKind kind, String label) {
+    final theme = Theme.of(context);
+    final pc = periodStageColor(context);
+    final fc = fertileStageColor(context);
+    Widget swatch;
+    switch (kind) {
+      case _LegendKind.actual:
+        swatch = Container(
+          width: 11,
+          height: 11,
           decoration: BoxDecoration(
-            // 2.8.2 待确认：浅底 + 虚线边（与「预测经期」的纯浅底区分开）
-            color: dot
-                ? Colors.transparent
-                : color.withValues(alpha: dashed ? 0.18 : 0.55),
-            shape: dot ? BoxShape.circle : BoxShape.rectangle,
-            borderRadius: dot ? null : BorderRadius.circular(3),
-            border: dot
-                ? Border.all(color: color, width: 2)
-                : dashed
-                    ? Border.all(color: color, width: 1)
-                    : null,
+              color: pc, borderRadius: BorderRadius.circular(3)),
+        );
+        break;
+      case _LegendKind.pending:
+        swatch = Container(
+          width: 11,
+          height: 11,
+          decoration: BoxDecoration(
+            color: pc.withValues(alpha: 0.20),
+            borderRadius: BorderRadius.circular(3),
           ),
-        ),
-        const SizedBox(width: 4),
-        Text(label,
-            style: Theme.of(context)
-                .textTheme
-                .labelSmall
-                ?.copyWith(color: cs.outline)),
-      ]);
+          child: CustomPaint(
+            painter: _DashedBorderPainter(
+                color: pc, radius: 3, dash: 2.5, gap: 1.8, strokeWidth: 1.2),
+          ),
+        );
+        break;
+      case _LegendKind.predicted:
+        swatch = Container(
+          width: 11,
+          height: 11,
+          decoration: BoxDecoration(
+            color: pc.withValues(alpha: 0.24),
+            borderRadius: BorderRadius.circular(3),
+          ),
+          child: CustomPaint(
+            painter: _DashedBorderPainter(
+                color: pc.withValues(alpha: 0.45),
+                radius: 3,
+                dash: 1.2,
+                gap: 2.4,
+                strokeWidth: 1.0),
+          ),
+        );
+        break;
+      case _LegendKind.fertile:
+        swatch = Container(
+          width: 11,
+          height: 11,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(color: fc, width: 2),
+          ),
+        );
+        break;
+    }
+    return Row(mainAxisSize: MainAxisSize.min, children: [
+      swatch,
+      const SizedBox(width: 4),
+      Text(label,
+          style: theme.textTheme.labelSmall?.copyWith(color: cs.outline)),
+    ]);
+  }
+
 
   Widget _dayCell(BuildContext context, PeriodDayCell cell) {
     final cs = Theme.of(context).colorScheme;
@@ -559,18 +673,43 @@ class _PeriodPageState extends ConsumerState<PeriodPage> {
             decoration: BoxDecoration(
               color: base,
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: cell.picked
-                    ? cs.primary
-                    : cell.isToday
-                        ? cs.onSurface
-                        : cell.isStart
-                            ? cs.primary.withValues(alpha: 0.55)
-                            : Colors.transparent,
-                width: cell.picked ? 2.5 : (cell.isToday ? 2 : 1),
-              ),
+              // 四态辨识（令三·1）：
+              //  · 待确认 = 浅粉底 + **虚线**边框（虚线单独用 painter 画在下面）
+              //  · 预测   = 极浅底 + 淡虚线边
+              //  · 排卵   = 独立色相**圆环**
+              //  · 实记   = 高饱和实心（_cellColor 承担）+ 加粗数字
+              border: (cell.pending || cell.predicted)
+                  ? null
+                  : Border.all(
+                      color: cell.picked
+                          ? cs.primary
+                          : cell.isToday
+                              ? cs.onSurface
+                              : cell.ovu
+                                  ? fertileStageColor(context)
+                                  : cell.isStart
+                                      ? cs.primary.withValues(alpha: 0.55)
+                                      : Colors.transparent,
+                      width: cell.picked ? 2.5 : (cell.isToday || cell.ovu ? 2 : 1),
+                    ),
             ),
             child: Stack(alignment: Alignment.center, children: [
+              // 虚线边框（待确认实线不用：它是"还没定稿"的状态，虚一点才对）
+              if (cell.pending || cell.predicted)
+                Positioned.fill(
+                  child: CustomPaint(
+                    painter: _DashedBorderPainter(
+                      color: cell.pending
+                          ? periodStageColor(context)
+                          : periodStageColor(context).withValues(alpha: 0.45),
+                      radius: 8,
+                      // 预测用更疏的点状，跟待确认的虚线再拉开一档
+                      dash: cell.predicted ? 1.5 : 3.0,
+                      gap: cell.predicted ? 3.5 : 2.5,
+                      strokeWidth: cell.pending ? 1.4 : 1.0,
+                    ),
+                  ),
+                ),
               Text('${cell.day}',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     fontWeight: cell.isToday || cell.isStart
@@ -578,6 +717,18 @@ class _PeriodPageState extends ConsumerState<PeriodPage> {
                         : FontWeight.normal,
                     color: _cellText(cell, cs),
                   )),
+              if (cell.pending)
+                Positioned(
+                  top: 3,
+                  right: 4,
+                  child: Container(
+                    width: 4,
+                    height: 4,
+                    decoration: BoxDecoration(
+                        color: periodStageColor(context),
+                        shape: BoxShape.circle),
+                  ),
+                ),
               if (cell.ovu)
                 Positioned(
                   top: 2,
@@ -620,7 +771,8 @@ class _PeriodPageState extends ConsumerState<PeriodPage> {
     // 排卵日格原写死 0xFF7E57C2 与排卵期 0xFF9575CD 双紫并存，统一为
     // --fertile 单一变量（Web 排卵日圆点即 var(--fertile)，:1643）。
     if (cell.ovu) return fertileStageColor(context);
-    final alpha = cell.predicted ? 0.45 : 0.9;
+    // 待确认=浅粉、预测=极浅（令三·1：四态必须一眼分得开）
+    final alpha = cell.pending ? 0.20 : (cell.predicted ? 0.24 : 0.9);
     switch (cell.phase) {
       case 'period':
         return periodStageColor(context).withValues(alpha: alpha);
@@ -637,7 +789,9 @@ class _PeriodPageState extends ConsumerState<PeriodPage> {
 
   Color _cellText(PeriodDayCell cell, ColorScheme cs) {
     if (cell.ovu) return Colors.white;
-    if (cell.phase == 'period' && !cell.predicted) return Colors.white;
+    // 待确认/预测都是浅底，必须用深色字（否则白字看不见）
+    if (cell.pending || cell.predicted) return periodStageColor(context);
+    if (cell.phase == 'period') return Colors.white;
     return cs.onSurface;
   }
 
@@ -656,10 +810,12 @@ class _PeriodPageState extends ConsumerState<PeriodPage> {
     final n = dayNum(day);
     final hit = periodEpisodeOf(d, n);
     final on = hit != null;
-    final head = day == today
-        ? '今天'
-        : '${int.parse(day.substring(5, 7))} 月 '
-            '${int.parse(day.substring(8, 10))} 日';
+    // 2.8.7 令三·4：顶部标明所选日期**身份**——「11 月 26 日 · 今天」
+    // 或「11 月 12 日 · 历史记录」。历史日期弱化主按钮，避免误以为在改今天。
+    final dateLabel = '${int.parse(day.substring(5, 7))} 月 '
+        '${int.parse(day.substring(8, 10))} 日';
+    final isToday = day == today;
+    final head = isToday ? '$dateLabel · 今天' : '$dateLabel · 历史记录';
     final ownerRecord = hit == null ? null : _recordById(hit.owner.id);
 
     return Card(
@@ -696,8 +852,11 @@ class _PeriodPageState extends ConsumerState<PeriodPage> {
             const SizedBox(width: 8),
             const SizedBox(width: 44, child: Text('经期')),
             const Spacer(),
+            // 历史日期弱化主按钮（令三·4）：今天用实心主按钮，历史一律降一档，
+            // 但补录/修改仍然可用（不删功能，只降视觉权重）。
             if (on) ...[
               OutlinedButton(
+                key: const Key('period-log-end'),
                 onPressed: _busy
                     ? null
                     : () => _runAction(
@@ -705,14 +864,25 @@ class _PeriodPageState extends ConsumerState<PeriodPage> {
                 child: const Text('月经走了'),
               ),
               const SizedBox(width: 6),
-              FilledButton.tonal(
-                onPressed: _busy
-                    ? null
-                    : () => _runAction(
-                        () => planMore(d, day), '月经又来了'),
-                child: const Text('月经又来了'),
-              ),
-            ] else
+              if (isToday)
+                FilledButton.tonal(
+                  key: const Key('period-log-more'),
+                  onPressed: _busy
+                      ? null
+                      : () => _runAction(
+                          () => planMore(d, day), '月经又来了'),
+                  child: const Text('月经又来了'),
+                )
+              else
+                TextButton(
+                  key: const Key('period-log-more'),
+                  onPressed: _busy
+                      ? null
+                      : () => _runAction(
+                          () => planMore(d, day), '月经又来了'),
+                  child: const Text('月经又来了'),
+                ),
+            ] else if (isToday)
               FilledButton(
                 onPressed: _busy
                     ? null
@@ -721,6 +891,16 @@ class _PeriodPageState extends ConsumerState<PeriodPage> {
                             clientId: api.newClientId()),
                         '月经来了'),
                 child: const Text('月经来了'),
+              )
+            else
+              OutlinedButton(
+                onPressed: _busy
+                    ? null
+                    : () => _runAction(
+                        () => planStart(d, day,
+                            clientId: api.newClientId()),
+                        '月经来了'),
+                child: const Text('补录月经来了'),
               ),
           ]),
           const Divider(height: 14),
@@ -796,6 +976,25 @@ class _PeriodPageState extends ConsumerState<PeriodPage> {
     } else {
       // Web `toast(...)` 是普通提示；成功语义也走 info，不冒充成功通知。
       ref.read(chatToastProvider.notifier).show(plan.message);
+    }
+  }
+
+  /// 与 [_runAction] 同一条错误通道，成功文案由调用方给（令三·3：不许静默刷新）。
+  Future<void> _runActionWithMessage(
+      PeriodWritePlan Function() build, String okMessage) async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    final plan = build();
+    final err =
+        await ref.read(periodControllerProvider.notifier).executePlan(plan);
+    if (!mounted) return;
+    setState(() => _busy = false);
+    if (err != null) {
+      ref
+          .read(chatToastProvider.notifier)
+          .show('操作失败：$err', tone: ChatToastTone.error);
+    } else {
+      ref.read(chatToastProvider.notifier).show(okMessage);
     }
   }
 
@@ -1055,3 +1254,59 @@ class _RingPainter extends CustomPainter {
       oldDelegate.track != track ||
       oldDelegate.fill != fill;
 }
+
+/// 虚线/点状边框（Flutter 没有内置 dashed Border，自己画一条闭合虚线圈）。
+///
+/// 只服务生理期日历的「待确认 / 预测」两态，参数全暴露便于两态拉开差异：
+/// 待确认用较实、较粗的虚线；预测用更疏的点状。
+class _DashedBorderPainter extends CustomPainter {
+  const _DashedBorderPainter({
+    required this.color,
+    required this.radius,
+    required this.dash,
+    required this.gap,
+    required this.strokeWidth,
+  });
+
+  final Color color;
+  final double radius;
+  final double dash;
+  final double gap;
+  final double strokeWidth;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rrect = RRect.fromRectAndRadius(
+      Offset.zero & size,
+      Radius.circular(radius),
+    );
+    final path = Path()..addRRect(rrect);
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth;
+
+    for (final metric in path.computeMetrics()) {
+      var d = 0.0;
+      while (d < metric.length) {
+        final next = d + dash;
+        canvas.drawPath(
+          metric.extractPath(d, next > metric.length ? metric.length : next),
+          paint,
+        );
+        d = next + gap;
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_DashedBorderPainter old) =>
+      old.color != color ||
+      old.dash != dash ||
+      old.gap != gap ||
+      old.strokeWidth != strokeWidth ||
+      old.radius != radius;
+}
+
+/// 图例四态（与日历格子四态一一对应）。
+enum _LegendKind { actual, pending, predicted, fertile }
