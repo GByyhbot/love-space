@@ -25,6 +25,11 @@ class ReportIn(BaseModel):
     push: Optional[bool] = None
     client_id: str = Field(default='', max_length=64)
     ts: Optional[float] = None
+    # 2.8.7 自动报备：设备状态事件。kind 以 'state.' 开头即走状态分支，
+    # payload 是结构化载荷；两者对主动报备（manual_report）一律忽略，
+    # 保证主动报备的 scene/note/place_name 语义不被污染。
+    kind: str = Field(default='', max_length=32)
+    payload: Optional[dict] = None
 
 
 class AckIn(BaseModel):
@@ -49,6 +54,26 @@ def create_report(body: ReportIn, u=Depends(security.current_user)):
         # 对齐现行 peer 套件口径：events 共享关闭时 422 拒绝
         if not peer.load_settings(c, user_id)['events']:
             raise HTTPException(status_code=422, detail='报备事件共享已关闭')
+
+        # 状态事件分支：与主动报备共用同一通道与 client_id 幂等，但写入
+        # type='state.*' / source='auto'，不写通知中心（状态事件默认不推送）。
+        if body.kind:
+            if body.kind not in peer.STATE_KINDS:
+                raise HTTPException(422, f'未知事件类型：{body.kind}')
+            try:
+                payload = peer.validate_state_payload(body.kind, body.payload)
+            except ValueError as e:
+                raise HTTPException(422, str(e))
+            event, created, rev = peer.create_state_event(
+                c,
+                user_id,
+                kind=body.kind,
+                payload=payload,
+                client_id=body.client_id,
+                ts=body.ts,
+            )
+            return {'ok': True, 'created': created, 'event': event,
+                    'peer_revision': rev}
 
         presets = {p['scene']: p for p in peer.load_report_presets(c)}
         should_push = (

@@ -38,6 +38,7 @@ class PeerLatest {
     this.charging,
     this.net,
     this.wifi,
+    this.stateUpdated,
   });
 
   final double? lat;
@@ -57,6 +58,10 @@ class PeerLatest {
   /// 网络类型原值（wifi / cell / none）。
   final String? net;
   final String? wifi;
+
+  /// 2.8.7：状态事件最后一次刷新快照的时刻（与定位的 `updated` 分开）。
+  /// 定位停了但状态还在动时，靠它说明「状态仍然新鲜」。
+  final double? stateUpdated;
 
   static PeerLatest? fromJson(Object? raw) {
     if (raw is! Map) return null;
@@ -78,6 +83,7 @@ class PeerLatest {
       charging: j['charging'] is bool ? j['charging'] as bool : null,
       net: netRaw.isEmpty ? null : netRaw,
       wifi: wifiRaw.isEmpty ? null : wifiRaw,
+      stateUpdated: (j['state_updated'] as num?)?.toDouble(),
     );
   }
 }
@@ -90,6 +96,7 @@ class PeerStatusData {
     required this.peer,
     required this.peerEnabled,
     required this.peerClosedOff,
+    this.mineEventsOn = true,
   });
 
   final int revision;
@@ -104,6 +111,9 @@ class PeerStatusData {
   final bool peerEnabled;
   final bool peerClosedOff;
 
+  /// 我方 `events` 共享开关（2.8.7 采集状态三态行用；缺字段按开处理）。
+  final bool mineEventsOn;
+
   static PeerStatusData fromJson(Map<String, dynamic> j) {
     final mine = (j['mine'] as Map?)?.cast<String, dynamic>() ?? const {};
     final peer = (j['peer'] as Map?)?.cast<String, dynamic>() ?? const {};
@@ -113,6 +123,10 @@ class PeerStatusData {
       peer: PeerLatest.fromJson(peer['location']),
       peerEnabled: peer['enabled'] == true,
       peerClosedOff: peer['closed_off'] == true,
+      mineEventsOn:
+          (mine['settings'] as Map?)?['events'] is bool
+              ? (mine['settings'] as Map)['events'] as bool
+              : true,
     );
   }
 }

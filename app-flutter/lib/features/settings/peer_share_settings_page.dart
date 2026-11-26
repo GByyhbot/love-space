@@ -17,11 +17,14 @@
 ///   不做本地假成功。
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_client.dart' as api;
 import '../../core/peer/peer_report_api.dart';
+import '../../core/peer/peer_state_collector.dart';
 import '../../core/theme/tokens.dart';
 import '../../core/ui/error_view.dart';
 import '../../core/ui/progress.dart';
@@ -134,6 +137,9 @@ class _PeerShareSettingsPageState extends ConsumerState<PeerShareSettingsPage> {
       final saved = await updatePeerSettings(dio, _settings!);
       if (!mounted) return;
       setState(() => _settings = saved); // 以后端落库结果为准
+      // 2.8.7：events 开关变了要立刻同步原生采集态（关 → 注销接收器并清窗口，
+      // 不 flush）。服务端 422 是第二道保险，这里是第一道。
+      unawaited(syncStateCollection(eventsOn: saved.events));
       ref.read(chatToastProvider.notifier).show('共享设置已更新',
           tone: ChatToastTone.success);
     } catch (e) {

@@ -268,6 +268,15 @@ def init():
             c.execute("ALTER TABLE peer_events ADD COLUMN ack_emoji TEXT NOT NULL DEFAULT ''")
         if 'ack_at' not in _peer_event_cols:
             c.execute('ALTER TABLE peer_events ADD COLUMN ack_at REAL')
+        # 2.8.7 自动报备：设备状态事件的结构化载荷（JSON 字符串，空串=无）
+        if 'payload' not in _peer_event_cols:
+            c.execute("ALTER TABLE peer_events ADD COLUMN payload TEXT NOT NULL DEFAULT ''")
+
+        # 2.8.7：状态事件顺手刷新的时间戳（与定位的 updated 分开记——
+        # 定位停了但状态在动时，客户端才知道「状态还是新鲜的」）
+        _latest_cols = {r[1] for r in c.execute('PRAGMA table_info(peer_location_latest)')}
+        if 'state_updated' not in _latest_cols:
+            c.execute('ALTER TABLE peer_location_latest ADD COLUMN state_updated REAL')
 
         # 仅对携带 client_id 的手动报备做幂等防重（弱网重试不重复入流）
         c.execute(

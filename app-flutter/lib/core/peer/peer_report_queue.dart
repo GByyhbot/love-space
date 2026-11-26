@@ -39,6 +39,8 @@ class PendingReport {
     this.note = '',
     this.placeName = '',
     this.push = true,
+    this.kind = '',
+    this.payload,
   });
 
   final String scene;
@@ -53,12 +55,21 @@ class PendingReport {
   final String placeName;
   final bool push;
 
+  /// 2.8.7 自动报备：状态事件类型（`state.*`）。空 = 主动报备（原语义不变）。
+  final String kind;
+
+  /// 状态事件的结构化载荷；主动报备恒为 null。
+  final Map<String, Object?>? payload;
+
   static PendingReport? fromJson(Object? raw) {
     if (raw is! Map) return null;
     final j = raw.cast<String, dynamic>();
     final scene = (j['scene'] ?? '').toString();
     final clientId = (j['client_id'] ?? '').toString();
-    if (scene.isEmpty || clientId.isEmpty) return null;
+    final kind = (j['kind'] ?? '').toString();
+    // 2.8.7：状态事件没有 scene（后端 scene 语义只属主动报备）——
+    // 判重口径改为「kind 或 scene 至少有一样」，否则这条记录是废的。
+    if ((scene.isEmpty && kind.isEmpty) || clientId.isEmpty) return null;
     return PendingReport(
       scene: scene,
       clientId: clientId,
@@ -67,6 +78,10 @@ class PendingReport {
       note: (j['note'] ?? '').toString(),
       placeName: (j['place_name'] ?? '').toString(),
       push: j['push'] is bool ? j['push'] as bool : true,
+      kind: kind,
+      payload: j['payload'] is Map
+          ? (j['payload'] as Map).cast<String, Object?>()
+          : null,
     );
   }
 
@@ -78,6 +93,8 @@ class PendingReport {
         'note': note,
         'place_name': placeName,
         'push': push,
+        'kind': kind,
+        'payload': payload,
       };
 }
 
@@ -217,6 +234,8 @@ class ReportOutbox {
             placeName: item.placeName,
             push: item.push,
             ts: item.createdAt > 0 ? item.createdAt : null,
+            kind: item.kind,
+            payload: item.payload,
           );
           sent++; // created=false 也走这里：已达即出队，不提示用户
         } on ReportShareClosed {

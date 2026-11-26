@@ -20,9 +20,11 @@
 （closed_off=true），不许显示空白或假故障。
 """
 
+import datetime as dt
 import json
 import time
 import uuid
+from zoneinfo import ZoneInfo
 
 from . import db
 
@@ -37,6 +39,17 @@ SHARE_KEYS = ('location', 'track', 'events', 'usage')
 
 # 关键报备类型（推送层默认勾选集；逐项可调，此处为缺省）
 DEFAULT_PUSH_TYPES = ('arrive_place', 'leave_place', 'sos', 'location_off', 'battery_low')
+
+# ── 自动报备第二阶段（2.8.7）：设备状态事件 ─────────────────────────
+# 四类状态事件一并走 POST /api/peer/report 的 client_id 幂等通道（不新开通道）。
+# 命名统一 state.* 前缀，与 manual_report / sos / arrive_place 并列不冲突，
+# 并为下一段「分档策略」留命名空间。
+STATE_KINDS = ('state.battery', 'state.net', 'state.unlock', 'state.screen')
+NET_KINDS = ('wifi', 'cell', 'none')
+# payload 内两个分档扩展键：服务端**不解析、只透传**（红线：本段不做分档，
+# 但 schema 必须留位，下一段加分档不改表结构）。
+STATE_PASSTHROUGH_KEYS = ('tier', 'policy')
+STATE_TIER_MAX = 16
 
 
 def settings_key(user_id):
@@ -124,6 +137,20 @@ def bump_peer_revision(c):
     return int(row['value']) if row else 0
 
 
+def _payload_dict(row, keys):
+    """把 payload 列（JSON 字符串）还原成 dict；空/坏值一律给 {}，不抛。"""
+    if 'payload' not in keys:
+        return {}
+    raw = row['payload'] or ''
+    if not raw:
+        return {}
+    try:
+        val = json.loads(raw)
+    except (ValueError, TypeError):
+        return {}
+    return val if isinstance(val, dict) else {}
+
+
 def serialize_peer_event(row):
     """完整事件序列化（保留原有核心字段并增量附加主动报备与 ack 字段）。"""
     keys = set(row.keys())
@@ -141,6 +168,9 @@ def serialize_peer_event(row):
         'note': row['note'] if 'note' in keys else '',
         'place_name': row['place_name'] if 'place_name' in keys else '',
         'client_id': row['client_id'] if 'client_id' in keys else '',
+        # 2.8.7 自动报备：状态事件的结构化载荷。旧行（无该列/空串）给空 dict，
+        # 客户端按缺省容错——不许拿 summary 反向解析。
+        'payload': _payload_dict(row, keys),
         'ack': (
             {
                 'by': row['ack_by'],
@@ -201,6 +231,141 @@ def create_manual_report(
             clean_scene, clean_note, clean_place, clean_client_id,
         ),
     )
+    rev = bump_peer_revision(c)
+    row = c.execute('SELECT * FROM peer_events WHERE id=?', (event_id,)).fetchone()
+    return serialize_peer_event(row), True, rev
+
+
+def validate_state_payload(kind, payload):
+    """校验并规范化状态事件 payload（令文：非法一律 422，服务端不猜）。
+
+    返回可 JSON 化的 dict；非法抛 ValueError（调用方转 422）。
+    tier/policy 两键**原样透传不解析**——本段不做分档，但不许拒收未来字段。
+    """
+    if kind not in STATE_KINDS:
+        raise ValueError(f'未知状态事件类型：{kind}')
+    if not isinstance(payload, dict):
+        raise ValueError('payload 必须是对象')
+
+    def _int(name, lo=None, hi=None):
+        v = payload.get(name)
+        if isinstance(v, bool) or not isinstance(v, (int, float)):
+            raise ValueError(f'{name} 必须是数字')
+        iv = int(v)
+        if lo is not None and iv < lo:
+            raise ValueError(f'{name} 不能小于 {lo}')
+        if hi is not None and iv > hi:
+            raise ValueError(f'{name} 不能大于 {hi}')
+        return iv
+
+    out = {}
+    if kind == 'state.battery':
+        out['level'] = _int('level', 0, 100)  # clamp 口径由下界/上界校验承担
+        charging = payload.get('charging')
+        if not isinstance(charging, bool):
+            raise ValueError('charging 必须是布尔')
+        out['charging'] = charging
+    elif kind == 'state.net':
+        net = payload.get('net')
+        if net not in NET_KINDS:
+            raise ValueError(f'net 必须是 {"/".join(NET_KINDS)} 之一')
+        out['net'] = net
+        ssid = payload.get('ssid')
+        # 取不到 SSID 时降级为 type-only：允许缺省或空串，绝不伪造
+        out['ssid'] = str(ssid)[:64] if isinstance(ssid, str) else ''
+    elif kind == 'state.unlock':
+        out['count'] = _int('count', 1)
+        out['window_sec'] = _int('window_sec', 0)
+    else:  # state.screen
+        out['session_sec'] = _int('session_sec', 0)
+        on = payload.get('on')
+        out['on'] = bool(on) if on is not None else False
+
+    for k in STATE_PASSTHROUGH_KEYS:
+        v = payload.get(k)
+        if isinstance(v, str) and v.strip():
+            out[k] = v.strip()[:STATE_TIER_MAX]
+    return out
+
+
+def _space_day(c, ts):
+    """把 unix 秒按空间时区折算成 YYYY-MM-DD（与 events/track 按日查询同口径）。"""
+    tz = ZoneInfo((db.setting(c, 'space') or {}).get('timezone', 'Asia/Shanghai'))
+    return dt.datetime.fromtimestamp(float(ts), tz).strftime('%Y-%m-%d')
+
+
+def _apply_state_side_effects(c, user_id, kind, payload, event_ts):
+    """状态事件的库内副作用（失败不阻断事件入库，但绝不静默写错列）。
+
+    1) battery/net → 顺手更新最新状态快照的对应列（只碰 battery/charging/net/wifi
+       + state_updated，**不动 lat/lng/updated 语义**：那是定位的字段）；
+    2) screen/unlock → peer_usage_daily 的 screen_sec / unlocks 两列累加。
+       🔴 围栏：top_apps 一律不写、usage 开关一律不读（本阶段明令）。
+    """
+    if kind in ('state.battery', 'state.net'):
+        now_ts = time.time()
+        if kind == 'state.battery':
+            c.execute(
+                'UPDATE peer_location_latest SET battery=?, charging=?, state_updated=? '
+                'WHERE user=?',
+                (payload['level'], 1 if payload['charging'] else 0, now_ts, user_id))
+        else:
+            c.execute(
+                'UPDATE peer_location_latest SET net=?, wifi=?, state_updated=? '
+                'WHERE user=?',
+                (payload['net'], payload.get('ssid', ''), now_ts, user_id))
+        # 行不存在（从未上报过定位）→ UPDATE 影响 0 行，正常跳过：没有经纬度
+        # 就无法凭空造快照，客户端各自兜底「最后活跃来自定位」。
+    elif kind == 'state.screen':
+        day = _space_day(c, event_ts)
+        sec = int(payload['session_sec'])
+        c.execute(
+            'INSERT INTO peer_usage_daily(user,day,screen_sec,unlocks,updated) '
+            'VALUES (?,?,?,0,?) '
+            'ON CONFLICT(user,day) DO UPDATE SET '
+            'screen_sec=screen_sec+excluded.screen_sec, updated=excluded.updated',
+            (user_id, day, sec, time.time()))
+    elif kind == 'state.unlock':
+        day = _space_day(c, event_ts)
+        cnt = int(payload['count'])
+        c.execute(
+            'INSERT INTO peer_usage_daily(user,day,screen_sec,unlocks,updated) '
+            'VALUES (?,?,0,?,?) '
+            'ON CONFLICT(user,day) DO UPDATE SET '
+            'unlocks=unlocks+excluded.unlocks, updated=excluded.updated',
+            (user_id, day, cnt, time.time()))
+
+
+def create_state_event(c, user_id, *, kind, payload, client_id='', ts=None):
+    """创建一条设备状态事件（client_id 幂等，与主动报备同口径）。
+
+    与 manual_report 的区别：type=state.*、source='auto'、scene/note/place_name
+    全空（**不污染主动报备的三个语义字段**）、payload 落 payload 列、不写通知中心。
+    幂等命中时**不重复累加日汇总**（副作用只在 created 分支执行）。
+    """
+    now_ts = time.time()
+    event_ts = float(ts) if ts is not None else now_ts
+    clean_client_id = (client_id or '').strip()[:64]
+
+    if clean_client_id:
+        existing = c.execute(
+            'SELECT * FROM peer_events WHERE user=? AND client_id=?',
+            (user_id, clean_client_id)).fetchone()
+        if existing:
+            return serialize_peer_event(existing), False, None
+
+    event_id = uuid.uuid4().hex
+    c.execute(
+        """
+        INSERT INTO peer_events(
+            id, user, type, ts, summary, pushed, created,
+            source, scene, note, place_name, client_id, payload
+        ) VALUES (?, ?, ?, ?, '', 0, ?, 'auto', '', '', '', ?, ?)
+        """,
+        (event_id, user_id, kind, event_ts, now_ts, clean_client_id,
+         json.dumps(payload, ensure_ascii=False, separators=(',', ':'))),
+    )
+    _apply_state_side_effects(c, user_id, kind, payload, event_ts)
     rev = bump_peer_revision(c)
     row = c.execute('SELECT * FROM peer_events WHERE id=?', (event_id,)).fetchone()
     return serialize_peer_event(row), True, rev

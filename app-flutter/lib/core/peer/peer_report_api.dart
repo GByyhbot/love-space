@@ -166,6 +166,7 @@ class PeerEventItem {
     this.clientId = '',
     this.ack,
     this.mine = false,
+    this.payload = const <String, Object?>{},
   });
 
   final String id;
@@ -186,8 +187,14 @@ class PeerEventItem {
   /// 该行是否属于「我」（后端 `mine=true` 或列表来源判定）。
   final bool mine;
 
+  /// 状态事件的结构化载荷（2.8.7）；主动报备恒为空 map。
+  final Map<String, Object?> payload;
+
   /// 事件流里**只给 manual_report 渲染报备卡与回应按钮**，自动事件维持简行。
   bool get isManualReport => type == 'manual_report';
+
+  /// 设备状态事件（`state.*`）：简行渲染 + 文案由 payload 生成。
+  bool get isStateEvent => type.startsWith('state.');
 
   static PeerEventItem fromJson(Object? raw, {bool mine = false}) {
     final j = raw is Map ? raw.cast<String, dynamic>() : <String, dynamic>{};
@@ -205,6 +212,9 @@ class PeerEventItem {
       clientId: (j['client_id'] ?? '').toString(),
       ack: PeerEventAck.fromJson(j['ack']),
       mine: j['mine'] == true || mine,
+      payload: j['payload'] is Map
+          ? (j['payload'] as Map).cast<String, Object?>()
+          : const <String, Object?>{},
     );
   }
 
@@ -213,6 +223,7 @@ class PeerEventItem {
         user: user,
         type: type,
         ts: ts,
+        payload: payload,
         summary: summary,
         pushed: pushed,
         source: source,
@@ -293,6 +304,8 @@ Future<ReportSendResult> sendReport(
   String placeName = '',
   bool? push,
   double? ts,
+  String kind = '',
+  Map<String, Object?>? payload,
 }) async {
   final r = await dio.post('/api/peer/report', data: {
     'scene': scene,
@@ -302,6 +315,9 @@ Future<ReportSendResult> sendReport(
     'push': ?push,
     'client_id': clientId,
     'ts': ?ts,
+    // 2.8.7：状态事件走同一条通道（kind 非空即状态分支，后端据此写 state.*）
+    if (kind.isNotEmpty) 'kind': kind,
+    'payload': ?payload,
   });
   final status = r.statusCode ?? 0;
   final err = writeResponseError(r);
@@ -337,6 +353,42 @@ Future<PeerEventItem> ackReport(
 /// 🔴 不可变 + `toJson()` **恒输出全部 4 键**：后端 `save_settings` 逐键
 /// `bool(data.get(k, True))` 覆盖写，漏传键 = 静默重置为 `true`（把对方
 /// 刚关掉的共享又打开）。所有变更一律 `copyWith` 后整对象提交。
+/// `GET /api/peer/state-daily` 归一结果。
+class PeerStateDaily {
+  const PeerStateDaily({
+    required this.date,
+    required this.mineScreenSec,
+    required this.mineUnlocks,
+    required this.peerClosedOff,
+    required this.peerScreenSec,
+    required this.peerUnlocks,
+  });
+
+  final String date;
+  final int mineScreenSec;
+  final int mineUnlocks;
+  final bool peerClosedOff;
+  final int peerScreenSec;
+  final int peerUnlocks;
+
+  /// 对方关闭共享时两列都是 0，但那是「看不到」而不是「没发生」——
+  /// 渲染层必须先判 [peerClosedOff]，不许直接显示 0。
+  bool get peerHasData => !peerClosedOff && (peerScreenSec > 0 || peerUnlocks > 0);
+
+  static PeerStateDaily fromJson(Map<String, dynamic> j) {
+    final mine = (j['mine'] as Map?)?.cast<String, dynamic>() ?? const {};
+    final peer = (j['peer'] as Map?)?.cast<String, dynamic>() ?? const {};
+    return PeerStateDaily(
+      date: (j['date'] ?? '').toString(),
+      mineScreenSec: (mine['screen_sec'] as num?)?.toInt() ?? 0,
+      mineUnlocks: (mine['unlocks'] as num?)?.toInt() ?? 0,
+      peerClosedOff: peer['closed_off'] == true,
+      peerScreenSec: (peer['screen_sec'] as num?)?.toInt() ?? 0,
+      peerUnlocks: (peer['unlocks'] as num?)?.toInt() ?? 0,
+    );
+  }
+}
+
 class PeerShareSettings {
   const PeerShareSettings({
     this.location = true,
@@ -434,6 +486,21 @@ Future<PeerShareSettings> updatePeerSettings(
   final raw = r.data;
   if (raw is! Map) throw const PeerApiException(genericErrorText);
   return PeerShareSettings.fromJson(raw);
+}
+
+/// 当日设备状态汇总（2.8.7）：亮屏时长 / 解锁次数。
+///
+/// 口径与 [fetchPeerEvents] 一致：服务端按空间时区切日；对方 events 关闭时
+/// `closed_off=true` 且数值归 0（**不许拿 0 冒充「今天没亮屏」**）。
+Future<PeerStateDaily> fetchStateDaily(Dio dio, {String date = ''}) async {
+  final r = await dio.get('/api/peer/state-daily', queryParameters: {
+    if (date.isNotEmpty) 'date': date,
+  });
+  final err = writeResponseError(r);
+  if (err != null) throw PeerApiException(err);
+  final raw = r.data;
+  if (raw is! Map) throw const PeerApiException(genericErrorText);
+  return PeerStateDaily.fromJson(raw.cast<String, dynamic>());
 }
 
 /// 当日事件流（默认服务端时区的「今天」；传 [date] 可指定 yyyy-MM-dd）。

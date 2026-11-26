@@ -58,6 +58,7 @@ import 'core/api/api_client.dart' as api;
 import 'core/notify/notify_decision.dart' show NoticeTargetKind, noticeTargetOf;
 import 'features/timeline/record_story_sheet.dart' show showRecordStorySheet;
 import 'core/peer/peer_locator.dart';
+import 'core/peer/peer_state_collector.dart';
 import 'features/chat/voice_playback.dart' show voiceInterruptHook;
 
 /// 2.4.5 甲组：通知/前台服务全局初始化先于首帧（Android only；失败不影响主链）。
@@ -106,6 +107,9 @@ Future<void> main() async {
   // 2.8.0 第 0 步：定位验证包冷启动自动恢复采集（开关持久化，
   // experiment/peer-loc-verify 分支，确认后主体接线替换）
   unawaited(peerLocatorAutoStart());
+  // 2.8.7 自动报备：装状态样本 handler + 按 events 开关同步原生采集态
+  unawaited(peerStateCollectionAutoStart(
+      dio: () => container.read(api.dioProvider.future)));
   runApp(UncontrolledProviderScope(container: container, child: const LoveApp()));
 }
 /// 认证驱动的路由重定向：checking → splash；out → /login；authed → 主框架。

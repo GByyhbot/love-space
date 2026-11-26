@@ -2056,6 +2056,47 @@ def peer_track(date: str = '', user=Depends(current_user)):
             'peer': {'closed_off': not theirs_on, 'points': peer_rows}}
 
 
+@app.get('/api/peer/state-daily')
+def peer_state_daily(date: str = '', user=Depends(current_user)):
+    """按日双方设备状态汇总（2.8.7 自动报备）：亮屏时长 / 解锁次数。
+
+    口径与 `/api/peer/events?date=` 完全一致：空间时区切日、对方 `events`
+    关闭时 `closed_off` 明示（对等口径，不给空白/假 0）。
+
+    纯只读：不写任何表；**不读不写 `usage` 开关**（本阶段围栏——状态汇总
+    与「应用使用时长」是两件事，别混）。
+    """
+    with connect() as c:
+        tz_default = ZoneInfo((db.setting(c, 'space') or {}).get(
+            'timezone', 'Asia/Shanghai'))
+    day = date or dt.datetime.now(tz_default).strftime('%Y-%m-%d')
+    if not re.fullmatch(r'\d{4}-\d{2}-\d{2}', day):
+        raise HTTPException(422, '日期格式应为 YYYY-MM-DD')
+    with connect() as c:
+        mine_on = peer.load_settings(c, user['id'])['events']
+        pid = peer.peer_partner(c, user['id'])
+        theirs_on = peer.load_settings(c, pid)['events']
+        row = c.execute(
+            'SELECT screen_sec, unlocks FROM peer_usage_daily '
+            'WHERE user=? AND day=?', (user['id'], day)).fetchone()
+        peer_row = c.execute(
+            'SELECT screen_sec, unlocks FROM peer_usage_daily '
+            'WHERE user=? AND day=?', (pid, day)).fetchone()
+    return {
+        'date': day,
+        'mine': {
+            # 自己一侧恒可读（events 关的是「不往外发」，不是「自己都看不到」）
+            'screen_sec': int(row['screen_sec']) if row else 0,
+            'unlocks': int(row['unlocks']) if row else 0,
+        },
+        'peer': {
+            'closed_off': not theirs_on,
+            'screen_sec': int(peer_row['screen_sec']) if (theirs_on and peer_row) else 0,
+            'unlocks': int(peer_row['unlocks']) if (theirs_on and peer_row) else 0,
+        },
+    }
+
+
 @app.get('/api/peer/events')
 def peer_events_list(date: str = '', user=Depends(current_user)):
     """按日双方报备事件流（动态流页；对方 events 关闭 → closed_off 明示）。"""

@@ -11,6 +11,9 @@ import android.content.pm.PackageManager
 import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
@@ -125,6 +128,9 @@ object PeerLocNative {
     private val listeners = mutableListOf<LocationListener>()
     private val handler = Handler(Looper.getMainLooper())
 
+    /** 状态事件回传 Dart 用的 messenger（register 时存，emit 时建通道）。 */
+    private var stateMessenger: io.flutter.plugin.common.BinaryMessenger? = null
+
     // 会话凭据（Dart 端 start 注入；进程内保存，服务被杀随进程消失）
     private var sessionCookie: String? = null
     private var baseUrl: String? = null
@@ -161,6 +167,7 @@ object PeerLocNative {
 
     fun register(messenger: io.flutter.plugin.common.BinaryMessenger, context: Context) {
         appContext = context.applicationContext
+        stateMessenger = messenger
         MethodChannel(messenger, CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
                 // ── 2.8.0 fix4 胶水重做：单一原生入口（一口价）──────────
@@ -174,6 +181,16 @@ object PeerLocNative {
                     baseUrl = args?.get("baseUrl") as? String
                     result.success(toggle(context, enable))
                 }
+                // ── 2.8.7 自动报备：设备状态采集开关（独立于定位）────────
+                // 为什么不挂在 toggle 里：验收要求「只开 events、关 location
+                // 也要状态新鲜」，而 toggle 受定位权限硬门槛约束。状态采样
+                // 只需要动态广播 + NetworkCallback（SSID 缺定位权限时降级
+                // type-only），因此单开一个入口，不动定位的既有判定。
+                "toggleState" -> {
+                    val args = call.arguments() as? Map<*, *>
+                    result.success(toggleState(context, args?.get("enable") == true))
+                }
+                "stateStatus" -> result.success(stateStatus())
                 "status" -> result.success(status())
                 "exportFatal" -> result.success(exportFatalLog())
                 // ── 2.8.0 fix6 B3：电池优化豁免（设置卡入口）──────────
@@ -374,6 +391,222 @@ object PeerLocNative {
         stillMode = false; stillCount = 0; heartbeatTicks = 0
         flushing = false; flushPending = false
         log("stopped (queue cleared, heartbeat alarm cancelled)")
+    }
+
+    // ── 2.8.7 自动报备：设备状态采集（电量/网络/解锁/亮屏）─────────────
+    //
+    // 设计约束（详见 docs/auto-report-stage1-design.md §4）：
+    // · 不新增任何 timer / 不建前台服务：全部挂在系统广播与 NetworkCallback 上；
+    // · 采到的样本按阈值/窗口筛完后**只通过 MethodChannel 交给 Dart**，
+    //   由既有文件队列做去重/毒丸/整批保留（不在这里另造一套上行）；
+    // · toggleState(false) 注销全部接收器并清空窗口，**不 flush**（停采就停干净）。
+
+    private var stateReceiver: BroadcastReceiver? = null
+    private var stateNetCallback: ConnectivityManager.NetworkCallback? = null
+    private var stateEnabled = false
+
+    private var batEmittedLevel = -1
+    private var batSeenCharging = -1
+    private var batLastEmitMs = 0L
+    private var netLastType = ""
+    private var netLastSsid = ""
+    private var netLastEmitMs = 0L
+    private var ssidLastEmitMs = 0L
+    private var unlockWindowStartMs = 0L
+    private var unlockCount = 0
+    private var screenOnAtMs = 0L
+    private var stateEmitted = 0
+
+    private fun nowMs(): Long = System.currentTimeMillis()
+
+    /** 状态事件投递给 Dart（入队与冲刷都在 Dart 侧，原生不碰网络）。 */
+    private fun emitState(kind: String, payload: Map<String, Any?>) {
+        val messenger = stateMessenger ?: return
+        try {
+            MethodChannel(messenger, CHANNEL)
+                .invokeMethod("onStateSample", mapOf("kind" to kind, "payload" to payload))
+            stateEmitted += 1
+        } catch (e: Exception) {
+            log("emitState failed: ${e.message}") // 投递失败只记日志，不阻断采集
+        }
+    }
+
+    @Synchronized
+    fun toggleState(context: Context, enable: Boolean): Map<String, Any?> {
+        val ctx = context.applicationContext ?: context.applicationContext
+        if (!enable) {
+            stopStateCollection()
+            return mapOf("ok" to true, "detail" to stateStatus())
+        }
+        startStateCollection(ctx)
+        return mapOf("ok" to (stateReceiver != null), "detail" to stateStatus())
+    }
+
+    fun stateStatus(): Map<String, Any?> = mapOf(
+        "enabled" to stateEnabled,
+        "emitted" to stateEmitted,
+        "unlockPending" to unlockCount,
+        "inScreenSession" to (screenOnAtMs > 0L))
+
+    @Synchronized
+    private fun startStateCollection(ctx: Context) {
+        if (stateReceiver != null) return
+        stateEnabled = true
+        // 新建会话：清闸门基线（否则上次会话的旧值会让首次变化被判成"没变"）
+        batEmittedLevel = -1
+        batSeenCharging = -1
+        batLastEmitMs = 0L
+        netLastType = ""
+        netLastSsid = ""
+        netLastEmitMs = 0L
+        ssidLastEmitMs = 0L
+        unlockWindowStartMs = 0L
+        unlockCount = 0
+        screenOnAtMs = 0L
+
+        val filter = IntentFilter().apply {
+            addAction(Intent.ACTION_BATTERY_CHANGED)
+            addAction(Intent.ACTION_USER_PRESENT)
+            addAction(Intent.ACTION_SCREEN_ON)
+            addAction(Intent.ACTION_SCREEN_OFF)
+        }
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(c: Context?, intent: Intent?) {
+                when (intent?.action) {
+                    Intent.ACTION_BATTERY_CHANGED -> onBattery(intent)
+                    Intent.ACTION_USER_PRESENT -> onUnlock()
+                    Intent.ACTION_SCREEN_ON -> if (screenOnAtMs == 0L) screenOnAtMs = nowMs()
+                    Intent.ACTION_SCREEN_OFF -> onScreenOff()
+                }
+            }
+        }
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                ctx.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
+            } else {
+                @Suppress("UnspecifiedRegisterReceiverFlag")
+                ctx.registerReceiver(receiver, filter)
+            }
+            stateReceiver = receiver
+            log("state receiver registered")
+        } catch (e: Exception) {
+            log("state receiver register failed: ${e.message}")
+            fatal(ctx, "state receiver register failed: ${e.message}")
+            stateEnabled = false
+            return
+        }
+        // 网络回调：注册后系统会立刻回调一次当前网络 → 首次采样不丢
+        try {
+            val cm = ctx.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+            val cb = object : ConnectivityManager.NetworkCallback() {
+                override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) {
+                    onNetwork(caps)
+                }
+                override fun onLost(network: Network) {
+                    onNetworkType("none", "")
+                }
+            }
+            cm.registerDefaultNetworkCallback(cb)
+            stateNetCallback = cb
+            log("state network callback registered")
+        } catch (e: Exception) {
+            log("network callback register failed: ${e.message}")
+            fatal(ctx, "network callback register failed: ${e.message}")
+        }
+    }
+
+    @Synchronized
+    private fun stopStateCollection() {
+        stateEnabled = false
+        stateReceiver?.let { try { appContext?.unregisterReceiver(it) } catch (_: Exception) {} }
+        stateReceiver = null
+        stateNetCallback?.let {
+            try {
+                val ctx = appContext
+                val cm = ctx?.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+                cm?.unregisterNetworkCallback(it)
+            } catch (_: Exception) {}
+        }
+        stateNetCallback = null
+        // 停采清窗口：**不 flush**——不把"停用瞬间"的残值发出去
+        unlockCount = 0
+        unlockWindowStartMs = 0L
+        screenOnAtMs = 0L
+        log("state collection stopped (windows cleared, not flushed)")
+    }
+
+    /** 电量：Δ≥2%（与**上次已报值**比）或充电翻转才报，60s 防抖。 */
+    private fun onBattery(intent: Intent) {
+        val level = intent.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, -1)
+        val status = intent.getIntExtra(android.os.BatteryManager.EXTRA_STATUS, -1)
+        val charging = status == android.os.BatteryManager.BATTERY_STATUS_CHARGING ||
+            status == android.os.BatteryManager.BATTERY_STATUS_FULL
+        if (level < 0 || level > 100) return
+
+        val now = nowMs()
+        val chargingFlag = if (charging) 1 else 0
+        val decision = StateGates.battery(
+            level = level, chargingFlag = chargingFlag,
+            emittedLevel = batEmittedLevel, seenCharging = batSeenCharging,
+            lastEmitMs = batLastEmitMs, nowMs = now)
+        batSeenCharging = chargingFlag // 看到即算（翻转判定基线）
+        if (!decision) return
+        batLastEmitMs = now
+        batEmittedLevel = level
+        emitState("state.battery", mapOf("level" to level, "charging" to charging))
+    }
+
+    private fun onNetwork(caps: NetworkCapabilities) {
+        val type = when {
+            caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> "wifi"
+            caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> "cell"
+            else -> "none"
+        }
+        val ssid = if (type == "wifi") readWifi() else ""
+        onNetworkType(type, ssid)
+    }
+
+    /** 网络：类型变化即报（30s 防抖），SSID 抖动 5min 冷却。 */
+    private fun onNetworkType(type: String, ssid: String) {
+        val now = nowMs()
+        val decision = StateGates.net(
+            type = type, ssid = ssid,
+            lastType = netLastType, lastSsid = netLastSsid,
+            lastEmitMs = netLastEmitMs, ssidLastEmitMs = ssidLastEmitMs, nowMs = now)
+        netLastType = type
+        netLastSsid = ssid
+        if (!decision) return
+        netLastEmitMs = now
+        if (type == "wifi") ssidLastEmitMs = now
+        emitState("state.net", mapOf("net" to type, "ssid" to ssid))
+    }
+
+    private fun onUnlock() {
+        if (unlockCount == 0) unlockWindowStartMs = nowMs()
+        unlockCount += 1
+        drainUnlockIfDue()
+    }
+
+    private fun onScreenOff() {
+        val started = screenOnAtMs
+        screenOnAtMs = 0L
+        if (started > 0L) {
+            val sec = StateGates.screenSessionSec(started, nowMs())
+            if (sec > 0) emitState("state.screen", mapOf("session_sec" to sec, "on" to false))
+        }
+        drainUnlockIfDue()
+    }
+
+    /** 10 分钟窗口聚合：借解锁/熄屏事件自然触发，不新增定时器。 */
+    private fun drainUnlockIfDue() {
+        if (unlockCount == 0 || unlockWindowStartMs == 0L) return
+        val now = nowMs()
+        if (!StateGates.unlockDue(unlockCount, unlockWindowStartMs, now)) return
+        emitState("state.unlock", mapOf(
+            "count" to unlockCount,
+            "window_sec" to ((now - unlockWindowStartMs) / 1000).toInt()))
+        unlockCount = 0
+        unlockWindowStartMs = 0L
     }
 
     // ── fix7：静止心跳真定时器（AlarmManager + 动态接收器）──────────────
@@ -954,5 +1187,70 @@ internal object FlushGate {
         }
         val n = sb.toString().toIntOrNull() ?: return 0
         return if (n > 0) n else 0
+    }
+}
+
+/**
+ * 2.8.7 状态事件的判定口径（纯函数，JVM 单测可覆盖）。
+ *
+ * 抽出来的理由：阈值/防抖是这段逻辑里唯一"会算错"的部分，埋在 BroadcastReceiver
+ * 里就只能靠真机试；抽成顶层 object 后与 Dart 侧 state_aggregator.dart 一一对应。
+ */
+internal object StateGates {
+    const val BATTERY_DELTA = 2
+    const val BATTERY_MIN_INTERVAL_MS = 60_000L
+    const val NET_MIN_INTERVAL_MS = 30_000L
+    const val SSID_COOLDOWN_MS = 5 * 60_000L
+    const val UNLOCK_WINDOW_MS = 10 * 60_000L
+
+    /**
+     * 电量是否该上报。
+     *
+     * 关键：`moved` 与**上次已报值**比（不是上次读数）——逐 1% 的读数如果跟读数
+     * 比永远攒不到 2%；防抖窗口内被压住时也不更新已报值，变化不会丢。
+     */
+    fun battery(
+        level: Int,
+        chargingFlag: Int,
+        emittedLevel: Int,
+        seenCharging: Int,
+        lastEmitMs: Long,
+        nowMs: Long,
+    ): Boolean {
+        if (level < 0 || level > 100) return false
+        val flipped = seenCharging >= 0 && seenCharging != chargingFlag
+        val moved = emittedLevel < 0 || kotlin.math.abs(level - emittedLevel) >= BATTERY_DELTA
+        if (!flipped && !moved) return false
+        if (lastEmitMs > 0L && nowMs - lastEmitMs < BATTERY_MIN_INTERVAL_MS) return false
+        return true
+    }
+
+    /** 网络是否该上报：类型变化即报；纯 SSID 抖动走 5min 冷却；整体 30s 防抖。 */
+    fun net(
+        type: String,
+        ssid: String,
+        lastType: String,
+        lastSsid: String,
+        lastEmitMs: Long,
+        ssidLastEmitMs: Long,
+        nowMs: Long,
+    ): Boolean {
+        if (type !in setOf("wifi", "cell", "none")) return false
+        val first = lastType.isEmpty()
+        val typeChanged = !first && lastType != type
+        val ssidChanged = type == "wifi" && lastSsid.isNotEmpty() && lastSsid != ssid
+        if (!first && !typeChanged && !ssidChanged) return false
+        if (ssidChanged && !typeChanged && ssidLastEmitMs > 0L &&
+            nowMs - ssidLastEmitMs < SSID_COOLDOWN_MS) return false
+        if (lastEmitMs > 0L && nowMs - lastEmitMs < NET_MIN_INTERVAL_MS) return false
+        return true
+    }
+
+    fun unlockDue(count: Int, windowStartMs: Long, nowMs: Long): Boolean =
+        count > 0 && windowStartMs > 0L && nowMs - windowStartMs >= UNLOCK_WINDOW_MS
+
+    fun screenSessionSec(startedAtMs: Long, nowMs: Long): Int {
+        if (startedAtMs <= 0L) return 0
+        return ((nowMs - startedAtMs) / 1000L).toInt()
     }
 }

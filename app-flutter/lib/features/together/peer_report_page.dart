@@ -23,6 +23,7 @@ import '../../core/api/api_client.dart' as api;
 import '../../core/peer/peer_locator.dart';
 import '../../core/peer/peer_report_api.dart';
 import '../../core/peer/peer_report_data.dart';
+import '../../core/peer/state_event_text.dart';
 import '../../core/sse/sse_client.dart';
 import '../../core/theme/tokens.dart';
 import '../../core/ui/empty_view.dart';
@@ -47,6 +48,9 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage> {
   int? _queue;
   bool _expectedOn = false;
   bool? _batteryIgnored;
+
+  /// 今日设备状态汇总（2.8.7；`GET /api/peer/state-daily` 当日）。
+  PeerStateDaily? _stateDaily;
 
   /// 今日事件流（P0 新增；`GET /api/peer/events` 当日）。
   PeerEventsDay? _day;
@@ -90,6 +94,21 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage> {
     }
     await _loadMine();
     await _loadEvents(silent: silent);
+    await _loadStateDaily(silent: silent);
+  }
+
+  /// 今日设备状态汇总（亮屏/解锁）。拿不到就整段不显示——**不许冒充 0**
+  /// （对方关闭共享时后端给 closed_off，我们连 0 都不显示，只写「已关闭」）。
+  Future<void> _loadStateDaily({bool silent = false}) async {
+    try {
+      final dio = await ref.read(api.dioProvider.future);
+      final daily = await fetchStateDaily(dio);
+      if (!mounted) return;
+      setState(() => _stateDaily = daily);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _stateDaily = null);
+    }
   }
 
   /// 今日事件流：打开拉一次 + SSE peer 静默重拉（沿本页现行刷新通道）。
@@ -281,6 +300,19 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage> {
           _kv(theme, cs, '电量与充电',
               '${batteryText(p.battery)} · ${chargingText(p.charging)}'),
           _kv(theme, cs, '网络类型', netText(p.net)),
+          // 2.8.7：状态事件最后一次刷新快照的时刻——定位停了但状态还在动时，
+          // 靠这一行说明「电量和网络仍是新鲜的」（state_updated 与 updated 分开）
+          if (p.stateUpdated case final su?)
+            _kv(theme, cs, '状态更新', _timeLine(su)),
+          // 今日亮屏/解锁：拿不到或不适用就整行不显示（不显示 0 / 不估算）
+          if (_stateDaily case final sd?)
+            if (peerScreenLine(
+                  sd.peerClosedOff,
+                  sd.peerScreenSec,
+                  sd.peerUnlocks,
+                )
+                case final line?)
+              _kv(theme, cs, '今日亮屏', line),
           _kv(theme, cs, '位置（GCJ-02）', coordText(p)),
           // 距离行：任一方无坐标则整行不渲染（不显示 0 / 不估算）
           if (distanceLine(d.status.mine, p) case final line?)
@@ -293,12 +325,26 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage> {
     );
   }
 
+  /// 状态采集三态：采集中 / 因「报备共享」关闭而暂停 / 采集未运行。
+  ///
+  /// 判定顺序：开关关 > 采集停 > 正常。开关关是最强原因——用户关的是
+  /// 「共享」，采集必须跟着停（服务端 422 是第二道保险）。
+  String _stateCollectionText() {
+    final d = _data;
+    if (d == null) return '未知';
+    if (!d.status.mineEventsOn) return '已暂停 · 你关闭了「报备共享」';
+    if (!_running) return '已暂停 · 采集未运行';
+    return '采集中';
+  }
+
   Widget _mineBlock(ThemeData theme, ColorScheme cs, PeerReport d) {
     final mine = d.status.mine;
     return _card(
       cs,
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         _kv(theme, cs, '采集实态', _running ? '运行中' : '已停止'),
+        // 2.8.7：状态采集三态（不许黑箱运行）
+        _kv(theme, cs, '状态采集', _stateCollectionText()),
         _kv(theme, cs, '期望态', _expectedOn ? '期望开启' : '未开启'),
         _kv(theme, cs, '最近一次上报', _timeLine(mine?.updated)),
         _kv(theme, cs, '待上报队列', _queue == null ? '未知' : '$_queue 条'),
@@ -377,14 +423,16 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage> {
 
   Widget _eventCard(ThemeData theme, ColorScheme cs, PeerEventItem e) {
     if (!e.isManualReport) {
-      // 自动事件：简行（时间 + 摘要），无回应按钮
+      // 自动事件：简行（时间 + 摘要），无回应按钮。
+      // 2.8.7：状态事件后端 summary 为空 → 文案从 payload 生成（纯函数，可单测）
+      final line = e.isStateEvent ? stateEventText(e) : e.summary;
       return Padding(
         key: Key('report-event-${e.id}'),
         padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
         child: Row(children: [
           Expanded(
             child: Text(
-              e.summary,
+              line,
               style: theme.textTheme.bodySmall?.copyWith(color: cs.outline),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
