@@ -224,10 +224,10 @@ void main() {
       expect(find.text('亮屏 1 小时 5 分钟 · 解锁 12 次'), findsOneWidget);
       expect(find.textContaining('长时间无更新'), findsNothing,
           reason: '10 分钟前不算失联');
-      // 状态卡在报备块之前（页面顶部）
+      // 状态卡在最顶上（在手机使用/足迹/时间线之前）
       expect(
         tester.getTopLeft(find.text('TA 的状态')).dy,
-        lessThan(tester.getTopLeft(find.text('TA 的报备')).dy),
+        lessThan(tester.getTopLeft(find.text('手机使用')).dy),
       );
     });
 
@@ -261,19 +261,18 @@ void main() {
       await pumpPage(
         tester,
         adapter(
-          peerLoc: _loc(const {}), // 无电量/网络/时间
+          peerLoc: null, // 对方从无任何快照（连坐标都没有）
           dailyStatus: 500, // 今日汇总也拿不到
         ),
       );
 
-      expect(find.text('TA 的状态'), findsNothing, reason: '一行都没有就别摆空壳卡');
+      expect(find.text('TA 还没有报备数据'), findsOneWidget);
+      expect(find.byKey(const Key('peer-status-card')), findsNothing,
+          reason: '一行都没有就别摆空壳卡');
       expect(find.byKey(const Key('peer-card-battery')), findsNothing);
       expect(find.byKey(const Key('peer-card-net')), findsNothing);
       expect(find.byKey(const Key('peer-card-active')), findsNothing);
       expect(find.byKey(const Key('peer-card-usage')), findsNothing);
-      // 报备块不受影响
-      expect(find.text('TA 的报备'), findsOneWidget);
-      expect(find.text('39.916300, 116.397200'), findsOneWidget);
     });
 
     testWidgets('超 6 小时：明写「长时间无更新」', (tester) async {

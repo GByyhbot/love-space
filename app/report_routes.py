@@ -36,6 +36,21 @@ class AckIn(BaseModel):
     emoji: str = Field(default='❤️', max_length=8)
 
 
+# 2.8.7 全量：互动抽屉三类（戳一下 / 抱抱 / 提醒）——走同一条报备通道，
+# 不新建通道。频控：每类每小时 ≤6 次，超限 422（服务端是权威，端上只做提示）。
+POKE_SCENES = ('poke', 'hug', 'care')
+POKE_HOURLY_LIMIT = 6
+
+
+def _poke_recent_count(c, user_id, scene):
+    import time as _t
+    since = _t.time() - 3600
+    row = c.execute(
+        'SELECT count(*) n FROM peer_events WHERE user=? AND scene=? AND '
+        "type='manual_report' AND ts>=?", (user_id, scene, since)).fetchone()
+    return int(row['n']) if row else 0
+
+
 class PresetsIn(BaseModel):
     presets: list[dict]
 
@@ -82,6 +97,10 @@ def create_report(body: ReportIn, u=Depends(security.current_user)):
                     'peer_revision': rev}
 
         presets = {p['scene']: p for p in peer.load_report_presets(c)}
+        # 互动抽屉：同一类每小时最多 6 次（防刷屏；对方看到的是有节制的关心）
+        if body.scene in POKE_SCENES and _poke_recent_count(
+                c, user_id, body.scene) >= POKE_HOURLY_LIMIT:
+            raise HTTPException(422, '这一类每小时最多 6 次，先歇一会儿吧')
         should_push = (
             body.push
             if body.push is not None
@@ -100,10 +119,14 @@ def create_report(body: ReportIn, u=Depends(security.current_user)):
         )
         partner_id = peer.peer_partner(c, user_id)
         if created and should_push and partner_id:
+            title = _format_report_notice_title(event)
+            # 互动类的通知标题必须是明文「TA 戳了你一下」（2.8.1 口径）
+            if body.scene in POKE_SCENES:
+                title = f'TA {event["summary"]}'[:120]
             db.notice(
                 c,
                 'peer_report',
-                _format_report_notice_title(event),
+                title,
                 actor=user_id,
                 recipient=partner_id,
             )

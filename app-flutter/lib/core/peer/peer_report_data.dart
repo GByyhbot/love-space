@@ -16,6 +16,8 @@ import 'dart:math' as math;
 import 'package:dio/dio.dart';
 
 import '../api/api_client.dart';
+import 'peer_policy.dart';
+import 'peer_usage_data.dart' show PeerCurrentApp, PeerHalt;
 
 /// 拉取失败（带服务端 detail 原文；网络层失败由 dio 异常直接透传）。
 class PeerReportException implements Exception {
@@ -97,6 +99,10 @@ class PeerStatusData {
     required this.peerEnabled,
     required this.peerClosedOff,
     this.mineEventsOn = true,
+    this.peerHalt = const PeerHalt(),
+    this.peerCurrentApp,
+    this.myPolicy = PeerPolicy.defaults,
+    this.peerPolicy = PeerPolicy.defaults,
   });
 
   final int revision;
@@ -114,6 +120,16 @@ class PeerStatusData {
   /// 我方 `events` 共享开关（2.8.7 采集状态三态行用；缺字段按开处理）。
   final bool mineEventsOn;
 
+  /// 对方停用态（完全关闭 / 暂停中）——停用时 location 恒 null。
+  final PeerHalt peerHalt;
+
+  /// 对方「正在使用」（仅对方 app_level=stream 时给）。
+  final PeerCurrentApp? peerCurrentApp;
+
+  /// 双方分档 policy（我自己那份用于设置页回填与预览）。
+  final PeerPolicy myPolicy;
+  final PeerPolicy peerPolicy;
+
   static PeerStatusData fromJson(Map<String, dynamic> j) {
     final mine = (j['mine'] as Map?)?.cast<String, dynamic>() ?? const {};
     final peer = (j['peer'] as Map?)?.cast<String, dynamic>() ?? const {};
@@ -127,6 +143,10 @@ class PeerStatusData {
           (mine['settings'] as Map?)?['events'] is bool
               ? (mine['settings'] as Map)['events'] as bool
               : true,
+      peerHalt: PeerHalt.fromJson(peer['halted']),
+      peerCurrentApp: PeerCurrentApp.fromJson(peer['current_app']),
+      myPolicy: PeerPolicy.fromJson(mine['policy']),
+      peerPolicy: PeerPolicy.fromJson(peer['policy']),
     );
   }
 }

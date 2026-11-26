@@ -193,6 +193,27 @@ Future<bool> openUsageAccessSettings() async {
   }
 }
 
+/// 已安装应用清单（敏感清单多选用；原生按启动器入口枚举，排除本 App）。
+///
+/// 通道不可用/旧包 → 返回空表（页面显示「本机拿不到应用清单」），不抛。
+Future<List<Map<String, String>>> fetchInstalledApps() async {
+  try {
+    final r = await _stateChannel
+        .invokeMethod<Map<Object?, Object?>>('installedApps');
+    final raw = (r?['apps'] as List?) ?? const [];
+    return raw
+        .whereType<Map>()
+        .map((e) => {
+              'pkg': (e['pkg'] ?? '').toString(),
+              'label': (e['label'] ?? '').toString(),
+            })
+        .where((e) => (e['pkg'] ?? '').isNotEmpty)
+        .toList(growable: false);
+  } catch (_) {
+    return const [];
+  }
+}
+
 /// 冷启动自举：装 handler + 读一次设置（四开关 + policy）并同步。
 ///
 /// 失败静默（未登录/网络差时不该弹错）；进入报备页与设置页保存后还会再同步。

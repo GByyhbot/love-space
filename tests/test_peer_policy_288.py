@@ -530,3 +530,45 @@ def test_low_battery_event_marked_low(client_a):
     ev = r.json()['event']
     assert ev['payload']['low'] is True
     assert '电量偏低' in ev['summary']
+
+
+# ── 7. 互动抽屉（戳/抱抱/提醒）：频控 + 通知标题 ──────────────────────
+
+def _poke(client, scene, summary, cid=None):
+    return client.post('/api/peer/report', headers=HEADERS, json={
+        'scene': scene, 'summary': summary, 'client_id': cid or _cid(scene),
+        'push': True})
+
+
+def test_poke_three_kinds_land_as_manual_reports(client_a):
+    for scene, text in (('poke', '戳了你一下'), ('hug', '抱了抱你'),
+                        ('care', '早点睡呀')):
+        r = _poke(client_a, scene, text)
+        assert r.status_code == 200, r.text
+        ev = r.json()['event']
+        assert ev['type'] == 'manual_report'
+        assert ev['scene'] == scene
+        assert ev['summary'] == text
+
+
+def test_poke_rate_limit_six_per_hour(client_a):
+    for i in range(6):
+        assert _poke(client_a, 'poke', f'戳了你一下{i}').status_code == 200
+    r = _poke(client_a, 'poke', '第七次')
+    assert r.status_code == 422
+    assert '每小时最多 6 次' in r.json()['detail']
+    # 别的类不受影响（各自独立计数）
+    assert _poke(client_a, 'hug', '抱了抱你').status_code == 200
+
+
+def test_poke_notice_title_is_plain(client_a, client_b):
+    with db.connect() as c:
+        before = {r['id'] for r in c.execute(
+            "SELECT id FROM notices WHERE event='peer_report'")}
+    _poke(client_a, 'poke', '戳了你一下')
+    with db.connect() as c:
+        rows = [r for r in c.execute(
+            "SELECT id,title FROM notices WHERE event='peer_report'")
+            if r['id'] not in before]
+    assert rows, '互动类必须写通知中心'
+    assert rows[-1]['title'] == 'TA 戳了你一下', '通知标题要明文「TA 戳了你一下」'

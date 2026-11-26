@@ -177,6 +177,12 @@ class PeerPolicy {
 
   bool get isHalted => haltedAt(DateTime.now());
 
+  /// 仅「暂停中」（不含完全关闭）——设置页两段文案分开用。
+  bool get isPaused {
+    final until = pausedUntil;
+    return !globalOff && until != null && until > DateTime.now().millisecondsSinceEpoch / 1000;
+  }
+
   /// 停用原因（'' = 未停用；与后端 reason 同口径）。
   String haltedReasonAt(DateTime now) {
     if (globalOff) return 'off';

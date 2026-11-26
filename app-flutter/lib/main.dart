@@ -45,6 +45,10 @@ import 'features/together/dashboard_page.dart';
 import 'features/together/ledger_page.dart';
 import 'features/together/music_page.dart';
 import 'features/together/peer_report_page.dart';
+import 'features/together/peer_track_page.dart';
+import 'features/together/peer_phone_page.dart';
+import 'features/together/peer_preview_page.dart';
+import 'features/settings/peer_sensitive_page.dart';
 import 'features/together/question_habit_pages.dart';
 import 'features/together/quest_page.dart';
 import 'features/together/tool_pages.dart';
@@ -287,6 +291,24 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/together/peer-report',
         builder: (_, _) => const PeerReportPage(),
+      ),
+      // 2.8.7 全量：足迹卡 → 轨迹页、手机使用卡 → 手机页（一律 push）
+      GoRoute(
+        path: '/together/peer-report/track',
+        builder: (_, _) => const PeerTrackPage(),
+      ),
+      GoRoute(
+        path: '/together/peer-report/phone',
+        builder: (_, _) => const PeerPhonePage(),
+      ),
+      // 报备设置页的两个子页：对方视角预览 / 敏感软件多选
+      GoRoute(
+        path: '/settings/peer-share/preview',
+        builder: (_, _) => const PeerPreviewPage(),
+      ),
+      GoRoute(
+        path: '/settings/peer-share/sensitive',
+        builder: (_, _) => const PeerSensitivePage(),
       ),
       // 相册查看器（条目 5 · 段 B 甲档）：Hero 共享元素转场 + 跨相册翻页 +
       // InteractiveViewer 缩放 + 下拉跟手关闭 + 计数/caption/预加载 + 下载顶部通知。

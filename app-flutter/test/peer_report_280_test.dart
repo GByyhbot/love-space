@@ -122,6 +122,11 @@ void main() {
   });
 
   Future<void> pumpPage(WidgetTester tester, _FakeAdapter adapter) async {
+    // 2.8.7 全量：页面变长（状态大卡+使用卡+足迹卡+时间线+我方），
+    // 视口开高一点让各节一次建出来（否则 ListView 惰性构建看不到断言目标）
+    tester.view.devicePixelRatio = 1.0;
+    tester.view.physicalSize = const Size(393, 2400);
+    addTearDown(tester.view.reset);
     final dio = Dio(BaseOptions(baseUrl: 'https://test.local'))
       ..httpClientAdapter = adapter;
     final sse = StreamController<SseEvent>.broadcast();
@@ -153,15 +158,17 @@ void main() {
     });
     await pumpPage(tester, adapter);
 
-    expect(find.text('TA 的报备'), findsOneWidget);
+    // 2.8.7 全量重构：原「TA 的报备」块并入顶部状态大卡与今日足迹卡
+    expect(find.text('TA 的状态'), findsOneWidget);
     expect(find.text('我的报备'), findsOneWidget);
     expect(find.text('82% · 未充电'), findsOneWidget, reason: '电量与充电原值呈现');
     // 2.8.7 第三段：网络改由顶部状态卡呈现，按口径说人话（不再暴露 cell 原值）
     expect(find.text('移动数据'), findsOneWidget, reason: '移动数据说人话');
     expect(find.text('39.916300, 116.397200'), findsOneWidget,
         reason: '坐标按 GCJ-02 原值展示');
-    expect(find.text('今日报备'), findsOneWidget, reason: '接口给得出就显示');
-    expect(find.text('3 点'), findsOneWidget);
+    expect(find.textContaining('今日报备'), findsOneWidget,
+        reason: '接口给得出就显示');
+    expect(find.textContaining('3 点'), findsOneWidget);
     // 距离行：约 845m → 米档
     expect(find.textContaining('距我约'), findsOneWidget);
     expect(find.textContaining('米'), findsWidgets);
@@ -220,7 +227,7 @@ void main() {
     });
     await pumpPage(tester, adapter);
 
-    expect(find.text('TA 的报备'), findsOneWidget);
+    expect(find.text('TA 的状态'), findsOneWidget);
     expect(find.textContaining('距我约'), findsNothing);
     expect(find.text('距离'), findsNothing);
     // 对方字段照常渲染（2.8.7：网络在顶部状态卡里按口径呈现）

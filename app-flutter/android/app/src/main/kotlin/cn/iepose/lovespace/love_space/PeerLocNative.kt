@@ -204,6 +204,7 @@ object PeerLocNative {
                 "usageStatus" -> result.success(usageStatus(context))
                 "openUsageSettings" -> result.success(openUsageSettings(context))
                 "pullUsage" -> result.success(pullUsage(context))
+                "installedApps" -> result.success(installedApps(context))
                 "applyPolicy" -> {
                     val args = call.arguments() as? Map<*, *>
                     @Suppress("UNCHECKED_CAST")
@@ -627,6 +628,34 @@ object PeerLocNative {
         "enabled" to usageEnabled,
         "emitted" to usageEmitted,
         "cursor" to usageCursorMs)
+
+    /**
+     * 已安装应用清单（敏感清单多选用）：包名 + 名称，只取有启动器入口的应用，
+     * 排除本 App 自己；上限 200 条（够用，且不把通道撑爆）。
+     */
+    fun installedApps(ctx: Context): Map<String, Any?> {
+        val pm = ctx.packageManager
+        val out = mutableListOf<Map<String, String>>()
+        try {
+            val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+            val list = pm.queryIntentActivities(intent, 0)
+                .map { it.activityInfo.packageName }
+                .distinct()
+                .filter { it != ctx.packageName }
+                .sorted()
+            for (pkg in list.take(200)) {
+                val label = try {
+                    pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString()
+                } catch (e: Exception) {
+                    pkg
+                }
+                out.add(mapOf("pkg" to pkg, "label" to label))
+            }
+        } catch (e: Exception) {
+            log("installedApps failed: ${e.message}")
+        }
+        return mapOf("apps" to out)
+    }
 
     /** 跳系统「使用情况访问」页（授权只能用户自己在系统页点）。 */
     fun openUsageSettings(ctx: Context): Boolean = try {

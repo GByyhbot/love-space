@@ -105,8 +105,12 @@ void main() {
     expect(req.method, 'PUT');
     expect(req.path, '/api/peer/settings');
     final body = (req.data as Map).cast<String, Object?>();
-    expect(body.keys.toSet(), {'location', 'track', 'events', 'usage'},
-        reason: '漏任何一键，后端都会把它覆盖成 true');
+    // 2.8.7 全量：请求体 = 四键 + policy（policy 十键全量）。
+    // 「漏任何一键后端就覆盖成默认」的教训不变，只是键多了一组。
+    expect(body.keys.toSet(),
+        {'location', 'track', 'events', 'usage', 'policy'},
+        reason: '漏任何一键，后端都会把它覆盖成默认值');
+    expect((body['policy'] as Map).keys.toSet().length, 10);
     expect(body['location'], isFalse);
     expect(body['track'], isFalse);
     expect(body['events'], isFalse);
@@ -151,8 +155,13 @@ void main() {
     );
   });
 
-  test('toJson 恒 4 键（全开基线也不能少键）', () {
-    expect(PeerShareSettings.allOn.toJson().keys.toSet(),
-        {'location', 'track', 'events', 'usage'});
+  test('toJson 恒定全键（四开关 + policy 十键，基线也不能少键）', () {
+    final j = PeerShareSettings.allOn.toJson();
+    expect(j.keys.toSet(), {'location', 'track', 'events', 'usage', 'policy'});
+    expect((j['policy'] as Map).keys.toSet(), {
+      'global_off', 'paused_until', 'location_level', 'usage_level',
+      'app_level', 'network_level', 'battery', 'battery_alert',
+      'sensitive_pkgs', 'fold_short',
+    });
   });
 }

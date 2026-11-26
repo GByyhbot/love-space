@@ -419,7 +419,17 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(PeerShareSettingsPage), findsOneWidget,
           reason: '「去开启」应 push 到 /settings/peer-share');
-      // 开关页按服务端真实值渲染（夹具全开）
+      // 开关页按服务端真实值渲染（夹具全开）。
+      // 2.8.7 全量重构后该开关在分档区之后，需滚动到可见（断言口径不变）
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('peer-share-events')), 200,
+        scrollable: find
+            .descendant(
+              of: find.byKey(const Key('peer-share-scroll')),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
       expect(find.byKey(const Key('peer-share-events')), findsOneWidget);
     });
 

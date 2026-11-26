@@ -92,49 +92,29 @@ void main() {
     });
   });
 
-  group('围栏：usage/top_apps 不许被消费', () {
-    test('lib/ 内无 top_apps 写入、无 usage 开关读取', () {
-      // 范围限定「采集与上报路径」：设置页里渲染 usage 开关是 2.8.0 既有行为
-      // （展示 ≠ 消费），本阶段新增的采集器不许碰它——这才是围栏要钉的。
-      final scoped = <String>[
-        'lib/core/peer',
-        'lib/features/together/peer_report_page.dart',
-      ];
-      final files = <File>[];
-      for (final path in scoped) {
-        final f = File(path);
-        if (f.existsSync()) {
-          files.add(f);
-        } else {
-          files.addAll(Directory(path)
-              .listSync(recursive: true)
-              .whereType<File>()
-              .where((x) => x.path.endsWith('.dart')));
-        }
-      }
-      final offenders = <String>[];
-      for (final f in files) {
-        final lines = f.readAsLinesSync();
-        for (var i = 0; i < lines.length; i++) {
-          final code = lines[i].split('//').first; // 行注释不算证据
-          if (code.trim().isEmpty) continue;
-          if (code.contains('top_apps')) {
-            offenders.add('${f.path}:${i + 1}: ${lines[i].trim()}');
-          }
-          // usage 开关：只允许出现在 PeerShareSettings 的字段声明/序列化里，
-          // 业务代码读 `settings.usage` 一律算越界（本阶段不消费）
-          if (RegExp(r'\.usage\b').hasMatch(code) &&
-              !code.contains('this.usage') &&
-              !code.contains('usage ??') &&
-              !code.contains('usage:') &&
-              !code.contains('other.usage') &&
-              !code.contains('final bool usage')) {
-            offenders.add('${f.path}:${i + 1}: ${lines[i].trim()}');
-          }
-        }
-      }
-      expect(offenders, isEmpty,
-          reason: '采集/上报路径不许消费 usage/top_apps，越界处：$offenders');
+  group('围栏（2026-11-27 令解除 usage 围栏，换脱敏红线）', () {
+    test('采集路径必须带脱敏：哨兵常量存在且在入队前生效', () {
+      // 旧断言「采集/上报路径不许消费 usage/top_apps」已被本令作废。
+      // 新红线：真实包名不许出设备——采集入口必须引用哨兵与脱敏函数。
+      final f = File('lib/core/peer/peer_state_collector.dart');
+      final src = f.readAsStringSync();
+      expect(src.contains("const String kMaskedPkg = 'masked.other'"), isTrue);
+      expect(src.contains('sanitizeTelemetryPayload'), isTrue);
+      expect(src.contains('reportOutbox.enqueue'), isTrue);
+      // 入队前必须先过脱敏：出现顺序即证据（sanitize 在 enqueue 之前）
+      final sanitizeAt = src.indexOf('sanitizeTelemetryPayload(kind');
+      final enqueueAt = src.indexOf('reportOutbox.enqueue');
+      expect(sanitizeAt, greaterThan(0));
+      expect(enqueueAt, greaterThan(sanitizeAt),
+          reason: '脱敏必须在入队之前，否则真实包名会先落盘');
+    });
+
+    test('usage 开关只在设置/预览路径被读，采集器不直接读它', () {
+      final f = File('lib/core/peer/peer_state_collector.dart');
+      final src = f.readAsStringSync();
+      // 采集器只认 policy（applyPeerPolicy），不认四键里的 usage
+      expect(src.contains('.usage'), isFalse,
+          reason: '采集器应读 policy，不该绕过档位直接读 usage 开关');
     });
   });
 }
