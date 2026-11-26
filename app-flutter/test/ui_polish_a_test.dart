@@ -149,13 +149,20 @@ class _NoTimerToastController extends ChatToastController {
 
 ProviderContainer _container(_Store store) {
   final Dio dio = _dio(store);
-  final ProviderContainer c = ProviderContainer(overrides: <Override>[
-    api.dioProvider.overrideWith((ref) async => dio),
-    chatToastProvider.overrideWith(_NoTimerToastController.new),
-    api.baseProvider.overrideWith((ref) async => 'https://test.local'),
-    sseEventsProvider.overrideWith((ref) => const Stream<SseEvent>.empty()),
-    personalCurrentUserProvider.overrideWith((ref) => 'u1'),
-  ]);
+  final ProviderContainer c = ProviderContainer(
+    // 3.x：provider 失败默认自动指数退避重试最多 10 次。本文件唯一走过
+    // auth.logout() 的用例会 await cookieJarProvider.future，而测试环境没有
+    // path_provider 插件 → 该 provider 必失败；开着重试就会一直等成功值，
+    // 30s 超时（2.x 立即抛出被 catch 吞掉）。这里关掉重试，恢复 2.x 语义。
+    retry: (_, _) => null,
+    overrides: <Override>[
+      api.dioProvider.overrideWith((ref) async => dio),
+      chatToastProvider.overrideWith(_NoTimerToastController.new),
+      api.baseProvider.overrideWith((ref) async => 'https://test.local'),
+      sseEventsProvider.overrideWith((ref) => const Stream<SseEvent>.empty()),
+      personalCurrentUserProvider.overrideWith((ref) => 'u1'),
+    ],
+  );
   addTearDown(c.dispose);
   return c;
 }
