@@ -933,11 +933,13 @@ def create_state_event(c, user_id, *, kind, payload, client_id='', ts=None):
     )
     _apply_state_side_effects(c, user_id, kind, payload, event_ts)
     if low:
-        partner_id = peer_partner(c, user_id)
-        if partner_id:
+        # 空间未绑定（只有一个用户）时没有「对方」，提醒不写通知——但事件照落。
+        partner = c.execute('SELECT id FROM users WHERE id<>?',
+                            (user_id,)).fetchone()
+        if partner:
             db.notice(c, 'peer_battery_low',
                       f'TA 的手机电量低了（{int(payload["level"])}%）',
-                      actor=user_id, recipient=partner_id)
+                      actor=user_id, recipient=partner['id'])
     rev = bump_peer_revision(c)
     row = c.execute('SELECT * FROM peer_events WHERE id=?', (event_id,)).fetchone()
     return serialize_peer_event(row), True, rev

@@ -157,9 +157,14 @@ def test_client_id_idempotent_no_double_count(client_a):
     cid = _cid('unlock-idem')
 
     def daily():
+        # 🔴 日界必须按**空间时区**算（服务端 _space_day 同口径）：
+        # CI 跑在 UTC，本地在 +8，跨零点时两者日期不同 → 旧写法会在
+        # UTC 16:00 之后稳定假红（2026-11-27 实测）。
         with db.connect() as c:
-            r = c.execute('SELECT unlocks FROM peer_usage_daily WHERE user=? AND day=?',
-                          (uid, time.strftime('%Y-%m-%d'))).fetchone()
+            day = peer._space_day(c, time.time())
+            r = c.execute(
+                'SELECT unlocks FROM peer_usage_daily WHERE user=? AND day=?',
+                (uid, day)).fetchone()
             return int(r['unlocks']) if r else 0
 
     before = daily()
@@ -218,7 +223,9 @@ def test_net_updates_snapshot_wifi_column(client_a):
 
 def test_screen_accumulates_daily(client_a):
     uid = _uid(client_a)
-    today = time.strftime('%Y-%m-%d')
+    # 日界按空间时区（见上条注释：UTC 与 +8 跨零点会差一天）
+    with db.connect() as c:
+        today = peer._space_day(c, time.time())
     with db.connect() as c:
         c.execute('DELETE FROM peer_usage_daily WHERE user=? AND day=?', (uid, today))
     _state(client_a, 'state.screen', {'session_sec': 60})
