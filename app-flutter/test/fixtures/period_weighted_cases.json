@@ -1,0 +1,154 @@
+{
+  "version": "2.8.7",
+  "note": "动态加权预测对拍夹具。双端同一份：Dart test/period_weighted_287_test.dart 与 Node tests/period_weighted_287.mjs 都跑这个文件，任何一端偏差都要红。",
+  "cases": [
+    {
+      "name": "recentWeighted_近端更重",
+      "why": "gap 由远到近 = 28,28,28,33,33,33（近→远 33,33,33,28,28,28），权重 6..1 → 663/21=31.6 → 32；纯平均是 30.5→31，加权必须更靠向近端",
+      "records": [
+        {
+          "start": "2026-01-01",
+          "length": 5
+        },
+        {
+          "start": "2026-01-29",
+          "length": 5
+        },
+        {
+          "start": "2026-02-26",
+          "length": 5
+        },
+        {
+          "start": "2026-03-26",
+          "length": 5
+        },
+        {
+          "start": "2026-04-28",
+          "length": 5
+        },
+        {
+          "start": "2026-05-31",
+          "length": 5
+        },
+        {
+          "start": "2026-07-03",
+          "length": 5
+        }
+      ],
+      "today": "2026-07-05",
+      "expect": {
+        "cycle": 32,
+        "length": 5,
+        "predictionSampleCount": 6,
+        "cycleSpread": 4,
+        "overdueDays": 0
+      }
+    },
+    {
+      "name": "outlier_52天被剔",
+      "why": "间隙 28,29,28,52,29：52 偏离中位数 29 达 23 天 >7 → 剔除；剔后 4 个样本，加权 (29*6+28*5+29*4+28*3)/18=28.55→29",
+      "records": [
+        {
+          "start": "2026-01-01",
+          "length": 5
+        },
+        {
+          "start": "2026-01-29",
+          "length": 5
+        },
+        {
+          "start": "2026-02-27",
+          "length": 5
+        },
+        {
+          "start": "2026-03-27",
+          "length": 5
+        },
+        {
+          "start": "2026-05-18",
+          "length": 5
+        },
+        {
+          "start": "2026-06-16",
+          "length": 5
+        }
+      ],
+      "today": "2026-06-18",
+      "expect": {
+        "cycle": 29,
+        "length": 5,
+        "predictionSampleCount": 4,
+        "cycleSpread": 1,
+        "overdueDays": 0
+      }
+    },
+    {
+      "name": "zeroSamples_回落默认",
+      "why": "只有一段、无有效 gap、body 无 cycle → 周期回落 28、经期长度回落 5、参与校准数 0、偏离为 null",
+      "records": [
+        {
+          "start": "2026-11-01",
+          "length": 5
+        }
+      ],
+      "today": "2026-11-03",
+      "expect": {
+        "cycle": 28,
+        "length": 5,
+        "predictionSampleCount": 0,
+        "cycleSpread": null,
+        "overdueDays": 0
+      }
+    },
+    {
+      "name": "overdue_推迟3天",
+      "why": "四段间隔 28；末段 start=今天-31、length=1，超待确认窗（>confirm+7）自动定稿 → nextStart=今天-3 → 推迟 3 天。注意经期长度：近→远 [1,5,5,5] 加权 (1*6+5*5+5*4+5*3)/18=3.67→4（末段只记 1 天会把加权长度拉低，这是设计行为）",
+      "records": [
+        {
+          "start": "2026-08-03",
+          "length": 5
+        },
+        {
+          "start": "2026-08-31",
+          "length": 5
+        },
+        {
+          "start": "2026-09-28",
+          "length": 5
+        },
+        {
+          "start": "2026-10-26",
+          "length": 1,
+          "updatedSameDay": true
+        }
+      ],
+      "today": "2026-11-26",
+      "expect": {
+        "cycle": 28,
+        "length": 4,
+        "predictionSampleCount": 3,
+        "cycleSpread": 0,
+        "overdueDays": 3
+      }
+    },
+    {
+      "name": "cycleFallback_body载cycle",
+      "why": "无有效 gap 但 body 带 cycle=31 → 周期回落到 31（前端口径），参与校准数仍 0",
+      "records": [
+        {
+          "start": "2026-11-10",
+          "length": 4,
+          "cycle": 31
+        }
+      ],
+      "today": "2026-11-12",
+      "expect": {
+        "cycle": 31,
+        "length": 4,
+        "predictionSampleCount": 0,
+        "cycleSpread": null,
+        "overdueDays": 0
+      }
+    }
+  ]
+}

@@ -6336,16 +6336,16 @@
         ]
       },
       "data": {
-        "cycle": 28,
+        "cycle": 29,
         "length": 3,
         "gaps": [
           21,
           35
         ],
         "todayN": 20771,
-        "nextStart": 20689,
-        "nextStartIso": "2026-08-24",
-        "untilNext": -82,
+        "nextStart": 20690,
+        "nextStartIso": "2026-08-25",
+        "untilNext": -81,
         "estimated": false,
         "inWindow": false,
         "dayOfPeriod": 0,
@@ -6388,7 +6388,7 @@
           "meterWidth": "100",
           "completeLine": "完整度 100%　·　已记 9/9 天",
           "stats": [
-            "28",
+            "29",
             "3",
             "14"
           ],
@@ -6400,16 +6400,11 @@
         },
         "pred": {
           "sub": "",
-          "lead": "预测下次经期将于 <b>8 月 24 日</b> 开始，已经推迟 <b>82</b> 天。",
-          "leadText": "预测下次经期将于 8 月 24 日 开始，已经推迟 82 天。",
+          "lead": "预测下次经期将于 <b>8 月 25 日</b> 开始，已经推迟 <b>81</b> 天。",
+          "leadText": "预测下次经期将于 8 月 25 日 开始，已经推迟 81 天。",
           "cells": [
             {
               "cls": "",
-              "day": 21,
-              "wd": "周五"
-            },
-            {
-              "cls": "soft",
               "day": 22,
               "wd": "周六"
             },
@@ -6419,12 +6414,12 @@
               "wd": "周日"
             },
             {
-              "cls": "on",
+              "cls": "soft",
               "day": 24,
               "wd": "周一"
             },
             {
-              "cls": "soft",
+              "cls": "on",
               "day": 25,
               "wd": "周二"
             },
@@ -6434,9 +6429,14 @@
               "wd": "周三"
             },
             {
-              "cls": "",
+              "cls": "soft",
               "day": 27,
               "wd": "周四"
+            },
+            {
+              "cls": "",
+              "day": 28,
+              "wd": "周五"
             }
           ],
           "legend": "预测开始日可能的开始日"
@@ -6446,7 +6446,7 @@
             "gapNow": 35,
             "tagCls": "",
             "tag": "正常",
-            "diffText": "长 7 天"
+            "diffText": "长 6 天"
           },
           "mini": "近期周期天数　·　最近一次 6 月 22 日 – 7 月 26 日",
           "rows": [
@@ -6460,7 +6460,7 @@
             },
             {
               "date": "6 月 22 日",
-              "diff": "推迟 7 天",
+              "diff": "推迟 6 天",
               "diffCls": "late",
               "width": 32,
               "days": 35,
@@ -6468,7 +6468,7 @@
             },
             {
               "date": "6 月 1 日",
-              "diff": "提前 7 天",
+              "diff": "提前 8 天",
               "diffCls": "early",
               "width": 19,
               "days": 21,
@@ -7693,16 +7693,16 @@
         ]
       },
       "data": {
-        "cycle": 28,
+        "cycle": 29,
         "length": 3,
         "gaps": [
           22,
           34
         ],
         "todayN": 20771,
-        "nextStart": 20658,
-        "nextStartIso": "2026-07-24",
-        "untilNext": -113,
+        "nextStart": 20659,
+        "nextStartIso": "2026-07-25",
+        "untilNext": -112,
         "estimated": false,
         "inWindow": false,
         "dayOfPeriod": 0,
@@ -7753,7 +7753,7 @@
           "meterWidth": "67",
           "completeLine": "完整度 67%　·　已记 6/9 天",
           "stats": [
-            "28",
+            "29",
             "3",
             "7"
           ],
@@ -7765,16 +7765,11 @@
         },
         "pred": {
           "sub": "",
-          "lead": "预测下次经期将于 <b>7 月 24 日</b> 开始，已经推迟 <b>113</b> 天。",
-          "leadText": "预测下次经期将于 7 月 24 日 开始，已经推迟 113 天。",
+          "lead": "预测下次经期将于 <b>7 月 25 日</b> 开始，已经推迟 <b>112</b> 天。",
+          "leadText": "预测下次经期将于 7 月 25 日 开始，已经推迟 112 天。",
           "cells": [
             {
               "cls": "",
-              "day": 21,
-              "wd": "周二"
-            },
-            {
-              "cls": "soft",
               "day": 22,
               "wd": "周三"
             },
@@ -7784,12 +7779,12 @@
               "wd": "周四"
             },
             {
-              "cls": "on",
+              "cls": "soft",
               "day": 24,
               "wd": "周五"
             },
             {
-              "cls": "soft",
+              "cls": "on",
               "day": 25,
               "wd": "周六"
             },
@@ -7799,9 +7794,14 @@
               "wd": "周日"
             },
             {
-              "cls": "",
+              "cls": "soft",
               "day": 27,
               "wd": "周一"
+            },
+            {
+              "cls": "",
+              "day": 28,
+              "wd": "周二"
             }
           ],
           "legend": "预测开始日可能的开始日"
@@ -7811,7 +7811,7 @@
             "gapNow": 34,
             "tagCls": "",
             "tag": "正常",
-            "diffText": "长 6 天"
+            "diffText": "长 5 天"
           },
           "mini": "近期周期天数　·　最近一次 5 月 23 日 – 6 月 25 日",
           "rows": [
@@ -7825,7 +7825,7 @@
             },
             {
               "date": "5 月 23 日",
-              "diff": "推迟 6 天",
+              "diff": "推迟 5 天",
               "diffCls": "late",
               "width": 24,
               "days": 34,
@@ -7833,7 +7833,7 @@
             },
             {
               "date": "5 月 1 日",
-              "diff": "提前 6 天",
+              "diff": "提前 7 天",
               "diffCls": "early",
               "width": 15,
               "days": 22,

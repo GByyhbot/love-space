@@ -108,6 +108,29 @@ async function periodMore(day){
  await put('/records/'+ep.id,{kind:'period',body:{...ep.body,length:want}});
  toast('这次经期又多算一天');await refresh();
 }
+/* ── 2.8.7 动态加权预测（App 侧 period_engine.dart 1:1 移植，改这里必须同步）──
+   规则（机主 2026-11-26 拍板）：
+   · 周期与经期长度各取最近 6 个有效样本，权重由近到远 6,5,4,3,2,1 线性衰减；
+   · 有效间隔 ≥4 个时先算中位数，剔除偏离中位数 >±7 天的离群样本再算加权；
+     剔除后不足 2 个则回退未剔除的近 6 个（宁可带一个坏样本，也不给空预测）；
+   · 被剔样本只不参与预测，历史与统计展示照常。 */
+function _medianOf(arr){
+ const s=arr.slice().sort((a,b)=>a-b),m=s.length>>1;
+ return s.length%2?s[m]:(s[m-1]+s[m])/2;
+}
+/* samples 必须是**近→远**顺序；权重 6,5,4,3,2,1 */
+function _weightedRecent(samples){
+ const n=Math.min(samples.length,6); if(!n) return null;
+ let sum=0,wsum=0;
+ for(let i=0;i<n;i++){const w=6-i;sum+=samples[i]*w;wsum+=w;}
+ return Math.round(sum/wsum);
+}
+function _dropOutliers(samples){
+ if(samples.length<4) return samples;
+ const med=_medianOf(samples);
+ const kept=samples.filter(v=>Math.abs(v-med)<=7);
+ return kept.length>=2?kept:samples;
+}
 function periodData(){
  /* 两个人共同维护同一条周期：不按作者区分，谁记的都算进去，界面也就只有一套 */
  const items=recordsOf('period').filter(r=>r.body.start).slice().sort((a,b)=>String(a.body.start).localeCompare(String(b.body.start)));
@@ -126,7 +149,14 @@ function periodData(){
  const gaps=[];
  for(let i=1;i<episodes.length;i++){const g=episodes[i].start-episodes[i-1].start;if(g>=15&&g<=60)gaps.push(g);}
  const lastEp=episodes[episodes.length-1]||null;
- const avg=gaps.length?Math.round(gaps.reduce((a,b)=>a+b,0)/gaps.length):(lastEp?.rec.body.cycle||28);
+ const recentGaps=gaps.slice().reverse();      /* gaps 原本按时间升序 → 反转成近→远 */
+ const cycSamples=_dropOutliers(recentGaps);
+ const _wCycle=cycSamples.length?_weightedRecent(cycSamples):null;
+ const avg=_wCycle!=null?_wCycle:(lastEp?.rec.body.cycle||28);
+ /* 三元预测元信息（供 UI 显示「基于近 N 次校准 · 周期 X 天（±Y 天）」） */
+ const predictionSampleCount=cycSamples.length;
+ const cycleSpread=cycSamples.length>=2
+   ?Math.max(...cycSamples.map(v=>Math.abs(v-avg))):null;
  const todayN=dayNum(today());
  /* 2.8.2 待确认模型（无数据结构改动，全部靠既有字段推断）：
     length 从此只代表「已确认天数」，不再代表结束事实。定稿判据：
@@ -151,7 +181,9 @@ function periodData(){
  const pending=lastFresh?{start:lastEp.start,confirmedEnd,end:todayN,
    days:todayN-lastEp.start+1,ep:lastEp}:null;
  const settled=episodes.filter(e=>e!==lastEp||!lastFresh);
- const length=settled.length?Math.round(settled.reduce((s,e)=>s+e.length,0)/settled.length):5;
+ const _lenSamples=_dropOutliers(settled.map(e=>e.length).reverse());
+ const _wLen=_lenSamples.length?_weightedRecent(_lenSamples):null;
+ const length=_wLen!=null?_wLen:5;
  const startN=lastEp?lastEp.start:null;
  const nextStart=startN!=null?startN+avg:null;
  /* 判断"今天在不在经期里"必须用这次记录的实际天数，不能用平均天数：
@@ -159,8 +191,11 @@ function periodData(){
    这里同样取合并后的段长，否则最后几天被拆成碎片时"经期第 N 天"会提前结束。 */
  const lastLen=lastEp?lastEp.length:5;
  const inWindow=startN!=null&&todayN>=startN&&todayN<startN+lastLen;
+ /* 超期：已过预计下次、且不在经期/待确认窗内才算推迟（否则是把"还在经期"误报成推迟） */
+ const overdueDays=(nextStart!=null&&!pending&&!inWindow&&todayN>nextStart)?todayN-nextStart:0;
  return {items,episodes,gaps,cycle:avg,length,last:lastEp?lastEp.rec:null,lastEp,lastLen,
   nextStart,todayN,inWindow,pending,
+  predictionSampleCount,cycleSpread,overdueDays,
   dayOfPeriod:inWindow?todayN-startN+1:0,untilNext:nextStart!=null?nextStart-todayN:null,
   estimated:gaps.length===0};
 }

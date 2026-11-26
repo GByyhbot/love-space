@@ -212,6 +212,36 @@ class PeriodEpisode {
 }
 
 /// `periodData()` 的返回值（`period.js:138-140`）。
+/// 2.8.7 动态加权预测的三个纯函数（与 `static/period.js` 的 `_medianOf` /
+/// `_weightedRecent` / `_dropOutliers` 逐行对应，改一端必须同步另一端）。
+double _medianOf(List<int> arr) {
+  final s = [...arr]..sort();
+  final m = s.length >> 1;
+  return s.length.isOdd ? s[m].toDouble() : (s[m - 1] + s[m]) / 2;
+}
+
+/// [samples] 必须是**近→远**顺序；权重 6,5,4,3,2,1（近端最重）。
+int? _weightedRecent(List<int> samples) {
+  final n = samples.length > 6 ? 6 : samples.length;
+  if (n == 0) return null;
+  var sum = 0;
+  var wsum = 0;
+  for (var i = 0; i < n; i++) {
+    final w = 6 - i;
+    sum += samples[i] * w;
+    wsum += w;
+  }
+  return _jsRound(sum / wsum);
+}
+
+/// 离群保护：≥4 个样本才剔；剔后不足 2 个回退原集（宁可带一个坏样本，不给空预测）。
+List<int> _dropOutliers(List<int> samples) {
+  if (samples.length < 4) return samples;
+  final med = _medianOf(samples);
+  final kept = samples.where((v) => (v - med).abs() <= 7).toList(growable: false);
+  return kept.length >= 2 ? kept : samples;
+}
+
 class PeriodData {
   const PeriodData({
     required this.items,
@@ -230,6 +260,9 @@ class PeriodData {
     required this.estimated,
     this.pending,
     this.settledLast = false,
+    this.predictionSampleCount = 0,
+    this.cycleSpread,
+    this.overdueDays = 0,
   });
 
   /// 末段是否已「定稿」（记录更新时间晚于确认结束日 = 用户点过「月经走了」）。
@@ -238,6 +271,15 @@ class PeriodData {
   /// ① P0 回归断言（点完之后必须为 true）② 页面区分「待确认 / 历史」身份。
   /// **判定逻辑本身一行未改**。
   final bool settledLast;
+
+  /// 实际参与周期校准的样本数（0 = 用了默认估算）。
+  final int predictionSampleCount;
+
+  /// 参与校准样本相对预测周期的**最大偏离天数**；样本 <2 为 null（UI 显示 ±Y）。
+  final int? cycleSpread;
+
+  /// 已过预计下次、且不在经期/待确认窗内时的推迟天数；否则 0。
+  final int overdueDays;
 
   /// 参与推算的经期区间行（按 start 升序）。
   final List<PeriodRow> items;
@@ -326,10 +368,19 @@ PeriodData periodData(List<PeriodRow> records, {required String today}) {
 
   final lastEp = episodes.isEmpty ? null : episodes.last;
 
-  // :128 平均周期：有有效 gap 取平均（JS Math.round），否则回落 body.cycle||28。
-  final int avg = gaps.isNotEmpty
-      ? _jsRound(gaps.fold<int>(0, (a, b) => a + b) / gaps.length)
-      : _cycleFallback(lastEp);
+  // 2.8.7 动态加权（period.js 同批改动）：近 6 个有效间隔加权 6..1，
+  // ≥4 个先剔离群（中位数 ±7）再算；样本为 0 时回落 body.cycle||28。
+  final recentGaps = gaps.reversed.toList(growable: false);
+  final cycSamples = _dropOutliers(recentGaps);
+  final wCycle = cycSamples.isEmpty ? null : _weightedRecent(cycSamples);
+  final int avg = wCycle ?? _cycleFallback(lastEp);
+  // 三元预测元信息（UI 显示「基于近 N 次校准 · 周期 X 天（±Y 天）」）
+  final int predictionSampleCount = cycSamples.length;
+  final int? cycleSpread = cycSamples.length < 2
+      ? null
+      : cycSamples
+          .map((v) => (v - avg).abs())
+          .reduce((a, b) => a > b ? a : b);
 
   // 2.8.2 待确认模型（对齐 `period.js` 同批改动，逐字移植）：
   // length 只代表「已确认天数」；定稿判据 = 段记录**更新日期** > 已确认结束日
@@ -360,9 +411,10 @@ PeriodData periodData(List<PeriodRow> records, {required String today}) {
   final settled = episodes
       .where((e) => !identical(e, lastEp) || !lastFresh)
       .toList(growable: false);
-  final int length = settled.isEmpty
-      ? 5
-      : _jsRound(settled.fold<int>(0, (s, e) => s + e.length) / settled.length);
+  final lenSamples = _dropOutliers(
+      settled.map((e) => e.length).toList(growable: false).reversed.toList(growable: false));
+  final wLen = lenSamples.isEmpty ? null : _weightedRecent(lenSamples);
+  final int length = wLen ?? 5;
 
   // :130-140 今天/下次预测/窗口/经期第几天/参考值。
   final startN = lastEp?.start;
@@ -372,6 +424,12 @@ PeriodData periodData(List<PeriodRow> records, {required String today}) {
   final lastLen = lastEp?.length ?? 5;
   final inWindow =
       startN != null && todayN >= startN && todayN < startN + lastLen;
+
+  // 超期：已过预计下次、且不在经期/待确认窗内才算推迟
+  final int overdueDays =
+      (nextStart != null && pending == null && !inWindow && todayN > nextStart)
+          ? todayN - nextStart
+          : 0;
 
   return PeriodData(
     items: items,
@@ -390,6 +448,9 @@ PeriodData periodData(List<PeriodRow> records, {required String today}) {
     estimated: gaps.isEmpty,
     pending: pending,
     settledLast: settledLast,
+    predictionSampleCount: predictionSampleCount,
+    cycleSpread: cycleSpread,
+    overdueDays: overdueDays,
   );
 }
 

@@ -2745,10 +2745,10 @@
     },
     "short": {
       "empty": false,
-      "dayIn": 24,
+      "dayIn": 25,
       "ringC": 194.8,
       "ringOffset": "0.0",
-      "cyc": 24,
+      "cyc": 25,
       "title": "当前阶段：经期预测",
       "tip": "多休息、保暖",
       "fertLevel": "低",
@@ -2778,7 +2778,7 @@
       "dayIn": 7,
       "ringC": 194.8,
       "ringOffset": "153.9",
-      "cyc": 34,
+      "cyc": 33,
       "title": "当前阶段：经期",
       "tip": "多休息、保暖",
       "fertLevel": "低",
@@ -2790,7 +2790,7 @@
         ],
         [
           "follicular",
-          10
+          9
         ],
         [
           "fertile",
@@ -2801,7 +2801,7 @@
           12
         ]
       ],
-      "cursorPos": 20.588235294117645
+      "cursorPos": 21.21212121212121
     },
     "longEpisode": {
       "empty": false,
