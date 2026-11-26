@@ -262,6 +262,52 @@ def test_state_daily_peer_closed_off(client_a, client_b):
             peer.save_settings(c, aid, {**peer.load_settings(c, aid), 'events': True})
 
 
+# ── 5b. 事件流可见性（2026-11-26 真机空白事故的回归护栏）────────
+
+def test_state_event_summary_is_non_empty(client_a):
+    """状态事件必须自带中文 summary——老包只认 summary，空串会渲染成空白行。"""
+    r = _state(client_a, 'state.battery', {'level': 33, 'charging': False})
+    assert r.status_code == 200, r.text
+    assert r.json()['event']['summary'] == '电量 33%'
+    r2 = _state(client_a, 'state.net', {'net': 'wifi', 'ssid': 'home'})
+    assert r2.json()['event']['summary'] == '连上 Wi-Fi（home）'
+
+
+def test_events_list_returns_payload_and_summary(client_a):
+    """`GET /api/peer/events` 必须带回 payload 与 summary。
+
+    首版漏了 SELECT 里的 payload 列 → 客户端拿到 payload={} + summary=''
+    → 事件流整行空白（真机复现）。这条钉住 SQL 列清单不许再漏。
+    """
+    uid = _uid(client_a)
+    cid = _cid('visible')
+    assert _state(client_a, 'state.battery',
+                  {'level': 61, 'charging': True}, cid=cid).status_code == 200
+    j = client_a.get('/api/peer/events').json()
+    row = next((e for e in j['mine'] if e.get('client_id') == cid), None)
+    assert row is not None, '刚上报的状态事件必须出现在当日事件流里'
+    assert row['payload'] == {'level': 61, 'charging': True}
+    assert row['summary'] == '电量 61%，充电中'
+
+
+def test_hist_row_without_summary_backfilled(client_a):
+    """历史空文案行（早于 state_summary 落库）序列化时按 payload 现算，不许空白。"""
+    uid = _uid(client_a)
+    cid = _cid('backfill')
+    eid = 't287-hist-' + uuid.uuid4().hex[:8]
+    with db.connect() as c:
+        c.execute(
+            "INSERT INTO peer_events(id,user,type,ts,summary,pushed,created,"
+            "source,scene,note,place_name,client_id,payload) "
+            "VALUES(?,?,?,?, '', 0, ?, 'auto','','','',?,?)",
+            (eid, uid, 'state.unlock', time.time(), time.time(), cid,
+             json.dumps({'count': 9, 'window_sec': 600})))
+    j = client_a.get('/api/peer/events').json()
+    row = next((e for e in j['mine'] if e['id'] == eid), None)
+    assert row is not None
+    assert row['summary'] == '解锁 9 次', '空文案的历史行必须被兜底补上'
+
+
 # ── 6. 围栏与不污染 ─────────────────────────────────────────────
 
 def test_manual_report_payload_ignored(client_a):

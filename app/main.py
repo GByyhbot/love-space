@@ -2118,7 +2118,7 @@ def peer_events_list(date: str = '', user=Depends(current_user)):
         if mine_on:
             for r in c.execute(
                     'SELECT id,user,type,ts,summary,pushed,created,source,scene,'
-                    'note,place_name,client_id,ack_by,ack_emoji,ack_at '
+                    'note,place_name,client_id,ack_by,ack_emoji,ack_at,payload '
                     'FROM peer_events '
                     'WHERE user=? AND ts>=? AND ts<? ORDER BY ts DESC',
                     (user['id'], start, end)):
@@ -2129,7 +2129,7 @@ def peer_events_list(date: str = '', user=Depends(current_user)):
         if theirs_on:
             peer_rows = [peer.serialize_peer_event(r) for r in c.execute(
                 'SELECT id,user,type,ts,summary,pushed,created,source,scene,'
-                'note,place_name,client_id,ack_by,ack_emoji,ack_at '
+                'note,place_name,client_id,ack_by,ack_emoji,ack_at,payload '
                 'FROM peer_events '
                 'WHERE user=? AND ts>=? AND ts<? ORDER BY ts DESC',
                 (pid, start, end))]

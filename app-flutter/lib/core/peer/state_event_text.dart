@@ -10,6 +10,28 @@ import 'peer_report_api.dart';
 ///
 /// 未知类型回落到后端 `summary`（旧后端/未来新类型都不会出现空白行）。
 String stateEventText(PeerEventItem e) {
+  final text = _stateEventText(e);
+  if (text.isNotEmpty) return text;
+  // 双兜底（2026-11-26 真机事故）：后端没给 summary、payload 又是空的时候，
+  // 早先版本会渲染出**一整行空白**。任何情况下都要有一句话。
+  return _typeFallback(e.type);
+}
+
+String _typeFallback(String type) {
+  switch (type) {
+    case 'state.battery':
+      return '电量发生变化';
+    case 'state.net':
+      return '网络发生变化';
+    case 'state.unlock':
+      return '有解锁';
+    case 'state.screen':
+      return '亮屏';
+  }
+  return '设备状态发生变化';
+}
+
+String _stateEventText(PeerEventItem e) {
   final p = e.payload;
   switch (e.type) {
     case 'state.battery':

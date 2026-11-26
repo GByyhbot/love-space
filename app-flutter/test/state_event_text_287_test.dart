@@ -46,6 +46,14 @@ void main() {
           '亮屏 12 分钟');
     });
 
+    test('payload 与 summary 都空 → 按类型兜底（真机空白事故回归）', () {
+      expect(stateEventText(_ev('state.battery', {})), '电量发生变化');
+      expect(stateEventText(_ev('state.net', {})), '网络发生变化');
+      expect(stateEventText(_ev('state.unlock', {})), '有解锁');
+      expect(stateEventText(_ev('state.screen', {})), '亮屏');
+      expect(stateEventText(_ev('state.unknown', {})), '设备状态发生变化');
+    });
+
     test('未知类型/缺字段回落到后端 summary（不出现空白行）', () {
       expect(stateEventText(_ev('state.other', {}, summary: '别的什么')), '别的什么');
       expect(stateEventText(_ev('state.battery', {}, summary: '兜底')), '兜底');

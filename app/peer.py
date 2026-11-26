@@ -137,6 +137,21 @@ def bump_peer_revision(c):
     return int(row['value']) if row else 0
 
 
+def _summary_for_row(row, keys):
+    """summary 兜底：状态事件的历史行可能没有文案（早于 state_summary 落库）。
+
+    只要 type 是 state.* 且 summary 为空，就按 payload 现算一句——
+    绝不让事件流出现空白行。
+    """
+    raw = row['summary'] or ''
+    if raw:
+        return raw
+    etype = row['type'] or ''
+    if etype.startswith('state.'):
+        return state_summary(etype, _payload_dict(row, keys))
+    return ''
+
+
 def _payload_dict(row, keys):
     """把 payload 列（JSON 字符串）还原成 dict；空/坏值一律给 {}，不抛。"""
     if 'payload' not in keys:
@@ -160,7 +175,7 @@ def serialize_peer_event(row):
         'user': row['user'] if 'user' in keys else '',
         'type': row['type'],
         'ts': row['ts'],
-        'summary': row['summary'],
+        'summary': _summary_for_row(row, keys),
         'pushed': row['pushed'],
         'created': row['created'] if 'created' in keys else row['ts'],
         'source': row['source'] if 'source' in keys else 'auto',
@@ -234,6 +249,45 @@ def create_manual_report(
     rev = bump_peer_revision(c)
     row = c.execute('SELECT * FROM peer_events WHERE id=?', (event_id,)).fetchone()
     return serialize_peer_event(row), True, rev
+
+
+def state_summary(kind, payload):
+    """状态事件的中文一句话（落库进 summary，供事件流直接显示）。
+
+    🔴 为什么服务端也要生成：客户端渲染文案是后加的，老包只认 `summary`。
+    如果 summary 留空，事件流里就是一行**空白**（2026-11-26 真机就是这么空的：
+    前端拿到 payload={} + summary='' → 无字可渲染）。所以这里按同一口径
+    落一份中文，任何版本的客户端至少都有一行字。
+    """
+    p = payload if isinstance(payload, dict) else {}
+    if kind == 'state.battery':
+        level = p.get('level')
+        if level is None:
+            return '电量发生变化'
+        return f'电量 {int(level)}%，充电中' if p.get('charging') else f'电量 {int(level)}%'
+    if kind == 'state.net':
+        net = p.get('net') or ''
+        ssid = p.get('ssid') or ''
+        if net == 'wifi':
+            return f'连上 Wi-Fi（{ssid}）' if ssid else '连上 Wi-Fi'
+        if net == 'cell':
+            return '切到移动数据'
+        if net == 'none':
+            return '断开网络'
+        return '网络发生变化'
+    if kind == 'state.unlock':
+        n = p.get('count')
+        return f'解锁 {int(n)} 次' if n is not None else '有解锁'
+    if kind == 'state.screen':
+        sec = p.get('session_sec')
+        if sec is None:
+            return '亮屏'
+        sec = int(sec)
+        if sec < 60:
+            return '亮屏不足 1 分钟'
+        m = sec // 60
+        return f'亮屏 {m} 分钟' if m < 60 else f'亮屏 {m // 60} 小时 {m % 60} 分钟' if m % 60 else f'亮屏 {m // 60} 小时'
+    return ''
 
 
 def validate_state_payload(kind, payload):
@@ -360,9 +414,10 @@ def create_state_event(c, user_id, *, kind, payload, client_id='', ts=None):
         INSERT INTO peer_events(
             id, user, type, ts, summary, pushed, created,
             source, scene, note, place_name, client_id, payload
-        ) VALUES (?, ?, ?, ?, '', 0, ?, 'auto', '', '', '', ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, 0, ?, 'auto', '', '', '', ?, ?)
         """,
-        (event_id, user_id, kind, event_ts, now_ts, clean_client_id,
+        (event_id, user_id, kind, event_ts, state_summary(kind, payload), now_ts,
+         clean_client_id,
          json.dumps(payload, ensure_ascii=False, separators=(',', ':'))),
     )
     _apply_state_side_effects(c, user_id, kind, payload, event_ts)
