@@ -15,14 +15,14 @@ import 'package:love_space/core/theme/motion.dart';
 import 'package:love_space/core/theme/tokens.dart';
 import 'pressable_scale.dart';
 
-/// 外层卡片默认圆角（对齐 iOS 大圆角卡片，同心内嵌元素用 [kGlassInnerRadius]）。
-const double kGlassRadius = 20.0;
+/// 外层卡片默认圆角（对齐 Liquid Glass 大圆角 20，同心内嵌元素用 [kGlassInnerRadius]）。
+const double kGlassRadius = AppRadius.large;
 
-/// 嵌套元素圆角：`kGlassRadius - 8 = 12`（同心圆角：外圆角 = 内圆角 + 间距）。
-const double kGlassInnerRadius = 12.0;
+/// 嵌套元素圆角：`AppRadius.concentric(20, 8) = 12`（同心圆角：外圆角 = 内圆角 + 间距）。
+const double kGlassInnerRadius = AppRadius.small;
 
-/// 悬浮条 / 抽屉顶部大圆角。
-const double kGlassSheetRadius = 24.0;
+/// 悬浮条 / 抽屉顶部特大圆角（28）。
+const double kGlassSheetRadius = AppRadius.xl;
 
 /// 等宽数字特性：防计时/百分比/分钟数跳动抖动。
 const List<FontFeature> kTabularFigures = <FontFeature>[
@@ -448,4 +448,73 @@ class _BatteryRingPainter extends CustomPainter {
   @override
   bool shouldRepaint(_BatteryRingPainter old) =>
       old.fraction != fraction || old.track != track || old.fill != fill;
+}
+
+/// 统一卡片区头（苹果风格分组小标题 + 可选右侧动作文案）。
+class GlassSectionHeader extends StatelessWidget {
+  const GlassSectionHeader({
+    super.key,
+    required this.title,
+    this.trailing,
+    this.padding = const EdgeInsets.symmetric(horizontal: Spacing.xs),
+  });
+
+  final String title;
+  final Widget? trailing;
+  final EdgeInsetsGeometry padding;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    return Padding(
+      padding: padding,
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.labelMedium?.copyWith(
+                color: cs.outline,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.4,
+              ),
+            ),
+          ),
+          ?trailing,
+        ],
+      ),
+    );
+  }
+}
+
+/// 列表顶/底微渐隐遮罩（纯 Gradient，无 BackdropFilter，配合悬浮玻璃栏使用）。
+class GlassEdgeFade extends StatelessWidget {
+  const GlassEdgeFade({
+    super.key,
+    this.top = false,
+    this.height = 24,
+  });
+
+  final bool top;
+  final double height;
+
+  @override
+  Widget build(BuildContext context) {
+    final bg = Theme.of(context).colorScheme.surface;
+    return IgnorePointer(
+      child: Container(
+        height: height,
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: top ? Alignment.topCenter : Alignment.bottomCenter,
+            end: top ? Alignment.bottomCenter : Alignment.topCenter,
+            colors: [bg.withValues(alpha: 0.85), bg.withValues(alpha: 0)],
+          ),
+        ),
+      ),
+    );
+  }
 }

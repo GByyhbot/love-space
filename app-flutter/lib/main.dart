@@ -408,29 +408,90 @@ class LoveApp extends ConsumerWidget {
     final fontScale = ref.watch(appFontScaleProvider);
     final motion = appearance.effectiveMotion;
 
-    ThemeData buildTheme(Color seed, Brightness brightness) => ThemeData(
-      useMaterial3: true,
-      colorScheme: ColorScheme.fromSeed(
+    ThemeData buildTheme(Color seed, Brightness brightness) {
+      final cs = ColorScheme.fromSeed(
         seedColor: seed,
         brightness: brightness,
-      ),
-      // 圆角 token 化（段 B G3）：Card 落 12 事实标准（2.1 基线），单源主题。
-      cardTheme: CardThemeData(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppRadius.card),
+      );
+      return ThemeData(
+        useMaterial3: true,
+        colorScheme: cs,
+        // 圆角 token 化（段 B G3）：Card 落 12 事实标准（2.1 基线），单源主题。
+        cardTheme: CardThemeData(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadius.card),
+          ),
         ),
-      ),
-      // 动效开关（space.motion）：关掉时页面转场/水波纹都退化。
-      splashFactory: motion ? null : NoSplash.splashFactory,
-      pageTransitionsTheme: motion
-          ? const PageTransitionsTheme()
-          : const PageTransitionsTheme(
-              builders: <TargetPlatform, PageTransitionsBuilder>{
-                TargetPlatform.android: _NoMotionTransitionsBuilder(),
-                TargetPlatform.iOS: _NoMotionTransitionsBuilder(),
-              },
+        filledButtonTheme: FilledButtonThemeData(
+          style: FilledButton.styleFrom(
+            minimumSize: const Size(AppTouch.minTarget, AppTouch.minTarget),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(AppRadius.small),
             ),
-    );
+          ),
+        ),
+        outlinedButtonTheme: OutlinedButtonThemeData(
+          style: OutlinedButton.styleFrom(
+            minimumSize: const Size(AppTouch.minTarget, AppTouch.minTarget),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(AppRadius.small),
+            ),
+          ),
+        ),
+        textButtonTheme: TextButtonThemeData(
+          style: TextButton.styleFrom(
+            minimumSize: const Size(AppTouch.minTarget, AppTouch.minTarget),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(AppRadius.small),
+            ),
+          ),
+        ),
+        inputDecorationTheme: InputDecorationTheme(
+          filled: true,
+          fillColor: cs.surfaceContainerHighest.withValues(alpha: 0.42),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(AppRadius.small),
+            borderSide: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.5)),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(AppRadius.small),
+            borderSide: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.5)),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(AppRadius.small),
+            borderSide: BorderSide(color: cs.primary, width: 1.4),
+          ),
+        ),
+        bottomSheetTheme: const BottomSheetThemeData(
+          showDragHandle: true,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.vertical(
+              top: Radius.circular(AppRadius.xl),
+            ),
+          ),
+        ),
+        dialogTheme: DialogThemeData(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadius.large),
+          ),
+        ),
+        dividerTheme: DividerThemeData(
+          thickness: 1,
+          space: 1,
+          color: cs.outlineVariant.withValues(alpha: 0.45),
+        ),
+        // 动效开关（space.motion）：关掉时页面转场/水波纹都退化。
+        splashFactory: motion ? null : NoSplash.splashFactory,
+        pageTransitionsTheme: motion
+            ? const PageTransitionsTheme()
+            : const PageTransitionsTheme(
+                builders: <TargetPlatform, PageTransitionsBuilder>{
+                  TargetPlatform.android: _NoMotionTransitionsBuilder(),
+                  TargetPlatform.iOS: _NoMotionTransitionsBuilder(),
+                },
+              ),
+      );
+    }
 
     return MaterialApp.router(
       title: '恋爱空间',

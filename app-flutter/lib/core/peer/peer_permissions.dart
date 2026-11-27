@@ -7,6 +7,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:love_space/core/theme/app_icons.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 const MethodChannel _peerNativeChannel = MethodChannel('peer_loc/native');
@@ -18,16 +19,16 @@ const Duration kPeerPermPromptCooldown = Duration(hours: 24);
 IconData networkIconFor(String? net) {
   switch ((net ?? '').trim().toLowerCase()) {
     case 'wifi':
-      return Icons.wifi_rounded;
+      return AppIcons.wifi;
     case 'cell':
     case 'cellular':
     case 'mobile':
-      return Icons.signal_cellular_alt_rounded;
+      return AppIcons.cellular;
     case 'none':
     case 'offline':
-      return Icons.signal_cellular_off_rounded;
+      return AppIcons.offline;
     default:
-      return Icons.public_rounded;
+      return AppIcons.networkOther;
   }
 }
 
