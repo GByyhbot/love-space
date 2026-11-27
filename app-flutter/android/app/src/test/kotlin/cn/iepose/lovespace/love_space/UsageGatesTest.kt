@@ -19,17 +19,20 @@ class UsageGatesTest {
     private fun ev(pkg: String, ts: Long, resumed: Boolean) =
         UsageGates.Raw(pkg, ts, resumed)
 
+    // 🔴 时间戳单位：生产侧是 System.currentTimeMillis()（毫秒），
+    // durSec 由 (end-start)/1000 得到。早期这几条用例把 ts 写成「秒」，
+    // 断言又按秒写期望值 → 恒假红（CI 实测 2 failed）。
     @Test
     fun `resumed paused pairs into one session`() {
         val r = UsageGates.pairIncremental(
             null,
-            listOf(ev("com.a", 1000, true), ev("com.a", 61000, false)),
+            listOf(ev("com.a", 1_000_000, true), ev("com.a", 61_000_000, false)),
         )
         assertEquals(1, r.sessions.size)
         assertEquals("com.a", r.sessions[0].pkg)
-        assertEquals(1000L, r.sessions[0].start)
-        assertEquals(61000L, r.sessions[0].end)
-        assertEquals(60L, r.sessions[0].durSec)
+        assertEquals(1_000_000L, r.sessions[0].start)
+        assertEquals(61_000_000L, r.sessions[0].end)
+        assertEquals(60_000L, r.sessions[0].durSec)
         assertNull(r.open)
     }
 
@@ -38,16 +41,16 @@ class UsageGatesTest {
         val r = UsageGates.pairIncremental(
             null,
             listOf(
-                ev("com.a", 1000, true),
-                ev("com.b", 5000, true),   // 换包：A 到此结束
-                ev("com.b", 9000, false),
+                ev("com.a", 1_000_000, true),
+                ev("com.b", 5_000_000, true),   // 换包：A 到此结束
+                ev("com.b", 9_000_000, false),
             ),
         )
         assertEquals(2, r.sessions.size)
         assertEquals("com.a", r.sessions[0].pkg)
-        assertEquals(5000L, r.sessions[0].end)
+        assertEquals(5_000_000L, r.sessions[0].end)
         assertEquals("com.b", r.sessions[1].pkg)
-        assertEquals(4000L, r.sessions[1].durSec)
+        assertEquals(4_000L, r.sessions[1].durSec)
     }
 
     @Test
@@ -55,13 +58,14 @@ class UsageGatesTest {
         val r = UsageGates.pairIncremental(
             null,
             listOf(
-                ev("com.a", 1000, true),
-                ev("com.a", 3000, true),
-                ev("com.a", 5000, false),
+                ev("com.a", 1_000_000, true),
+                ev("com.a", 3_000_000, true),
+                ev("com.a", 5_000_000, false),
             ),
         )
         assertEquals(1, r.sessions.size)
-        assertEquals(1000L, r.sessions[0].start)
+        assertEquals(1_000_000L, r.sessions[0].start)
+        assertEquals(4_000L, r.sessions[0].durSec)
     }
 
     @Test
@@ -69,41 +73,42 @@ class UsageGatesTest {
         val r = UsageGates.pairIncremental(
             null,
             listOf(
-                ev("com.a", 1000, true),
-                ev("com.b", 2000, false),  // 乱序/别包 PAUSED：不许关 A
-                ev("com.a", 3000, false),
+                ev("com.a", 1_000_000, true),
+                ev("com.b", 2_000_000, false),  // 乱序/别包 PAUSED：不许关 A
+                ev("com.a", 3_000_000, false),
             ),
         )
         assertEquals(1, r.sessions.size)
-        assertEquals(3000L, r.sessions[0].end)
+        assertEquals(3_000_000L, r.sessions[0].end)
     }
 
     @Test
     fun `cross call resume continues open session (no duplicate no gap)`() {
         // 第一次拉取只看到 RESUMED
         val first = UsageGates.pairIncremental(
-            null, listOf(ev("com.a", 1000, true)))
+            null, listOf(ev("com.a", 1_000_000, true)))
         assertEquals(0, first.sessions.size)
         assertEquals("com.a", first.open?.pkg)
         // 第二次拉取只看到 PAUSED（游标已过 RESUMED）
         val second = UsageGates.pairIncremental(
-            first.open, listOf(ev("com.a", 61000, false)))
+            first.open, listOf(ev("com.a", 61_000_000, false)))
         assertEquals(1, second.sessions.size)
-        assertEquals(1000L, second.sessions[0].start)
-        assertEquals(60000L, second.sessions[0].durSec)
+        assertEquals(1_000_000L, second.sessions[0].start)
+        assertEquals(60_000L, second.sessions[0].durSec)
         assertNull(second.open)
     }
 
     @Test
     fun `cross call switch across batch keeps continuity`() {
         val first = UsageGates.pairIncremental(
-            null, listOf(ev("com.a", 1000, true), ev("com.a", 2000, true)))
+            null,
+            listOf(ev("com.a", 1_000_000, true), ev("com.a", 2_000_000, true)))
         val second = UsageGates.pairIncremental(
             first.open,
-            listOf(ev("com.b", 3000, true), ev("com.b", 9000, false)))
+            listOf(ev("com.b", 3_000_000, true), ev("com.b", 9_000_000, false)))
         assertEquals(2, second.sessions.size)
         assertEquals("com.a", second.sessions[0].pkg)
-        assertEquals(3000L, second.sessions[0].end)
+        assertEquals(3_000_000L, second.sessions[0].end)
         assertEquals("com.b", second.sessions[1].pkg)
     }
 
