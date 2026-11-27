@@ -28,7 +28,6 @@ import 'composer_store.dart';
 import 'timeline_controller.dart';
 import '../../core/theme/app_icons.dart';
 import '../../core/theme/tokens.dart';
-import '../../core/theme/typography.dart';
 import '../../core/ui/selection_sheet.dart';
 import '../settings/settings_widgets.dart'
     show GlassActionBar, filledFieldDecoration;
@@ -725,7 +724,7 @@ class _ComposerSheetState extends ConsumerState<ComposerSheet> {
             Row(children: [
               Expanded(child: Text(
                   widget.isEdit ? '编辑这一刻' : '记录此刻',
-                  style: AppType.title(theme))),
+                  style: theme.textTheme.titleMedium)),
               Container(
                 width: 34,
                 height: 34,
@@ -946,7 +945,8 @@ class _ComposerSheetState extends ConsumerState<ComposerSheet> {
                   Padding(
                     padding: const EdgeInsets.only(top: Spacing.xs),
                     child: Text('加载相册中…',
-                        style: AppType.caption(theme)),
+                        style: theme.textTheme.bodyMedium
+                            ?.copyWith(color: theme.colorScheme.outline)),
                   ),
               ]),
             ),
