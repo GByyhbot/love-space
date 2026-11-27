@@ -95,7 +95,8 @@ def filter_points(rows):
         pts.append({'ts': float(r['ts']), 'lat': float(r['lat']),
                     'lng': float(r['lng']),
                     'acc': float(acc) if acc is not None else None,
-                    'speed': float(r['speed']) if r['speed'] is not None else None})
+                    'speed': float(r['speed']) if r['speed'] is not None else None,
+                    'place_name': (r.get('place_name') or '').strip()})
     pts.sort(key=lambda p: p['ts'])
     kept = []
     for p in pts:
@@ -152,9 +153,11 @@ def cluster_stays(points, *, radius=STAY_RADIUS_M, min_sec=STAY_MIN_SEC):
     return stays
 
 
-def name_stays(c, stays):
-    """用 `peer_places` 给停留点命名；匹配不上就留空名（端上写「停留点」）。"""
+def name_stays(c, stays, points=None):
+    """用 `peer_places` 给停留点命名；未命中围栏再取停留窗内点位 `place_name`，
+    都没有就留空名（历史点不追溯编造，端上兜底写「停留点」）。"""
     places = c.execute('SELECT name,lat,lng,radius FROM peer_places').fetchall()
+    pts = points or []
     for s in stays:
         best = None
         for p in places:
@@ -162,7 +165,29 @@ def name_stays(c, stays):
             d = haversine_m(s['lat'], s['lng'], p['lat'], p['lng'])
             if d <= r and (best is None or d < best[0]):
                 best = (d, p['name'])
-        s['place_name'] = best[1] if best else ''
+        if best:
+            s['place_name'] = best[1]
+            continue
+        arrived = float(s['arrived_at'])
+        left = s.get('left_at')
+        counts = {}
+        latest_ts = {}
+        for pt in pts:
+            ts = float(pt['ts'])
+            if ts < arrived:
+                continue
+            if left is not None and ts >= float(left):
+                continue
+            pn = (pt.get('place_name') or '').strip()
+            if not pn:
+                continue
+            counts[pn] = counts.get(pn, 0) + 1
+            if ts >= latest_ts.get(pn, -1.0):
+                latest_ts[pn] = ts
+        if counts:
+            s['place_name'] = max(counts, key=lambda k: (counts[k], latest_ts[k]))
+        else:
+            s['place_name'] = ''
     return stays
 
 
@@ -210,23 +235,24 @@ def track_for(c, user_id, day, policy):
     # 存量已迁移，但仍把同一天的**毫秒区间**一并捞出并按 ts>1e11 → /1000 换算——
     # 防迁移漏网、老备份恢复、或绕过写侧的老数据让轨迹页再次「这一天没有轨迹记录」。
     raw = c.execute(
-        'SELECT ts,lat,lng,acc,speed FROM peer_location_points '
+        'SELECT ts,lat,lng,acc,speed,place_name FROM peer_location_points '
         'WHERE user=? AND ((ts>=? AND ts<?) OR (ts>=? AND ts<?)) ORDER BY ts',
         (user_id, start, end, start * 1000.0, end * 1000.0)).fetchall()
     rows = [{'ts': db.ts_to_sec(r['ts']), 'lat': r['lat'], 'lng': r['lng'],
-             'acc': r['acc'], 'speed': r['speed']} for r in raw]
+             'acc': r['acc'], 'speed': r['speed'],
+             'place_name': (r['place_name'] or '').strip()} for r in raw]
     if level == 'off':
         return {'level': 'off', 'points': [], 'stays': [], 'segments': [],
                 'distance_m': 0.0, 'latest': None}
 
     if level == 'street':
         pts = filter_points(rows)
-        stays = name_stays(c, cluster_stays(pts))
+        stays = name_stays(c, cluster_stays(pts), pts)
         for s in stays:
             s['lat'] = grid_round(s['lat'])
             s['lng'] = grid_round(s['lng'])
         latest = c.execute(
-            'SELECT lat,lng,updated FROM peer_location_latest WHERE user=?',
+            'SELECT lat,lng,place_name,updated FROM peer_location_latest WHERE user=?',
             (user_id,)).fetchone()
         return {
             'level': 'street',
@@ -236,13 +262,14 @@ def track_for(c, user_id, day, policy):
             'distance_m': None,  # 不足 500m 的精度不提供，端上不显示距离
             'latest': ({'lat': grid_round(latest['lat']),
                         'lng': grid_round(latest['lng']),
+                        'place_name': (latest['place_name'] or '').strip(),
                         'updated': db.ts_to_sec(latest['updated'])} if latest else None),
         }
 
     pts = filter_points(rows)
-    stays = name_stays(c, cluster_stays(pts))
+    stays = name_stays(c, cluster_stays(pts), pts)
     latest = c.execute(
-        'SELECT lat,lng,updated FROM peer_location_latest WHERE user=?',
+        'SELECT lat,lng,place_name,updated FROM peer_location_latest WHERE user=?',
         (user_id,)).fetchone()
     return {
         'level': 'exact',
@@ -251,6 +278,7 @@ def track_for(c, user_id, day, policy):
         'segments': speed_segments(pts),
         'distance_m': round(total_distance_m(pts), 1),
         'latest': ({'lat': latest['lat'], 'lng': latest['lng'],
+                    'place_name': (latest['place_name'] or '').strip(),
                     'updated': db.ts_to_sec(latest['updated'])} if latest else None),
     }
 

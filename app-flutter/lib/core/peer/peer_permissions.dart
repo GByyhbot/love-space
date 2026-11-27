@@ -121,6 +121,11 @@ class PeerDiagnosticsSnapshot {
     this.droppedBounce = 0,
     this.droppedStationary = 0,
     this.backoffStep = 0,
+    this.mapStatus = '',
+    this.mapErrorCode = '',
+    this.mapErrorMessage = '',
+    this.mapErrorCallback = '',
+    this.mapErrorAtMs,
   });
 
   final bool locRunning;
@@ -157,6 +162,11 @@ class PeerDiagnosticsSnapshot {
   final int droppedBounce;
   final int droppedStationary;
   final int backoffStep;
+  final String mapStatus;
+  final String mapErrorCode;
+  final String mapErrorMessage;
+  final String mapErrorCallback;
+  final int? mapErrorAtMs;
 
   static const PeerDiagnosticsSnapshot unavailable = PeerDiagnosticsSnapshot(
     locRunning: false,
@@ -200,6 +210,7 @@ class PeerDiagnosticsSnapshot {
     final st = (m['state'] as Map?)?.cast<Object?, Object?>() ?? const {};
     final us = (m['usage'] as Map?)?.cast<Object?, Object?>() ?? const {};
     final pm = (m['permissions'] as Map?)?.cast<Object?, Object?>();
+    final mp = (m['map'] as Map?)?.cast<Object?, Object?>() ?? const {};
     final errRaw = loc['error']?.toString();
     return PeerDiagnosticsSnapshot(
       locRunning: loc['running'] == true,
@@ -238,6 +249,11 @@ class PeerDiagnosticsSnapshot {
       droppedBounce: _asInt(loc['droppedBounce']),
       droppedStationary: _asInt(loc['droppedStationary']),
       backoffStep: _asInt(loc['backoffStep']),
+      mapStatus: (mp['status'] ?? '').toString(),
+      mapErrorCode: (mp['errorCode'] ?? '').toString(),
+      mapErrorMessage: (mp['errorMessage'] ?? '').toString(),
+      mapErrorCallback: (mp['callback'] ?? '').toString(),
+      mapErrorAtMs: _asPosInt(mp['errorAt']),
     );
   }
 }

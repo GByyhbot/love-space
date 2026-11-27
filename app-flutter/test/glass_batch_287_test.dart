@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/gestures.dart' show EagerGestureRecognizer;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -23,8 +24,10 @@ import 'package:love_space/features/auth/auth_state.dart'
     show AuthNotifier, AuthPhase, MeData, SpaceUser, authProvider;
 import 'package:love_space/features/chat/chat_toast.dart'
     show ChatToastController, ChatToastMessage, ChatToastTone, chatToastProvider;
+import 'package:love_space/features/settings/peer_share_settings_page.dart';
 import 'package:love_space/features/settings/settings_widgets.dart'
     show showFormSheet;
+import 'package:love_space/features/together/amap_track_map.dart';
 import 'package:love_space/features/together/calendar_page.dart';
 import 'package:love_space/features/together/peer_report_page.dart';
 import 'package:love_space/features/together/peer_track_page.dart';
@@ -515,6 +518,206 @@ void main() {
       await tester.tap(foldFinder);
       await tester.pump();
       expect(find.byKey(const Key('report-event-b1')), findsNothing);
+    });
+  });
+
+  group('乙-6：高德手势抢占、日图强制可读、错误回调自检与画布降级', () {
+    test('AmapTrackPlatformView.kt 源码守卫：MAP_TYPE_NORMAL + 防拦截 + ExceptionLogger + OnMapLoadedListener',
+        () {
+      final kt = File(
+        'android/app/src/main/kotlin/cn/iepose/lovespace/love_space/AmapTrackPlatformView.kt',
+      ).readAsStringSync();
+      expect(kt.contains('AMap.MAP_TYPE_NORMAL'), isTrue);
+      expect(kt.contains('AMap.MAP_TYPE_NIGHT'), isFalse);
+      expect(kt.contains('requestDisallowInterceptTouchEvent(true)'), isTrue);
+      expect(kt.contains('MapsInitializer.setExceptionLogger'), isTrue);
+      expect(kt.contains('onDownloaderException'), isTrue);
+      expect(kt.contains('addOnMapLoadedListener'), isTrue);
+      expect(kt.contains('onMapError'), isTrue);
+
+      final nativeKt = File(
+        'android/app/src/main/kotlin/cn/iepose/lovespace/love_space/PeerLocNative.kt',
+      ).readAsStringSync();
+      expect(nativeKt.contains('"map" to AmapDiagnostics.snapshot()'), isTrue);
+      expect(nativeKt.contains('if (pn.isNotEmpty()) put("place_name", pn)'),
+          isTrue);
+    });
+
+    testWidgets('AndroidView 注册 EagerGestureRecognizer，收到 onMapError 后立即降级自绘画布',
+        (tester) async {
+      AmapTrackMapWidget.resetKeyCacheForTest();
+      const cfgCh = MethodChannel('cn.iepose.lovespace/amap_config');
+      const viewPrefix = 'cn.iepose.lovespace/amap_track_view_';
+      final binding = tester.binding.defaultBinaryMessenger;
+      binding.setMockMethodCallHandler(cfgCh, (call) async {
+        if (call.method == 'hasApiKey') return true;
+        return null;
+      });
+      addTearDown(() {
+        binding.setMockMethodCallHandler(cfgCh, null);
+        AmapTrackMapWidget.resetKeyCacheForTest();
+      });
+
+      const side = PeerTrackSide(
+        level: 'exact',
+        closedOff: false,
+        distanceM: 1200,
+        points: [
+          PeerTrackPoint(ts: 1000, lat: 22.54, lng: 113.95, speed: 0.2),
+          PeerTrackPoint(ts: 1300, lat: 22.541, lng: 113.951, speed: 1.1),
+        ],
+        stays: [],
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ThemeData(brightness: Brightness.dark),
+          home: Scaffold(
+            body: SizedBox(
+              width: 360,
+              height: 300,
+              child: AmapTrackMapWidget(
+                side: side,
+                pathColor: Colors.pink,
+                forceAndroidForTest: true,
+                fallbackBuilder: (_) =>
+                    const Center(child: Text('AMAP-CANVAS-FALLBACK')),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final avFinder = find.byKey(const Key('track-amap-view'));
+      expect(avFinder, findsOneWidget);
+      final av = tester.widget<AndroidView>(avFinder);
+      expect(av.gestureRecognizers, isNotNull);
+      expect(
+        av.gestureRecognizers!.any((f) {
+          final rec = f.constructor();
+          try {
+            return rec is EagerGestureRecognizer;
+          } finally {
+            rec.dispose();
+          }
+        }),
+        isTrue,
+      );
+      expect(find.text('AMAP-CANVAS-FALLBACK'), findsNothing);
+
+      // Attach view channel via onPlatformViewCreated(0) then simulate native onMapError.
+      av.onPlatformViewCreated?.call(0);
+      await tester.pump();
+      final codec = const StandardMethodCodec();
+      await binding.handlePlatformMessage(
+        '${viewPrefix}0',
+        codec.encodeMethodCall(const MethodCall('onMapError', {
+          'code': 'downloader:1008/403',
+          'callback': 'ExceptionLogger.onDownloaderException',
+          'message': 'AMap auth/tile error',
+        })),
+        (_) {},
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('track-amap-view')), findsNothing);
+      expect(find.text('AMAP-CANVAS-FALLBACK'), findsOneWidget);
+    });
+
+    testWidgets('采集自检面板解析并高亮展示 map 错误码与触发回调', (tester) async {
+      const nativeCh = MethodChannel('peer_loc/native');
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        nativeCh,
+        (call) async {
+          switch (call.method) {
+            case 'status':
+              return <String, Object?>{'running': true, 'queue': 0};
+            case 'permissions':
+              return <String, Object?>{
+                'fine': true,
+                'background': true,
+                'usage': true,
+                'notification': true,
+                'batteryIgnored': true,
+              };
+            case 'diagnostics':
+              return <String, Object?>{
+                'location': <String, Object?>{'running': true, 'received': 3},
+                'state': <String, Object?>{'enabled': true, 'emitted': 1},
+                'usage': <String, Object?>{'granted': true, 'enabled': true},
+                'permissions': <String, Object?>{
+                  'fine': true,
+                  'background': true,
+                  'usage': true,
+                  'notification': true,
+                  'batteryIgnored': true,
+                },
+                'map': <String, Object?>{
+                  'status': 'error',
+                  'errorCode': 'downloader:1008/403',
+                  'callback': 'ExceptionLogger.onDownloaderException',
+                  'errorMessage': 'AMap downloader failed',
+                  'errorAt': 1795747933000,
+                },
+                'policySummary': 'halted=false loc=exact',
+                'policyHalted': false,
+              };
+            default:
+              return <String, Object?>{};
+          }
+        },
+      );
+      addTearDown(() =>
+          tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+              nativeCh, null));
+
+      final snap = await peerDiagnosticsStatus();
+      expect(snap.mapStatus, 'error');
+      expect(snap.mapErrorCode, 'downloader:1008/403');
+      expect(snap.mapErrorCallback, 'ExceptionLogger.onDownloaderException');
+
+      final c = _makeContainer((o) {
+        if (o.uri.path == '/api/peer/settings') {
+          return {
+            'location': true,
+            'track': true,
+            'events': true,
+            'usage': true,
+            'policy': {
+              'location_level': 'exact',
+              'usage_level': 'full',
+              'app_level': 'stream',
+              'network_level': 'ssid',
+            },
+          };
+        }
+        if (o.uri.path == '/api/peer/policy-audit') {
+          return {'items': <Object?>[]};
+        }
+        return const <String, Object?>{};
+      });
+      addTearDown(c.dispose);
+      tester.view.devicePixelRatio = 1.0;
+      tester.view.physicalSize = const Size(393, 859);
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: c,
+          child: const MaterialApp(home: PeerShareSettingsPage()),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final card = find.byKey(const Key('peer-diagnostics-card'));
+      await tester.scrollUntilVisible(card, 300);
+      await tester.pumpAndSettle();
+      expect(find.text('轨迹底图'), findsOneWidget);
+      expect(
+        find.textContaining('downloader:1008/403 · ExceptionLogger.onDownloaderException'),
+        findsOneWidget,
+      );
     });
   });
 }

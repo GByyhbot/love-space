@@ -555,6 +555,7 @@ object PeerLocNative {
             "state" to stateStatus(),
             "usage" to usageStatus(ctx),
             "permissions" to permissions(ctx),
+            "map" to AmapDiagnostics.snapshot(),
             "lastFlushAt" to lastFlushWallMs,
             "lastStateEmitAt" to lastStateEmitMs,
             "lastUsagePullAt" to lastUsagePullMs,
@@ -1371,6 +1372,7 @@ object PeerLocNative {
             log("hb tick: cold start without any fix -> skip")
             return
         }
+        val pn = cachedPlaceName
         val hbLat: Double
         val hbLng: Double
         if (lockedFix != null) {
@@ -1381,6 +1383,7 @@ object PeerLocNative {
                 put("lng", lockedFix.lng)
                 put("acc", lockedFix.acc)
                 put("speed", 0.0)
+                if (pn.isNotEmpty()) put("place_name", pn)
             }
             enqueue(point)
             lastEnqueued = point
@@ -1395,6 +1398,7 @@ object PeerLocNative {
                 put("lng", src.getDouble("lng"))
                 put("acc", src.getDouble("acc"))
                 put("speed", 0.0) // 静止心跳，速度按 0 记
+                if (pn.isNotEmpty()) put("place_name", pn)
             }
             enqueue(point)
             lastEnqueued = point
@@ -1408,7 +1412,6 @@ object PeerLocNative {
         }
         val lat = hbLat
         val lng = hbLng
-        val pn = cachedPlaceName
         lastSent = JSONObject().apply {
             put("lat", lat); put("lng", lng)
             put("battery", readBattery()); put("charging", readCharging())
@@ -1512,6 +1515,7 @@ object PeerLocNative {
                 val f = outcome.fix
                 stillMode = (outcome.state == DebounceState.STATIONARY_LOCKED)
                 if (!stillMode) stillCount = 0
+                val pn = cachedPlaceName
                 val point = JSONObject().apply {
                     put("id", "pl-${f.timeMs}")
                     put("ts", f.timeMs.toDouble())
@@ -1519,6 +1523,7 @@ object PeerLocNative {
                     put("lng", f.lng)
                     put("acc", f.acc)
                     put("speed", f.speed ?: 0.0)
+                    if (pn.isNotEmpty()) put("place_name", pn)
                 }
                 if (f.acc <= ACC_LATEST_ONLY_M) {
                     enqueue(point)
@@ -1527,7 +1532,6 @@ object PeerLocNative {
                     }
                 }
                 lastEnqueued = point
-                val pn = cachedPlaceName
                 lastSent = JSONObject().apply {
                     put("lat", f.lat); put("lng", f.lng)
                     put("battery", readBattery()); put("charging", readCharging())

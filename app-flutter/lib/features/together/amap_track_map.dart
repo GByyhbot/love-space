@@ -11,7 +11,9 @@ library;
 
 import 'dart:io' show Platform;
 
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show Factory, kIsWeb;
+import 'package:flutter/gestures.dart'
+    show EagerGestureRecognizer, OneSequenceGestureRecognizer;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -26,6 +28,7 @@ class AmapTrackMapWidget extends StatefulWidget {
     this.replayLng,
     required this.pathColor,
     required this.fallbackBuilder,
+    this.forceAndroidForTest,
   });
 
   final PeerTrackSide side;
@@ -33,6 +36,14 @@ class AmapTrackMapWidget extends StatefulWidget {
   final double? replayLng;
   final Color pathColor;
   final WidgetBuilder fallbackBuilder;
+
+  /// 测试覆盖：仅在 `flutter test`（Windows/Linux）绕过 `Platform.isAndroid` 判断。
+  @visibleForTesting
+  final bool? forceAndroidForTest;
+
+  @visibleForTesting
+  static void resetKeyCacheForTest() =>
+      _AmapTrackMapWidgetState._hasKeyFuture = null;
 
   @override
   State<AmapTrackMapWidget> createState() => _AmapTrackMapWidgetState();
@@ -65,7 +76,9 @@ class _AmapTrackMapWidgetState extends State<AmapTrackMapWidget> {
   }
 
   Future<void> _checkNativeAvailability() async {
-    if (kIsWeb || !Platform.isAndroid) return;
+    final isAndroid =
+        widget.forceAndroidForTest ?? (!kIsWeb && Platform.isAndroid);
+    if (!isAndroid) return;
     try {
       _hasKeyFuture ??= _configChannel
           .invokeMethod<bool>('hasApiKey')
@@ -180,6 +193,20 @@ class _AmapTrackMapWidgetState extends State<AmapTrackMapWidget> {
         case 'onUserDrag':
           if (!_freeBrowse) setState(() => _freeBrowse = true);
         case 'onMapError':
+          String code = '';
+          String callback = '';
+          String message = '';
+          final args = call.arguments;
+          if (args is Map) {
+            code = (args['code'] ?? '').toString();
+            callback = (args['callback'] ?? '').toString();
+            message = (args['message'] ?? '').toString();
+          } else if (args != null) {
+            message = args.toString();
+          }
+          debugPrint(
+            '[amap-track] native map error (code=$code callback=$callback): $message -> fallback canvas',
+          );
           setState(() {
             _mapFailed = true;
             _useNativeMap = false;
@@ -205,6 +232,10 @@ class _AmapTrackMapWidgetState extends State<AmapTrackMapWidget> {
                   viewType: _viewType,
                   creationParams: _buildTrackPayload(context),
                   creationParamsCodec: const StandardMessageCodec(),
+                  gestureRecognizers: const <Factory<OneSequenceGestureRecognizer>>{
+                    Factory<OneSequenceGestureRecognizer>(
+                        EagerGestureRecognizer.new),
+                  },
                   onPlatformViewCreated: _onPlatformViewCreated,
                 )
               : InteractiveViewer(

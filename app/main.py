@@ -1934,13 +1934,15 @@ def peer_location(request: Request, body: dict = Body(default=...),
             plat, plng = float(pt['lat']), float(pt['lng'])
             if street:
                 plat, plng = peer_agg.grid_round(plat), peer_agg.grid_round(plng)
+            raw_pt_place = pt.get('place_name')
+            pt_place = raw_pt_place.strip()[:80] if isinstance(raw_pt_place, str) else ''
             c.execute('INSERT INTO peer_location_points'
-                      '(id,user,ts,lat,lng,acc,speed,backfill,created) '
-                      'VALUES (?,?,?,?,?,?,?,?,?)',
+                      '(id,user,ts,lat,lng,acc,speed,backfill,place_name,created) '
+                      'VALUES (?,?,?,?,?,?,?,?,?,?)',
                       # 写侧归一：任何版本客户端发毫秒进来都按秒落库（ts>1e11 → /1000）
                       (pid, user['id'], db.ts_to_sec(pt['ts']), plat,
                        plng, pt.get('acc'), pt.get('speed'),
-                       1 if pt.get('backfill') else 0, now()))
+                       1 if pt.get('backfill') else 0, pt_place, now()))
             accepted += 1
         latest = body.get('latest')
         if isinstance(latest, dict) and isinstance(latest.get('lat'), (int, float)):

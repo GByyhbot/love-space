@@ -883,6 +883,19 @@ class _PeerShareSettingsPageState extends ConsumerState<PeerShareSettingsPage>
             '当前策略摘要',
             _diag.policySummary.isEmpty ? '尚未下发' : _diag.policySummary,
           ),
+          _diagRow(
+            theme,
+            cs,
+            '轨迹底图',
+            _diag.mapErrorCode.isNotEmpty
+                ? '异常（已降级画布）· ${_diag.mapErrorCode}'
+                    '${_diag.mapErrorCallback.isEmpty ? '' : ' · ${_diag.mapErrorCallback}'}'
+                    '${_diag.mapErrorAtMs != null ? ' · ${_fmtMs(_diag.mapErrorAtMs)}' : ''}'
+                : (_diag.mapStatus == 'loaded'
+                    ? '高德底图正常'
+                    : '尚未加载（进入轨迹页后更新）'),
+            warn: _diag.mapErrorCode.isNotEmpty,
+          ),
           if (_diag.locError != null)
             _diagRow(theme, cs, '最近错误', _diag.locError!, warn: true),
         ]),

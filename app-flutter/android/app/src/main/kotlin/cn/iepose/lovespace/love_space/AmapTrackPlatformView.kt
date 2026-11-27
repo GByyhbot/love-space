@@ -11,6 +11,7 @@ import android.widget.FrameLayout
 import java.util.concurrent.atomic.AtomicBoolean
 import com.amap.api.maps.AMap
 import com.amap.api.maps.CameraUpdateFactory
+import com.amap.api.maps.ExceptionLogger
 import com.amap.api.maps.MapsInitializer
 import com.amap.api.maps.TextureMapView
 import com.amap.api.maps.model.BitmapDescriptorFactory
@@ -25,6 +26,116 @@ import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.StandardMessageCodec
 import io.flutter.plugin.platform.PlatformView
 import io.flutter.plugin.platform.PlatformViewFactory
+
+/**
+ * 高德地图加载/鉴权/瓦片下载诊断中心：
+ * 通过 `MapsInitializer.setExceptionLogger`、`AMap.OnMapLoadedListener` 与初始化结果
+ * 记录错误码并回调当前活跃轨迹视图，绝不允许底图静默全黑；
+ * 同时通过 `PeerLocNative.diagnostics` 输出到「采集自检」面板。
+ */
+object AmapDiagnostics {
+    private const val TAG = "AmapDiagnostics"
+    private val loggerRegistered = AtomicBoolean(false)
+
+    @Volatile
+    var status: String = "idle"
+        private set
+
+    @Volatile
+    var errorCode: String = ""
+        private set
+
+    @Volatile
+    var errorMessage: String = ""
+        private set
+
+    @Volatile
+    var errorCallback: String = ""
+        private set
+
+    @Volatile
+    var errorAtMs: Long = 0L
+        private set
+
+    @Volatile
+    private var activeErrorSink: ((code: String, callback: String, message: String) -> Unit)? = null
+
+    fun ensureExceptionLogger() {
+        if (!loggerRegistered.compareAndSet(false, true)) return
+        try {
+            MapsInitializer.setExceptionLogger(object : ExceptionLogger {
+                override fun onDownloaderException(errCode: Int, responseCode: Int) {
+                    val code = "downloader:$errCode/$responseCode"
+                    val callback = "ExceptionLogger.onDownloaderException"
+                    val msg = "AMap downloader failed (errorCode=$errCode, responseCode=$responseCode)"
+                    android.util.Log.w(TAG, "$callback -> $msg")
+                    recordError(code, callback, msg)
+                }
+
+                override fun onException(t: Throwable?) {
+                    val type = t?.javaClass?.simpleName ?: "Throwable"
+                    val code = "sdk:$type"
+                    val callback = "ExceptionLogger.onException"
+                    val msg = t?.message ?: "AMap SDK exception ($type)"
+                    android.util.Log.w(TAG, "$callback -> $msg", t)
+                    recordError(code, callback, msg)
+                }
+            })
+        } catch (t: Throwable) {
+            android.util.Log.w(TAG, "setExceptionLogger failed", t)
+        }
+    }
+
+    fun attachSink(sink: (code: String, callback: String, message: String) -> Unit) {
+        activeErrorSink = sink
+    }
+
+    fun detachSink(sink: (code: String, callback: String, message: String) -> Unit) {
+        if (activeErrorSink === sink) {
+            activeErrorSink = null
+        }
+    }
+
+    fun recordLoaded() {
+        status = "loaded"
+        errorCode = ""
+        errorMessage = ""
+        errorCallback = ""
+    }
+
+    fun recordError(code: String, callback: String, message: String) {
+        status = "error"
+        errorCode = code
+        errorCallback = callback
+        errorMessage = message
+        errorAtMs = System.currentTimeMillis()
+        activeErrorSink?.invoke(code, callback, message)
+    }
+
+    fun snapshot(): Map<String, Any?> = mapOf(
+        "status" to status,
+        "errorCode" to errorCode,
+        "errorMessage" to errorMessage,
+        "callback" to errorCallback,
+        "errorAt" to errorAtMs,
+    )
+}
+
+/**
+ * 阻止外层竖向滚动列表（Flutter / Android 父容器）在触摸事件按下与滑动过程中抢走地图手势。
+ */
+private class MapTouchFrameLayout(context: Context) : FrameLayout(context) {
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        when (ev.actionMasked) {
+            MotionEvent.ACTION_DOWN,
+            MotionEvent.ACTION_MOVE,
+            MotionEvent.ACTION_POINTER_DOWN -> parent?.requestDisallowInterceptTouchEvent(true)
+            MotionEvent.ACTION_UP,
+            MotionEvent.ACTION_CANCEL -> parent?.requestDisallowInterceptTouchEvent(false)
+        }
+        return super.dispatchTouchEvent(ev)
+    }
+}
 
 /**
  * 主线程预加载高德 3D SDK 与底层 JNI 动态库：
@@ -47,6 +158,7 @@ object AmapPreload {
             val appCtx = context.applicationContext
             MapsInitializer.updatePrivacyShow(appCtx, true, true)
             MapsInitializer.updatePrivacyAgree(appCtx, true)
+            AmapDiagnostics.ensureExceptionLogger()
             MapsInitializer.initialize(appCtx)
             System.loadLibrary("AMapSDK_MAP_v9_8_3")
             android.util.Log.i(
@@ -125,18 +237,35 @@ class AmapTrackPlatformView(
     initialParams: Map<String, Any?>?
 ) : PlatformView, MethodChannel.MethodCallHandler {
 
-    private val container = FrameLayout(context)
+    private val container = MapTouchFrameLayout(context)
     private val channel = MethodChannel(messenger, "${AmapConfigChannel.VIEW_TYPE}_$viewId")
     private val disposed = AtomicBoolean(false)
+    private val errorReported = AtomicBoolean(false)
     private val mainHandler = Handler(Looper.getMainLooper())
     private var mapView: TextureMapView? = null
     private var aMap: AMap? = null
     private var replayMarker: Marker? = null
     private var lastBounds: LatLngBounds? = null
     private var lastSinglePoint: LatLng? = null
+    private var mapLoaded = false
+    private var mapLoadedListener: AMap.OnMapLoadedListener? = null
+    private val errorSink: (String, String, String) -> Unit = { code, callback, message ->
+        mainHandler.post { emitMapError(code, callback, message) }
+    }
+    private val loadTimeoutRunnable = Runnable {
+        if (!disposed.get() && !mapLoaded) {
+            AmapDiagnostics.recordError(
+                "load_timeout:8000ms",
+                "AMap.OnMapLoadedListener(timeout)",
+                "AMap tiles/map did not load within 8s"
+            )
+        }
+    }
 
     init {
         channel.setMethodCallHandler(this)
+        AmapDiagnostics.ensureExceptionLogger()
+        AmapDiagnostics.attachSink(errorSink)
         try {
             // 高德 SDK 合规要求：创建地图前必须先声明隐私合规并同意
             MapsInitializer.updatePrivacyShow(context, true, true)
@@ -153,7 +282,15 @@ class AmapTrackPlatformView(
                 )
             )
             mapView = mv
-            aMap = mv.map?.also { map ->
+            val map = mv.map
+            if (map == null) {
+                AmapDiagnostics.recordError(
+                    "init_null_map",
+                    "AmapTrackPlatformView.init",
+                    "TextureMapView.getMap() returned null"
+                )
+            } else {
+                aMap = map
                 map.uiSettings.apply {
                     isScrollGesturesEnabled = true
                     isZoomGesturesEnabled = true
@@ -161,7 +298,21 @@ class AmapTrackPlatformView(
                     isCompassEnabled = false
                     isScaleControlsEnabled = true
                 }
+                val loaded = AMap.OnMapLoadedListener {
+                    if (disposed.get()) return@OnMapLoadedListener
+                    mapLoaded = true
+                    mainHandler.removeCallbacks(loadTimeoutRunnable)
+                    AmapDiagnostics.recordLoaded()
+                }
+                mapLoadedListener = loaded
+                map.addOnMapLoadedListener(loaded)
+                mainHandler.postDelayed(loadTimeoutRunnable, 8_000L)
+
                 map.setOnMapTouchListener { ev ->
+                    container.parent?.requestDisallowInterceptTouchEvent(
+                        ev.actionMasked != MotionEvent.ACTION_UP &&
+                            ev.actionMasked != MotionEvent.ACTION_CANCEL
+                    )
                     if (!disposed.get() && ev.action == MotionEvent.ACTION_MOVE) {
                         channel.invokeMethod("onUserDrag", null)
                     }
@@ -174,10 +325,25 @@ class AmapTrackPlatformView(
                 }
             }
         } catch (t: Throwable) {
-            if (!disposed.get()) {
-                channel.invokeMethod("onMapError", t.message ?: "AMap init failed")
-            }
+            AmapDiagnostics.recordError(
+                "init_exception",
+                "AmapTrackPlatformView.init",
+                t.message ?: "AMap init failed"
+            )
         }
+    }
+
+    private fun emitMapError(code: String, callback: String, message: String) {
+        if (disposed.get() || !errorReported.compareAndSet(false, true)) return
+        mainHandler.removeCallbacks(loadTimeoutRunnable)
+        channel.invokeMethod(
+            "onMapError",
+            mapOf(
+                "code" to code,
+                "callback" to callback,
+                "message" to message,
+            )
+        )
     }
 
     override fun getView(): View = container
@@ -222,8 +388,8 @@ class AmapTrackPlatformView(
         lastSinglePoint = null
 
         val isStreet = data["isStreet"] == true
-        val dark = data["dark"] == true
-        map.mapType = if (dark) AMap.MAP_TYPE_NIGHT else AMap.MAP_TYPE_NORMAL
+        // 地图可读性优先于跟随主题：高德 3D 夜间样式底图极暗，深浅双模式统一采用标准日图。
+        map.mapType = AMap.MAP_TYPE_NORMAL
 
         val pathColor = (data["pathColor"] as? Number)?.toInt() ?: Color.parseColor("#E05A4F")
         val boundsBuilder = LatLngBounds.Builder()
@@ -321,17 +487,24 @@ class AmapTrackPlatformView(
 
     override fun dispose() {
         if (!disposed.compareAndSet(false, true)) return
+        AmapDiagnostics.detachSink(errorSink)
+        mainHandler.removeCallbacks(loadTimeoutRunnable)
         channel.setMethodCallHandler(null)
         val teardown = Runnable {
             val mv = mapView
             val map = aMap
+            val loaded = mapLoadedListener
             mapView = null
             aMap = null
+            mapLoadedListener = null
             replayMarker = null
             lastBounds = null
             lastSinglePoint = null
 
             try {
+                if (loaded != null) {
+                    map?.removeOnMapLoadedListener(loaded)
+                }
                 map?.setOnMapTouchListener(null)
                 map?.stopAnimation()
                 map?.clear()
