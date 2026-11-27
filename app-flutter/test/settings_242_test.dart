@@ -16,6 +16,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:love_space/core/api/api_client.dart' as api;
 import 'package:love_space/core/chat/chat_media.dart'
     show chatBaseProvider, mediaCookieHeadersProvider;
+import 'package:love_space/core/theme/tokens.dart' show Spacing;
+import 'package:love_space/core/ui/apple_ui.dart' show ShellChromeScope;
+import 'package:love_space/core/ui/page_heading.dart' show pageHeadingTopGap;
 import 'package:love_space/features/auth/auth_state.dart'
     show authProvider, AuthNotifier, AuthPhase, MeData, SpaceUser;
 import 'package:love_space/features/chat/chat_toast.dart' show ChatToastHost;
@@ -263,23 +266,15 @@ void main() {
       expect(src.contains('PageHeading('), isTrue,
           reason: '$f 标题行引用共享 PageHeading');
     }
-    // 首页私有标题行实现已删
+    // 首页私有标题行实现已删（具体边距/留白交由下方几何断言在普通屏与刘海屏实测，
+    // 不再盯源码 padding 字符串）。
     final home =
         codeOnly(File('lib/features/home/home_page.dart').readAsStringSync());
     expect(home.contains('class _PageHeading'), isFalse,
         reason: '首页私有标题行删除');
-    // 我们页容器 padding 归零（原 16+12 与 PageHeading 自带 16/8 叠加成
-    // 左 32/顶 20 的根因）；首页容器 18→16 且顶部归零
-    final together =
-        codeOnly(File('lib/features/together/together_page.dart')
-            .readAsStringSync());
-    expect(together.contains('EdgeInsets.only(bottom: Spacing.pageBottom)'),
-        isTrue, reason: '我们页容器 padding 归零');
-    expect(home.contains('fromLTRB(\n              16, 0, 16,'),
-        isTrue, reason: '首页容器左右 16、顶部归零');
   });
 
-  testWidgets('🔴 第 4 项：393 宽三页标题左缘/距顶一致（首页/我们页 vs 时光参照）',
+  testWidgets('🔴 第 4 项：393 宽三页标题左缘/距顶一致 + 底部留白达标（普通屏与刘海屏）',
       (tester) async {
     tester.view.physicalSize = const Size(393, 859);
     tester.view.devicePixelRatio = 1.0;
@@ -289,44 +284,107 @@ void main() {
       return _json(<Object>[]);
     });
 
-    Future<Rect> headingRect(WidgetTester tester, Widget page, String text) async {
+    Future<({Rect heading, double bottomPad})> measurePage(
+      WidgetTester tester,
+      Widget page,
+      String text, {
+      double notchTop = 0,
+      double shellTopInset = 0,
+    }) async {
       final container = _setup(adapter);
+      Widget wrapped = Material(child: page);
+      if (shellTopInset > 0) {
+        wrapped = ShellChromeScope(topInset: shellTopInset, child: wrapped);
+      }
       await tester.pumpWidget(UncontrolledProviderScope(
         container: container,
-        child: MaterialApp(
-          builder: (context, child) => Stack(children: [
-            child ?? const SizedBox.shrink(),
-            const Positioned(
-                top: 0, left: 0, right: 0,
-                child: IgnorePointer(child: SafeArea(child: ChatToastHost()))),
-          ]),
-          // Material 祖先：页内 TextField/InkWell 在裸 pump 下无 Material
-          // 会逐帧抛异常（时光页搜索框等 10 处），套一层不占布局的 Material。
-          home: Material(child: page),
+        child: MediaQuery(
+          data: MediaQueryData(
+            size: const Size(393, 859),
+            padding: EdgeInsets.only(top: notchTop),
+            viewPadding: EdgeInsets.only(top: notchTop),
+          ),
+          child: MaterialApp(
+            builder: (context, child) => Stack(children: [
+              child ?? const SizedBox.shrink(),
+              const Positioned(
+                  top: 0, left: 0, right: 0,
+                  child: IgnorePointer(child: SafeArea(child: ChatToastHost()))),
+            ]),
+            // Material 祖先：页内 TextField/InkWell 在裸 pump 下无 Material
+            // 会逐帧抛异常（时光页搜索框等 10 处），套一层不占布局的 Material。
+            home: wrapped,
+          ),
         ),
       ));
       await tester.pump(const Duration(milliseconds: 300));
       await tester.pump(const Duration(seconds: 2));
       await tester.pump(const Duration(seconds: 2));
       final rect = tester.getRect(find.text(text));
+
+      // 读取滚动容器实际底部留白（ListView 或 SingleChildScrollView）
+      double bottomPad = 0;
+      final lvFinder = find.byType(ListView);
+      final scsvFinder = find.byType(SingleChildScrollView);
+      if (scsvFinder.evaluate().isNotEmpty) {
+        final p = tester.widget<SingleChildScrollView>(scsvFinder.first).padding;
+        bottomPad = p?.resolve(TextDirection.ltr).bottom ?? 0;
+      } else if (lvFinder.evaluate().isNotEmpty) {
+        final p = tester.widget<ListView>(lvFinder.first).padding;
+        bottomPad = p?.resolve(TextDirection.ltr).bottom ?? 0;
+      }
+
       container.dispose();
-      return rect;
+      return (heading: rect, bottomPad: bottomPad);
     }
 
-    final homeRect = await headingRect(tester, const HomePage(), '我们的每一天');
-    final togetherRect =
-        await headingRect(tester, const TogetherPage(active: true), '关于我们，还有好多好多');
-    final timelineRect =
-        await headingRect(tester, const TimelinePage(active: true), '时光慢慢，爱意满满');
+    // 1. 普通屏（无刘海、独立渲染）
+    final home = await measurePage(tester, const HomePage(), '我们的每一天');
+    final together = await measurePage(
+        tester, const TogetherPage(active: true), '关于我们，还有好多好多');
+    final timeline = await measurePage(
+        tester, const TimelinePage(active: true), '时光慢慢，爱意满满');
     // 左缘一致（PageHeading 自带 16）
-    expect(homeRect.left, closeTo(timelineRect.left, 0.5),
-        reason: '首页标题左缘与时光页一致（原 18 vs 16）');
-    expect(togetherRect.left, closeTo(timelineRect.left, 0.5),
-        reason: '我们页标题左缘与时光页一致（原双重 32）');
+    expect(home.heading.left, closeTo(16.0, 0.5),
+        reason: '首页标题左缘 16（原 18 vs 16）');
+    expect(together.heading.left, closeTo(16.0, 0.5),
+        reason: '我们页标题左缘 16（原双重 32）');
+    expect(home.heading.left, closeTo(timeline.heading.left, 0.5));
+    expect(together.heading.left, closeTo(timeline.heading.left, 0.5));
     // 距顶一致（PageHeading 顶 8）
-    expect(homeRect.top, closeTo(timelineRect.top, 0.5),
-        reason: '首页标题距顶与时光页一致（原 18 vs 8）');
-    expect(togetherRect.top, closeTo(timelineRect.top, 0.5),
-        reason: '我们页标题距顶与时光页一致（原 20 vs 8）');
+    expect(home.heading.top, closeTo(pageHeadingTopGap, 0.5),
+        reason: '首页标题距顶 8（原 18 vs 8）');
+    expect(together.heading.top, closeTo(pageHeadingTopGap, 0.5),
+        reason: '我们页标题距顶 8（原 20 vs 8）');
+    expect(home.heading.top, closeTo(timeline.heading.top, 0.5));
+    expect(together.heading.top, closeTo(timeline.heading.top, 0.5));
+    // 底部留白实际效果 ≥ Spacing.pageBottom（避让悬浮 Dock）
+    expect(home.bottomPad, greaterThanOrEqualTo(Spacing.pageBottom),
+        reason: '首页滚动容器底部留白需 ≥ pageBottom');
+    expect(together.bottomPad, greaterThanOrEqualTo(Spacing.pageBottom),
+        reason: '我们页滚动容器底部留白需 ≥ pageBottom');
+
+    // 2. 刘海屏嵌入真玻璃壳（状态栏 44 + 顶栏 56 = topInset 100）：
+    // 验证 SafeArea(top: topInset == 0) + top: topInset 绝不双重叠加刘海高度，
+    // 三页标题距顶严格等于 topInset + pageHeadingTopGap（108.0），2.4.2 距顶问题不复发。
+    const notch = 44.0;
+    const inset = notch + kToolbarHeight;
+    final homeNotch = await measurePage(tester, const HomePage(), '我们的每一天',
+        notchTop: notch, shellTopInset: inset);
+    final togetherNotch = await measurePage(
+        tester, const TogetherPage(active: true), '关于我们，还有好多好多',
+        notchTop: notch, shellTopInset: inset);
+    final timelineNotch = await measurePage(
+        tester, const TimelinePage(active: true), '时光慢慢，爱意满满',
+        notchTop: notch, shellTopInset: inset);
+    expect(homeNotch.heading.left, closeTo(16.0, 0.5));
+    expect(togetherNotch.heading.left, closeTo(16.0, 0.5));
+    expect(timelineNotch.heading.left, closeTo(16.0, 0.5));
+    expect(homeNotch.heading.top, closeTo(inset + pageHeadingTopGap, 0.5),
+        reason: '刘海屏首页标题距顶 = topInset + pageHeadingTopGap（无双重叠加）');
+    expect(togetherNotch.heading.top, closeTo(inset + pageHeadingTopGap, 0.5),
+        reason: '刘海屏我们页标题距顶 = topInset + pageHeadingTopGap（SafeArea top:false 无双重叠加）');
+    expect(timelineNotch.heading.top, closeTo(inset + pageHeadingTopGap, 0.5),
+        reason: '刘海屏时光页标题距顶 = topInset + pageHeadingTopGap（三页严格齐平）');
   });
 }
