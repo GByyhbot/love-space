@@ -19,6 +19,7 @@ import '../../core/theme/app_icons.dart';
 import '../../core/theme/tokens.dart';
 import '../../core/theme/typography.dart';
 import '../../core/together/together_data.dart' show kindLabel;
+import '../../core/ui/apple_ui.dart';
 import '../chat/media_bubble_widgets.dart' show MediaImageView;
 
 /// ── 数据模型 ─────────────────────────────────────────────────────────
@@ -158,46 +159,54 @@ List<(OnThisDayGroup, Record)> pastTodayItems(List<OnThisDayGroup> groups) => [
 
 /// ── 卡面公共件 ───────────────────────────────────────────────────────
 
-/// 卡面家族（PostCard 同款）：radius 17 + outlineVariant 描边 + --shadow 双影。
+/// 卡面家族（Apple 分组容器纵深：大圆角 20 + 双层浮起阴影 + 细描边）。
 Widget homeCardShell(BuildContext context, {required Widget child, Key? tapKey,
     VoidCallback? onTap}) {
   final theme = Theme.of(context);
-  const cardRadius = 17.0;
-  return InkWell(
-    key: tapKey,
-    borderRadius: BorderRadius.circular(cardRadius),
-    onTap: onTap,
-    child: Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(cardRadius),
-        border: Border.all(color: theme.colorScheme.outlineVariant),
-        boxShadow: <BoxShadow>[
-          BoxShadow(
-            color: theme.colorScheme.shadow.withValues(alpha: 0.06),
-            offset: const Offset(0, 2),
-            blurRadius: 10,
-          ),
-          BoxShadow(
-            color: theme.colorScheme.shadow.withValues(alpha: 0.04),
-            offset: const Offset(0, 1),
-            blurRadius: 2,
-          ),
-        ],
+  final cs = theme.colorScheme;
+  final dark = theme.brightness == Brightness.dark;
+  const cardRadius = AppRadius.large;
+  return Container(
+    decoration: BoxDecoration(
+      color: dark ? cs.surfaceContainerHigh : cs.surface,
+      borderRadius: BorderRadius.circular(cardRadius),
+      border: Border.all(
+        color: dark
+            ? Colors.white.withValues(alpha: 0.08)
+            : cs.outlineVariant.withValues(alpha: 0.45),
+        width: 0.8,
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(Spacing.cardPad),
-        child: child,
+      boxShadow: appleCardShadows(dark),
+    ),
+    child: Material(
+      type: MaterialType.transparency,
+      borderRadius: BorderRadius.circular(cardRadius),
+      child: InkWell(
+        key: tapKey,
+        borderRadius: BorderRadius.circular(cardRadius),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(Spacing.cardPad),
+          child: child,
+        ),
       ),
     ),
   );
 }
 
-/// 卡头一行：emoji 标题（titleMedium w600，与双格卡标题同级）+ 右 chevron。
-Widget cardHeader(BuildContext context, String emoji, String title) {
+/// 卡头一行：AppleIconBadge 圆角色底矢量图标 + 标题 + 右 chevron。
+Widget cardHeader(
+  BuildContext context,
+  IconData icon,
+  AppleIconTone tone,
+  String title,
+) {
   final theme = Theme.of(context);
   return Row(children: [
+    AppleIconBadge(icon: icon, tone: tone, size: 28),
+    const SizedBox(width: 10),
     Expanded(
-      child: Text('$emoji $title', style: AppType.title(theme)),
+      child: Text(title, style: AppType.title(theme)),
     ),
     Icon(AppIcons.chevronRight,
         size: 20, color: theme.colorScheme.outline),
@@ -223,7 +232,7 @@ class OnThisDayCard extends ConsumerWidget {
       onTap: () => context.push('/on-this-day'),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min, children: [
-        cardHeader(context, '🕰', '历史上的今天'),
+        cardHeader(context, Icons.history_rounded, AppleIconTone.amber, '历史上的今天'),
         const SizedBox(height: 10),
         for (var i = 0; i < top.length; i++) ...[
           _OtdPreviewRow(year: top[i].$1.year, record: top[i].$2),
@@ -275,7 +284,10 @@ class _OtdPreviewRow extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 6),
-                Text('📷 照片', style: theme.textTheme.bodySmall?.copyWith(
+                Icon(Icons.photo_camera_rounded,
+                    size: 14, color: theme.colorScheme.outline),
+                const SizedBox(width: 4),
+                Text('照片', style: theme.textTheme.bodySmall?.copyWith(
                     color: theme.colorScheme.outline)),
               ])
             : Text(
@@ -305,7 +317,7 @@ class YearbookCard extends ConsumerWidget {
       onTap: () => context.push('/yearbook'),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min, children: [
-        cardHeader(context, '📖', '今年的我们'),
+        cardHeader(context, Icons.auto_stories_rounded, AppleIconTone.indigo, '今年的我们'),
         const SizedBox(height: 12),
         Row(children: [
           // 四格等宽均分（yang 改判口径）：条记录/张照片/天心情/个心愿。

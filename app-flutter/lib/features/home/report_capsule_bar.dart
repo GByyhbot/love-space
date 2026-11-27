@@ -31,6 +31,7 @@ import '../../core/peer/peer_report_data.dart' show relativeTimeZh;
 import '../../core/peer/peer_report_queue.dart';
 import '../../core/sse/sse_client.dart' show SsePhase, sseEventsProvider, sseProvider;
 import '../../core/theme/tokens.dart';
+import '../../core/ui/apple_ui.dart';
 import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
 
 /// 快捷预设（失败回落默认 6 条；回落值不写回服务端）。
@@ -280,24 +281,35 @@ class _Capsule extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
+    final dark = theme.brightness == Brightness.dark;
     final fg = enabled ? cs.onSurface : cs.onSurface.withValues(alpha: 0.45);
     return Opacity(
       opacity: enabled ? 1 : 0.55,
-      child: Material(
-        color: cs.surface,
-        borderRadius: BorderRadius.circular(20),
-        child: InkWell(
-          key: Key('report-capsule-${preset.scene}'),
-          borderRadius: BorderRadius.circular(20),
-          onTap: enabled ? onTap : null,
-          onLongPress: enabled ? onLongPress : null,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: cs.outlineVariant),
-            ),
-            child: Row(mainAxisSize: MainAxisSize.min, children: [
+      child: Container(
+        decoration: BoxDecoration(
+          color: dark
+              ? cs.surfaceContainerHigh.withValues(alpha: 0.88)
+              : cs.surface.withValues(alpha: 0.94),
+          borderRadius: BorderRadius.circular(AppRadius.pill),
+          border: Border.all(
+            color: dark
+                ? Colors.white.withValues(alpha: 0.10)
+                : cs.outlineVariant.withValues(alpha: 0.55),
+            width: 0.9,
+          ),
+          boxShadow: appleCardShadows(dark),
+        ),
+        child: Material(
+          type: MaterialType.transparency,
+          borderRadius: BorderRadius.circular(AppRadius.pill),
+          child: InkWell(
+            key: Key('report-capsule-${preset.scene}'),
+            borderRadius: BorderRadius.circular(AppRadius.pill),
+            onTap: enabled ? onTap : null,
+            onLongPress: enabled ? onLongPress : null,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
               if (busy)
                 SizedBox(
                   width: 14,
@@ -315,6 +327,7 @@ class _Capsule extends StatelessWidget {
                 style: theme.textTheme.bodySmall?.copyWith(color: fg),
               ),
             ]),
+            ),
           ),
         ),
       ),

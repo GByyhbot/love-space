@@ -20,6 +20,7 @@ import '../../core/timeline/timeline_data.dart';
 import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
 import '../chat/media_bubble_widgets.dart' show MediaImageView, VideoCardView, VoiceChipView;
 import '../shell/web_chrome.dart' show WebSemanticColors;
+import '../../core/ui/apple_ui.dart';
 import '../../core/ui/hold_to_confirm.dart' show HoldToConfirmButton;
 import '../../core/ui/like_burst.dart' show LikeBurstIcon, LikeCountLabel;
 import '../chat/media_bubble_widgets.dart' show SongCardView;
@@ -74,19 +75,7 @@ class PostCard extends ConsumerWidget {
         // 1px 内缩（几何口径不变，单图 334 断言依赖它）；可见亮边在
         // foregroundDecoration（盖在内容之上）。
         border: Border.all(color: Colors.transparent),
-        boxShadow: <BoxShadow>[
-          // Web --shadow：0 2px 10px .06 + 0 1px 2px .04（style.css:137）
-          BoxShadow(
-            color: theme.colorScheme.shadow.withValues(alpha: 0.06),
-            offset: const Offset(0, 2),
-            blurRadius: 10,
-          ),
-          BoxShadow(
-            color: theme.colorScheme.shadow.withValues(alpha: 0.04),
-            offset: const Offset(0, 1),
-            blurRadius: 2,
-          ),
-        ],
+        boxShadow: appleCardShadows(!light),
       ),
       // 1px 半透明白亮边（浅 .55 / 夜 .12）：foregroundDecoration 盖在
       // 内容之上，保证亮边不被磨砂半透明填充压暗。

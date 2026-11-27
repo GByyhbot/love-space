@@ -12,6 +12,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/timeline/timeline_data.dart';
 import '../../core/sse/sse_client.dart';
+import '../../core/ui/apple_ui.dart';
 import '../../core/ui/error_view.dart';
 import '../../core/ui/page_heading.dart';
 import '../../core/ui/selection_sheet.dart';
@@ -104,8 +105,12 @@ class _TimelinePageState extends ConsumerState<TimelinePage> {
       });
     }
 
+    final topInset = ShellChromeScope.topInsetOf(context);
     return SafeArea(
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      top: topInset == 0,
+      child: Padding(
+        padding: EdgeInsets.only(top: topInset),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         // 2.4.1 第 9 项：标题行统一引用共享 PageHeading 组件（同字号/间距
         // 共享常量）；第 7 项：删除「记录此刻」按钮（发布统一走 Dock 上滑
         // 抽屉，功能不受影响）。
@@ -116,6 +121,7 @@ class _TimelinePageState extends ConsumerState<TimelinePage> {
         _buildFilters(context, me, chat),
         Expanded(child: _buildList(context, me, chat)),
       ]),
+      ),
     );
   }
 
@@ -131,7 +137,7 @@ class _TimelinePageState extends ConsumerState<TimelinePage> {
         // 2.3.4：筛选控件高 46 档（Web 桌面常开 input+select 高 46，
         // style.css:591-600/:1422）——contentPadding/minimumSize 设自然高，
         // 不用固定高容器（Dropdown 在固定高 Row 内约束冲突）。
-        // 2.4.1 第 7 项③：搜索框圆角 14、边框颜色与胶囊对齐。
+        // 2.4.1 第 7 项③：搜索框圆角 14、Apple 风格柔和填底与细边。
         TextField(
           controller: _qController,
           onChanged: _onQueryChanged,
@@ -139,13 +145,21 @@ class _TimelinePageState extends ConsumerState<TimelinePage> {
             hintText: '搜索我们的故事…',
             prefixIcon: const Icon(AppIcons.search),
             isDense: true,
+            filled: true,
+            fillColor: theme.brightness == Brightness.dark
+                ? cs.surfaceContainerHigh
+                : cs.surface,
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(14),
-              borderSide: BorderSide(color: cs.outlineVariant),
+              borderSide: BorderSide(
+                color: cs.outlineVariant.withValues(alpha: 0.55),
+              ),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(14),
-              borderSide: BorderSide(color: cs.outlineVariant),
+              borderSide: BorderSide(
+                color: cs.outlineVariant.withValues(alpha: 0.55),
+              ),
             ),
           ),
         ),

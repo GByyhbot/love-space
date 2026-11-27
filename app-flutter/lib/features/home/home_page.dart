@@ -22,6 +22,7 @@ import '../../core/chat/chat_media.dart'
     show chatBaseProvider, mediaCookieHeadersProvider;
 import '../../core/sse/sse_client.dart';
 import '../../core/together/together_data.dart' show anniversaryDue;
+import '../../core/ui/apple_ui.dart';
 import '../../core/ui/error_view.dart';
 import '../../core/ui/page_heading.dart';
 import '../../core/ui/progress.dart';
@@ -95,6 +96,7 @@ class HomePage extends ConsumerWidget {
 
     final records = ref.watch(recordsProvider);
     final theme = Theme.of(context);
+    final topInset = ShellChromeScope.topInsetOf(context);
     final me = ref.watch(authProvider.notifier).me;
 
     if (me == null) {
@@ -134,8 +136,8 @@ class HomePage extends ConsumerWidget {
           // 由标题行 PageHeading embedded 模式供 pageHeadingTopGap(8)
           // （原 18，与四页不一致的根因；embedded 组件不再叠加左右 16，
           // 防双重内边距把左缘挤成 32）。
-          padding: const EdgeInsets.fromLTRB(
-              16, 0, 16, ChromeMetrics.contentBottom),
+          padding: EdgeInsets.fromLTRB(
+              16, topInset, 16, ChromeMetrics.contentBottom),
           children: [
             // 页头：h1 + 副题（文案逐字 app.js:725）
             // 2.4.2 第 4 项：删私有 _PageHeading（距顶 18/副题间距 5 的
@@ -437,12 +439,19 @@ class _Hero extends ConsumerWidget {
         ? Colors.white.withValues(alpha: 0.94) // hero-foot 白 .94（:2277）
         : cs.outline;
 
+    final dark = theme.brightness == Brightness.dark;
     return Container(
       key: const Key('home-hero'),
-      constraints: const BoxConstraints(minHeight: 230), // 手机 min-height（:1406）
+      constraints: const BoxConstraints(minHeight: 236), // 手机 min-height（:1406）
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20), // --radius（style.css:448）
-        border: Border.all(color: cs.outlineVariant), // 1px --line（:449）
+        border: Border.all(
+          color: dark
+              ? Colors.white.withValues(alpha: 0.12)
+              : Colors.white.withValues(alpha: 0.65),
+          width: 1,
+        ),
+        boxShadow: appleCardShadows(dark, elevated: true),
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(20),
@@ -522,46 +531,68 @@ class _Hero extends ConsumerWidget {
                 // 改 Positioned(bottom) 相对撑满的 Stack 底部定位，名字行仍在顶部。
                 Positioned(
                   key: const Key('home-hero-days'),
-                  bottom: 18,
-                  left: 16,
-                  right: 16,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                    Text.rich(
-                      TextSpan(
-                        children: <InlineSpan>[
-                          TextSpan(
-                            // hero-days strong：serif 42（手机档 :2289）/500
-                            text: days == null ? '—' : '$days',
-                            style: webSerifStyle(42, color: daysColor, height: 1.15)
-                                .copyWith(fontFeatures: AppType.tabularFeatures),
-                          ),
-                          TextSpan(
-                            // em「天」：fs-body、常规字族（:2272-2274）
-                            text: ' 天',
-                            style: TextStyle(fontSize: 14, color: daysColor),
-                          ),
-                        ],
+                  bottom: 14,
+                  left: 14,
+                  right: 14,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: hasCover
+                          ? Colors.black.withValues(alpha: 0.26)
+                          : (dark
+                              ? cs.surfaceContainerHigh.withValues(alpha: 0.56)
+                              : cs.surface.withValues(alpha: 0.62)),
+                      borderRadius: BorderRadius.circular(
+                        AppRadius.concentric(20, 6),
+                      ),
+                      border: Border.all(
+                        color: hasCover
+                            ? Colors.white.withValues(alpha: 0.20)
+                            : (dark
+                                ? Colors.white.withValues(alpha: 0.08)
+                                : Colors.white.withValues(alpha: 0.72)),
+                        width: 0.8,
                       ),
                     ),
-                    const SizedBox(height: 4),
-                    if (me.spaceSince.isEmpty)
-                      Text(
-                        '点这里设置相恋日期 →',
-                        style: theme.textTheme.bodySmall
-                            ?.copyWith(color: cs.primary),
-                      )
-                    else
-                      Text(
-                        '${me.spaceSince} 起 · 今天也要好好相爱',
-                        style: theme.textTheme.bodySmall
-                            ?.copyWith(color: metaColor),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                      Text.rich(
+                        TextSpan(
+                          children: <InlineSpan>[
+                            TextSpan(
+                              // hero-days strong：serif 42（手机档 :2289）/500
+                              text: days == null ? '—' : '$days',
+                              style: webSerifStyle(42, color: daysColor, height: 1.15)
+                                  .copyWith(fontFeatures: AppType.tabularFeatures),
+                            ),
+                            TextSpan(
+                              // em「天」：fs-body、常规字族（:2272-2274）
+                              text: ' 天',
+                              style: TextStyle(fontSize: 14, color: daysColor),
+                            ),
+                          ],
+                        ),
                       ),
-                    ],
+                      const SizedBox(height: 4),
+                      if (me.spaceSince.isEmpty)
+                        Text(
+                          '点这里设置相恋日期 →',
+                          style: theme.textTheme.bodySmall
+                              ?.copyWith(color: cs.primary),
+                        )
+                      else
+                        Text(
+                          '${me.spaceSince} 起 · 今天也要好好相爱',
+                          style: theme.textTheme.bodySmall
+                              ?.copyWith(color: metaColor),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
                   ),
                 ),
                 Positioned(
@@ -808,6 +839,11 @@ class _TodayCells extends StatelessWidget {
 
     // IntrinsicHeight + stretch：双格等高（对齐 Web grid 拉伸语义），
     // ListView 无界高度下 IntrinsicHeight 给 Row 提供有界约束。
+    final dark = theme.brightness == Brightness.dark;
+    final cellSurface = dark ? cs.surfaceContainerHigh : cs.surface;
+    final cellBorder = dark
+        ? Colors.white.withValues(alpha: 0.08)
+        : cs.outlineVariant.withValues(alpha: 0.45);
     return IntrinsicHeight(
       child: Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -816,21 +852,37 @@ class _TodayCells extends StatelessWidget {
         Expanded(
           child: Container(
             decoration: BoxDecoration(
-              color: cs.surface,
-              borderRadius: BorderRadius.circular(16), // :496
-              border: Border.all(color: cs.outlineVariant),
+              color: cellSurface,
+              borderRadius: BorderRadius.circular(AppRadius.large),
+              border: Border.all(color: cellBorder, width: 0.8),
+              boxShadow: appleCardShadows(dark),
             ),
             // Material 透明层：原单卡结构由 Card 提供 ink 介质，拆格后自补
             child: Material(
               color: Colors.transparent,
               child: Padding(
-                padding: const EdgeInsets.all(13), // 手机档 11px 13px（:1417）
+                padding: const EdgeInsets.all(14),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text('今天的心情', style: headerStyle()),
-                    const SizedBox(height: 8), // .tiny margin-bottom 8（:498）
+                    Row(children: [
+                      const AppleIconBadge(
+                        icon: Icons.mood_rounded,
+                        tone: AppleIconTone.rose,
+                        size: 22,
+                      ),
+                      const SizedBox(width: 7),
+                      Expanded(
+                        child: Text(
+                          '今天的心情',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: headerStyle(),
+                        ),
+                      ),
+                    ]),
+                    const SizedBox(height: 10),
                     for (final u in me.users)
                       _MoodRow(
                         me: me,
@@ -856,25 +908,37 @@ class _TodayCells extends StatelessWidget {
         Expanded(
           child: Container(
             decoration: BoxDecoration(
-              color: cs.surface,
-              borderRadius: BorderRadius.circular(AppRadius.lg), // :496
-              border: Border.all(color: cs.outlineVariant),
+              color: cellSurface,
+              borderRadius: BorderRadius.circular(AppRadius.large),
+              border: Border.all(color: cellBorder, width: 0.8),
+              boxShadow: appleCardShadows(dark),
             ),
             child: Material(
               color: Colors.transparent,
               child: InkWell(
-                borderRadius: BorderRadius.circular(AppRadius.lg),
+                borderRadius: BorderRadius.circular(AppRadius.large),
                 onTap: () => context.push('/together/anniversary'),
                 child: Padding(
-                  padding: const EdgeInsets.all(13),
+                  padding: const EdgeInsets.all(14),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Row(
                         children: [
+                          const AppleIconBadge(
+                            icon: Icons.celebration_rounded,
+                            tone: AppleIconTone.amber,
+                            size: 22,
+                          ),
+                          const SizedBox(width: 7),
                           Expanded(
-                            child: Text('最近纪念日', style: headerStyle()),
+                            child: Text(
+                              '最近纪念日',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: headerStyle(),
+                            ),
                           ),
                           Icon(AppIcons.chevronRight,
                               size: 14, color: cs.outline), // tiny-go（:508）

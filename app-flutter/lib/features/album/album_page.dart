@@ -23,6 +23,7 @@ import '../../core/ui/hold_to_confirm.dart' show HoldToConfirmButton;
 import '../../core/ui/stagger_in.dart' show StaggerIn;
 import '../chat/video_player_page.dart';
 import 'album_controller.dart';
+import '../../core/ui/apple_ui.dart';
 import '../../core/ui/page_heading.dart';
 import '../settings/settings_widgets.dart'
     show SettingsSegmented, filledFieldDecoration, showFormSheet;
@@ -103,7 +104,9 @@ class _AlbumPageState extends ConsumerState<AlbumPage> {
       }
     });
 
+    final topInset = ShellChromeScope.topInsetOf(context);
     return SafeArea(
+      top: topInset == 0,
       // D 段选图态：系统返回手势/返回键 = 取消选图（不误设封面），再按才退出 App
       child: PopScope(
         canPop: st.coverPickAlbum.isEmpty,
@@ -119,12 +122,15 @@ class _AlbumPageState extends ConsumerState<AlbumPage> {
             onPressed: () => _openUpload(context, st.selectedAlbum),
             child: const Icon(Icons.add_a_photo_rounded),
           ),
-          body: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            _heading(context),
-            _viewTabs(context, st),
-            if (st.view == AlbumView.byAlbum) _albumCoverRow(context, st),
-            Expanded(child: _body(context, st)),
-          ]),
+          body: Padding(
+            padding: EdgeInsets.only(top: topInset),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              _heading(context),
+              _viewTabs(context, st),
+              if (st.view == AlbumView.byAlbum) _albumCoverRow(context, st),
+              Expanded(child: _body(context, st)),
+            ]),
+          ),
         ),
       ),
     );
@@ -212,11 +218,16 @@ class _AlbumPageState extends ConsumerState<AlbumPage> {
           // 2.4.1 第 8 项④：选中态 = 主题色描边 + 淡紫底，禁止整卡实心紫。
           color: selected
               ? cs.primaryContainer.withValues(alpha: 0.35)
-              : cs.surfaceContainerHighest.withValues(alpha: 0.5),
+              : (theme.brightness == Brightness.dark
+                  ? cs.surfaceContainerHigh
+                  : cs.surface),
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
-              color: selected ? cs.primary : cs.outlineVariant,
-              width: selected ? 1.5 : 1),
+              color: selected
+                  ? cs.primary
+                  : cs.outlineVariant.withValues(alpha: 0.5),
+              width: selected ? 1.5 : 0.8),
+          boxShadow: appleCardShadows(theme.brightness == Brightness.dark),
         ),
         child: Column(children: [
           Expanded(
