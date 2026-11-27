@@ -154,6 +154,9 @@ object PeerLocNative {
     private var appContext: Context? = null
 
     // 采集态
+    private val debouncer = LocationDebouncer()
+    private var adaptiveStationaryActive = false
+    private var nextFlushAllowedAtElapsed = 0L
     private val queue = ArrayDeque<JSONObject>()
     private var lastSent: JSONObject? = null
     private var lastEnqueued: JSONObject? = null
@@ -331,6 +334,9 @@ object PeerLocNative {
             return mapOf("ok" to false, "reason" to reason, "detail" to detail)
         }
         stillMode = false; stillCount = 0; queue.clear()
+        debouncer.reset()
+        adaptiveStationaryActive = false
+        nextFlushAllowedAtElapsed = 0L
         reportedCount = 0; droppedCount = 0; lastError = null
         receivedCount = 0; lastReceivedAt = 0
         // fix7：重开前先清掉可能残留的旧闹钟（上一会话的 stillMode 已归零，
@@ -347,19 +353,30 @@ object PeerLocNative {
     }
 
     /** 开关态单一事实源查询：服务在跑 + 最近回调计数（页面进入/toggle 后回填）。 */
-    fun status(): Map<String, Any?> = mapOf(
-        "running" to listeners.isNotEmpty(),
-        "received" to receivedCount,
-        "lastReceivedAt" to lastReceivedAt,
-        "queue" to queue.size,
-        "reported" to reportedCount,
-        "dropped" to droppedCount,
-        "still" to stillMode,
-        // fix7 诊断：定时器是否挂着 / 实际 tick 次数（真机复验看这两个值，
-        // 比只看落库点数更早暴露「闹钟没挂上」）
-        "heartbeatArmed" to heartbeatArmed,
-        "heartbeatTicks" to heartbeatTicks,
-        "error" to lastError)
+    fun status(): Map<String, Any?> {
+        val db = debouncer.diagnostics()
+        return mapOf(
+            "running" to listeners.isNotEmpty(),
+            "received" to receivedCount,
+            "lastReceivedAt" to lastReceivedAt,
+            "queue" to queue.size,
+            "reported" to reportedCount,
+            "dropped" to droppedCount,
+            "still" to stillMode,
+            // fix7 诊断：定时器是否挂着 / 实际 tick 次数（真机复验看这两个值，
+            // 比只看落库点数更早暴露「闹钟没挂上」）
+            "heartbeatArmed" to heartbeatArmed,
+            "heartbeatTicks" to heartbeatTicks,
+            "debounceState" to db.state.name,
+            "anchorLockCount" to db.anchorLockCount,
+            "droppedAccuracy" to db.droppedAccuracy,
+            "droppedSpike" to db.droppedSpike,
+            "droppedBounce" to db.droppedBounce,
+            "droppedStationary" to db.droppedStationary,
+            "backoffStep" to db.backoffStep,
+            "error" to lastError,
+        )
+    }
 
     /** fatal 日志导出（验证卡导出/分享入口——机主拿得出来才算落盘完成）。 */
     fun exportFatalLog(): Map<String, Any?> {
@@ -576,16 +593,68 @@ object PeerLocNative {
         ensureHeartbeatReceiver(context)
         try {
             manager.requestLocationUpdates(
-                LocationManager.GPS_PROVIDER, MIN_TIME_MS, MIN_DISTANCE_M, listener,
+                LocationManager.GPS_PROVIDER,
+                LocationDebounceConfig.MOVING_MIN_TIME_MS,
+                LocationDebounceConfig.MOVING_MIN_DISTANCE_M,
+                listener,
                 Looper.getMainLooper())
             manager.requestLocationUpdates(
-                LocationManager.NETWORK_PROVIDER, MIN_TIME_MS, MIN_DISTANCE_M, listener,
+                LocationManager.NETWORK_PROVIDER,
+                LocationDebounceConfig.MOVING_MIN_TIME_MS,
+                LocationDebounceConfig.MOVING_MIN_DISTANCE_M,
+                listener,
                 Looper.getMainLooper())
             manager.requestLocationUpdates(
                 LocationManager.PASSIVE_PROVIDER, 0L, 0f, listener, Looper.getMainLooper())
-            log("started: gps+network+passive (25m/15s; passive 0/0)")
+            adaptiveStationaryActive = false
+            log("started: gps+network+passive (30m/30s adaptive; passive 0/0)")
         } catch (e: Exception) {
             log("start partial-error: ${e.message}") // provider 被系统关闭不整体失败
+        }
+    }
+
+    /** 乙·自适应采样切换：STATIONARY_LOCKED 停 GPS 省电，仅留 NETWORK+PASSIVE 唤醒；MOVING 恢复 GPS。 */
+    private fun updateAdaptiveSampling(target: DebounceState) {
+        val manager = lm ?: return
+        val listener = listeners.firstOrNull() ?: return
+        if (target == DebounceState.STATIONARY_LOCKED && !adaptiveStationaryActive) {
+            try {
+                manager.removeUpdates(listener)
+                manager.requestLocationUpdates(
+                    LocationManager.NETWORK_PROVIDER,
+                    LocationDebounceConfig.MOVING_MIN_TIME_MS,
+                    LocationDebounceConfig.MOVING_MIN_DISTANCE_M,
+                    listener,
+                    Looper.getMainLooper())
+                manager.requestLocationUpdates(
+                    LocationManager.PASSIVE_PROVIDER, 0L, 0f, listener, Looper.getMainLooper())
+                adaptiveStationaryActive = true
+                log("adaptive -> STATIONARY_LOCKED (gps off, network+passive wakeup)")
+            } catch (e: Exception) {
+                log("adaptive stationary switch failed: ${e.message}")
+            }
+        } else if (target == DebounceState.MOVING && adaptiveStationaryActive) {
+            try {
+                manager.removeUpdates(listener)
+                manager.requestLocationUpdates(
+                    LocationManager.GPS_PROVIDER,
+                    LocationDebounceConfig.MOVING_MIN_TIME_MS,
+                    LocationDebounceConfig.MOVING_MIN_DISTANCE_M,
+                    listener,
+                    Looper.getMainLooper())
+                manager.requestLocationUpdates(
+                    LocationManager.NETWORK_PROVIDER,
+                    LocationDebounceConfig.MOVING_MIN_TIME_MS,
+                    LocationDebounceConfig.MOVING_MIN_DISTANCE_M,
+                    listener,
+                    Looper.getMainLooper())
+                manager.requestLocationUpdates(
+                    LocationManager.PASSIVE_PROVIDER, 0L, 0f, listener, Looper.getMainLooper())
+                adaptiveStationaryActive = false
+                log("adaptive -> MOVING (gps+network+passive restored)")
+            } catch (e: Exception) {
+                log("adaptive moving switch failed: ${e.message}")
+            }
         }
     }
 
@@ -602,6 +671,9 @@ object PeerLocNative {
         }
         listeners.clear(); lm = null; queue.clear(); lastSent = null
         lastEnqueued = null; lastAccepted = null; lastSentAt = 0; lastFlushAt = 0
+        debouncer.reset()
+        adaptiveStationaryActive = false
+        nextFlushAllowedAtElapsed = 0L
         stillMode = false; stillCount = 0; heartbeatTicks = 0
         flushing = false; flushPending = false
         log("stopped (queue cleared, heartbeat alarm cancelled)")
@@ -1200,10 +1272,17 @@ object PeerLocNative {
      * fix8：锚点恒为 `lastSentAt + HEARTBEAT_MS`（不按 tick 时刻累加，避免
      * 漂移）；锚点已过则最早 1 s 后触发。同目标时刻重复调用只 set 一次。
      */
+    private fun activeHeartbeatWindowMs(): Long =
+        if (debouncer.state == DebounceState.STATIONARY_LOCKED) {
+            LocationDebounceConfig.STATIONARY_HEARTBEAT_MS
+        } else {
+            STILL_HEARTBEAT_MS
+        }
+
     private fun scheduleHeartbeat(ctx: Context) {
         val am = ctx.getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
         val now = SystemClock.elapsedRealtime()
-        val at = HeartbeatGate.nextArmAt(now, lastSentAt)
+        val at = HeartbeatGate.nextArmAt(now, lastSentAt, windowMs = activeHeartbeatWindowMs())
         if (heartbeatArmed && armedTarget == at) return
         try {
             am.setAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, at, heartbeatIntent(ctx))
@@ -1260,10 +1339,11 @@ object PeerLocNative {
             log("hb tick: end arm (running=$running)")
             return
         }
+        val winMs = activeHeartbeatWindowMs()
         if (!HeartbeatGate.shouldEmitOnTick(
-                running, hasHistory, HeartbeatGate.due(now, lastSentAt))) {
+                running, hasHistory, HeartbeatGate.due(now, lastSentAt, windowMs = winMs))) {
             // 本窗口已有回调出点（或尚无历史定位）→ 不补点，只按锚点续挂
-            log("hb tick: gated (${(now - lastSentAt) / 1000}s < ${STILL_HEARTBEAT_MS / 1000}s) -> re-arm")
+            log("hb tick: gated (${(now - lastSentAt) / 1000}s < ${winMs / 1000}s) -> re-arm")
             ctx?.let { scheduleHeartbeat(it) }
             return
         }
@@ -1272,24 +1352,42 @@ object PeerLocNative {
     }
 
     /**
-     * 心跳出点：优先用 [lastAccepted]（acc ≤ 50 的最后入点定位）造轨迹点；
+     * 心跳出点：STATIONARY_LOCKED 优先沿用锁定的真实锚点；
+     * 否则沿用 [lastAccepted]（acc ≤ 50 的最后入点定位）造轨迹点；
      * 无历史点时只保鲜 latest。两者都做「刷新 lastSent + 立即 flush」，
      * 保证对方端最后在线不冻结。
      */
     private fun emitHeartbeat(atElapsed: Long) {
         val nowMs = System.currentTimeMillis()
+        val lockedFix = debouncer.heartbeatFix(nowMs)
         // 口径二次校验：来源必须是 acc ≤ 50 的入点定位（[lastAccepted] 本来
         // 只存这类，这里是防将来有人改 lastAccepted 的写入条件）
         val src = lastAccepted?.takeIf {
             HeartbeatGate.heartbeatSourceAllowed(it.getDouble("acc"), ACC_LATEST_ONLY_M)
         }
         val prev = lastSent
-        if (src == null && prev == null) {
+        if (lockedFix == null && src == null && prev == null) {
             // 冷启动即静止且无任何历史定位：不造假点（下个 tick 再说）
             log("hb tick: cold start without any fix -> skip")
             return
         }
-        if (src != null) {
+        val hbLat: Double
+        val hbLng: Double
+        if (lockedFix != null) {
+            val point = JSONObject().apply {
+                put("id", "pl-hb-$nowMs")
+                put("ts", nowMs.toDouble())
+                put("lat", lockedFix.lat)
+                put("lng", lockedFix.lng)
+                put("acc", lockedFix.acc)
+                put("speed", 0.0)
+            }
+            enqueue(point)
+            lastEnqueued = point
+            hbLat = lockedFix.lat
+            hbLng = lockedFix.lng
+            log("hb tick: locked anchor enqueued (acc=${lockedFix.acc})")
+        } else if (src != null) {
             val point = JSONObject().apply {
                 put("id", "pl-hb-$nowMs")
                 put("ts", nowMs.toDouble())
@@ -1300,12 +1398,16 @@ object PeerLocNative {
             }
             enqueue(point)
             lastEnqueued = point
+            hbLat = src.getDouble("lat")
+            hbLng = src.getDouble("lng")
             log("hb tick: point enqueued (acc=${src.getDouble("acc")})")
         } else {
-            log("hb tick: no acc<=50 history -> latest only (${prev!!.optDouble("battery", -1.0)})")
+            hbLat = prev!!.getDouble("lat")
+            hbLng = prev.getDouble("lng")
+            log("hb tick: no acc<=50 history -> latest only (${prev.optDouble("battery", -1.0)})")
         }
-        val lat = src?.getDouble("lat") ?: prev!!.getDouble("lat")
-        val lng = src?.getDouble("lng") ?: prev!!.getDouble("lng")
+        val lat = hbLat
+        val lng = hbLng
         val pn = cachedPlaceName
         lastSent = JSONObject().apply {
             put("lat", lat); put("lng", lng)
@@ -1382,78 +1484,62 @@ object PeerLocNative {
         lastReceivedAt = System.currentTimeMillis()
         appContext?.let { maybeGeocodeAsync(it, location.latitude, location.longitude) }
         val acc = if (location.hasAccuracy()) location.accuracy.toDouble() else 9999.0
-        // 精度过滤：acc>100 丢弃
-        if (acc > ACC_DROP_M) {
-            droppedCount++; log("drop: acc=${acc}m > ${ACC_DROP_M}m"); return
-        }
         val gcj = wgs84ToGcj02(location.latitude, location.longitude)
-        // 位移判定（与上次上报点比较，米）
-        val moved = lastSent?.let {
-            distanceMeters(it.getDouble("lat"), it.getDouble("lng"), gcj.first, gcj.second)
-        } ?: Double.MAX_VALUE
-        var heartbeat = false
-        if (moved < MIN_DISTANCE_M) {
-            stillCount++
-            if (HeartbeatGate.shouldEnterStill(stillCount, stillMode)) {
-                stillMode = true
-                log("still confirmed x$stillCount -> heartbeat ${STILL_HEARTBEAT_MS / 1000}s")
-            }
-        } else {
-            if (stillMode) log("movement resumed (moved=${moved.toInt()}m) -> active pace")
-            stillCount = 0; stillMode = false
-        }
-        // 静止心跳 5 min 时间门控（与定时器共用 lastSentAt，先到者为准）：
-        // 门控未到直接丢弃本次回调（PASSIVE/重复 provider 高频触发，
-        // 不能每帧都当心跳入点）
-        if (stillMode) {
-            val now = SystemClock.elapsedRealtime()
-            if (!HeartbeatGate.due(now, lastSentAt)) {
-                log("still heartbeat gated (${(now - lastSentAt) / 1000}s < ${STILL_HEARTBEAT_MS / 1000}s)")
+        val rawSpeed = if (location.hasSpeed()) location.speed.toDouble() else null
+        val outcome = debouncer.process(
+            RawFix(
+                lat = gcj.first,
+                lng = gcj.second,
+                acc = acc,
+                speed = rawSpeed,
+                timeMs = location.time,
+            ),
+        )
+        updateAdaptiveSampling(debouncer.state)
+        when (outcome) {
+            is DebounceOutcome.Drop -> {
+                if (outcome.reason != DropReason.STATIONARY_ABSORBED) {
+                    droppedCount++
+                }
+                if (outcome.state == DebounceState.STATIONARY_LOCKED) {
+                    stillMode = true
+                }
+                log("debounce drop: ${outcome.reason} state=${outcome.state} acc=${acc}m")
+                maybeArmHeartbeat()
                 return
             }
-            heartbeat = true
-        }
-        // 多 provider 去重：与上一个**入队**点 <10 m 视为同位置重复回调。
-        // fix7：心跳点豁免——静止点必然 <10 m，豁免否则心跳永远入不了队
-        if (!heartbeat) {
-            lastEnqueued?.let {
-                if (distanceMeters(it.getDouble("lat"), it.getDouble("lng"),
-                        gcj.first, gcj.second) < 10.0) {
-                    log("dedup: same spot as last enqueued (${location.provider})")
-                    return
+            is DebounceOutcome.Emit -> {
+                val f = outcome.fix
+                stillMode = (outcome.state == DebounceState.STATIONARY_LOCKED)
+                if (!stillMode) stillCount = 0
+                val point = JSONObject().apply {
+                    put("id", "pl-${f.timeMs}")
+                    put("ts", f.timeMs.toDouble())
+                    put("lat", f.lat)
+                    put("lng", f.lng)
+                    put("acc", f.acc)
+                    put("speed", f.speed ?: 0.0)
                 }
+                if (f.acc <= ACC_LATEST_ONLY_M) {
+                    enqueue(point)
+                    lastAccepted = JSONObject().apply {
+                        put("lat", f.lat); put("lng", f.lng); put("acc", f.acc)
+                    }
+                }
+                lastEnqueued = point
+                val pn = cachedPlaceName
+                lastSent = JSONObject().apply {
+                    put("lat", f.lat); put("lng", f.lng)
+                    put("battery", readBattery()); put("charging", readCharging())
+                    put("net", readNet()); put("wifi", readWifi())
+                    if (pn.isNotEmpty()) put("place_name", pn)
+                    put("ts", System.currentTimeMillis().toDouble())
+                }
+                lastSentAt = SystemClock.elapsedRealtime()
+                maybeArmHeartbeat()
+                maybeFlush()
             }
         }
-        val point = JSONObject().apply {
-            put("id", "pl-${location.time}")
-            put("ts", location.time.toDouble())
-            put("lat", gcj.first)
-            put("lng", gcj.second)
-            put("acc", acc)
-            put("speed", if (location.hasSpeed()) location.speed.toDouble() else 0.0)
-        }
-        // 精度分层：50<acc≤100 只更新 latest，不入轨迹 points
-        if (acc <= ACC_LATEST_ONLY_M) {
-            enqueue(point)
-            // fix7：记住「最后一条 acc ≤ 50 的入点定位」，心跳点只从它复制
-            lastAccepted = JSONObject().apply {
-                put("lat", gcj.first); put("lng", gcj.second); put("acc", acc)
-            }
-        }
-        lastEnqueued = point
-        val pn = cachedPlaceName
-        lastSent = JSONObject().apply {
-            put("lat", gcj.first); put("lng", gcj.second)
-            put("battery", readBattery()); put("charging", readCharging())
-            put("net", readNet()); put("wifi", readWifi())
-            if (pn.isNotEmpty()) put("place_name", pn)
-            put("ts", System.currentTimeMillis().toDouble())
-        }
-        lastSentAt = SystemClock.elapsedRealtime()
-        // fix8：每次成功上报后把闹钟锚点前移到新的 lastSentAt + 5min
-        // （运动中也挂着——熄屏后没有回调时靠它续点）
-        maybeArmHeartbeat()
-        maybeFlush()
     }
 
     private fun enqueue(point: JSONObject) {
@@ -1474,9 +1560,10 @@ object PeerLocNative {
 
     private fun maybeFlush() {
         if (lastSent == null) return
+        val now = SystemClock.elapsedRealtime()
+        if (nextFlushAllowedAtElapsed > 0L && now < nextFlushAllowedAtElapsed) return
         val due = queue.size >= BATCH_MAX ||
-            (queue.isNotEmpty() &&
-                SystemClock.elapsedRealtime() - lastFlushAt >= BATCH_FLUSH_MS)
+            (queue.isNotEmpty() && now - lastFlushAt >= BATCH_FLUSH_MS)
         if (due) flush()
     }
 
@@ -1576,10 +1663,14 @@ object PeerLocNative {
                     reportedCount += accepted
                     lastFlushAt = SystemClock.elapsedRealtime()
                     lastFlushWallMs = System.currentTimeMillis()
+                    debouncer.recordSuccess()
+                    nextFlushAllowedAtElapsed = 0L
                     log("flush ok n=${ids.size} accepted=$accepted " +
                         "(reported=$reportedCount, queue=${queue.size})")
                 } else {
-                    log("flush fail (queue=${queue.size}) err=$lastError")
+                    val delayMs = debouncer.recordFailure()
+                    nextFlushAllowedAtElapsed = SystemClock.elapsedRealtime() + delayMs
+                    log("flush fail (queue=${queue.size}) backoff=${delayMs / 1000}s err=$lastError")
                 }
                 // 尾随补发：仅在成功路径（失败立即重试会在无网夜空转打点，
                 // 留给下一个 tick / 回调再发）

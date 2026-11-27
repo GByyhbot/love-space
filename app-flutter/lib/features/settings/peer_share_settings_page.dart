@@ -1098,6 +1098,14 @@ class _PeerShareSettingsPageState extends ConsumerState<PeerShareSettingsPage>
           _diagRow(
             theme,
             cs,
+            '定位去抖/锚点',
+            _diag.debounceState.isEmpty
+                ? '尚未初始化'
+                : '${_diag.debounceState == 'STATIONARY_LOCKED' ? '静止锁定' : '移动中'} · 锚点锁 ${_diag.anchorLockCount} 次 · 退避阶 ${_diag.backoffStep}\n滤除: 精度${_diag.droppedAccuracy} / 跳变${_diag.droppedSpike} / 回弹${_diag.droppedBounce} / 静止吸收${_diag.droppedStationary}',
+          ),
+          _diagRow(
+            theme,
+            cs,
             '当前策略摘要',
             _diag.policySummary.isEmpty ? '尚未下发' : _diag.policySummary,
           ),

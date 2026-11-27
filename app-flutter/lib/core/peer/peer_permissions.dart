@@ -113,6 +113,13 @@ class PeerDiagnosticsSnapshot {
     required this.policyHalted,
     required this.permissions,
     required this.channelAvailable,
+    this.debounceState = '',
+    this.anchorLockCount = 0,
+    this.droppedAccuracy = 0,
+    this.droppedSpike = 0,
+    this.droppedBounce = 0,
+    this.droppedStationary = 0,
+    this.backoffStep = 0,
   });
 
   final bool locRunning;
@@ -142,6 +149,13 @@ class PeerDiagnosticsSnapshot {
   final bool policyHalted;
   final PeerPermissionSnapshot permissions;
   final bool channelAvailable;
+  final String debounceState;
+  final int anchorLockCount;
+  final int droppedAccuracy;
+  final int droppedSpike;
+  final int droppedBounce;
+  final int droppedStationary;
+  final int backoffStep;
 
   static const PeerDiagnosticsSnapshot unavailable = PeerDiagnosticsSnapshot(
     locRunning: false,
@@ -216,6 +230,13 @@ class PeerDiagnosticsSnapshot {
           ? PeerPermissionSnapshot.unavailable
           : PeerPermissionSnapshot.fromMap(pm),
       channelAvailable: true,
+      debounceState: (loc['debounceState'] ?? '').toString(),
+      anchorLockCount: _asInt(loc['anchorLockCount']),
+      droppedAccuracy: _asInt(loc['droppedAccuracy']),
+      droppedSpike: _asInt(loc['droppedSpike']),
+      droppedBounce: _asInt(loc['droppedBounce']),
+      droppedStationary: _asInt(loc['droppedStationary']),
+      backoffStep: _asInt(loc['backoffStep']),
     );
   }
 }
