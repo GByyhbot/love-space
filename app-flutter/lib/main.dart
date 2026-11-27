@@ -105,9 +105,8 @@ Future<void> main() async {
   voiceInterruptHook = () => container.read(songPlaybackProvider.notifier).stop();
   // 2.5.9 裁定⑥：static 回调（onTaskData）写 provider 用
   NotifyCoordinator.notifyStatusContainer = container;
-  // 2.8.0 第 0 步：定位验证包冷启动自动恢复采集（开关持久化，
-  // experiment/peer-loc-verify 分支，确认后主体接线替换）
-  unawaited(peerLocatorAutoStart());
+  // 2.8.0 第 0 步：冷启动按持久化期望态自动恢复定位采集（开关显示与自启解耦依赖用户手拨）
+  unawaited(peerLocatorAutoStart(resumeIfExpected: true));
   // 2.8.7 自动报备：装状态样本 handler + 按 events 开关同步原生采集态
   unawaited(peerStateCollectionAutoStart(
       dio: () => container.read(api.dioProvider.future)));
@@ -328,6 +327,223 @@ final routerProvider = Provider<GoRouter>((ref) {
   );
 });
 
+ThemeData buildAppTheme(
+  Color seed,
+  Brightness brightness, {
+  bool motion = true,
+}) {
+  final cs = ColorScheme.fromSeed(
+    seedColor: seed,
+    brightness: brightness,
+  );
+  final dark = brightness == Brightness.dark;
+  final sheetSurface = dark ? cs.surfaceContainerHigh : cs.surface;
+  final sheetBorder = dark
+      ? Colors.white.withValues(alpha: 0.12)
+      : cs.outlineVariant.withValues(alpha: 0.55);
+  return ThemeData(
+    useMaterial3: true,
+    colorScheme: cs,
+    // 圆角 token 化（段 B G3）：Card 落 12 事实标准（2.1 基线），单源主题。
+    cardTheme: CardThemeData(
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppRadius.card),
+      ),
+    ),
+    filledButtonTheme: FilledButtonThemeData(
+      style: ButtonStyle(
+        minimumSize: const WidgetStatePropertyAll(
+          Size(AppTouch.minTarget, AppTouch.minTarget),
+        ),
+        textStyle: const WidgetStatePropertyAll(
+          TextStyle(fontWeight: FontWeight.w600),
+        ),
+        shape: WidgetStatePropertyAll(
+          RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadius.small),
+          ),
+        ),
+        backgroundColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.disabled)) {
+            return cs.onSurface.withValues(alpha: dark ? 0.18 : 0.14);
+          }
+          return null;
+        }),
+        foregroundColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.disabled)) {
+            return cs.onSurface.withValues(alpha: dark ? 0.45 : 0.48);
+          }
+          return null;
+        }),
+      ),
+    ),
+    outlinedButtonTheme: OutlinedButtonThemeData(
+      style: ButtonStyle(
+        minimumSize: const WidgetStatePropertyAll(
+          Size(AppTouch.minTarget, AppTouch.minTarget),
+        ),
+        textStyle: const WidgetStatePropertyAll(
+          TextStyle(fontWeight: FontWeight.w600),
+        ),
+        shape: WidgetStatePropertyAll(
+          RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadius.small),
+          ),
+        ),
+        backgroundColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.disabled)) {
+            return dark
+                ? cs.surfaceContainerHighest.withValues(alpha: 0.32)
+                : cs.surfaceContainerHighest.withValues(alpha: 0.50);
+          }
+          return dark
+              ? cs.surfaceContainerHigh.withValues(alpha: 0.55)
+              : cs.surface.withValues(alpha: 0.94);
+        }),
+        foregroundColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.disabled)) {
+            return cs.onSurface.withValues(alpha: dark ? 0.42 : 0.46);
+          }
+          return cs.onSurface;
+        }),
+        side: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.disabled)) {
+            return BorderSide(
+              color: cs.outline.withValues(alpha: dark ? 0.22 : 0.28),
+              width: 1,
+            );
+          }
+          return BorderSide(
+            color: dark
+                ? Colors.white.withValues(alpha: 0.22)
+                : cs.outline.withValues(alpha: 0.52),
+            width: 1,
+          );
+        }),
+      ),
+    ),
+    textButtonTheme: TextButtonThemeData(
+      style: ButtonStyle(
+        minimumSize: const WidgetStatePropertyAll(
+          Size(AppTouch.minTarget, AppTouch.minTarget),
+        ),
+        textStyle: const WidgetStatePropertyAll(
+          TextStyle(fontWeight: FontWeight.w600),
+        ),
+        shape: WidgetStatePropertyAll(
+          RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadius.small),
+          ),
+        ),
+        foregroundColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.disabled)) {
+            return cs.onSurface.withValues(alpha: dark ? 0.42 : 0.46);
+          }
+          return null;
+        }),
+      ),
+    ),
+    chipTheme: ChipThemeData(
+      backgroundColor: dark ? cs.surfaceContainerHigh : cs.surface,
+      disabledColor: cs.surfaceContainerHighest.withValues(alpha: 0.55),
+      selectedColor: cs.primaryContainer,
+      labelStyle: TextStyle(color: cs.onSurface),
+      secondaryLabelStyle: TextStyle(color: cs.onPrimaryContainer),
+      side: BorderSide(
+        color: dark
+            ? Colors.white.withValues(alpha: 0.14)
+            : cs.outline.withValues(alpha: 0.36),
+        width: 0.8,
+      ),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppRadius.pill),
+      ),
+    ),
+    inputDecorationTheme: InputDecorationTheme(
+      filled: true,
+      fillColor: dark
+          ? cs.surfaceContainerHighest.withValues(alpha: 0.42)
+          : cs.surfaceContainerHighest.withValues(alpha: 0.55),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(AppRadius.small),
+        borderSide: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.6)),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(AppRadius.small),
+        borderSide: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.6)),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(AppRadius.small),
+        borderSide: BorderSide(color: cs.primary, width: 1.4),
+      ),
+    ),
+    bottomSheetTheme: BottomSheetThemeData(
+      showDragHandle: false,
+      backgroundColor: sheetSurface,
+      surfaceTintColor: Colors.transparent,
+      modalBarrierColor: Colors.black.withValues(alpha: dark ? 0.62 : 0.42),
+      clipBehavior: Clip.antiAlias,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(AppRadius.xl),
+        ),
+      ),
+    ),
+    dialogTheme: DialogThemeData(
+      backgroundColor: sheetSurface,
+      surfaceTintColor: Colors.transparent,
+      elevation: dark ? 6 : 3,
+      titleTextStyle: TextStyle(
+        fontSize: 18,
+        fontWeight: FontWeight.w700,
+        color: cs.onSurface,
+      ),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppRadius.large),
+        side: BorderSide(color: sheetBorder, width: 0.8),
+      ),
+    ),
+    popupMenuTheme: PopupMenuThemeData(
+      color: sheetSurface,
+      surfaceTintColor: Colors.transparent,
+      shadowColor: Colors.black.withValues(alpha: dark ? 0.28 : 0.08),
+      elevation: dark ? 4 : 2,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppRadius.medium),
+        side: BorderSide(color: sheetBorder, width: 0.8),
+      ),
+    ),
+    datePickerTheme: DatePickerThemeData(
+      backgroundColor: sheetSurface,
+      surfaceTintColor: Colors.transparent,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppRadius.large),
+      ),
+    ),
+    timePickerTheme: TimePickerThemeData(
+      backgroundColor: sheetSurface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppRadius.large),
+      ),
+    ),
+    dividerTheme: DividerThemeData(
+      thickness: 1,
+      space: 1,
+      color: cs.outlineVariant.withValues(alpha: 0.45),
+    ),
+    // 动效开关（space.motion）：关掉时页面转场/水波纹都退化。
+    splashFactory: motion ? null : NoSplash.splashFactory,
+    pageTransitionsTheme: motion
+        ? const PageTransitionsTheme()
+        : const PageTransitionsTheme(
+            builders: <TargetPlatform, PageTransitionsBuilder>{
+              TargetPlatform.android: _NoMotionTransitionsBuilder(),
+              TargetPlatform.iOS: _NoMotionTransitionsBuilder(),
+            },
+          ),
+  );
+}
+
 class LoveApp extends ConsumerWidget {
   const LoveApp({super.key});
 
@@ -403,95 +619,10 @@ class LoveApp extends ConsumerWidget {
     final fontScale = ref.watch(appFontScaleProvider);
     final motion = appearance.effectiveMotion;
 
-    ThemeData buildTheme(Color seed, Brightness brightness) {
-      final cs = ColorScheme.fromSeed(
-        seedColor: seed,
-        brightness: brightness,
-      );
-      return ThemeData(
-        useMaterial3: true,
-        colorScheme: cs,
-        // 圆角 token 化（段 B G3）：Card 落 12 事实标准（2.1 基线），单源主题。
-        cardTheme: CardThemeData(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppRadius.card),
-          ),
-        ),
-        filledButtonTheme: FilledButtonThemeData(
-          style: FilledButton.styleFrom(
-            minimumSize: const Size(AppTouch.minTarget, AppTouch.minTarget),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(AppRadius.small),
-            ),
-          ),
-        ),
-        outlinedButtonTheme: OutlinedButtonThemeData(
-          style: OutlinedButton.styleFrom(
-            minimumSize: const Size(AppTouch.minTarget, AppTouch.minTarget),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(AppRadius.small),
-            ),
-          ),
-        ),
-        textButtonTheme: TextButtonThemeData(
-          style: TextButton.styleFrom(
-            minimumSize: const Size(AppTouch.minTarget, AppTouch.minTarget),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(AppRadius.small),
-            ),
-          ),
-        ),
-        inputDecorationTheme: InputDecorationTheme(
-          filled: true,
-          fillColor: cs.surfaceContainerHighest.withValues(alpha: 0.42),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(AppRadius.small),
-            borderSide: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.5)),
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(AppRadius.small),
-            borderSide: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.5)),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(AppRadius.small),
-            borderSide: BorderSide(color: cs.primary, width: 1.4),
-          ),
-        ),
-        bottomSheetTheme: const BottomSheetThemeData(
-          showDragHandle: true,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.vertical(
-              top: Radius.circular(AppRadius.xl),
-            ),
-          ),
-        ),
-        dialogTheme: DialogThemeData(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppRadius.large),
-          ),
-        ),
-        dividerTheme: DividerThemeData(
-          thickness: 1,
-          space: 1,
-          color: cs.outlineVariant.withValues(alpha: 0.45),
-        ),
-        // 动效开关（space.motion）：关掉时页面转场/水波纹都退化。
-        splashFactory: motion ? null : NoSplash.splashFactory,
-        pageTransitionsTheme: motion
-            ? const PageTransitionsTheme()
-            : const PageTransitionsTheme(
-                builders: <TargetPlatform, PageTransitionsBuilder>{
-                  TargetPlatform.android: _NoMotionTransitionsBuilder(),
-                  TargetPlatform.iOS: _NoMotionTransitionsBuilder(),
-                },
-              ),
-      );
-    }
-
     return MaterialApp.router(
       title: '恋爱空间',
-      theme: buildTheme(lightSeed, Brightness.light),
-      darkTheme: buildTheme(darkSeed, Brightness.dark),
+      theme: buildAppTheme(lightSeed, Brightness.light, motion: motion),
+      darkTheme: buildAppTheme(darkSeed, Brightness.dark, motion: motion),
       themeMode: themeMode,
       routerConfig: router,
       // 2.3.7：日期选择器等 Material 组件中文（zh-CN 本地化）。

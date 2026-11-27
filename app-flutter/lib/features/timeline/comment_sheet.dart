@@ -11,6 +11,7 @@ import '../auth/auth_state.dart';
 import '../../core/ui/submit_morph.dart' show SubmitMorphButton;
 import 'timeline_controller.dart';
 import '../../core/theme/tokens.dart';
+import '../../core/ui/apple_ui.dart';
 import '../../core/ui/hold_to_confirm.dart' show HoldToConfirmButton;
 
 /// 打开评论 Sheet（footer 评论数点击 / 「回复」入口）
@@ -20,8 +21,8 @@ Future<void> showCommentSheet(BuildContext context,
     context: context,
     isScrollControlled: true, // 键盘避让
     isDismissible: true, // 允许下滑手势 / 点遮罩关闭
-    shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.lg))),
+    showDragHandle: false,
+    backgroundColor: Colors.transparent,
     builder: (_) => CommentSheet(rid: rid, me: me),
   );
 }
@@ -85,19 +86,14 @@ class _CommentSheetState extends ConsumerState<CommentSheet> {
     final comments = idx < 0
         ? const <Map<String, dynamic>>[]
         : posts[idx].comments;
-    return Padding(
-      padding: EdgeInsets.only(
-          left: 16, right: 16, top: 12,
-          bottom: MediaQuery.of(context).viewInsets.bottom + 16),
-      child: Column(mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        Row(children: [
-          Expanded(child: Text('评论', style: theme.textTheme.titleMedium)),
-          IconButton(
-              tooltip: '关闭',
-              onPressed: () => Navigator.of(context).pop(),
-              icon: const Icon(Icons.close_rounded)),
-        ]),
+    return AppleSheetContainer(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      title: '评论',
+      onClose: () => Navigator.of(context).pop(),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
         ConstrainedBox(
           constraints: BoxConstraints(
               maxHeight: MediaQuery.of(context).size.height * 0.45),

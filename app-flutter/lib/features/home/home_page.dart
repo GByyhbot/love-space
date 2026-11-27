@@ -125,6 +125,11 @@ class HomePage extends ConsumerWidget {
         ),
       ),
       data: (list) => RefreshIndicator(
+        edgeOffset: topInset,
+        color: theme.colorScheme.primary,
+        backgroundColor: theme.brightness == Brightness.dark
+            ? theme.colorScheme.surfaceContainerHigh
+            : theme.colorScheme.surface,
         // 2.4.3：下拉刷新把双卡数据一并刷新（与 hero/双格同一批生命周期）。
         onRefresh: () async {
           ref.invalidate(recordsProvider);
@@ -1100,55 +1105,17 @@ class _MoodRow extends ConsumerWidget {
     final saved = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
+      showDragHandle: false,
+      backgroundColor: Colors.transparent,
       builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setState) => Padding(
-          padding: EdgeInsets.only(
-            left: 16,
-            right: 16,
-            top: 12,
-            bottom: MediaQuery.of(ctx).viewInsets.bottom + 12,
-          ),
+        builder: (ctx, setState) => AppleSheetContainer(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+          title: '今天的心情',
+          onClose: () => Navigator.pop(ctx, false),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Center(
-                child: Container(
-                  width: 38,
-                  height: 4.5,
-                  margin: const EdgeInsets.only(bottom: 10),
-                  decoration: BoxDecoration(
-                    color: Theme.of(ctx)
-                        .colorScheme
-                        .outlineVariant
-                        .withValues(alpha: 0.8),
-                    borderRadius: BorderRadius.circular(3),
-                  ),
-                ),
-              ),
-              Row(children: [
-                Expanded(
-                    child: Text('今天的心情',
-                        style: Theme.of(ctx).textTheme.titleMedium)),
-                Container(
-                  width: 34,
-                  height: 34,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Theme.of(ctx)
-                        .colorScheme
-                        .surfaceContainerHighest
-                        .withValues(alpha: 0.6),
-                  ),
-                  child: IconButton(
-                      tooltip: '关闭',
-                      visualDensity: VisualDensity.compact,
-                      onPressed: () => Navigator.pop(ctx, false),
-                      icon:
-                          const Icon(Icons.close_rounded, size: 18)),
-                ),
-              ]),
-              const SizedBox(height: 10),
               // 表情格子：全部等大 tile（4 列网格，禁双倍宽）；选中 =
               // 淡紫底 + 主题色描边 + 勾徽；底色整体提亮一档。
               GridView.count(

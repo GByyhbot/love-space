@@ -30,6 +30,7 @@ import '../../core/chat/chat_media.dart';
 import '../../core/chat/keyboard_metrics.dart';
 import '../../core/chat/chat_models.dart';
 import '../../core/chat/chat_state.dart';
+import '../../core/ui/apple_ui.dart';
 import '../../core/ui/selection_sheet.dart';
 import '../auth/auth_state.dart';
 import '../settings/settings_state.dart' show spaceAppearanceProvider;
@@ -788,6 +789,13 @@ class _ChatComposeState extends ConsumerState<ChatCompose>
             color: chatChromeColor(theme,
                 immersive: widget.immersive, dark: widget.dark),
             borderRadius: BorderRadius.circular(26),
+            border: Border.all(
+              color: onDark
+                  ? Colors.white.withValues(alpha: 0.14)
+                  : theme.colorScheme.outlineVariant.withValues(alpha: 0.55),
+              width: 0.8,
+            ),
+            boxShadow: appleCardShadows(onDark),
           ),
           padding: const EdgeInsets.fromLTRB(6, 6, 6, 6),
           // 🔴 07 打回真根因（第三层）：ChatCompose 顶层 Column 交叉轴
@@ -992,6 +1000,7 @@ class _PanelSurface extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final onDark = chromeIsDark(dark, immersive);
     return SizedBox(
       height: height,
       child: Padding(
@@ -1002,6 +1011,13 @@ class _PanelSurface extends StatelessWidget {
           decoration: BoxDecoration(
             color: chatChromeColor(theme, immersive: immersive, dark: dark),
             borderRadius: BorderRadius.circular(kChatPanelRadius),
+            border: Border.all(
+              color: onDark
+                  ? Colors.white.withValues(alpha: 0.14)
+                  : theme.colorScheme.outlineVariant.withValues(alpha: 0.55),
+              width: 0.8,
+            ),
+            boxShadow: appleCardShadows(onDark),
           ),
           padding: contentPadding,
           child: child,
@@ -1073,7 +1089,7 @@ class _FnPanel extends StatelessWidget {
   }
 }
 
-/// ⊕面板单格（固定布局用；图标+文字居中）。
+/// ⊕面板单格（固定布局用；图标徽章+文字居中）。
 class _FnCell extends StatelessWidget {
   const _FnCell(
       {required this.tile, required this.onDark, required this.onTap});
@@ -1081,23 +1097,48 @@ class _FnCell extends StatelessWidget {
   final bool onDark;
   final VoidCallback onTap;
 
+  static AppleIconTone _toneFor(String id) => switch (id) {
+        'media' => AppleIconTone.sky,
+        'camera' => AppleIconTone.coral,
+        'bubble' => AppleIconTone.pink,
+        'sticker-panel' => AppleIconTone.amber,
+        'chat-locate' => AppleIconTone.emerald,
+        'chat-song' => AppleIconTone.purple,
+        'chat-search' => AppleIconTone.blue,
+        'chat-bg' => AppleIconTone.teal,
+        'tool-calendar' => AppleIconTone.blue,
+        'tool-quest' => AppleIconTone.coral,
+        'tool-wish' => AppleIconTone.purple,
+        'tool-ledger' => AppleIconTone.amber,
+        'tool-period' => AppleIconTone.rose,
+        'dashboard' => AppleIconTone.indigo,
+        'weekly' => AppleIconTone.sky,
+        _ => AppleIconTone.slate,
+      };
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return InkWell(
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(14),
       onTap: onTap,
       child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(tile.$2,
-                size: 24, color: onDark ? Colors.white : theme.colorScheme.primary),
-            const SizedBox(height: 5),
+            AppleIconBadge(
+              icon: tile.$2,
+              tone: _toneFor(tile.$1),
+              size: 34,
+            ),
+            const SizedBox(height: 4),
             Text(tile.$3,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: theme.textTheme.labelSmall?.copyWith(
-                    color: onDark ? Colors.white70 : null)),
+                    fontWeight: FontWeight.w500,
+                    color: onDark
+                        ? Colors.white.withValues(alpha: 0.90)
+                        : theme.colorScheme.onSurface)),
           ]),
     );
   }
@@ -1154,7 +1195,7 @@ class _StickerDock extends ConsumerWidget {
           height: 44,
           child: ListView(
             scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             children: [
               for (final (id, label) in stickerTabs)
                 Padding(
@@ -1162,12 +1203,28 @@ class _StickerDock extends ConsumerWidget {
                   child: TextButton(
                     onPressed: () => onTab(id),
                     style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      minimumSize: const Size(0, 34),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      backgroundColor: tab == id
+                          ? (onDark
+                              ? Colors.white.withValues(alpha: 0.16)
+                              : theme.colorScheme.primaryContainer
+                                  .withValues(alpha: 0.78))
+                          : Colors.transparent,
                       foregroundColor: tab == id
-                          ? (onDark ? Colors.white : theme.colorScheme.primary)
+                          ? (onDark
+                              ? Colors.white
+                              : theme.colorScheme.onPrimaryContainer)
                           : (onDark
                               ? Colors.white60
-                              : theme.colorScheme.outline),
-                      textStyle: theme.textTheme.labelLarge,
+                              : theme.colorScheme.onSurfaceVariant),
+                      textStyle: theme.textTheme.labelMedium?.copyWith(
+                        fontWeight:
+                            tab == id ? FontWeight.w700 : FontWeight.w500,
+                      ),
                     ),
                     child: Text(label),
                   ),

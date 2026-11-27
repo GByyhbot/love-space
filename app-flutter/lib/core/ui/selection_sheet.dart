@@ -7,7 +7,7 @@ library;
 import 'package:flutter/material.dart';
 
 import '../../core/theme/tokens.dart';
-import '../../core/theme/typography.dart';
+import 'apple_ui.dart';
 
 /// 单个选项。[leading] 可选（封面缩略图/彩色字徽等自定义头部）。
 class SelectionOption<T> {
@@ -36,80 +36,80 @@ Future<T?> showSelectionSheet<T>({
   return showModalBottomSheet<T>(
     context: context,
     isScrollControlled: true,
-    shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xl))),
-    builder: (ctx) => SafeArea(
-      child: ConstrainedBox(
-        constraints: BoxConstraints(
-          maxHeight: MediaQuery.of(ctx).size.height * 0.6,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
+    showDragHandle: false,
+    backgroundColor: Colors.transparent,
+    builder: (ctx) {
+      final theme = Theme.of(ctx);
+      final cs = theme.colorScheme;
+      final dark = theme.brightness == Brightness.dark;
+      return AppleSheetContainer(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+        title: title,
+        onClose: () => Navigator.pop(ctx),
+        maxHeightFactor: 0.65,
+        child: ListView(
+          shrinkWrap: true,
+          padding: const EdgeInsets.only(top: 2, bottom: 4),
           children: [
-            // 外壳（同 composer sheet）：抓手 + 标题 + 关闭圆钮。
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 10, 8, 0),
-              child: Row(children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        width: 38,
-                        height: 4.5,
-                        margin: const EdgeInsets.only(bottom: 10),
-                        decoration: BoxDecoration(
-                          color: Theme.of(ctx)
-                              .colorScheme
-                              .outlineVariant
-                              .withValues(alpha: 0.8),
-                          borderRadius: BorderRadius.circular(3),
-                        ),
-                      ),
-                      Text(title, style: AppType.title(Theme.of(ctx))),
-                    ],
-                  ),
-                ),
-                IconButton(
-                  constraints: const BoxConstraints(
-                    minWidth: AppTouch.minTarget,
-                    minHeight: AppTouch.minTarget,
-                  ),
-                  onPressed: () => Navigator.pop(ctx),
-                  icon: const Icon(Icons.close_rounded),
-                ),
-              ]),
-            ),
-            const Divider(height: 1),
-            Flexible(
-              child: ListView(
-                shrinkWrap: true,
-                padding: const EdgeInsets.symmetric(vertical: 6),
-                children: [
-                  for (final opt in options)
-                    ListTile(
-                      key: Key('selection-${opt.value}'),
-                      leading: opt.leading,
-                      title: Text(opt.label),
-                      // 选中行淡紫底 + 右勾；点选即关。
-                      tileColor: opt.value == selected
-                          ? Theme.of(ctx)
-                              .colorScheme
-                              .primaryContainer
-                              .withValues(alpha: 0.45)
+            for (final opt in options)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 2),
+                child: Material(
+                  color: opt.value == selected
+                      ? cs.primaryContainer.withValues(alpha: dark ? 0.58 : 0.72)
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(AppRadius.small),
+                  child: InkWell(
+                    key: Key('selection-${opt.value}'),
+                    borderRadius: BorderRadius.circular(AppRadius.small),
+                    onTap: () => Navigator.pop(ctx, opt.value),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 12),
+                      decoration: opt.value == selected
+                          ? BoxDecoration(
+                              borderRadius:
+                                  BorderRadius.circular(AppRadius.small),
+                              border: Border.all(
+                                color: cs.primary.withValues(alpha: 0.28),
+                                width: 0.8,
+                              ),
+                            )
                           : null,
-                      trailing: opt.value == selected
-                          ? Icon(Icons.check_rounded,
-                              color: Theme.of(ctx).colorScheme.primary)
-                          : opt.trailing,
-                      onTap: () => Navigator.pop(ctx, opt.value),
+                      child: Row(
+                        children: [
+                          if (opt.leading != null) ...[
+                            opt.leading!,
+                            const SizedBox(width: Spacing.md),
+                          ],
+                          Expanded(
+                            child: Text(
+                              opt.label,
+                              style: theme.textTheme.bodyLarge?.copyWith(
+                                fontWeight: opt.value == selected
+                                    ? FontWeight.w600
+                                    : FontWeight.w400,
+                                color: opt.value == selected
+                                    ? (dark
+                                        ? cs.onPrimaryContainer
+                                        : cs.onSurface)
+                                    : cs.onSurface,
+                              ),
+                            ),
+                          ),
+                          if (opt.value == selected)
+                            Icon(Icons.check_rounded, color: cs.primary)
+                          else if (opt.trailing != null)
+                            opt.trailing!,
+                        ],
+                      ),
                     ),
-                ],
+                  ),
+                ),
               ),
-            ),
           ],
         ),
-      ),
-    ),
+      );
+    },
   );
 }

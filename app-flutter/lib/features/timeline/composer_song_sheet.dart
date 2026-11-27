@@ -11,6 +11,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_client.dart' as api;
 import '../../core/theme/tokens.dart';
+import '../../core/ui/apple_ui.dart';
 import '../chat/song_picker_sheet.dart' show MusicSearchResult, searchOnlineMusic;
 import '../together/together_controller.dart' show togetherControllerProvider;
 
@@ -19,8 +20,9 @@ Future<Map<String, dynamic>?> showComposerSongSheet(BuildContext context) {
   return showModalBottomSheet<Map<String, dynamic>>(
     context: context,
     isScrollControlled: true,
+    showDragHandle: false,
     shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.lg))),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xl))),
     builder: (_) => const _ComposerSongSheet(),
   );
 }
@@ -82,10 +84,30 @@ class _ComposerSongSheetState extends ConsumerState<_ComposerSongSheet> {
       maxChildSize: 0.92,
       minChildSize: 0.4,
       builder: (context, scrollCtrl) => Padding(
-        padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+        padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
         child: Column(children: [
-          Text('选一首歌', style: theme.textTheme.titleMedium),
-          const SizedBox(height: 12),
+          Center(
+            child: Container(
+              width: 38,
+              height: 4.5,
+              margin: const EdgeInsets.only(bottom: 10),
+              decoration: BoxDecoration(
+                color: cs.onSurface.withValues(alpha: 0.22),
+                borderRadius: BorderRadius.circular(99),
+              ),
+            ),
+          ),
+          Row(children: [
+            Expanded(
+              child: Text('选一首歌',
+                  style: theme.textTheme.titleMedium
+                      ?.copyWith(fontWeight: FontWeight.w700)),
+            ),
+            AppleSheetCloseButton(
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+          ]),
+          const SizedBox(height: 10),
           // 页签分段器
           Container(
             padding: const EdgeInsets.all(3),

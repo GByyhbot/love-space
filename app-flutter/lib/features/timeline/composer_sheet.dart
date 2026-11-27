@@ -28,6 +28,7 @@ import 'composer_store.dart';
 import 'timeline_controller.dart';
 import '../../core/theme/app_icons.dart';
 import '../../core/theme/tokens.dart';
+import '../../core/ui/apple_ui.dart';
 import '../../core/ui/selection_sheet.dart';
 import '../settings/settings_widgets.dart'
     show GlassActionBar, filledFieldDecoration;
@@ -57,6 +58,7 @@ Future<void> showComposerSheet(
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
+    showDragHandle: false,
     shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xl))),
     builder: (_) => ComposerSheet(
@@ -388,21 +390,40 @@ class _ComposerSheetState extends ConsumerState<ComposerSheet> {
       if (!mounted) return;
       final picked = await showModalBottomSheet<String>(
         context: context,
-        shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.lg))),
-        builder: (ctx) => SizedBox(
-          height: MediaQuery.of(ctx).size.height * 0.5,
+        showDragHandle: false,
+        backgroundColor: Colors.transparent,
+        builder: (ctx) => AppleSheetContainer(
+          title: '从媒体库选',
+          onClose: () => Navigator.pop(ctx),
+          maxHeightFactor: 0.55,
           child: GridView.builder(
-            padding: const EdgeInsets.all(8),
+            padding: const EdgeInsets.only(bottom: 8),
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 3, mainAxisSpacing: 4, crossAxisSpacing: 4),
+                crossAxisCount: 3, mainAxisSpacing: 6, crossAxisSpacing: 6),
             itemCount: list.length,
-            itemBuilder: (ctx, i) => InkWell(
-                onTap: () => Navigator.pop(ctx, list[i].id),
-                child: Center(child: Text(list[i].name,
-                    maxLines: 2, overflow: TextOverflow.ellipsis,
-                    textAlign: TextAlign.center,
-                    style: Theme.of(ctx).textTheme.labelSmall))),
+            itemBuilder: (ctx, i) {
+              final cs = Theme.of(ctx).colorScheme;
+              return Material(
+                color: cs.surfaceContainerHighest.withValues(alpha: 0.45),
+                borderRadius: BorderRadius.circular(AppRadius.small),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(AppRadius.small),
+                  onTap: () => Navigator.pop(ctx, list[i].id),
+                  child: Padding(
+                    padding: const EdgeInsets.all(6),
+                    child: Center(
+                      child: Text(
+                        list[i].name,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.center,
+                        style: Theme.of(ctx).textTheme.labelSmall,
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
           ),
         ),
       );
@@ -724,20 +745,10 @@ class _ComposerSheetState extends ConsumerState<ComposerSheet> {
             Row(children: [
               Expanded(child: Text(
                   widget.isEdit ? '编辑这一刻' : '记录此刻',
-                  style: theme.textTheme.titleMedium)),
-              Container(
-                width: 34,
-                height: 34,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: theme.colorScheme.surfaceContainerHighest
-                      .withValues(alpha: 0.6),
-                ),
-                child: IconButton(
-                    tooltip: '关闭',
-                    visualDensity: VisualDensity.compact,
-                    onPressed: () => Navigator.of(context).pop(),
-                    icon: const Icon(Icons.close_rounded, size: 18)),
+                  style: theme.textTheme.titleMedium
+                      ?.copyWith(fontWeight: FontWeight.w700))),
+              AppleSheetCloseButton(
+                onPressed: () => Navigator.of(context).pop(),
               ),
             ]),
           ]),

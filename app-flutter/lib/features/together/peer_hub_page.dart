@@ -254,7 +254,7 @@ class _HubTabItem extends StatelessWidget {
     final dark = theme.brightness == Brightness.dark;
     final fg = selected
         ? (dark ? cs.onPrimaryContainer : cs.primary)
-        : cs.outline;
+        : (dark ? cs.outline : cs.onSurfaceVariant);
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -267,9 +267,15 @@ class _HubTabItem extends StatelessWidget {
           color: selected
               ? (dark
                   ? cs.primaryContainer.withValues(alpha: 0.72)
-                  : cs.primaryContainer.withValues(alpha: 0.65))
+                  : cs.primaryContainer.withValues(alpha: 0.78))
               : Colors.transparent,
           borderRadius: BorderRadius.circular(18),
+          border: selected && !dark
+              ? Border.all(
+                  color: cs.primary.withValues(alpha: 0.24),
+                  width: 0.7,
+                )
+              : null,
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,

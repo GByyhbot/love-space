@@ -530,3 +530,199 @@ class AppleGlassAppBar extends StatelessWidget implements PreferredSizeWidget {
     );
   }
 }
+
+/// 统一底部弹层容器（抓手 + 可选徽章图标/标题/副题 + 圆形关闭钮 + 安全区底距）。
+/// 严格零 `BackdropFilter`，与 [AppleGroupedSection] / [LiquidGlassCard] 同源令牌。
+class AppleSheetContainer extends StatelessWidget {
+  const AppleSheetContainer({
+    super.key,
+    required this.child,
+    this.title,
+    this.subtitle,
+    this.icon,
+    this.iconTone = AppleIconTone.blue,
+    this.onClose,
+    this.showHandle = true,
+    this.handleKey,
+    this.padding = const EdgeInsets.fromLTRB(20, 0, 20, 16),
+    this.maxHeightFactor,
+  });
+
+  final Widget child;
+  final String? title;
+  final String? subtitle;
+  final IconData? icon;
+  final AppleIconTone iconTone;
+  final VoidCallback? onClose;
+  final bool showHandle;
+  final Key? handleKey;
+  final EdgeInsetsGeometry padding;
+  final double? maxHeightFactor;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final dark = theme.brightness == Brightness.dark;
+    final surface = dark ? cs.surfaceContainerHigh : cs.surface;
+    final rim = dark
+        ? Colors.white.withValues(alpha: 0.12)
+        : cs.outlineVariant.withValues(alpha: 0.55);
+    final handleColor = dark
+        ? Colors.white.withValues(alpha: 0.28)
+        : cs.onSurface.withValues(alpha: 0.22);
+
+    Widget body = Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        if (showHandle)
+          Padding(
+            padding: const EdgeInsets.only(top: 10, bottom: 10),
+            child: Center(
+              child: Container(
+                key: handleKey,
+                width: 38,
+                height: 4.5,
+                decoration: BoxDecoration(
+                  color: handleColor,
+                  borderRadius: BorderRadius.circular(99),
+                ),
+              ),
+            ),
+          )
+        else
+          const SizedBox(height: 14),
+        if (title != null && title!.isNotEmpty) ...<Widget>[
+          Row(
+            children: <Widget>[
+              if (icon != null) ...<Widget>[
+                AppleIconBadge(icon: icon!, tone: iconTone, size: 34),
+                const SizedBox(width: Spacing.md),
+              ],
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    Text(
+                      title!,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        color: cs.onSurface,
+                      ),
+                    ),
+                    if (subtitle != null && subtitle!.isNotEmpty) ...<Widget>[
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle!,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: cs.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              if (onClose != null) ...<Widget>[
+                const SizedBox(width: Spacing.sm),
+                AppleSheetCloseButton(onPressed: onClose!),
+              ],
+            ],
+          ),
+          const SizedBox(height: Spacing.md),
+        ],
+        Flexible(child: child),
+      ],
+    );
+
+    if (maxHeightFactor != null) {
+      body = ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(context).height * maxHeightFactor!,
+        ),
+        child: body,
+      );
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: surface,
+        borderRadius: const BorderRadius.vertical(
+          top: Radius.circular(AppRadius.xl),
+        ),
+        border: Border(top: BorderSide(color: rim, width: 0.8)),
+        boxShadow: appleCardShadows(dark, elevated: true),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.viewInsetsOf(context).bottom,
+          ),
+          child: Padding(
+            padding: padding,
+            child: body,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 统一弹层右上角 34×34 圆形关闭按钮（外圈保留 44×44 触控热区）。
+class AppleSheetCloseButton extends StatelessWidget {
+  const AppleSheetCloseButton({
+    super.key,
+    required this.onPressed,
+    this.tooltip = '关闭',
+  });
+
+  final VoidCallback onPressed;
+  final String tooltip;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final dark = theme.brightness == Brightness.dark;
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: Colors.transparent,
+        shape: const CircleBorder(),
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: onPressed,
+          child: SizedBox(
+            width: 36,
+            height: 36,
+            child: Center(
+              child: Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: dark
+                      ? Colors.white.withValues(alpha: 0.12)
+                      : cs.surfaceContainerHighest.withValues(alpha: 0.92),
+                  border: Border.all(
+                    color: dark
+                        ? Colors.white.withValues(alpha: 0.10)
+                        : cs.outline.withValues(alpha: 0.24),
+                    width: 0.7,
+                  ),
+                ),
+                child: Icon(
+                  Icons.close_rounded,
+                  size: 18,
+                  color: cs.onSurfaceVariant,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}

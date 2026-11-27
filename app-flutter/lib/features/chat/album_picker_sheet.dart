@@ -12,7 +12,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/chat/chat_media.dart';
-import '../../core/theme/tokens.dart';
+import '../../core/ui/apple_ui.dart';
 
 /// 打开半屏相册选择器。
 /// [onSend] 点发送（mids 已勾选、caption 已填）；[onUpload] 点「上传」。
@@ -24,8 +24,8 @@ Future<void> showAlbumPicker(
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
-    shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.lg))),
+    showDragHandle: false,
+    backgroundColor: Colors.transparent,
     builder: (_) => _AlbumSheet(onSend: onSend, onUpload: onUpload),
   );
 }
@@ -93,37 +93,40 @@ class _AlbumSheetState extends ConsumerState<_AlbumSheet> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final height = MediaQuery.of(context).size.height * 0.62;
-    return SizedBox(
-      height: height,
-      child: Column(children: [
-        // 头部：标题 + 计数 + 上传 + 关闭（对齐 Web ps-head）
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
-          child: Row(children: [
-            Expanded(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text('从相册选', style: theme.textTheme.titleMedium),
-                Text(_countText,
-                    style: theme.textTheme.bodySmall
-                        ?.copyWith(color: theme.colorScheme.outline)),
-              ]),
-            ),
-            OutlinedButton(onPressed: widget.onUpload, child: const Text('上传')),
-            IconButton(
+    final height = MediaQuery.of(context).size.height * 0.68;
+    return AppleSheetContainer(
+      padding: const EdgeInsets.fromLTRB(0, 0, 0, 8),
+      child: SizedBox(
+        height: height,
+        child: Column(children: [
+          // 头部：标题 + 计数 + 上传 + 关闭（对齐 Web ps-head）
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 12, 8),
+            child: Row(children: [
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text('从相册选',
+                      style: theme.textTheme.titleMedium
+                          ?.copyWith(fontWeight: FontWeight.w700)),
+                  Text(_countText,
+                      style: theme.textTheme.bodySmall
+                          ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+                ]),
+              ),
+              OutlinedButton(onPressed: widget.onUpload, child: const Text('上传')),
+              const SizedBox(width: 8),
+              AppleSheetCloseButton(
                 onPressed: () => Navigator.of(context).pop(),
-                icon: const Icon(Icons.close_rounded)),
-          ]),
-        ),
-        Divider(height: 1, color: theme.colorScheme.outlineVariant),
-        // 网格
-        Expanded(child: _buildGrid(theme)),
-        Divider(height: 1, color: theme.colorScheme.outlineVariant),
-        // 底部：已选 chips + 一句话 + 发送（对齐 Web ps-foot）
-        SafeArea(
-          top: false,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+              ),
+            ]),
+          ),
+          Divider(height: 1, color: theme.colorScheme.outlineVariant),
+          // 网格
+          Expanded(child: _buildGrid(theme)),
+          Divider(height: 1, color: theme.colorScheme.outlineVariant),
+          // 底部：已选 chips + 一句话 + 发送（对齐 Web ps-foot）
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
             child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
               if (_sel.isNotEmpty)
                 SizedBox(
@@ -153,8 +156,8 @@ class _AlbumSheetState extends ConsumerState<_AlbumSheet> {
               ]),
             ]),
           ),
-        ),
-      ]),
+        ]),
+      ),
     );
   }
 

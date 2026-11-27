@@ -22,6 +22,7 @@ import '../../core/chat/chat_models.dart';
 import '../../core/api/api_client.dart';
 import '../../core/chat/chat_media.dart';
 import '../../core/chat/chat_state.dart';
+import '../../core/ui/apple_ui.dart';
 import 'chat_toast.dart' show ChatToastTone, chatToastProvider;
 import '../../core/theme/tokens.dart';
 
@@ -70,8 +71,8 @@ Future<void> showSongPicker(BuildContext context) {
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
-    shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.lg))),
+    showDragHandle: false,
+    backgroundColor: Colors.transparent,
     builder: (_) => const _SongSheet(),
   );
 }
@@ -280,31 +281,34 @@ class _SongSheetState extends ConsumerState<_SongSheet> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final height = MediaQuery.of(context).size.height * 0.62;
-    return SizedBox(
-      height: height,
-      child: Column(children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-          child: Row(children: [
-            Expanded(
-              child: SegmentedButton<String>(
-                segments: const [
-                  ButtonSegment(value: 'online', label: Text('在线搜歌')),
-                  ButtonSegment(value: 'playlist', label: Text('共同歌单')),
-                ],
-                selected: {_tab},
-                onSelectionChanged: (s) {
-                  setState(() => _tab = s.first);
-                  if (s.first == 'playlist') _loadPlaylist();
-                },
+    final height = MediaQuery.of(context).size.height * 0.66;
+    return AppleSheetContainer(
+      padding: const EdgeInsets.fromLTRB(0, 0, 0, 8),
+      child: SizedBox(
+        height: height,
+        child: Column(children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 12, 8),
+            child: Row(children: [
+              Expanded(
+                child: SegmentedButton<String>(
+                  segments: const [
+                    ButtonSegment(value: 'online', label: Text('在线搜歌')),
+                    ButtonSegment(value: 'playlist', label: Text('共同歌单')),
+                  ],
+                  selected: {_tab},
+                  onSelectionChanged: (s) {
+                    setState(() => _tab = s.first);
+                    if (s.first == 'playlist') _loadPlaylist();
+                  },
+                ),
               ),
-            ),
-            IconButton(
+              const SizedBox(width: 8),
+              AppleSheetCloseButton(
                 onPressed: () => Navigator.of(context).pop(),
-                icon: const Icon(Icons.close_rounded)),
-          ]),
-        ),
+              ),
+            ]),
+          ),
         if (_tab == 'online') ...[
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -339,6 +343,7 @@ class _SongSheetState extends ConsumerState<_SongSheet> {
         Expanded(
             child: _tab == 'online' ? _results(theme) : _playlistList(theme)),
       ]),
+      ),
     );
   }
 

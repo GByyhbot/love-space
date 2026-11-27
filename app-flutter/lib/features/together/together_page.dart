@@ -62,6 +62,11 @@ class _TogetherPageState extends ConsumerState<TogetherPage> {
       child: Scaffold(
         backgroundColor: Colors.transparent,
         body: RefreshIndicator(
+          edgeOffset: topInset,
+          color: theme.colorScheme.primary,
+          backgroundColor: theme.brightness == Brightness.dark
+              ? theme.colorScheme.surfaceContainerHigh
+              : theme.colorScheme.surface,
           onRefresh: () => ref.read(togetherControllerProvider.notifier).load(),
           child: SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),

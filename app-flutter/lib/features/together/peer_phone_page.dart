@@ -130,6 +130,11 @@ class _PeerPhonePageState extends ConsumerState<PeerPhonePage>
     final side = _side;
     final topInset = widget.embedded ? ShellChromeScope.topInsetOf(context) : 0.0;
     final body = RefreshIndicator(
+        edgeOffset: topInset,
+        color: cs.primary,
+        backgroundColor: theme.brightness == Brightness.dark
+            ? cs.surfaceContainerHigh
+            : cs.surface,
         onRefresh: _load,
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),

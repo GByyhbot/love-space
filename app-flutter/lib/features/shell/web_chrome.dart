@@ -253,6 +253,7 @@ class WebDock extends StatefulWidget {
     required this.currentIndex,
     required this.onTab,
     required this.onOpenDrawer,
+    this.hideHandle = false,
   });
 
   final int currentIndex;
@@ -260,6 +261,9 @@ class WebDock extends StatefulWidget {
 
   /// 2.3.6：原 onCompose（+ 钮）改为开抽屉回调（把手点击 / Dock 上滑）。
   final VoidCallback onOpenDrawer;
+
+  /// 抽屉展开时隐藏 Dock 自带横条，避免屏上同时出现两条横条（手势仍归 Dock 本体）。
+  final bool hideHandle;
 
   static const List<(int, IconData, String)> _tabs = <(int, IconData, String)>[
     (0, Icons.home_rounded, '首页'),
@@ -333,21 +337,28 @@ class _WebDockState extends State<WebDock> {
                 mainAxisSize: MainAxisSize.min,
                 children: <Widget>[
                   // 把手行：38×4.5 短横线居中，点击即开抽屉（热区=整行，
-                  // 行属 Dock 容器内部，不越界）。
-                  SizedBox(
-                    key: const Key('shell-dock-handle'),
-                    height: ChromeMetrics.dockHandleRow,
-                    width: double.infinity,
-                    child: Center(
-                      child: InkWell(
-                        onTap: widget.onOpenDrawer,
-                        borderRadius: BorderRadius.circular(99),
-                        child: Container(
-                          width: ChromeMetrics.dockHandleWidth,
-                          height: ChromeMetrics.dockHandleHeight,
-                          decoration: BoxDecoration(
-                            color: colors.dockHandle,
+                  // 行属 Dock 容器内部，不越界）。抽屉打开时淡出，仅留一条横条。
+                  IgnorePointer(
+                    ignoring: widget.hideHandle,
+                    child: AnimatedOpacity(
+                      opacity: widget.hideHandle ? 0.0 : 1.0,
+                      duration: Motion.fast,
+                      child: SizedBox(
+                        key: const Key('shell-dock-handle'),
+                        height: ChromeMetrics.dockHandleRow,
+                        width: double.infinity,
+                        child: Center(
+                          child: InkWell(
+                            onTap: widget.onOpenDrawer,
                             borderRadius: BorderRadius.circular(99),
+                            child: Container(
+                              width: ChromeMetrics.dockHandleWidth,
+                              height: ChromeMetrics.dockHandleHeight,
+                              decoration: BoxDecoration(
+                                color: colors.dockHandle,
+                                borderRadius: BorderRadius.circular(99),
+                              ),
+                            ),
                           ),
                         ),
                       ),
@@ -376,9 +387,11 @@ class _WebDockState extends State<WebDock> {
     (int, IconData, String) tab,
     ChromeColors colors,
   ) {
-    final cs = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final dark = theme.brightness == Brightness.dark;
     final active = tab.$1 == widget.currentIndex;
-    final fg = active ? cs.primary : cs.outline;
+    final fg = active ? cs.primary : (dark ? cs.outline : cs.onSurfaceVariant);
     return Material(
       color: Colors.transparent,
       child: InkWell(

@@ -539,7 +539,12 @@ class _AlbumPageState extends ConsumerState<AlbumPage> {
       for (var i = 0; i < st.photos.length; i++) st.photos[i]: i,
     };
     final picking = st.coverPickAlbum.isNotEmpty;
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
     return RefreshIndicator(
+      color: cs.primary,
+      backgroundColor:
+          theme.brightness == Brightness.dark ? cs.surfaceContainerHigh : cs.surface,
       onRefresh: () => ref.read(albumControllerProvider.notifier).load(),
       child: GridView.builder(
         controller: _gridScroll, // 段 B：查看器翻页后预滚动，保证 Hero 落点
@@ -569,7 +574,12 @@ class _AlbumPageState extends ConsumerState<AlbumPage> {
       for (var i = 0; i < st.photos.length; i++) st.photos[i]: i,
     };
     final picking = st.coverPickAlbum.isNotEmpty;
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
     return RefreshIndicator(
+      color: cs.primary,
+      backgroundColor:
+          theme.brightness == Brightness.dark ? cs.surfaceContainerHigh : cs.surface,
       onRefresh: () => ref.read(albumControllerProvider.notifier).load(),
       child: ListView.builder(
         padding: const EdgeInsets.fromLTRB(16, 4, 16, Spacing.pageBottom),

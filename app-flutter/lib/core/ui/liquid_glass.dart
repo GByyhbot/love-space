@@ -128,7 +128,10 @@ class LiquidGlassSurface extends StatelessWidget {
             : cs.surface.withValues(alpha: 0.84));
     final rim = dark
         ? Colors.white.withValues(alpha: 0.16)
-        : Colors.white.withValues(alpha: 0.80);
+        : Colors.white.withValues(alpha: 0.55);
+    final stroke = dark
+        ? cs.outlineVariant.withValues(alpha: 0.45)
+        : cs.outline.withValues(alpha: 0.32);
 
     return Container(
       decoration: BoxDecoration(
@@ -151,10 +154,7 @@ class LiquidGlassSurface extends StatelessWidget {
               color: fill,
               borderRadius: br,
               border: Border.all(
-                color: Color.alphaBlend(
-                  rim,
-                  cs.outlineVariant.withValues(alpha: 0.45),
-                ),
+                color: Color.alphaBlend(rim, stroke),
                 width: 1,
               ),
             ),
@@ -215,6 +215,12 @@ class LiquidPillSegmented<T> extends StatelessWidget {
                 ? (dark ? cs.primaryContainer : cs.surface)
                 : Colors.transparent,
             borderRadius: BorderRadius.circular(11),
+            border: isSelected && !dark
+                ? Border.all(
+                    color: cs.outline.withValues(alpha: 0.24),
+                    width: 0.7,
+                  )
+                : null,
             boxShadow: isSelected
                 ? <BoxShadow>[
                     BoxShadow(
@@ -235,7 +241,7 @@ class LiquidPillSegmented<T> extends StatelessWidget {
                 fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
                 color: isSelected
                     ? (dark ? cs.onPrimaryContainer : cs.onSurface)
-                    : cs.outline,
+                    : (dark ? cs.outline : cs.onSurfaceVariant),
               ),
             ),
           ),
@@ -247,10 +253,14 @@ class LiquidPillSegmented<T> extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
-        color: cs.surfaceContainerHighest.withValues(alpha: dark ? 0.55 : 0.72),
+        color: dark
+            ? cs.surfaceContainerHighest.withValues(alpha: 0.55)
+            : cs.surfaceContainerHighest.withValues(alpha: 0.92),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: cs.outlineVariant.withValues(alpha: dark ? 0.45 : 0.65),
+          color: dark
+              ? cs.outlineVariant.withValues(alpha: 0.45)
+              : cs.outline.withValues(alpha: 0.28),
         ),
       ),
       child: Row(
@@ -281,21 +291,29 @@ class LiveStatusPill extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    final (bg, fg, dot) = switch (tone) {
+    final dark = theme.brightness == Brightness.dark;
+    final (bg, fg, dot, border) = switch (tone) {
       LivePillTone.active => (
-          cs.primaryContainer.withValues(alpha: 0.78),
+          cs.primaryContainer.withValues(alpha: dark ? 0.78 : 0.88),
           cs.onPrimaryContainer,
           cs.primary,
+          cs.primary.withValues(alpha: dark ? 0.35 : 0.28),
         ),
       LivePillTone.idle => (
-          cs.surfaceContainerHighest.withValues(alpha: 0.72),
-          cs.outline,
-          cs.outline,
+          dark
+              ? cs.surfaceContainerHighest.withValues(alpha: 0.72)
+              : cs.surface.withValues(alpha: 0.94),
+          dark ? cs.outline : cs.onSurfaceVariant,
+          dark ? cs.outline : cs.onSurfaceVariant,
+          dark
+              ? cs.outlineVariant.withValues(alpha: 0.45)
+              : cs.outline.withValues(alpha: 0.28),
         ),
       LivePillTone.warn => (
-          cs.errorContainer.withValues(alpha: 0.78),
+          cs.errorContainer.withValues(alpha: dark ? 0.78 : 0.88),
           cs.error,
           cs.error,
+          cs.error.withValues(alpha: 0.35),
         ),
     };
     final textWidget = Text(
@@ -309,10 +327,11 @@ class LiveStatusPill extends StatelessWidget {
       ),
     );
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
       decoration: BoxDecoration(
         color: bg,
         borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: border, width: 0.8),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,

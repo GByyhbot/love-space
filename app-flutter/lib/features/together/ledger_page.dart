@@ -11,6 +11,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/together/together_data.dart';
+import '../../core/ui/apple_ui.dart';
 import '../../core/ui/empty_view.dart';
 import '../../core/ui/error_view.dart';
 import '../../core/ui/progress.dart';
@@ -342,9 +343,10 @@ class _LedgerPageState extends ConsumerState<LedgerPage> {
     final saved = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
+      showDragHandle: false,
       shape: const RoundedRectangleBorder(
           borderRadius:
-              BorderRadius.vertical(top: Radius.circular(AppRadius.lg))),
+              BorderRadius.vertical(top: Radius.circular(AppRadius.xl))),
       builder: (dctx) => StatefulBuilder(
         builder: (dctx, setDialogState) => Padding(
           padding: EdgeInsets.only(
@@ -366,31 +368,21 @@ class _LedgerPageState extends ConsumerState<LedgerPage> {
                     decoration: BoxDecoration(
                       color: Theme.of(dctx)
                           .colorScheme
-                          .outlineVariant
-                          .withValues(alpha: 0.8),
-                      borderRadius: BorderRadius.circular(3),
+                          .onSurface
+                          .withValues(alpha: 0.22),
+                      borderRadius: BorderRadius.circular(99),
                     ),
                   ),
                 ),
                 Row(children: [
                   Expanded(
                       child: Text(editing ? '编辑这笔' : '记一笔',
-                          style: Theme.of(dctx).textTheme.titleMedium)),
-                  Container(
-                    width: 34,
-                    height: 34,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: Theme.of(dctx)
-                          .colorScheme
-                          .surfaceContainerHighest
-                          .withValues(alpha: 0.6),
-                    ),
-                    child: IconButton(
-                        tooltip: '关闭',
-                        visualDensity: VisualDensity.compact,
-                        onPressed: () => Navigator.of(dctx).pop(false),
-                        icon: const Icon(Icons.close_rounded, size: 18)),
+                          style: Theme.of(dctx)
+                              .textTheme
+                              .titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w700))),
+                  AppleSheetCloseButton(
+                    onPressed: () => Navigator.of(dctx).pop(false),
                   ),
                 ]),
               ]),

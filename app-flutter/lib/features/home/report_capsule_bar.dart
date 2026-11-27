@@ -251,9 +251,8 @@ class _ReportCapsuleBarState extends ConsumerState<ReportCapsuleBar> {
     final draft = await showModalBottomSheet<({String note, String placeName})>(
       context: context,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.lg)),
-      ),
+      showDragHandle: false,
+      backgroundColor: Colors.transparent,
       builder: (_) => _ReportComposeSheet(preset: preset),
     );
     if (draft == null || !mounted) return;
@@ -282,34 +281,40 @@ class _Capsule extends StatelessWidget {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     final dark = theme.brightness == Brightness.dark;
-    final fg = enabled ? cs.onSurface : cs.onSurface.withValues(alpha: 0.45);
-    return Opacity(
-      opacity: enabled ? 1 : 0.55,
-      child: Container(
-        decoration: BoxDecoration(
-          color: dark
-              ? cs.surfaceContainerHigh.withValues(alpha: 0.88)
-              : cs.surface.withValues(alpha: 0.94),
-          borderRadius: BorderRadius.circular(AppRadius.pill),
-          border: Border.all(
-            color: dark
-                ? Colors.white.withValues(alpha: 0.10)
-                : cs.outlineVariant.withValues(alpha: 0.55),
-            width: 0.9,
-          ),
-          boxShadow: appleCardShadows(dark),
+    final fg = enabled
+        ? cs.onSurface
+        : cs.onSurface.withValues(alpha: dark ? 0.45 : 0.48);
+    return Container(
+      decoration: BoxDecoration(
+        color: !enabled
+            ? (dark
+                ? cs.surfaceContainerHighest.withValues(alpha: 0.45)
+                : cs.surfaceContainerHighest.withValues(alpha: 0.65))
+            : (dark
+                ? cs.surfaceContainerHigh.withValues(alpha: 0.88)
+                : cs.surface),
+        borderRadius: BorderRadius.circular(AppRadius.pill),
+        border: Border.all(
+          color: !enabled
+              ? cs.outline.withValues(alpha: dark ? 0.22 : 0.28)
+              : (dark
+                  ? Colors.white.withValues(alpha: 0.14)
+                  : cs.outline.withValues(alpha: 0.34)),
+          width: 0.9,
         ),
-        child: Material(
-          type: MaterialType.transparency,
+        boxShadow: enabled ? appleCardShadows(dark) : null,
+      ),
+      child: Material(
+        type: MaterialType.transparency,
+        borderRadius: BorderRadius.circular(AppRadius.pill),
+        child: InkWell(
+          key: Key('report-capsule-${preset.scene}'),
           borderRadius: BorderRadius.circular(AppRadius.pill),
-          child: InkWell(
-            key: Key('report-capsule-${preset.scene}'),
-            borderRadius: BorderRadius.circular(AppRadius.pill),
-            onTap: enabled ? onTap : null,
-            onLongPress: enabled ? onLongPress : null,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              child: Row(mainAxisSize: MainAxisSize.min, children: [
+          onTap: enabled ? onTap : null,
+          onLongPress: enabled ? onLongPress : null,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
               if (busy)
                 SizedBox(
                   width: 14,
@@ -324,10 +329,12 @@ class _Capsule extends StatelessWidget {
               const SizedBox(width: 6),
               Text(
                 preset.label,
-                style: theme.textTheme.bodySmall?.copyWith(color: fg),
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: fg,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
             ]),
-            ),
           ),
         ),
       ),
@@ -364,26 +371,14 @@ class _ReportComposeSheetState extends State<_ReportComposeSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final cs = theme.colorScheme;
-    return Padding(
-      padding: EdgeInsets.only(
-        left: 16,
-        right: 16,
-        top: 16,
-        bottom: MediaQuery.of(context).viewInsets.bottom + 16,
-      ),
+    return AppleSheetContainer(
+      title: '${widget.preset.emoji} ${widget.preset.label}',
+      subtitle: '发送后 TA 会收到「${widget.preset.summary}」',
+      onClose: () => Navigator.of(context).pop(),
       child: Column(
         mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(
-            '${widget.preset.emoji} ${widget.preset.label}',
-            style: theme.textTheme.titleSmall?.copyWith(
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 12),
           TextField(
             controller: _note,
             maxLength: 500,
@@ -391,7 +386,6 @@ class _ReportComposeSheetState extends State<_ReportComposeSheet> {
             minLines: 1,
             decoration: const InputDecoration(
               labelText: '备注（可选）',
-              border: OutlineInputBorder(),
             ),
           ),
           const SizedBox(height: 8),
@@ -400,24 +394,24 @@ class _ReportComposeSheetState extends State<_ReportComposeSheet> {
             maxLength: 80,
             decoration: const InputDecoration(
               labelText: '地点（可选）',
-              border: OutlineInputBorder(),
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 12),
           Row(children: [
             Expanded(
-              child: Text(
-                '发送后 TA 会收到「${widget.preset.summary}」',
-                style: theme.textTheme.bodySmall?.copyWith(color: cs.outline),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+              child: OutlinedButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('取消'),
               ),
             ),
-            const SizedBox(width: 8),
-            FilledButton(
-              key: const Key('report-compose-send'),
-              onPressed: _submit,
-              child: const Text('发送'),
+            const SizedBox(width: 10),
+            Expanded(
+              flex: 2,
+              child: FilledButton(
+                key: const Key('report-compose-send'),
+                onPressed: _submit,
+                child: const Text('发送'),
+              ),
             ),
           ]),
         ],

@@ -34,6 +34,7 @@ import '../../core/notify/local_notifications.dart';
 import '../../core/notify/notify_decision.dart' show NotifyItem, kChannelMessages;
 import '../../core/notify/notify_task.dart' show startNotifyTask;
 import '../../core/theme/tokens.dart';
+import '../../core/ui/apple_ui.dart';
 import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
 import '../notify/notify_widgets.dart' show NotifyInfoCard;
 
@@ -276,10 +277,8 @@ Future<void> showXiaomiGuideSheet(BuildContext context) {
     context: context,
     isScrollControlled: true,
     useSafeArea: true,
-    barrierColor: Colors.black54,
+    showDragHandle: false,
     backgroundColor: Colors.transparent,
-    shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.lg))),
     builder: (_) => const _XiaomiGuideSheet(),
   );
 }
@@ -291,95 +290,129 @@ class _XiaomiGuideSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    return Padding(
-      padding: EdgeInsets.fromLTRB(
-          20, 16, 20, 16 + MediaQuery.of(context).padding.bottom),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Center(
-            child: Container(
-              width: 36,
-              height: 4,
-              decoration: BoxDecoration(
-                color: cs.outlineVariant,
-                borderRadius: BorderRadius.circular(2),
-              ),
+    final dark = theme.brightness == Brightness.dark;
+    return AppleSheetContainer(
+      icon: Icons.security_rounded,
+      iconTone: AppleIconTone.amber,
+      title: '小米手机放行三步',
+      subtitle: '（菜单名以真机为准，不同 HyperOS 版本措辞或有差异）',
+      onClose: () => Navigator.of(context).pop(),
+      maxHeightFactor: 0.85,
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            _step(
+              context,
+              theme,
+              cs,
+              dark,
+              '1',
+              '自启动',
+              '系统设置 → 应用设置 → 应用管理 → 恋爱空间 → 「自启动」开关打开。',
+              () => _openAppDetails(context),
+              '跳应用信息',
             ),
-          ),
-          const SizedBox(height: 12),
-          Text('小米手机放行三步', style: theme.textTheme.titleMedium),
-          const SizedBox(height: 4),
-          Text(
-            '（菜单名以真机为准，不同 HyperOS 版本措辞或有差异）',
-            style: theme.textTheme.bodySmall?.copyWith(color: cs.outline),
-          ),
-          const SizedBox(height: 12),
-          _step(
-            context,
-            '① 自启动',
-            '系统设置 → 应用设置 → 应用管理 → 恋爱空间 → '
-                '「自启动」开关打开。',
-            () => _openAppDetails(context),
-            '跳应用信息',
-          ),
-          _step(
-            context,
-            '② 电池策略',
-            '在电池优化设置里把「恋爱空间」设为不优化'
-                '（HyperOS 里对应「省电策略 → 无限制」）。',
-            () => _openBattery(context),
-            '跳电池设置',
-          ),
-          _step(
-            context,
-            '③ 最近任务上锁',
-            '打开最近任务（多任务界面），找到恋爱空间卡片，'
-                '下拉或长按（以真机为准）选中「锁定」，锁定的卡片不会被清理。',
-            null,
-            null,
-          ),
-          const SizedBox(height: 8),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton(
+            _step(
+              context,
+              theme,
+              cs,
+              dark,
+              '2',
+              '电池策略',
+              '在电池优化设置里把「恋爱空间」设为不优化（HyperOS 里对应「省电策略 → 无限制」）。',
+              () => _openBattery(context),
+              '跳电池设置',
+            ),
+            _step(
+              context,
+              theme,
+              cs,
+              dark,
+              '3',
+              '最近任务上锁',
+              '打开最近任务（多任务界面），找到恋爱空间卡片，下拉或长按（以真机为准）选中「锁定」，锁定的卡片不会被清理。',
+              null,
+              null,
+            ),
+            const SizedBox(height: Spacing.sm),
+            FilledButton(
               key: const Key('notify-guide-done'),
               onPressed: () => Navigator.of(context).pop(),
               child: const Text('我已完成这三步'),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
-  Widget _step(BuildContext context, String title, String detail,
-      VoidCallback? onJump, String? jumpLabel) {
-    final theme = Theme.of(context);
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Text(title, style: theme.textTheme.titleSmall),
-            const SizedBox(height: 4),
-            Text(detail, style: theme.textTheme.bodySmall),
-            if (onJump != null && jumpLabel != null) ...<Widget>[
-              const SizedBox(height: 8),
-              Align(
-                alignment: Alignment.centerRight,
-                child: TextButton.icon(
-                  onPressed: onJump,
-                  icon: const Icon(Icons.open_in_new, size: 16),
-                  label: Text(jumpLabel),
+  Widget _step(
+    BuildContext context,
+    ThemeData theme,
+    ColorScheme cs,
+    bool dark,
+    String indexLabel,
+    String title,
+    String detail,
+    VoidCallback? onJump,
+    String? jumpLabel,
+  ) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: Spacing.sm),
+      padding: const EdgeInsets.all(Spacing.md),
+      decoration: BoxDecoration(
+        color: dark
+            ? cs.surfaceContainerHighest.withValues(alpha: 0.45)
+            : cs.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(AppRadius.medium),
+        border: Border.all(
+          color: cs.outlineVariant.withValues(alpha: 0.55),
+          width: 0.8,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(children: [
+            Container(
+              width: 22,
+              height: 22,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: cs.primaryContainer,
+              ),
+              alignment: Alignment.center,
+              child: Text(
+                indexLabel,
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: cs.onPrimaryContainer,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
-            ],
+            ),
+            const SizedBox(width: Spacing.sm),
+            Text(title,
+                style: theme.textTheme.titleSmall
+                    ?.copyWith(fontWeight: FontWeight.w600)),
+          ]),
+          const SizedBox(height: 6),
+          Text(detail,
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(color: cs.onSurfaceVariant)),
+          if (onJump != null && jumpLabel != null) ...<Widget>[
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerRight,
+              child: OutlinedButton.icon(
+                onPressed: onJump,
+                icon: const Icon(Icons.open_in_new, size: 16),
+                label: Text(jumpLabel),
+              ),
+            ),
           ],
-        ),
+        ],
       ),
     );
   }

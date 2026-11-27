@@ -311,7 +311,9 @@ class _TimelinePageState extends ConsumerState<TimelinePage> {
     required bool active,
     required VoidCallback onTap,
   }) {
-    final cs = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final dark = theme.brightness == Brightness.dark;
     return InkWell(
       key: key,
       borderRadius: BorderRadius.circular(AppRadius.pill),
@@ -320,10 +322,16 @@ class _TimelinePageState extends ConsumerState<TimelinePage> {
         height: AppTouch.minTarget,
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: cs.surfaceContainerHighest.withValues(alpha: 0.55),
+          color: dark
+              ? cs.surfaceContainerHighest.withValues(alpha: 0.55)
+              : cs.surface.withValues(alpha: 0.96),
           borderRadius: BorderRadius.circular(AppRadius.pill),
           border: Border.all(
-            color: active ? cs.primary : cs.outlineVariant,
+            color: active
+                ? cs.primary
+                : (dark
+                    ? cs.outlineVariant
+                    : cs.outline.withValues(alpha: 0.36)),
             width: active ? 1.5 : 1,
           ),
         ),
@@ -332,9 +340,9 @@ class _TimelinePageState extends ConsumerState<TimelinePage> {
             child: Text(label,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                style: theme.textTheme.labelMedium?.copyWith(
                       color: active ? cs.primary : cs.onSurfaceVariant,
-                      fontWeight: active ? FontWeight.w600 : null,
+                      fontWeight: active ? FontWeight.w600 : FontWeight.w500,
                     )),
           ),
           const SizedBox(width: 4),
@@ -394,7 +402,12 @@ class _TimelinePageState extends ConsumerState<TimelinePage> {
         ]),
       );
     }
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
     return RefreshIndicator(
+      color: cs.primary,
+      backgroundColor:
+          theme.brightness == Brightness.dark ? cs.surfaceContainerHigh : cs.surface,
       onRefresh: () => ref.read(timelineControllerProvider.notifier).load(reset: true),
       child: ListView.builder(
         controller: _scroll,

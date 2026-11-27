@@ -3,9 +3,12 @@ package cn.iepose.lovespace.love_space
 import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.Color
+import android.os.Handler
+import android.os.Looper
 import android.view.MotionEvent
 import android.view.View
 import android.widget.FrameLayout
+import java.util.concurrent.atomic.AtomicBoolean
 import com.amap.api.maps.AMap
 import com.amap.api.maps.CameraUpdateFactory
 import com.amap.api.maps.MapsInitializer
@@ -124,6 +127,8 @@ class AmapTrackPlatformView(
 
     private val container = FrameLayout(context)
     private val channel = MethodChannel(messenger, "${AmapConfigChannel.VIEW_TYPE}_$viewId")
+    private val disposed = AtomicBoolean(false)
+    private val mainHandler = Handler(Looper.getMainLooper())
     private var mapView: TextureMapView? = null
     private var aMap: AMap? = null
     private var replayMarker: Marker? = null
@@ -157,23 +162,31 @@ class AmapTrackPlatformView(
                     isScaleControlsEnabled = true
                 }
                 map.setOnMapTouchListener { ev ->
-                    if (ev.action == MotionEvent.ACTION_MOVE) {
+                    if (!disposed.get() && ev.action == MotionEvent.ACTION_MOVE) {
                         channel.invokeMethod("onUserDrag", null)
                     }
                 }
                 if (initialParams != null) {
                     applyTrackData(map, initialParams)
                 }
-                channel.invokeMethod("onMapReady", null)
+                if (!disposed.get()) {
+                    channel.invokeMethod("onMapReady", null)
+                }
             }
         } catch (t: Throwable) {
-            channel.invokeMethod("onMapError", t.message ?: "AMap init failed")
+            if (!disposed.get()) {
+                channel.invokeMethod("onMapError", t.message ?: "AMap init failed")
+            }
         }
     }
 
     override fun getView(): View = container
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
+        if (disposed.get()) {
+            result.success(false)
+            return
+        }
         val map = aMap
         if (map == null) {
             result.success(false)
@@ -307,14 +320,43 @@ class AmapTrackPlatformView(
     }
 
     override fun dispose() {
+        if (!disposed.compareAndSet(false, true)) return
         channel.setMethodCallHandler(null)
-        try {
-            mapView?.onPause()
-            mapView?.onDestroy()
-        } catch (_: Throwable) {
-            // ignore teardown errors
+        val teardown = Runnable {
+            val mv = mapView
+            val map = aMap
+            mapView = null
+            aMap = null
+            replayMarker = null
+            lastBounds = null
+            lastSinglePoint = null
+
+            try {
+                map?.setOnMapTouchListener(null)
+                map?.stopAnimation()
+                map?.clear()
+            } catch (_: Throwable) {
+                // ignore map cleanup errors before view teardown
+            }
+
+            if (mv != null) {
+                // 按 TextureMapView 官方生命周期顺序：先暂停 GL 渲染，再从父容器摘除
+                // 完成 Surface 分离，最后仅执行一次 onDestroy() 释放引擎。
+                try {
+                    mv.onPause()
+                } catch (_: Throwable) {}
+                try {
+                    container.removeView(mv)
+                } catch (_: Throwable) {}
+                try {
+                    mv.onDestroy()
+                } catch (_: Throwable) {}
+            }
         }
-        mapView = null
-        aMap = null
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            teardown.run()
+        } else {
+            mainHandler.post(teardown)
+        }
     }
 }

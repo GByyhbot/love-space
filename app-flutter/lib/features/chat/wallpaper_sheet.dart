@@ -18,14 +18,16 @@ import '../../core/chat/chat_wallpaper.dart';
 import '../auth/auth_state.dart';
 import 'chat_toast.dart' show ChatToastTone, chatToastProvider;
 import '../../core/theme/tokens.dart';
+import '../../core/ui/apple_ui.dart';
 import '../settings/settings_widgets.dart' show SettingsSegmented;
 
 Future<void> showWallpaperSheet(BuildContext context) {
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
+    showDragHandle: false,
     shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.lg))),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xl))),
     builder: (_) => const WallpaperSheet(),
   );
 }
@@ -106,25 +108,32 @@ class WallpaperSheetState extends ConsumerState<WallpaperSheet> {
       if (!mounted) return;
       final picked = await showModalBottomSheet<String>(
         context: context,
-        shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.lg))),
-        builder: (ctx) => SizedBox(
-          height: MediaQuery.of(ctx).size.height * 0.5,
+        showDragHandle: false,
+        backgroundColor: Colors.transparent,
+        builder: (ctx) => AppleSheetContainer(
+          title: '从媒体库选',
+          onClose: () => Navigator.pop(ctx),
+          maxHeightFactor: 0.55,
           child: GridView.builder(
-            padding: const EdgeInsets.all(8),
+            padding: const EdgeInsets.only(bottom: 8),
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 3, mainAxisSpacing: 4, crossAxisSpacing: 4),
+                crossAxisCount: 3, mainAxisSpacing: 6, crossAxisSpacing: 6),
             itemCount: list.length,
             itemBuilder: (ctx, i) => Consumer(builder: (ctx, ref, _) {
               final base = ref.watch(chatBaseProvider).value;
               final headers = ref.watch(mediaCookieHeadersProvider).value;
-              return InkWell(
-                onTap: () => Navigator.pop(ctx, list[i].id),
-                child: base == null
-                    ? const SizedBox()
-                    : CachedNetworkImage(
-                        imageUrl: mediaUrl(base, list[i].id),
-                        httpHeaders: headers, fit: BoxFit.cover),
+              return ClipRRect(
+                borderRadius: BorderRadius.circular(AppRadius.small),
+                child: InkWell(
+                  onTap: () => Navigator.pop(ctx, list[i].id),
+                  child: base == null
+                      ? const SizedBox()
+                      : CachedNetworkImage(
+                          imageUrl: mediaUrl(base, list[i].id),
+                          httpHeaders: headers,
+                          fit: BoxFit.cover,
+                        ),
+                ),
               );
             }),
           ),
@@ -175,15 +184,28 @@ class WallpaperSheetState extends ConsumerState<WallpaperSheet> {
             crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           // embedded（设置独立页）：标题行不渲染（页 AppBar 已有「聊天背景」，
           // 避免重复）；sheet 模式保留标题 + 关闭钮。
-          if (!widget.embedded)
+          if (!widget.embedded) ...[
+            Center(
+              child: Container(
+                width: 38,
+                height: 4.5,
+                margin: const EdgeInsets.only(bottom: 10),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.22),
+                  borderRadius: BorderRadius.circular(99),
+                ),
+              ),
+            ),
             Row(children: [
               Expanded(
-                  child:
-                      Text('聊天背景', style: theme.textTheme.titleMedium)),
-              IconButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  icon: const Icon(Icons.close_rounded)),
+                  child: Text('聊天背景',
+                      style: theme.textTheme.titleMedium
+                          ?.copyWith(fontWeight: FontWeight.w700))),
+              AppleSheetCloseButton(
+                onPressed: () => Navigator.of(context).pop(),
+              ),
             ]),
+          ],
           SizedBox(height: widget.embedded ? 0 : 4),
           if (partner != null)
             Row(children: [

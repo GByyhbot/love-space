@@ -15,8 +15,8 @@ import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
 
+import '../../core/ui/apple_ui.dart';
 import '../../core/ui/submit_morph.dart';
-import '../../core/theme/tokens.dart';
 
 /// 表单底部 sheet 骨架（2.4.1 通则 A 共用外壳）：全仓录入类弹窗/表单
 /// 一律套同一外壳——抓手 + 标题 + 关闭圆钮 + 内容（键盘升高）+
@@ -39,54 +39,17 @@ Future<bool?> showFormSheet(
   return showModalBottomSheet<bool>(
     context: context,
     isScrollControlled: true,
-    shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.lg))),
+    showDragHandle: false,
+    backgroundColor: Colors.transparent,
     builder: (sheetCtx) => StatefulBuilder(
-      builder: (sheetCtx, setSheetState) => Padding(
-        padding: EdgeInsets.only(
-            left: 16,
-            right: 16,
-            top: 12,
-            bottom: MediaQuery.of(sheetCtx).viewInsets.bottom + 12),
+      builder: (sheetCtx, setSheetState) => AppleSheetContainer(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+        title: title,
+        onClose: () => Navigator.of(sheetCtx).pop(false),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Center(
-              child: Container(
-                width: 38,
-                height: 4.5,
-                margin: const EdgeInsets.only(bottom: 10),
-                decoration: BoxDecoration(
-                  color: Theme.of(sheetCtx)
-                      .colorScheme
-                      .outlineVariant
-                      .withValues(alpha: 0.8),
-                  borderRadius: BorderRadius.circular(3),
-                ),
-              ),
-            ),
-            Row(children: [
-              Expanded(
-                  child: Text(title, style: Theme.of(sheetCtx).textTheme.titleMedium)),
-              Container(
-                width: 34,
-                height: 34,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Theme.of(sheetCtx)
-                      .colorScheme
-                      .surfaceContainerHighest
-                      .withValues(alpha: 0.6),
-                ),
-                child: IconButton(
-                    tooltip: '关闭',
-                    visualDensity: VisualDensity.compact,
-                    onPressed: () => Navigator.of(sheetCtx).pop(false),
-                    icon: const Icon(Icons.close_rounded, size: 18)),
-              ),
-            ]),
-            const SizedBox(height: 10),
             Flexible(
               child: SingleChildScrollView(child: builder(setSheetState)),
             ),
@@ -173,13 +136,22 @@ class SettingsSegmented<T> extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final dark = theme.brightness == Brightness.dark;
     return Container(
       // 容器淡底 + 圆角 14（简报第 3 项口径）
       padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
-        color: cs.surfaceContainerHighest.withValues(alpha: 0.55),
+        color: dark
+            ? cs.surfaceContainerHighest.withValues(alpha: 0.55)
+            : cs.surfaceContainerHighest.withValues(alpha: 0.90),
         borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: dark
+              ? cs.outlineVariant.withValues(alpha: 0.45)
+              : cs.outline.withValues(alpha: 0.26),
+        ),
       ),
       child: Row(
         children: [
@@ -194,7 +166,7 @@ class SettingsSegmented<T> extends StatelessWidget {
                   height: 34,
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
-                    // 选中段实心主色深字；未选段透明底弱化字。
+                    // 选中段实心主色深字；未选段透明底清晰文字。
                     color: selected == value
                         ? cs.primary
                         : Colors.transparent,
@@ -204,12 +176,12 @@ class SettingsSegmented<T> extends StatelessWidget {
                     label,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                    style: theme.textTheme.labelMedium?.copyWith(
                           color: selected == value
                               ? cs.onPrimary
-                              : cs.outline,
+                              : (dark ? cs.outline : cs.onSurfaceVariant),
                           fontWeight:
-                              selected == value ? FontWeight.w600 : null,
+                              selected == value ? FontWeight.w600 : FontWeight.w500,
                         ),
                   ),
                 ),

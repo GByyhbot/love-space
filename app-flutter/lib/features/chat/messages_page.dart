@@ -157,8 +157,11 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
     final size = box.size;
     setState(() => _pressedId = record.id);
     final theme = Theme.of(context);
-    // 菜单配色与聊天页同体系（surface 容器圆角卡片 + 主题色图标）
-    final menuColor = theme.colorScheme.surfaceContainerHighest;
+    final dark = theme.brightness == Brightness.dark;
+    // 菜单配色与聊天页同体系（表面容器圆角卡片 + 边框 + 主题色图标）
+    final menuColor = dark
+        ? theme.colorScheme.surfaceContainerHigh
+        : theme.colorScheme.surface;
     final itemIconColor = theme.colorScheme.primary;
     PopupMenuItem<String> item(String value, IconData icon, String label,
             {Color? danger}) =>
@@ -232,8 +235,8 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
     final theme = Theme.of(context);
     await showModalBottomSheet<void>(
       context: context,
-      shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xl))),
+      showDragHandle: false,
+      backgroundColor: Colors.transparent,
       builder: (sheetCtx) => _AsrTextSheet(
         mediaId: chatVisualOf(record).voiceMids.first,
         theme: theme,
@@ -515,38 +518,17 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
             child: AnimatedOpacity(
               opacity: ref.watch(chatRecordProvider) != null ? 0 : 1,
               duration: Motion.base,
-              // 悬浮玻璃输入容器外包层（不动 chat_compose.dart 本体）
-              child: Container(
-                margin: const EdgeInsets.fromLTRB(10, 4, 10, 8),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(24),
-                  border: Border.all(
-                    color: immersive
-                        ? Colors.white.withValues(alpha: 0.16)
-                        : Theme.of(context)
-                            .colorScheme
-                            .outlineVariant
-                            .withValues(alpha: 0.45),
-                    width: 0.8,
-                  ),
-                  boxShadow: appleCardShadows(
-                    immersive ||
-                        Theme.of(context).brightness == Brightness.dark,
-                  ),
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(24),
-                  child: ChatCompose(
-                    immersive: immersive,
-                    dark: true,
-                    replyNotifier: _replyNotifier,
-                    onOpenSearch: () => setState(() {
-                      _searchOpen = true;
-                      _searchCtrl.clear();
-                    }),
-                    onOpenWallpaper: () => showWallpaperSheet(context),
-                  ),
-                ),
+              // 直接挂载 ChatCompose（由内部悬浮胶囊与 _PanelSurface 自带单层描边与投影，
+              // 避免外层再套 ClipRRect+border 导致底部「+」面板出现双层描边感）。
+              child: ChatCompose(
+                immersive: immersive,
+                dark: true,
+                replyNotifier: _replyNotifier,
+                onOpenSearch: () => setState(() {
+                  _searchOpen = true;
+                  _searchCtrl.clear();
+                }),
+                onOpenWallpaper: () => showWallpaperSheet(context),
               ),
             ),
           ),
@@ -1657,17 +1639,14 @@ class _AsrTextSheetState extends ConsumerState<_AsrTextSheet> {
   @override
   Widget build(BuildContext context) {
     final cs = widget.theme.colorScheme;
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Row(children: [
-            Icon(Icons.graphic_eq_rounded, size: 18, color: cs.primary),
-            const SizedBox(width: 10),
-            Text('语音转文字',
-                style: widget.theme.textTheme.titleMedium),
-          ]),
-          const SizedBox(height: 16),
+    return AppleSheetContainer(
+      icon: Icons.graphic_eq_rounded,
+      iconTone: AppleIconTone.blue,
+      title: '语音转文字',
+      onClose: () => Navigator.of(context).pop(),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
           if (_loading)
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 28),
@@ -1683,7 +1662,7 @@ class _AsrTextSheetState extends ConsumerState<_AsrTextSheet> {
             const SizedBox(height: 4),
             Text(_error!,
                 style: widget.theme.textTheme.bodySmall
-                    ?.copyWith(color: cs.outline)),
+                    ?.copyWith(color: cs.onSurfaceVariant)),
             const SizedBox(height: 16),
             FilledButton.icon(
               onPressed: _run,
@@ -1701,7 +1680,7 @@ class _AsrTextSheetState extends ConsumerState<_AsrTextSheet> {
               ),
             ),
           ],
-        ]),
+        ],
       ),
     );
   }

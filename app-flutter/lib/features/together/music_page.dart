@@ -28,6 +28,7 @@ import '../../core/chat/chat_media.dart'
         uploadChatMedia,
         validateUploadFile;
 import '../../core/together/together_data.dart';
+import '../../core/ui/apple_ui.dart';
 import '../../core/ui/empty_view.dart';
 import '../../core/ui/error_view.dart';
 import '../../core/ui/progress.dart';
@@ -440,6 +441,7 @@ class _MusicPageState extends ConsumerState<MusicPage> {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+      showDragHandle: false,
       shape: const RoundedRectangleBorder(
           borderRadius:
               BorderRadius.vertical(top: Radius.circular(AppRadius.xl))),
@@ -460,31 +462,21 @@ class _MusicPageState extends ConsumerState<MusicPage> {
                 decoration: BoxDecoration(
                   color: Theme.of(sheetCtx)
                       .colorScheme
-                      .outlineVariant
-                      .withValues(alpha: 0.8),
-                  borderRadius: BorderRadius.circular(3),
+                      .onSurface
+                      .withValues(alpha: 0.22),
+                  borderRadius: BorderRadius.circular(99),
                 ),
               ),
             ),
             Row(children: [
               Expanded(
                   child: Text('搜歌入单',
-                      style: Theme.of(sheetCtx).textTheme.titleMedium)),
-              Container(
-                width: 34,
-                height: 34,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Theme.of(sheetCtx)
-                      .colorScheme
-                      .surfaceContainerHighest
-                      .withValues(alpha: 0.6),
-                ),
-                child: IconButton(
-                    tooltip: '关闭',
-                    visualDensity: VisualDensity.compact,
-                    onPressed: () => Navigator.of(sheetCtx).pop(),
-                    icon: const Icon(Icons.close_rounded, size: 18)),
+                      style: Theme.of(sheetCtx)
+                          .textTheme
+                          .titleMedium
+                          ?.copyWith(fontWeight: FontWeight.w700))),
+              AppleSheetCloseButton(
+                onPressed: () => Navigator.of(sheetCtx).pop(),
               ),
             ]),
             const SizedBox(height: 10),

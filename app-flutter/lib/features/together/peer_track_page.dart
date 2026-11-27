@@ -332,6 +332,11 @@ class _PeerTrackPageState extends ConsumerState<PeerTrackPage> {
     final body = Stack(
         children: [
           RefreshIndicator(
+            edgeOffset: topInset,
+            color: cs.primary,
+            backgroundColor: theme.brightness == Brightness.dark
+                ? cs.surfaceContainerHigh
+                : cs.surface,
             onRefresh: _load,
             child: ListView(
               physics: const AlwaysScrollableScrollPhysics(),

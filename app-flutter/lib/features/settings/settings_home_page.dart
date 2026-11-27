@@ -5,8 +5,7 @@
 /// 路由沿用 `/settings`（旧长页退役，路径语义无缝接管）：
 /// · 外观组：空间信息（弹窗，沿 spaceEditRequestedProvider 机制）/
 ///   主题与外观 / 主页背景 / 聊天背景 / 聊天气泡（后四张独立页）；
-/// · 连接与提醒组：提醒设置（→ /channels）/ 线路与连接 / 消息通知 /
-///   伴侣共享与守护（2.8.0 P1，均为独立页）；
+/// · 连接与提醒组：提醒设置（→ /channels）/ 线路与连接 / 消息通知；
 /// · 数据与账号组：数据导出（独立页）/ 备份与存储（→ /backups，admin
 ///   门控沿用 main.dart redirect）/ 邀请另一半入住（→ /settings/invite）。
 /// 页头文案「设置 / 管理空间、账号和数据。」（沿用原页副题逐字）。
@@ -28,6 +27,7 @@ import '../../core/config.dart';
 import '../../core/theme/tokens.dart';
 import '../../core/ui/apple_ui.dart';
 import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
+import '../shell/web_chrome.dart' show WebSemanticColors;
 import '../update/update_service.dart' show manualCheck;
 import 'settings_state.dart';
 
@@ -211,14 +211,6 @@ class _SettingsHomePageState extends ConsumerState<SettingsHomePage> {
                     title: '消息通知',
                     subtitle: 'App 后台收 TA 的消息提醒',
                     onTap: () => context.push('/settings/notify'),
-                  ),
-                  AppleGroupedRow(
-                    key: const Key('settings-home-peer-share'),
-                    icon: Icons.shield_rounded,
-                    tone: AppleIconTone.emerald,
-                    title: '伴侣共享与守护',
-                    subtitle: '位置、轨迹、报备与使用报告共享开关',
-                    onTap: () => context.push('/settings/peer-share'),
                   ),
                 ],
               ),
@@ -467,7 +459,7 @@ class PeerVerifyCardState extends ConsumerState<PeerVerifyCard> {
       final reported = (st['reported'] as num?)?.toInt() ?? 0;
       _summary = _on
           ? '采集上报中 · 回调 $received · 已报 $reported · 队列 $queue'
-          : '已关闭';
+          : (_expectedOn ? '采集待恢复' : '已关闭');
     });
   }
 
@@ -486,11 +478,12 @@ class PeerVerifyCardState extends ConsumerState<PeerVerifyCard> {
     if (!mounted) return;
     setState(() {
       _busy = false;
-      _on = r.ok;
+      _on = v ? r.ok : false;
+      _expectedOn = v ? (r.ok ? true : _expectedOn) : false;
       _reason = r.ok ? '' : r.reason;
-      _summary = r.ok ? '采集上报中（探针验证中）' : (v ? '开启失败' : '已关闭');
-      // 期望态由 peerVerifyToggle 写盘，这里同步内存值（开关返回即真相）
-      if (!v || r.ok) _expectedOn = v;
+      _summary = r.ok
+          ? (v ? '采集上报中（探针验证中）' : '已关闭')
+          : (v ? '开启失败' : '已关闭');
     });
     if (v && !r.ok && r.reason.isNotEmpty) {
       // 顶部弹窗（既有统一机制）+ 下方常驻原因行（失败态不许不可见）
@@ -536,7 +529,10 @@ class PeerVerifyCardState extends ConsumerState<PeerVerifyCard> {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final amberFg = WebSemanticColors.amber(theme.brightness);
+    final amberBg = WebSemanticColors.amberSoft(theme.brightness);
     return AppleGroupedSection(
       title: '位置共享',
       children: [
@@ -550,53 +546,53 @@ class PeerVerifyCardState extends ConsumerState<PeerVerifyCard> {
               ),
               title: const Text('位置共享'),
               subtitle: Text(
-                  _on
-                      ? '开启中 · 数据仅存自家空间 · 轨迹保留 15 天'
+                  _expectedOn
+                      ? (_on
+                          ? '开启中 · 数据仅存自家空间 · 轨迹保留 15 天'
+                          : '已开启 · 等待恢复后台采集 · 轨迹保留 15 天')
                       : '后台定位上报 · 数据仅存自家空间 · 轨迹保留 15 天',
-                  style: Theme.of(context)
-                      .textTheme
-                      .bodySmall
-                      ?.copyWith(color: cs.outline)),
-              value: _on,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: cs.onSurfaceVariant,
+                  )),
+              value: _expectedOn,
               onChanged: _busy ? null : _toggle,
             ),
           if (_summary.isNotEmpty)
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
               child: Text(_summary,
-                  style: Theme.of(context)
-                      .textTheme
-                      .bodySmall
-                      ?.copyWith(color: cs.outline)),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: cs.onSurfaceVariant,
+                  )),
             ),
           // 常驻失败原因行（细分引导：缺前台/缺后台文案由原生区分）
           if (_reason.isNotEmpty)
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
               child: Text('⚠ $_reason',
-                  style: Theme.of(context)
-                      .textTheme
-                      .bodySmall
-                      ?.copyWith(color: cs.error)),
+                  style: theme.textTheme.bodySmall?.copyWith(color: cs.error)),
             ),
-          // fix6 A1：期望开而实态停（进程被系统结束）→ 黄色提示 + 一键恢复。
-          // 只提示、不自动开启：恢复必须由用户点击（采集启动仍是显式动作）。
+          // fix6 A1：期望开而实态停（进程被系统结束）→ 琥珀提示 + 一键恢复。
           if (_expectedOn && !_on)
             Container(
               width: double.infinity,
               margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
               padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
               decoration: BoxDecoration(
-                color: Colors.amber.withValues(alpha: 0.18),
+                color: amberBg,
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: Colors.amber.withValues(alpha: 0.6)),
+                border: Border.all(color: amberFg.withValues(alpha: 0.45)),
               ),
               child: Wrap(
                 crossAxisAlignment: WrapCrossAlignment.center,
                 spacing: 8,
                 children: [
-                  const Text('⚠ 已停止（进程被系统结束），点击恢复',
-                      style: TextStyle(fontSize: 12, color: Colors.amber)),
+                  Text('⚠ 已停止（进程被系统结束），点击恢复',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        color: amberFg,
+                      )),
                   TextButton(
                     onPressed: _busy ? null : () => _toggle(true),
                     style: TextButton.styleFrom(
@@ -620,13 +616,10 @@ class PeerVerifyCardState extends ConsumerState<PeerVerifyCard> {
                       : (_batteryIgnored!
                           ? '电池优化：已豁免'
                           : '电池优化：未豁免（后台可能被系统限制）'),
-                  style: Theme.of(context)
-                      .textTheme
-                      .bodySmall
-                      ?.copyWith(
-                          color: _batteryIgnored == false
-                              ? Colors.amber
-                              : cs.outline),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                      color: _batteryIgnored == false
+                          ? amberFg
+                          : cs.onSurfaceVariant),
                 ),
               ),
               if (_batteryIgnored != true)

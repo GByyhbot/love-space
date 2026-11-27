@@ -20,6 +20,7 @@ import '../../core/chat/chat_media.dart';
 import '../../core/chat/chat_models.dart' show ChatLocalFile;
 import '../../core/chat/chat_repository.dart' show newChatClientId;
 import '../../core/theme/tokens.dart';
+import '../../core/ui/apple_ui.dart';
 import '../../core/ui/selection_sheet.dart';
 import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
 import '../settings/settings_widgets.dart' show GlassActionBar;
@@ -31,8 +32,9 @@ Future<void> showPhotoUploadSheet(BuildContext context) {
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
+    showDragHandle: false,
     shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.lg))),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xl))),
     builder: (_) => const PhotoUploadSheet(),
   );
 }
@@ -191,20 +193,15 @@ class _PhotoUploadSheetState extends ConsumerState<PhotoUploadSheet> {
             ),
           ),
           Row(children: [
-            Expanded(child: Text('传照片', style: theme.textTheme.titleMedium)),
-            Container(
-              width: 34,
-              height: 34,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: theme.colorScheme.surfaceContainerHighest
-                    .withValues(alpha: 0.6),
+            Expanded(
+              child: Text(
+                '传照片',
+                style: theme.textTheme.titleMedium
+                    ?.copyWith(fontWeight: FontWeight.w700),
               ),
-              child: IconButton(
-                  tooltip: '关闭',
-                  visualDensity: VisualDensity.compact,
-                  onPressed: _uploading ? null : () => Navigator.of(context).pop(),
-                  icon: const Icon(Icons.close_rounded, size: 18)),
+            ),
+            AppleSheetCloseButton(
+              onPressed: _uploading ? () {} : () => Navigator.of(context).pop(),
             ),
           ]),
         ]),

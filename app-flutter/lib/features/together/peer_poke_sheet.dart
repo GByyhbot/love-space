@@ -11,6 +11,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api/api_client.dart' as api;
 import '../../core/peer/peer_report_api.dart';
 import '../../core/peer/peer_report_queue.dart';
+import '../../core/ui/apple_ui.dart';
 import '../../core/ui/liquid_glass.dart';
 import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
 
@@ -30,6 +31,7 @@ Future<void> showPeerPokeSheet(
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+      showDragHandle: false,
       backgroundColor: Colors.transparent,
       builder: (_) => _PokeSheet(outbox: outbox ?? reportOutbox, ref: ref),
     );
@@ -94,6 +96,7 @@ class _PokeSheetState extends State<_PokeSheet> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
+    final dark = theme.brightness == Brightness.dark;
     return LiquidGlassSurface(
       borderRadius: const BorderRadius.vertical(
         top: Radius.circular(kGlassSheetRadius),
@@ -113,17 +116,32 @@ class _PokeSheetState extends State<_PokeSheet> {
             Center(
               child: Container(
                 width: 38,
-                height: 4,
-                margin: const EdgeInsets.only(bottom: 12),
+                height: 4.5,
+                margin: const EdgeInsets.only(bottom: 10),
                 decoration: BoxDecoration(
-                  color: cs.outlineVariant,
-                  borderRadius: BorderRadius.circular(2),
+                  color: dark
+                      ? Colors.white.withValues(alpha: 0.28)
+                      : cs.onSurface.withValues(alpha: 0.22),
+                  borderRadius: BorderRadius.circular(99),
                 ),
               ),
             ),
-            Text('想 TA 一下',
-                style: theme.textTheme.titleMedium
-                    ?.copyWith(fontWeight: FontWeight.w700)),
+            Row(children: [
+              const AppleIconBadge(
+                icon: Icons.favorite_rounded,
+                tone: AppleIconTone.rose,
+                size: 32,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text('想 TA 一下',
+                    style: theme.textTheme.titleMedium
+                        ?.copyWith(fontWeight: FontWeight.w700)),
+              ),
+              AppleSheetCloseButton(
+                onPressed: () => Navigator.of(context).pop(),
+              ),
+            ]),
             const SizedBox(height: 12),
             Row(children: [
               Expanded(
@@ -152,6 +170,15 @@ class _PokeSheetState extends State<_PokeSheet> {
                 ActionChip(
                   key: Key('poke-care-$t'),
                   label: Text(t),
+                  backgroundColor: dark
+                      ? cs.surfaceContainerHigh
+                      : cs.surface.withValues(alpha: 0.96),
+                  side: BorderSide(
+                    color: dark
+                        ? Colors.white.withValues(alpha: 0.14)
+                        : cs.outline.withValues(alpha: 0.34),
+                    width: 0.8,
+                  ),
                   onPressed: _sending ? null : () => _send('care', t),
                 ),
             ]),
@@ -188,7 +215,8 @@ class _PokeSheetState extends State<_PokeSheet> {
             ]),
             const SizedBox(height: 6),
             Text('每类每小时最多 6 次',
-                style: theme.textTheme.bodySmall?.copyWith(color: cs.outline)),
+                style: theme.textTheme.bodySmall
+                    ?.copyWith(color: cs.onSurfaceVariant)),
           ],
         ),
       ),

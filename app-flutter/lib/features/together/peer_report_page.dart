@@ -48,6 +48,7 @@ import '../../core/ui/pressable_scale.dart';
 import '../../core/ui/progress.dart';
 import '../auth/auth_state.dart';
 import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
+import '../settings/peer_permission_sheet.dart';
 import 'peer_poke_sheet.dart';
 
 class PeerReportPage extends ConsumerStatefulWidget {
@@ -144,76 +145,12 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage>
   }
 
   Future<void> _showMissingPermSheet(PeerPermissionSnapshot p) async {
-    final missing = <String>[
-      if (!p.fine) '精确定位（实时位置与附近地点）',
-      if (!p.background) '后台位置（熄屏与切后台持续报备）',
-      if (!p.usage) '应用使用情况访问（手机使用与亮屏统计）',
-      if (!p.notification) '系统通知（消息与低电量提醒）',
-      if (!p.batteryIgnored) '忽略电池优化（避免后台被系统冻结）',
-    ];
-    if (missing.isEmpty) return;
-    await showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      builder: (ctx) {
-        final theme = Theme.of(ctx);
-        final cs = theme.colorScheme;
-        return SafeArea(
-          child: Padding(
-            key: const Key('peer-perm-prompt-sheet'),
-            padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '开启完整报备能力',
-                  style: theme.textTheme.titleMedium
-                      ?.copyWith(fontWeight: FontWeight.w700),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  '检测到以下系统权限尚未开启，可能导致对方看不到你的位置或手机使用时长：',
-                  style: theme.textTheme.bodySmall?.copyWith(color: cs.outline),
-                ),
-                const SizedBox(height: 10),
-                for (final item in missing)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 3),
-                    child: Row(children: [
-                      Icon(Icons.circle, size: 6, color: cs.primary),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(item, style: theme.textTheme.bodySmall),
-                      ),
-                    ]),
-                  ),
-                const SizedBox(height: 16),
-                Row(children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      key: const Key('peer-perm-prompt-later'),
-                      onPressed: () => Navigator.of(ctx).pop(),
-                      child: const Text('稍后再说'),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: FilledButton(
-                      key: const Key('peer-perm-prompt-go'),
-                      onPressed: () {
-                        Navigator.of(ctx).pop();
-                        context.push('/settings/peer-share');
-                      },
-                      child: const Text('去补齐'),
-                    ),
-                  ),
-                ]),
-              ],
-            ),
-          ),
-        );
-      },
+    if (p.allGranted) return;
+    await showPeerPermissionGuideSheet(
+      context,
+      initialSnapshot: p,
+      isFirstInstall: false,
+      onOpenSettings: () => context.push('/settings/peer-share'),
     );
   }
 
@@ -375,6 +312,10 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage>
     final d = _data;
     final topInset = widget.embedded ? ShellChromeScope.topInsetOf(context) : 0.0;
     final body = RefreshIndicator(
+        edgeOffset: topInset,
+        color: cs.primary,
+        backgroundColor:
+            theme.brightness == Brightness.dark ? cs.surfaceContainerHigh : cs.surface,
         onRefresh: () => _load(),
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),

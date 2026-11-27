@@ -22,6 +22,7 @@ import 'package:open_filex/open_filex.dart';
 import '../../core/api/api_client.dart' show dioProvider;
 import '../../core/theme/tokens.dart';
 import '../../core/theme/typography.dart';
+import '../../core/ui/apple_ui.dart';
 import '../chat/chat_toast.dart' show chatToastProvider;
 import 'update_service.dart';
 import 'update_trace.dart';
@@ -37,6 +38,7 @@ Future<void> showUpdateSheet(
     isScrollControlled: true,
     isDismissible: true,
     useSafeArea: true,
+    showDragHandle: false,
     barrierColor: Colors.black54, // 遮罩压暗
     backgroundColor: Colors.transparent,
     shape: const RoundedRectangleBorder(
@@ -219,34 +221,63 @@ class _UpdateSheetState extends ConsumerState<_UpdateSheet> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final dark = theme.brightness == Brightness.dark;
     final ver = widget.release.appVersion;
     return Container(
       margin: const EdgeInsets.only(top: 60),
       child: Container(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+        padding: const EdgeInsets.fromLTRB(18, 0, 18, 16),
         decoration: BoxDecoration(
-          color: theme.colorScheme.surface,
+          color: dark ? cs.surfaceContainerHigh : cs.surface,
           borderRadius: const BorderRadius.vertical(
               top: Radius.circular(AppRadius.xl)),
-        ),
-        child: Column(mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          // 抓手（既有 sheet 家族同款 38×4.5）
-          Center(
-            child: Container(
-              width: 38,
-              height: 4.5,
-              margin: const EdgeInsets.only(bottom: 12),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.outlineVariant
-                    .withValues(alpha: 0.8),
-                borderRadius: BorderRadius.circular(3),
-              ),
+          border: Border(
+            top: BorderSide(
+              color: dark
+                  ? Colors.white.withValues(alpha: 0.12)
+                  : cs.outlineVariant.withValues(alpha: 0.55),
+              width: 0.8,
             ),
           ),
-          Text('发现新版本 v$ver',
-              style: theme.textTheme.titleMedium
-                  ?.copyWith(fontWeight: FontWeight.w600)),
+          boxShadow: appleCardShadows(dark, elevated: true),
+        ),
+        child: SafeArea(
+          top: false,
+          child: Column(mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            // 抓手（既有 sheet 家族同款 38×4.5）
+            Padding(
+              padding: const EdgeInsets.only(top: 10, bottom: 10),
+              child: Center(
+                child: Container(
+                  width: 38,
+                  height: 4.5,
+                  decoration: BoxDecoration(
+                    color: dark
+                        ? Colors.white.withValues(alpha: 0.28)
+                        : cs.onSurface.withValues(alpha: 0.22),
+                    borderRadius: BorderRadius.circular(99),
+                  ),
+                ),
+              ),
+            ),
+            Row(children: [
+              const AppleIconBadge(
+                icon: Icons.system_update_rounded,
+                tone: AppleIconTone.blue,
+                size: 34,
+              ),
+              const SizedBox(width: Spacing.md),
+              Expanded(
+                child: Text('发现新版本 v$ver',
+                    style: theme.textTheme.titleMedium
+                        ?.copyWith(fontWeight: FontWeight.w700)),
+              ),
+              AppleSheetCloseButton(
+                onPressed: () => Navigator.of(context).pop(),
+              ),
+            ]),
           const SizedBox(height: Spacing.gap),
           // Release 说明全文（纯文本）
           Flexible(
@@ -351,6 +382,7 @@ class _UpdateSheetState extends ConsumerState<_UpdateSheet> {
             ),
           ]),
         ]),
+        ),
       ),
     );
   }

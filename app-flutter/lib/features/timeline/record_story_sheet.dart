@@ -23,6 +23,7 @@ import '../../core/chat/chat_models.dart' show ChatMedia;
 import '../../core/theme/app_icons.dart';
 import '../../core/theme/tokens.dart';
 import '../../core/timeline/timeline_data.dart';
+import '../../core/ui/apple_ui.dart';
 import '../../core/ui/avatar_media.dart';
 import '../auth/auth_state.dart';
 import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
@@ -43,6 +44,7 @@ Future<void> showRecordStorySheet(
     isScrollControlled: true,
     isDismissible: true,
     useSafeArea: true,
+    showDragHandle: false,
     barrierColor: Colors.black54, // 遮罩压暗
     backgroundColor: Colors.transparent,
     shape: const RoundedRectangleBorder(
@@ -201,6 +203,8 @@ class _RecordStorySheetState extends ConsumerState<_RecordStorySheet> {
     final yearsAgo = DateTime.now().year - recYear;
     final liked = cur.likes.contains(widget.me.user.id);
 
+    final dark = theme.brightness == Brightness.dark;
+    final cs = theme.colorScheme;
     return Container(
       margin: const EdgeInsets.only(top: 60),
       decoration: const BoxDecoration(
@@ -210,9 +214,18 @@ class _RecordStorySheetState extends ConsumerState<_RecordStorySheet> {
         constraints: BoxConstraints(
             maxHeight: MediaQuery.of(context).size.height * 0.86),
         decoration: BoxDecoration(
-          color: theme.colorScheme.surface,
+          color: dark ? cs.surfaceContainerHigh : cs.surface,
           borderRadius: const BorderRadius.vertical(
               top: Radius.circular(AppRadius.xl)),
+          border: Border(
+            top: BorderSide(
+              color: dark
+                  ? Colors.white.withValues(alpha: 0.12)
+                  : cs.outlineVariant.withValues(alpha: 0.55),
+              width: 0.8,
+            ),
+          ),
+          boxShadow: appleCardShadows(dark, elevated: true),
         ),
         child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),

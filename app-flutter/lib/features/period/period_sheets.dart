@@ -26,6 +26,7 @@ import 'period_actions.dart';
 import 'period_controller.dart';
 import 'period_meta.dart';
 import '../../core/theme/tokens.dart';
+import '../../core/ui/apple_ui.dart';
 
 /// 打开某天的某个字段弹层。
 Future<void> showPeriodLogSheet(
@@ -38,6 +39,8 @@ Future<void> showPeriodLogSheet(
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+      showDragHandle: false,
+      backgroundColor: Colors.transparent,
       builder: (_) => PeriodLogSheet(
         field: field,
         day: day,
@@ -249,37 +252,23 @@ class _PeriodLogSheetState extends ConsumerState<PeriodLogSheet> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    return SafeArea(
-      child: Padding(
-        padding: EdgeInsets.only(
-          left: 16,
-          right: 16,
-          top: 12,
-          bottom: MediaQuery.viewInsetsOf(context).bottom + 16,
-        ),
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(children: [
-                Expanded(
-                    child: Text(periodSheetTitle(widget.field),
-                        style: theme.textTheme.titleMedium)),
-                Text(widget.day == widget.today ? '今天' : widget.day,
-                    style: theme.textTheme.bodySmall
-                        ?.copyWith(color: cs.outline)),
-              ]),
-              const SizedBox(height: 12),
-              _buildBody(theme, cs),
-              if (_inlineError != null) ...[
-                const SizedBox(height: Spacing.gap),
-                Text(_inlineError!,
-                    style: theme.textTheme.bodySmall
-                        ?.copyWith(color: cs.error)),
-              ],
+    return AppleSheetContainer(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      title: periodSheetTitle(widget.field),
+      subtitle: widget.day == widget.today ? '今天' : widget.day,
+      onClose: () => Navigator.of(context).pop(),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _buildBody(theme, cs),
+            if (_inlineError != null) ...[
+              const SizedBox(height: Spacing.gap),
+              Text(_inlineError!,
+                  style: theme.textTheme.bodySmall?.copyWith(color: cs.error)),
             ],
-          ),
+          ],
         ),
       ),
     );

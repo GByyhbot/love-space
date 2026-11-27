@@ -14,6 +14,7 @@ const MethodChannel _peerNativeChannel = MethodChannel('peer_loc/native');
 
 const String kPeerPermPromptLastAtKey = 'peer_perm_prompt_last_at_ms';
 const Duration kPeerPermPromptCooldown = Duration(hours: 24);
+const String kFirstInstallPermGuideDoneKey = 'first_install_perm_guide_done_v1';
 
 /// Maps peer network string (`wifi` / `cell` / `none`) to the semantic Material icon.
 IconData networkIconFor(String? net) {
@@ -332,6 +333,25 @@ Future<bool> shouldShowProactivePermissionPrompt(
 
 Future<void> markProactivePermissionPromptShown({DateTime? now}) async {
   final prefs = await SharedPreferences.getInstance();
+  await prefs.setInt(
+    kPeerPermPromptLastAtKey,
+    (now ?? DateTime.now()).millisecondsSinceEpoch,
+  );
+}
+
+/// 首次安装引导判定：原生通道可用、尚有未授权限，且本机尚未记录过首次引导完成标记。
+Future<bool> shouldShowFirstInstallPermissionGuide(
+  PeerPermissionSnapshot snap,
+) async {
+  if (!snap.channelAvailable || snap.allGranted) return false;
+  final prefs = await SharedPreferences.getInstance();
+  return prefs.getBool(kFirstInstallPermGuideDoneKey) != true;
+}
+
+/// 记录首次安装权限引导已弹出，并同步刷新 24h 冷却时间戳，避免同日进报备页重复弹窗。
+Future<void> markFirstInstallPermissionGuideDone({DateTime? now}) async {
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.setBool(kFirstInstallPermGuideDoneKey, true);
   await prefs.setInt(
     kPeerPermPromptLastAtKey,
     (now ?? DateTime.now()).millisecondsSinceEpoch,

@@ -19,6 +19,7 @@ import '../../core/chat/chat_bubbles.dart';
 import '../../core/chat/chat_media.dart';
 import '../../core/chat/chat_state.dart';
 import '../auth/auth_state.dart';
+import '../../core/ui/apple_ui.dart';
 import '../../core/ui/jelly_switch.dart' show JellySwitch;
 import '../../core/ui/submit_morph.dart' show SubmitMorphButton;
 import 'chat_toast.dart' show ChatToastTone, chatToastProvider;
@@ -29,8 +30,9 @@ Future<void> showBubbleSkinSheet(BuildContext context) {
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
+    showDragHandle: false,
     shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.lg))),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xl))),
     builder: (_) => const BubbleSkinSheet(),
   );
 }
@@ -184,27 +186,43 @@ class _BubbleSkinSheetState extends ConsumerState<BubbleSkinSheet> {
     // sheet 模式固定 68% 屏高；embedded（设置独立页）由 Scaffold body
     // 有界高度撑满，不固定高（Column + Expanded 直接可用）。
     final Widget body = Column(children: [
+      if (!widget.embedded)
+        Padding(
+          padding: const EdgeInsets.only(top: 10, bottom: 4),
+          child: Center(
+            child: Container(
+              width: 38,
+              height: 4.5,
+              decoration: BoxDecoration(
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.22),
+                borderRadius: BorderRadius.circular(99),
+              ),
+            ),
+          ),
+        ),
       Padding(
-        padding: const EdgeInsets.fromLTRB(16, 12, 8, 4),
+        padding: const EdgeInsets.fromLTRB(16, 8, 12, 4),
         child: Row(children: [
           Expanded(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('聊天气泡', style: theme.textTheme.titleMedium),
+              Text('聊天气泡',
+                  style: theme.textTheme.titleMedium
+                      ?.copyWith(fontWeight: FontWeight.w700)),
               // 2.4.6 各发各的：点明写的是「我的」按人皮肤
               Text('只换你发出的气泡，对方的由对方设置',
                   style: theme.textTheme.bodySmall
-                      ?.copyWith(color: theme.colorScheme.outline)),
+                      ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
               if (_groups.isNotEmpty)
                 Text('共 $total 张 · 这一组 ${_currentGroup?.count ?? 0} 张',
                     style: theme.textTheme.bodySmall
-                        ?.copyWith(color: theme.colorScheme.outline)),
+                        ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
             ]),
           ),
           // embedded（设置独立页内嵌）不渲染关闭钮：pop 会误关设置页。
           if (!widget.embedded)
-            IconButton(
-                onPressed: () => Navigator.of(context).pop(),
-                icon: const Icon(Icons.close_rounded)),
+            AppleSheetCloseButton(
+              onPressed: () => Navigator.of(context).pop(),
+            ),
         ]),
       ),
         // 组 tab（第 N 组，对齐 Web bpPackLabel）

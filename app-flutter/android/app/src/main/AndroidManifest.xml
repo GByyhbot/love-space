@@ -42,10 +42,14 @@
          用户在系统「使用情况访问」页手动给；不弹窗催、不给就采集不启动） -->
     <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS"
         tools:ignore="ProtectedPermissions"/>
+    <!-- libAMapSDK_MAP_v9_8_3.so 在 GLMapEngine_nativeDestroy 销毁引擎释放内存时会截断
+         ARM64 TBI 指针高位 tag，在 Android 14–17 触发 bionic free() SIGABRT；
+         与 AmapTrackPlatformView.dispose() 生命周期重排双管齐下根治退出闪退。 -->
     <application
         android:label="love_space"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:allowNativeHeapPointerTagging="false">
         <activity
             android:name="cn.iepose.lovespace.love_space.MainActivity"
             android:exported="true"

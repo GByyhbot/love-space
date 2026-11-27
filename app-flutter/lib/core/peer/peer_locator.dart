@@ -192,13 +192,22 @@ Future<({String path, String content})> exportPeerFatalLog() async {
   return (path: nativePath, content: nativeContent);
 }
 
-/// App 启动钩子：以原生 status 回填开关态（无持久化——服务被杀即显示关）。
-Future<void> peerLocatorAutoStart() async {
+/// App 启动钩子：以原生 status 回填开关态；冷启动传 [resumeIfExpected]=true 时
+/// 若持久化期望态为开且当前采集未运行，则按原路径自动恢复后台定位采集。
+Future<void> peerLocatorAutoStart({bool resumeIfExpected = false}) async {
   try {
     final status = await peerVerifyStatus();
     peerVerifyOn = status['running'] == true;
     peerLocLog('auto-start check: running=${status['running']} '
         'received=${status['received']}');
+    if (resumeIfExpected && !peerVerifyOn) {
+      final expected = await readPeerExpectedOn();
+      if (expected) {
+        final res = await peerVerifyToggle(true);
+        peerVerifyOn = res.ok;
+        peerLocLog('auto-start resume: ok=${res.ok} reason=${res.reason}');
+      }
+    }
   } catch (e) {
     peerLocLog('auto-start error: $e');
   }

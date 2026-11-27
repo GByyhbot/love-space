@@ -222,31 +222,49 @@ class _AmapTrackMapWidgetState extends State<AmapTrackMapWidget> {
           Positioned(
             right: 8,
             bottom: 8,
-            child: Material(
-              color: cs.surface.withValues(alpha: 0.92),
-              borderRadius: BorderRadius.circular(AppRadius.pill),
-              elevation: 2,
-              child: InkWell(
-                key: const Key('track-recenter-btn'),
+            child: Container(
+              decoration: BoxDecoration(
+                color: theme.brightness == Brightness.dark
+                    ? cs.surfaceContainerHigh.withValues(alpha: 0.94)
+                    : cs.surface.withValues(alpha: 0.96),
                 borderRadius: BorderRadius.circular(AppRadius.pill),
-                onTap: _recenter,
-                child: Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.my_location_rounded,
-                          size: 14, color: cs.primary),
-                      const SizedBox(width: 4),
-                      Text(
-                        '回到轨迹',
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          color: cs.primary,
-                          fontWeight: FontWeight.w600,
+                border: Border.all(
+                  color: cs.outline.withValues(alpha: 0.30),
+                  width: 0.9,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.14),
+                    blurRadius: 10,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
+              ),
+              child: Material(
+                type: MaterialType.transparency,
+                borderRadius: BorderRadius.circular(AppRadius.pill),
+                child: InkWell(
+                  key: const Key('track-recenter-btn'),
+                  borderRadius: BorderRadius.circular(AppRadius.pill),
+                  onTap: _recenter,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 7),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.my_location_rounded,
+                            size: 14, color: cs.primary),
+                        const SizedBox(width: 4),
+                        Text(
+                          '回到轨迹',
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: cs.primary,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),

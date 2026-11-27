@@ -17,6 +17,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import '../auth/auth_state.dart';
 import '../../core/chat/chat_state.dart';
 import '../../core/notify/notify_service.dart' show NotifyCoordinator, onAppResumedReload;
+import '../../core/peer/peer_permissions.dart';
 import '../../core/sse/sse_client.dart';
 import '../../core/theme/app_icons.dart';
 import '../../core/theme/tokens.dart';
@@ -25,6 +26,7 @@ import '../album/album_page.dart';
 import '../home/home_page.dart';
 import '../notify/system_unread_provider.dart';
 import '../personal/personal_page.dart';
+import '../settings/peer_permission_sheet.dart';
 import '../timeline/composer_sheet.dart';
 import '../timeline/photo_upload_sheet.dart';
 import 'composer_drawer.dart';
@@ -43,6 +45,7 @@ class ShellPage extends ConsumerStatefulWidget {
 
 class _ShellPageState extends ConsumerState<ShellPage> {
   int _tab = 0;
+  bool _drawerOpen = false;
 
   /// 各 Tab 的滚动收起进度（0.0 = 顶部展开，1.0 = 滚过页头后紧凑标题淡入顶栏）。
   final List<double> _collapseByTab = <double>[0, 0, 0, 0, 0];
@@ -92,6 +95,57 @@ class _ShellPageState extends ConsumerState<ShellPage> {
         // 自动检查异常绝不影响启动/首页
       }
     });
+    // 首次安装主动弹出权限引导（使用共用权限清单弹层，仅首次触发一次）
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkFirstInstallPermissions();
+    });
+  }
+
+  Future<void> _checkFirstInstallPermissions() async {
+    try {
+      final snap = await peerPermissionStatus();
+      if (!mounted) return;
+      if (!await shouldShowFirstInstallPermissionGuide(snap) || !mounted) {
+        return;
+      }
+      await markFirstInstallPermissionGuideDone();
+      if (!mounted) return;
+      await showPeerPermissionGuideSheet(
+        context,
+        initialSnapshot: snap,
+        isFirstInstall: true,
+      );
+    } catch (_) {
+      // 权限引导异常绝不影响主链
+    }
+  }
+
+  Future<void> _openComposerDrawer() async {
+    if (_drawerOpen) return;
+    setState(() => _drawerOpen = true);
+    try {
+      await showComposerDrawerSheet(
+        context,
+        onPick: (action) {
+          switch (action) {
+            case ComposerDrawerAction.post:
+              showComposerSheet(context);
+            case ComposerDrawerAction.photo:
+              showPhotoUploadSheet(context);
+            case ComposerDrawerAction.mood:
+              context.push('/together/mood');
+            case ComposerDrawerAction.diary:
+              context.push('/personal/diary-form');
+            case ComposerDrawerAction.surprise:
+              context.push('/personal/surprise-form');
+            case ComposerDrawerAction.ledger:
+              context.push('/together/ledger');
+          }
+        },
+      );
+    } finally {
+      if (mounted) setState(() => _drawerOpen = false);
+    }
   }
 
   @override
@@ -226,27 +280,9 @@ class _ShellPageState extends ConsumerState<ShellPage> {
               child: WebDock(
                 key: const Key('shell-dock'),
                 currentIndex: _tab,
+                hideHandle: _drawerOpen,
                 onTab: (tab) => setState(() => _tab = tab),
-                onOpenDrawer: () => showComposerDrawerSheet(context,
-                    onPick: (action) {
-                  switch (action) {
-                    // 发动态：composer 弹层原链。传照片：2.4.1 第 16 项改
-                    // 开专属传照片 sheet（两段式上传同 composer 链路）。
-                    case ComposerDrawerAction.post:
-                      showComposerSheet(context);
-                    case ComposerDrawerAction.photo:
-                      showPhotoUploadSheet(context);
-                    // 其余四项：各自既有入口页（数据流/请求零变化）。
-                    case ComposerDrawerAction.mood:
-                      context.push('/together/mood');
-                    case ComposerDrawerAction.diary:
-                      context.push('/personal/diary-form');
-                    case ComposerDrawerAction.surprise:
-                      context.push('/personal/surprise-form');
-                    case ComposerDrawerAction.ledger:
-                      context.push('/together/ledger');
-                  }
-                }),
+                onOpenDrawer: _openComposerDrawer,
               ),
             ),
           ],

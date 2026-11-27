@@ -182,10 +182,20 @@ class _PersonalPageState extends ConsumerState<PersonalPage> {
                         ]),
                         selected: _tab == i,
                         selectedColor: theme.colorScheme.primary,
+                        backgroundColor: theme.brightness == Brightness.dark
+                            ? theme.colorScheme.surfaceContainerHigh
+                            : theme.colorScheme.surface,
+                        side: BorderSide(
+                          color: _tab == i
+                              ? theme.colorScheme.primary
+                              : theme.colorScheme.outline.withValues(alpha: 0.34),
+                          width: 0.8,
+                        ),
                         labelStyle: theme.textTheme.bodySmall?.copyWith(
+                            fontWeight: _tab == i ? FontWeight.w600 : FontWeight.w500,
                             color: _tab == i
                                 ? theme.colorScheme.onPrimary
-                                : null),
+                                : theme.colorScheme.onSurface),
                         showCheckmark: false,
                         onSelected: (_) {
                           setState(() => _tab = i);
