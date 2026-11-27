@@ -232,8 +232,8 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
-      // 玻璃只 Dock 一处
-      expect(find.byType(BackdropFilter), findsOneWidget);
+      // 真玻璃壳层（主要页面真改版式令）：固定顶栏 AppleGlassAppBar + 固定底栏 WebDock 共两处 BackdropFilter
+      expect(find.byType(BackdropFilter), findsNWidgets(2));
       // 距左右下各 10px（style.css:2738）
       final positioned = tester
           .widgetList<Positioned>(find.ancestor(

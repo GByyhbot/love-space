@@ -13,6 +13,7 @@ import 'package:flutter/material.dart';
 
 import 'package:love_space/core/theme/motion.dart';
 import 'package:love_space/core/theme/tokens.dart';
+import 'apple_ui.dart';
 import 'pressable_scale.dart';
 
 /// 外层卡片默认圆角（对齐 Liquid Glass 大圆角 20，同心内嵌元素用 [kGlassInnerRadius]）。
@@ -78,13 +79,7 @@ class LiquidGlassCard extends StatelessWidget {
           color: Color.alphaBlend(rimColor, strokeFallback),
           width: 1,
         ),
-        boxShadow: <BoxShadow>[
-          BoxShadow(
-            color: Colors.black.withValues(alpha: dark ? 0.28 : 0.05),
-            blurRadius: dark ? 16 : 14,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        boxShadow: appleCardShadows(dark),
       ),
       child: Material(
         type: MaterialType.transparency,

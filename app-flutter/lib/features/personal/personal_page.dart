@@ -16,6 +16,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/api/api_client.dart' as api;
+import '../../core/ui/apple_ui.dart';
 import '../../core/ui/page_heading.dart';
 import '../settings/settings_widgets.dart'
     show SettingsGlassBar, filledFieldDecoration, SettingsFootnote;
@@ -137,9 +138,14 @@ class _PersonalPageState extends ConsumerState<PersonalPage> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final topInset = ShellChromeScope.topInsetOf(context);
     return Scaffold(
+      backgroundColor: topInset > 0 ? Colors.transparent : null,
       body: SafeArea(
-        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        top: topInset == 0,
+        child: Padding(
+          padding: EdgeInsets.only(top: topInset),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           // 2.4.1 第 9 项：标题行统一引用共享 PageHeading 组件。
           const PageHeading(
             title: '我的小角落',
@@ -229,6 +235,7 @@ class _PersonalPageState extends ConsumerState<PersonalPage> {
             ),
           ),
         ]),
+        ),
       ),
     );
   }

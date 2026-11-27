@@ -20,6 +20,7 @@ import '../../core/notify/notify_service.dart' show NotifyCoordinator, onAppResu
 import '../../core/sse/sse_client.dart';
 import '../../core/theme/app_icons.dart';
 import '../../core/theme/tokens.dart';
+import '../../core/ui/apple_ui.dart';
 import '../album/album_page.dart';
 import '../home/home_page.dart';
 import '../notify/system_unread_provider.dart';
@@ -42,6 +43,26 @@ class ShellPage extends ConsumerStatefulWidget {
 
 class _ShellPageState extends ConsumerState<ShellPage> {
   int _tab = 0;
+
+  /// 各 Tab 的滚动收起进度（0.0 = 顶部展开，1.0 = 滚过页头后紧凑标题淡入顶栏）。
+  final List<double> _collapseByTab = <double>[0, 0, 0, 0, 0];
+
+  static const List<String> _tabTitles = <String>[
+    '首页',
+    '时光',
+    '相册',
+    '我们',
+    '角落',
+  ];
+
+  bool _onTabScroll(ScrollNotification notification) {
+    if (notification.metrics.axis != Axis.vertical) return false;
+    final next = ((notification.metrics.pixels - 16) / 36).clamp(0.0, 1.0);
+    if ((next - _collapseByTab[_tab]).abs() > 0.04) {
+      setState(() => _collapseByTab[_tab] = next);
+    }
+    return false;
+  }
 
   @override
   void initState() {
@@ -110,6 +131,7 @@ class _ShellPageState extends ConsumerState<ShellPage> {
     final systemUnread = ref.watch(systemUnreadProvider);
     final me = ref.watch(authProvider.notifier).me;
     final theme = Theme.of(context);
+    final topInset = MediaQuery.paddingOf(context).top + kToolbarHeight;
     // IndexedStack 常驻五个 tab：时光列表/筛选状态切页不丢（时光页状态
     // 挂 keepAlive controller，双保险）；条目 7 段 7-A 新增「角落」第 5 页。
     final pages = [
@@ -123,17 +145,12 @@ class _ShellPageState extends ConsumerState<ShellPage> {
       const PersonalPage(),
     ];
     return Scaffold(
-      // 顶栏半透明 80%（Web 原生端 color-mix(--bg 80%)，style.css:2108；
-      // AppBar 与 body 上下布局、其后无可模糊内容，不引入 blur——毛玻璃
-      // 只 Dock 一个静态区）。
-      appBar: AppBar(
-        backgroundColor: ChromeColors.of(theme).topbarBg,
-        surfaceTintColor: Colors.transparent,
-        scrolledUnderElevation: 0,
-        // 2.4.1 第 9 项：五 tab 顶栏删除页名文字——顶栏只保留右侧圆钮组
-        //（通知/聊天/齿轮/头像），顺序、尺寸、行为全不变；顶栏仍是壳层
-        // 本体的部件，禁止为此新增 overlay（冻结教训）。页名由各页标题行
-        // （共享 PageHeading 组件）承担。
+      backgroundColor: appleCanvasColor(theme),
+      // 真玻璃壳层：正文滚入毛玻璃顶栏背后，顶栏紧凑标题随滚动平滑淡入。
+      extendBodyBehindAppBar: true,
+      appBar: AppleGlassAppBar(
+        collapsedTitle: _tabTitles[_tab],
+        collapseProgress: _collapseByTab[_tab],
         actions: [
           // 「数据管理与通知渠道」章 段 A：通知中心铃铛（对齐 Web 顶栏
           // 「通知」图标 `app.js:325`）。角标用 me.unread（系统未读总数，
@@ -185,9 +202,18 @@ class _ShellPageState extends ConsumerState<ShellPage> {
           const SizedBox(width: Spacing.xs),
         ],
       ),
-      body: Stack(
+      body: ApplePageBackground(
+        child: Stack(
           children: [
-            Positioned.fill(child: IndexedStack(index: _tab, children: pages)),
+            Positioned.fill(
+              child: ShellChromeScope(
+                topInset: topInset,
+                child: NotificationListener<ScrollNotification>(
+                  onNotification: _onTabScroll,
+                  child: IndexedStack(index: _tab, children: pages),
+                ),
+              ),
+            ),
             // 悬浮 Dock（方案 A 浮层，web-visual-plan.md 3.2①）：距左右下各
             // 10px + 底部安全区透传（Web inset:auto 10px calc(10px+safe)，
             // style.css:2738）；bottomNavigationBar 已置 null，Scaffold body
@@ -225,6 +251,7 @@ class _ShellPageState extends ConsumerState<ShellPage> {
             ),
           ],
         ),
+      ),
     );
   }
 }
