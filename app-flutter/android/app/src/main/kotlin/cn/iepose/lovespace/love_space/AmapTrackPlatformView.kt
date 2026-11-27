@@ -24,6 +24,43 @@ import io.flutter.plugin.platform.PlatformView
 import io.flutter.plugin.platform.PlatformViewFactory
 
 /**
+ * 主线程预加载高德 3D SDK 与底层 JNI 动态库：
+ * - 合规要求：updatePrivacyShow / updatePrivacyAgree 必须最先调用；
+ * - 治本逻辑：在 MainActivity.onCreate（主线程、带完整应用 ClassLoader）调用
+ *   MapsInitializer.initialize + System.loadLibrary("AMapSDK_MAP_v9_8_3")，
+ *   确保 JNI_OnLoad 的 FindClass/GetStaticMethodID 在应用类加载器上下文执行，
+ *   杜绝首次在 GL 渲染线程加载 .so 时找不到 SDK Java 类而触发 SIGABRT。
+ */
+object AmapPreload {
+    private const val TAG = "AmapPreload"
+
+    @Volatile
+    private var initialized = false
+
+    fun initOnMainThread(context: Context) {
+        if (initialized) return
+        initialized = true
+        try {
+            val appCtx = context.applicationContext
+            MapsInitializer.updatePrivacyShow(appCtx, true, true)
+            MapsInitializer.updatePrivacyAgree(appCtx, true)
+            MapsInitializer.initialize(appCtx)
+            System.loadLibrary("AMapSDK_MAP_v9_8_3")
+            android.util.Log.i(
+                TAG,
+                "AMapSDK_MAP_v9_8_3 loaded on thread=${Thread.currentThread().name}"
+            )
+        } catch (t: Throwable) {
+            android.util.Log.w(
+                TAG,
+                "preload failed on thread=${Thread.currentThread().name}",
+                t
+            )
+        }
+    }
+}
+
+/**
  * 高德地图配置通道：向 Flutter 汇报是否已注入有效 AMAP_API_KEY。
  * Key 为空时 Flutter 自动走自绘轨迹画布回退，不白屏。
  */

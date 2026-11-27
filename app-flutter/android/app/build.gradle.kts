@@ -90,6 +90,10 @@ android {
 
     buildTypes {
         release {
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
             // 正式签名只在 CI 注入钥匙时启用；否则回退 debug 签名
             // （保持 flutter run --release 等本地流程原样可用）。
             if (hasReleaseSigning) {

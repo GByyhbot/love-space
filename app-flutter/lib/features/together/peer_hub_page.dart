@@ -39,6 +39,10 @@ class PeerHubPage extends ConsumerStatefulWidget {
 class _PeerHubPageState extends ConsumerState<PeerHubPage> {
   late int _tab = widget.initialTab.clamp(0, 3);
 
+  /// 懒建保活集合：仅首次切到的页签才创建实体树，建后由 IndexedStack 保活，
+  /// 避免在今日/设置等非地图页签时提前创建轨迹页 AndroidView。
+  late final Set<int> _activated = <int>{_tab};
+
   static const List<({String title, String sub, IconData icon, String label})>
       _tabs = [
     (
@@ -70,7 +74,34 @@ class _PeerHubPageState extends ConsumerState<PeerHubPage> {
   void _setTab(int index) {
     final next = index.clamp(0, 3);
     if (next == _tab) return;
-    setState(() => _tab = next);
+    setState(() {
+      _tab = next;
+      _activated.add(next);
+    });
+  }
+
+  Widget _buildTab(int index) {
+    if (!_activated.contains(index)) {
+      return const SizedBox.shrink();
+    }
+    return switch (index) {
+      0 => PeerReportPage(
+          embedded: true,
+          onSwitchTab: _setTab,
+        ),
+      1 => PeerTrackPage(
+          embedded: true,
+          onSwitchTab: _setTab,
+        ),
+      2 => PeerPhonePage(
+          embedded: true,
+          onSwitchTab: _setTab,
+        ),
+      3 => const PeerShareSettingsPage(
+          embedded: true,
+        ),
+      _ => const SizedBox.shrink(),
+    };
   }
 
   @override
@@ -127,21 +158,7 @@ class _PeerHubPageState extends ConsumerState<PeerHubPage> {
                 child: IndexedStack(
                   index: _tab,
                   children: [
-                    PeerReportPage(
-                      embedded: true,
-                      onSwitchTab: _setTab,
-                    ),
-                    PeerTrackPage(
-                      embedded: true,
-                      onSwitchTab: _setTab,
-                    ),
-                    PeerPhonePage(
-                      embedded: true,
-                      onSwitchTab: _setTab,
-                    ),
-                    const PeerShareSettingsPage(
-                      embedded: true,
-                    ),
+                    for (var i = 0; i < 4; i++) _buildTab(i),
                   ],
                 ),
               ),

@@ -1,5 +1,6 @@
 package cn.iepose.lovespace.love_space
 
+import android.os.Bundle
 import com.ryanheise.audioservice.AudioServiceActivity
 import io.flutter.embedding.engine.FlutterEngine
 
@@ -13,6 +14,13 @@ import io.flutter.embedding.engine.FlutterEngine
  * Activity 口径，媒体前台服务行为不变）并接管 manifest activity 声明。
  */
 class MainActivity : AudioServiceActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        // 主线程预初始化高德 SDK 并首载 libAMapSDK_MAP_v9_8_3.so，确保 JNI_OnLoad
+        // 在应用 ClassLoader 上下文完成，避免 GL 线程首载 FindClass 返回 null 触发 SIGABRT。
+        AmapPreload.initOnMainThread(this)
+    }
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         // 2.8.0 第 0 步 · 路线 B：原生 LocationManager 采集桥
