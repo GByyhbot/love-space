@@ -56,12 +56,15 @@ class _ThrottledAdapter implements HttpClientAdapter {
       // （CI 实测 直连 7.9KB/s vs gh-proxy 8.1KB/s → 选了代理，断言假红）。
       // 直连 400B/50ms ≈ 8KB/s、代理 300B/50ms ≈ 6KB/s：都仍是「慢」，
       // 但直连稳定是实测最快候选，断言才有确定的语义。
-      final chunk = host == 'github.com' ? 400 : 300;
+      // 确定性慢流：直连 128B/200ms≈0.64KB/s、代理 64B/200ms≈0.32KB/s，
+      // 距阈值 10KB/s 有 15–30 倍余量；不设 take 上限，只能由慢速判别的
+      // CancelToken 中止，不会在判慢前自然结束。
+      final chunk = host == 'github.com' ? 128 : 64;
       final body = Stream<Uint8List>.periodic(
-        const Duration(milliseconds: 50),
+        const Duration(milliseconds: 200),
         (n) => Uint8List.fromList(utf8.encode('S' * chunk)),
-      ).take(80);
-      return ResponseBody(body, -1);
+      );
+      return ResponseBody(body, 200);
     }
     // 快通道：单 chunk 全量
     return ResponseBody.fromString('F' * 4096, 200,
@@ -172,17 +175,23 @@ void main() {
     test('全员皆慢 → 定在直连收尾轮（禁判慢）把下载走完', () async {
       final a = _ThrottledAdapter(slowProxy: true, slowAll: true); // 全部通道慢
       final target = File('${tmp.path}${Platform.pathSeparator}a3.apk');
+      final statusWords = <String>[];
       final outcome = await downloadApk(
         _dio(a),
         _asset(),
         target,
+        onChannelChange: statusWords.add,
         speedProbe: _shortProbe,
       );
       expect(outcome.channelUsed, '直连 GitHub',
           reason: '全员慢过一轮后回直连（实测最快候选）收尾');
+      expect(statusWords, contains('所有线路均较慢，正在以最快候选继续下载'),
+          reason: '确定性进入全员皆慢后的收尾轮');
       expect(target.readAsStringSync(), 'F' * 4096);
-      // 防抖③：切换总次数 ≤ 候选数+1（4 通道 → 收尾前最多 4 次切换）
-      expect(a.requestNo, lessThanOrEqualTo(kProxyPrefixes.length + 3));
+      // 通道数 = 直连 + 代理列；各慢切一次 + 回直连收尾 1 次
+      expect(a.requestNo, kProxyPrefixes.length + 2);
+      expect(a.log.last, contains('github.com'),
+          reason: '最终收尾请求落在直连');
     });
 
     test('全部通道失败仍上抛（既有语义不回归）', () async {
