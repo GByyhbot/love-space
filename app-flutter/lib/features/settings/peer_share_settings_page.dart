@@ -21,7 +21,9 @@ import '../../core/peer/peer_policy.dart';
 import '../../core/peer/peer_report_api.dart';
 import '../../core/peer/peer_report_queue.dart';
 import '../../core/peer/peer_state_collector.dart';
+import '../../core/theme/app_icons.dart';
 import '../../core/theme/tokens.dart';
+import '../../core/theme/typography.dart';
 import '../../core/ui/error_view.dart';
 import '../../core/ui/liquid_glass.dart';
 import '../../core/ui/progress.dart';
@@ -181,21 +183,19 @@ class _PeerShareSettingsPageState extends ConsumerState<PeerShareSettingsPage>
                     const EdgeInsets.fromLTRB(16, 12, 16, Spacing.pageBottom),
                 children: [
                   _statusStrip(theme, cs, s),
-                  const SizedBox(height: Spacing.gap),
+                  const SizedBox(height: Spacing.sm),
                   _permissionCenter(theme, cs),
-                  const SizedBox(height: Spacing.gap),
-                  _dangerZone(theme, cs, s),
-                  const SizedBox(height: Spacing.gap),
-                  _pauseZone(theme, cs, s),
-                  const SizedBox(height: Spacing.gap),
+                  const SizedBox(height: Spacing.md),
+                  _masterZone(theme, cs, s),
+                  const SizedBox(height: Spacing.md),
                   _levels(theme, cs, s),
-                  const SizedBox(height: Spacing.gap),
+                  const SizedBox(height: Spacing.md),
                   _extras(theme, cs, s),
-                  const SizedBox(height: Spacing.gap),
+                  const SizedBox(height: Spacing.md),
                   _entries(theme, cs),
-                  const SizedBox(height: Spacing.gap),
+                  const SizedBox(height: Spacing.md),
                   _auditSection(theme, cs),
-                  const SizedBox(height: Spacing.gap),
+                  const SizedBox(height: Spacing.md),
                   _diagnosticsSection(theme, cs),
                   if (_saving)
                     Padding(
@@ -258,27 +258,91 @@ class _PeerShareSettingsPageState extends ConsumerState<PeerShareSettingsPage>
     );
   }
 
-  Widget _dangerZone(ThemeData theme, ColorScheme cs, PeerShareSettings s) {
-    final off = s.policy.globalOff;
+  Widget _masterZone(ThemeData theme, ColorScheme cs, PeerShareSettings s) {
+    final p = s.policy;
+    final off = p.globalOff;
+    final now = DateTime.now();
     return LiquidGlassCard(
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-      tint: cs.errorContainer.withValues(alpha: 0.24),
-      borderColor: cs.error.withValues(alpha: 0.30),
-      child: ListTile(
-        key: const Key('peer-share-off'),
-        leading: Icon(off ? Icons.lock : Icons.lock_open, color: cs.error),
-        title: Text(
-          off ? '完全关闭报备（已开启）' : '完全关闭报备',
-          style: theme.textTheme.titleSmall
-              ?.copyWith(fontWeight: FontWeight.w700),
+      padding: EdgeInsets.zero,
+      tint: off ? cs.errorContainer.withValues(alpha: 0.28) : null,
+      borderColor: off ? cs.error.withValues(alpha: 0.32) : null,
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+              Spacing.xs, Spacing.xs, Spacing.xs, 0),
+          child: ListTile(
+            key: const Key('peer-share-off'),
+            leading: Icon(
+              off ? AppIcons.lock : AppIcons.unlock,
+              color: cs.error,
+            ),
+            title: Text(
+              off ? '完全关闭报备（已开启）' : '完全关闭报备',
+              style: AppType.title(theme),
+            ),
+            subtitle: Text(
+              '一停全停：定位、状态、使用、网络、电量都不再上报；对方立刻看到关闭态',
+              style: AppType.caption(theme),
+            ),
+            trailing: Switch(
+              value: off,
+              onChanged: _saving ? null : (v) => _confirmOff(v),
+            ),
+          ),
         ),
-        subtitle: Text('一停全停：定位、状态、使用、网络、电量都不再上报；对方立刻看到关闭态',
-            style: theme.textTheme.bodySmall?.copyWith(color: cs.outline)),
-        trailing: Switch(
-          value: off,
-          onChanged: _saving ? null : (v) => _confirmOff(v),
+        const Divider(height: 1),
+        Padding(
+          padding: const EdgeInsets.all(Spacing.lg),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(children: [
+                Text('暂停报备', style: AppType.title(theme)),
+                const Spacer(),
+                Text(
+                  p.isPaused ? '至 ${_fmt(p.pausedUntil)}' : '恢复后不补报',
+                  style: AppType.numeric(
+                    theme,
+                    base: AppType.caption(theme),
+                  ),
+                ),
+              ]),
+              const SizedBox(height: Spacing.sm),
+              Wrap(spacing: Spacing.sm, runSpacing: Spacing.sm, children: [
+                FilledButton.tonal(
+                  key: const Key('peer-share-pause-2h'),
+                  onPressed: p.globalOff || _saving
+                      ? null
+                      : () => _applyPolicy(
+                            p.copyWith(pausedUntil: pauseUntilHours(now, 2)),
+                            toast: '已暂停 2 小时',
+                          ),
+                  child: const Text('暂停 2 小时'),
+                ),
+                FilledButton.tonal(
+                  key: const Key('peer-share-pause-morning'),
+                  onPressed: p.globalOff || _saving
+                      ? null
+                      : () => _applyPolicy(
+                            p.copyWith(pausedUntil: pauseUntilNextMorning(now)),
+                            toast: '已暂停到明早 8 点',
+                          ),
+                  child: const Text('暂停到明早 8 点'),
+                ),
+                if (p.isPaused)
+                  OutlinedButton(
+                    key: const Key('peer-share-resume'),
+                    onPressed: _saving
+                        ? null
+                        : () => _applyPolicy(p.copyWith(pausedUntil: null),
+                            toast: '已恢复报备'),
+                    child: const Text('恢复'),
+                  ),
+              ]),
+            ],
+          ),
         ),
-      ),
+      ]),
     );
   }
 
@@ -310,59 +374,6 @@ class _PeerShareSettingsPageState extends ConsumerState<PeerShareSettingsPage>
     await _applyPolicy(
       _settings!.policy.copyWith(globalOff: true, pausedUntil: null),
       toast: '已完全关闭报备',
-    );
-  }
-
-  Widget _pauseZone(ThemeData theme, ColorScheme cs, PeerShareSettings s) {
-    final p = s.policy;
-    final now = DateTime.now();
-    return LiquidGlassCard(
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text('暂停报备',
-            style: theme.textTheme.titleSmall
-                ?.copyWith(fontWeight: FontWeight.w700)),
-        const SizedBox(height: 4),
-        Text(
-          p.isPaused
-              ? '当前暂停至 ${_fmt(p.pausedUntil)}，恢复后中间这段不补报'
-              : '暂停期间不采集、不上报；恢复后不补报这段',
-          style: tabularStyle(
-            theme.textTheme.bodySmall?.copyWith(color: cs.outline),
-          ),
-        ),
-        const SizedBox(height: 10),
-        Wrap(spacing: 8, runSpacing: 8, children: [
-          FilledButton.tonal(
-            key: const Key('peer-share-pause-2h'),
-            onPressed: p.globalOff || _saving
-                ? null
-                : () => _applyPolicy(
-                      p.copyWith(pausedUntil: pauseUntilHours(now, 2)),
-                      toast: '已暂停 2 小时',
-                    ),
-            child: const Text('暂停 2 小时'),
-          ),
-          FilledButton.tonal(
-            key: const Key('peer-share-pause-morning'),
-            onPressed: p.globalOff || _saving
-                ? null
-                : () => _applyPolicy(
-                      p.copyWith(pausedUntil: pauseUntilNextMorning(now)),
-                      toast: '已暂停到明早 8 点',
-                    ),
-            child: const Text('暂停到明早 8 点'),
-          ),
-          if (p.isPaused)
-            OutlinedButton(
-              key: const Key('peer-share-resume'),
-              onPressed: _saving
-                  ? null
-                  : () => _applyPolicy(p.copyWith(pausedUntil: null),
-                      toast: '已恢复报备'),
-              child: const Text('恢复'),
-            ),
-        ]),
-      ]),
     );
   }
 
@@ -481,6 +492,16 @@ class _PeerShareSettingsPageState extends ConsumerState<PeerShareSettingsPage>
     return LiquidGlassCard(
       padding: EdgeInsets.zero,
       child: Column(children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+              Spacing.lg, Spacing.md, Spacing.lg, Spacing.xs),
+          child: Row(children: [
+            Text('分项颗粒度控制', style: AppType.title(theme)),
+            const Spacer(),
+            Text('切换即生效', style: AppType.caption(theme)),
+          ]),
+        ),
+        Divider(height: 1, color: cs.outlineVariant.withValues(alpha: 0.45)),
         _levelGroup<LocLevel>(
           theme,
           cs,

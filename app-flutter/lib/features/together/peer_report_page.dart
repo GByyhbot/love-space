@@ -37,7 +37,9 @@ import '../../core/peer/peer_track_data.dart';
 import '../../core/peer/peer_usage_data.dart';
 import '../../core/peer/state_event_text.dart';
 import '../../core/sse/sse_client.dart';
+import '../../core/theme/app_icons.dart';
 import '../../core/theme/tokens.dart';
+import '../../core/theme/typography.dart';
 import '../../core/ui/empty_view.dart';
 import '../../core/ui/error_view.dart';
 import '../../core/ui/liquid_glass.dart';
@@ -892,20 +894,29 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage>
                   borderRadius: BorderRadius.circular(kGlassInnerRadius),
                 ),
                 child: Row(children: [
-                  Icon(Icons.smartphone_rounded,
+                  Icon(AppIcons.phone,
                       size: 15, color: cs.onPrimaryContainer),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: Spacing.sm),
                   Expanded(
                     child: Text(
                       '正在使用 ${usage.currentApp!.app} · ${durationTextZh(((DateTime.now().millisecondsSinceEpoch / 1000) - (usage.currentApp!.since ?? 0)).round())}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: tabularStyle(
-                        theme.textTheme.bodySmall?.copyWith(
+                      style: AppType.numeric(
+                        theme,
+                        base: theme.textTheme.bodySmall?.copyWith(
                           color: cs.onPrimaryContainer,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
+                    ),
+                  ),
+                  const SizedBox(width: Spacing.sm),
+                  Text(
+                    '详情 ›',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: cs.onPrimaryContainer,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                 ]),
@@ -967,11 +978,21 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage>
           ),
         ],
         if (d.peerTodayPoints != null && d.peerTodayPoints! > 0) ...[
-          const SizedBox(height: 4),
+          const SizedBox(height: Spacing.xs),
           Text(
             '今日报备 ${d.peerTodayPoints} 点',
             style: tabularStyle(
               theme.textTheme.labelSmall?.copyWith(color: cs.outline),
+            ),
+          ),
+        ],
+        if (hasTrackData) ...[
+          const SizedBox(height: Spacing.xs),
+          Text(
+            '打开轨迹地图 ›',
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: cs.primary,
+              fontWeight: FontWeight.w600,
             ),
           ),
         ],
@@ -1126,7 +1147,71 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage>
             child: const Text('对方视角预览'),
           ),
         ]),
-        const SizedBox(height: 6),
+        const SizedBox(height: Spacing.sm),
+        Container(
+          key: const Key('report-mine-preview-grid'),
+          padding: const EdgeInsets.all(Spacing.sm),
+          decoration: BoxDecoration(
+            color: cs.surfaceContainerHighest.withValues(alpha: 0.36),
+            borderRadius: BorderRadius.circular(AppRadius.small),
+            border: Border.all(
+              color: cs.outlineVariant.withValues(alpha: 0.45),
+            ),
+          ),
+          child: Row(children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('位置共享', style: AppType.caption(theme)),
+                  const SizedBox(height: 2),
+                  Text(
+                    d.status.myPolicy.locLevel.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.labelMedium
+                        ?.copyWith(fontWeight: FontWeight.w600),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: Spacing.sm),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('网络显示', style: AppType.caption(theme)),
+                  const SizedBox(height: 2),
+                  Text(
+                    d.status.myPolicy.netLevel.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.labelMedium
+                        ?.copyWith(fontWeight: FontWeight.w600),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: Spacing.sm),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('使用共享', style: AppType.caption(theme)),
+                  const SizedBox(height: 2),
+                  Text(
+                    d.status.myPolicy.usageLevel.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.labelMedium
+                        ?.copyWith(fontWeight: FontWeight.w600),
+                  ),
+                ],
+              ),
+            ),
+          ]),
+        ),
+        const SizedBox(height: Spacing.sm),
         if (mine?.battery != null)
           _kv(theme, cs, '我的电量', '${mine!.battery}%'),
         if (myUsage?.screenSec != null)
@@ -1158,7 +1243,7 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage>
               border: Border.all(color: cs.error.withValues(alpha: 0.35)),
             ),
             child: Row(children: [
-              Icon(Icons.location_off_outlined, size: 16, color: cs.error),
+              Icon(AppIcons.locationOff, size: 16, color: cs.error),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -1186,7 +1271,11 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage>
   List<Widget> _eventsSection(ThemeData theme, ColorScheme cs) {
     final day = _day;
     final out = <Widget>[
-      _sectionTitle(theme, '今日时间线'),
+      Row(children: [
+        _sectionTitle(theme, '今日时间线'),
+        const Spacer(),
+        Text('实时更新', style: AppType.caption(theme)),
+      ]),
       const SizedBox(height: Spacing.gap),
     ];
     if (day == null) {

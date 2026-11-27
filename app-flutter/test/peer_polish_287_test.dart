@@ -451,9 +451,28 @@ void main() {
 
         await tester.tap(find.byKey(const Key('phone-tab-net')));
         await tester.pump();
-        expect(find.byIcon(Icons.wifi_rounded), findsOneWidget);
-        expect(find.byIcon(Icons.signal_cellular_alt_rounded), findsOneWidget);
-        expect(find.byIcon(Icons.signal_cellular_off_rounded), findsOneWidget);
+        final phoneNetCard = find.byKey(const Key('phone-network'));
+        expect(
+          find.descendant(
+            of: phoneNetCard,
+            matching: find.byIcon(Icons.wifi_rounded),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(
+            of: phoneNetCard,
+            matching: find.byIcon(Icons.signal_cellular_alt_rounded),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(
+            of: phoneNetCard,
+            matching: find.byIcon(Icons.signal_cellular_off_rounded),
+          ),
+          findsOneWidget,
+        );
 
         await tester.tap(find.text('我'));
         await tester.pump();

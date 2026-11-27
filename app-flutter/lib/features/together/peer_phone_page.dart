@@ -22,7 +22,9 @@ import '../../core/peer/peer_state_collector.dart'
 import '../../core/peer/peer_usage_data.dart';
 import '../../core/peer/state_event_text.dart'
     show durationTextZh, usageDeltaText;
+import '../../core/theme/motion.dart';
 import '../../core/theme/tokens.dart';
+import '../../core/theme/typography.dart';
 import '../../core/ui/empty_view.dart';
 import '../../core/ui/error_view.dart';
 import '../../core/ui/liquid_glass.dart';
@@ -295,17 +297,16 @@ class _PeerPhonePageState extends ConsumerState<PeerPhonePage>
     final unlockSub = (hasUnlocks && hasScreen)
         ? '平均 ${durationTextZh(side.screenSec! ~/ side.unlocks!)}'
         : null;
-    final netHead = side.networkEvents?.isNotEmpty == true
-        ? _netShortLabel(side.networkEvents!.first)
-        : '—';
-    final netSub = side.networkEvents?.isNotEmpty == true
-        ? _netDetailLabel(side.networkEvents!.first)
+    final netEvent = side.networkEvents?.isNotEmpty == true
+        ? side.networkEvents!.first
         : null;
+    final netHead = netEvent != null ? _netShortLabel(netEvent) : '—';
+    final netSub = netEvent != null ? _netDetailLabel(netEvent) : null;
 
     return _card(
       cs,
       key: const Key('phone-stats'),
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(Spacing.md),
       child: Column(
         children: [
           IntrinsicHeight(
@@ -324,7 +325,7 @@ class _PeerPhonePageState extends ConsumerState<PeerPhonePage>
                         side.screenSec! > side.yesterdayScreenSec!,
                   ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: Spacing.sm),
                 Expanded(
                   child: _statBox(
                     theme,
@@ -337,7 +338,7 @@ class _PeerPhonePageState extends ConsumerState<PeerPhonePage>
               ],
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: Spacing.sm),
           IntrinsicHeight(
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -352,7 +353,7 @@ class _PeerPhonePageState extends ConsumerState<PeerPhonePage>
                         : durationTextZh(side.longestSessionSec!),
                   ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: Spacing.sm),
                 Expanded(
                   child: _statBox(
                     theme,
@@ -360,6 +361,8 @@ class _PeerPhonePageState extends ConsumerState<PeerPhonePage>
                     label: '当前网络',
                     value: netHead,
                     sub: netSub,
+                    leadingIcon:
+                        netEvent == null ? null : networkIconFor(netEvent.net),
                   ),
                 ),
               ],
@@ -377,12 +380,14 @@ class _PeerPhonePageState extends ConsumerState<PeerPhonePage>
     required String value,
     String? sub,
     bool subWarn = false,
+    IconData? leadingIcon,
   }) =>
       Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        padding: const EdgeInsets.symmetric(
+            horizontal: Spacing.md, vertical: Spacing.sm),
         decoration: BoxDecoration(
           color: cs.surfaceContainerHighest.withValues(alpha: 0.42),
-          borderRadius: BorderRadius.circular(kGlassInnerRadius),
+          borderRadius: BorderRadius.circular(AppRadius.small),
           border: Border.all(
             color: cs.outlineVariant.withValues(alpha: 0.45),
           ),
@@ -397,19 +402,29 @@ class _PeerPhonePageState extends ConsumerState<PeerPhonePage>
               overflow: TextOverflow.ellipsis,
               style: theme.textTheme.labelSmall?.copyWith(color: cs.outline),
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: Spacing.xs),
             FittedBox(
               fit: BoxFit.scaleDown,
               alignment: Alignment.centerLeft,
-              child: Text(
-                value,
-                maxLines: 1,
-                style: tabularStyle(
-                  theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: -0.2,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (leadingIcon != null) ...[
+                    Icon(leadingIcon, size: 15, color: cs.primary),
+                    const SizedBox(width: Spacing.xs),
+                  ],
+                  Text(
+                    value,
+                    maxLines: 1,
+                    style: AppType.numeric(
+                      theme,
+                      base: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: -0.2,
+                      ),
+                    ),
                   ),
-                ),
+                ],
               ),
             ),
             if (sub != null) ...[
@@ -508,7 +523,8 @@ class _PeerPhonePageState extends ConsumerState<PeerPhonePage>
                         child: Align(
                           alignment: Alignment.bottomCenter,
                           child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 120),
+                            duration: Motion.fast,
+                            curve: Motion.springCurve,
                             height: hourly[h] <= 0 || maxV == 0
                                 ? 3
                                 : (6 + 80 * hourly[h] / maxV),

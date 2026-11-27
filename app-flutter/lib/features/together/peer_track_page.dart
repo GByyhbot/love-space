@@ -14,9 +14,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/api/api_client.dart' as api;
+import '../../core/peer/peer_permissions.dart' show networkIconFor;
 import '../../core/peer/peer_report_api.dart' show PeerEventItem, fetchPeerEvents;
 import '../../core/peer/peer_track_data.dart';
+import '../../core/theme/app_icons.dart';
 import '../../core/theme/tokens.dart';
+import '../../core/theme/typography.dart';
 import '../../core/ui/empty_view.dart';
 import '../../core/ui/error_view.dart';
 import '../../core/ui/liquid_glass.dart';
@@ -346,7 +349,7 @@ class _PeerTrackPageState extends ConsumerState<PeerTrackPage> {
                   _card(
                     cs,
                     child: const AppEmptyView(
-                      icon: Icons.location_off_outlined,
+                      icon: AppIcons.locationOff,
                       title: '这一天没有轨迹记录',
                       hint: '仅街区共享时只显示停留点，不保留精确轨迹',
                       padding: EdgeInsets.symmetric(vertical: 24),
@@ -356,7 +359,7 @@ class _PeerTrackPageState extends ConsumerState<PeerTrackPage> {
                   _card(
                     cs,
                     child: const AppEmptyView(
-                      icon: Icons.route_outlined,
+                      icon: AppIcons.track,
                       title: '这一天没有轨迹记录',
                       hint: '不开定位或当天没走动，都不会画线',
                       padding: EdgeInsets.symmetric(vertical: 24),
@@ -641,9 +644,11 @@ class _PeerTrackPageState extends ConsumerState<PeerTrackPage> {
                 IconButton.filledTonal(
                   key: const Key('track-play'),
                   onPressed: _togglePlay,
-                  icon: Icon(_playing ? Icons.pause : Icons.play_arrow),
+                  icon: Icon(_playing
+                      ? Icons.pause_rounded
+                      : Icons.play_arrow_rounded),
                 ),
-                const SizedBox(width: 6),
+                const SizedBox(width: Spacing.xs),
                 Expanded(
                   child: Slider(
                     key: const Key('track-slider'),
@@ -655,25 +660,38 @@ class _PeerTrackPageState extends ConsumerState<PeerTrackPage> {
                     },
                   ),
                 ),
-                const SizedBox(width: 4),
+                const SizedBox(width: Spacing.xs),
                 Text(
                   _clock(t),
-                  style: tabularStyle(
-                    theme.textTheme.labelLarge?.copyWith(
+                  style: AppType.numeric(
+                    theme,
+                    base: theme.textTheme.labelLarge?.copyWith(
                       color: cs.primary,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
                 ),
               ]),
-              const SizedBox(height: 2),
+              const SizedBox(height: Spacing.xs),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   _readout(theme, cs, '速度',
                       speed == null ? '—' : '${speed.toStringAsFixed(0)} km/h'),
                   Flexible(
-                    child: _readout(theme, cs, '网络', net?.label ?? '—'),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (net != null) ...[
+                          Icon(networkIconFor(net.net),
+                              size: 13, color: cs.outline),
+                          const SizedBox(width: Spacing.xs),
+                        ],
+                        Flexible(
+                          child: _readout(theme, cs, '网络', net?.label ?? '—'),
+                        ),
+                      ],
+                    ),
                   ),
                   _readout(theme, cs, '电量', batt == null ? '—' : '$batt%'),
                 ],
@@ -694,8 +712,10 @@ class _PeerTrackPageState extends ConsumerState<PeerTrackPage> {
             value,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: tabularStyle(
-              theme.textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w600),
+            style: AppType.numeric(
+              theme,
+              base: theme.textTheme.labelSmall
+                  ?.copyWith(fontWeight: FontWeight.w600),
             ),
           ),
         ),
@@ -714,14 +734,11 @@ class _PeerTrackPageState extends ConsumerState<PeerTrackPage> {
       key: const Key('track-stays'),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
-          Text('停留点与通勤节点',
-              style: theme.textTheme.titleSmall
-                  ?.copyWith(fontWeight: FontWeight.w700)),
+          Text('停留点与通勤节点', style: AppType.title(theme)),
           const Spacer(),
-          Text('点击定位到时间轴',
-              style: theme.textTheme.labelSmall?.copyWith(color: cs.outline)),
+          Text('点击定位到时间轴', style: AppType.caption(theme)),
         ]),
-        const SizedBox(height: 8),
+        const SizedBox(height: Spacing.sm),
         for (var i = 0; i < side.stays.length; i++) ...[
           if (i > 0)
             Divider(
@@ -737,15 +754,18 @@ class _PeerTrackPageState extends ConsumerState<PeerTrackPage> {
   Widget _stayRow(
       ThemeData theme, ColorScheme cs, PeerTrackStay s, int index) {
     return InkWell(
-      borderRadius: BorderRadius.circular(kGlassInnerRadius),
+      borderRadius: BorderRadius.circular(AppRadius.small),
       onTap: () {
         _timer?.cancel();
         if (_playing) setState(() => _playing = false);
         _tNotifier.value = s.arrivedAt;
       },
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 2),
-        child: Row(children: [
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: AppTouch.minTarget),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+              vertical: Spacing.sm, horizontal: Spacing.xs),
+          child: Row(children: [
           Container(
             width: 24,
             height: 24,
@@ -798,6 +818,7 @@ class _PeerTrackPageState extends ConsumerState<PeerTrackPage> {
             ),
           ),
         ]),
+        ),
       ),
     );
   }
