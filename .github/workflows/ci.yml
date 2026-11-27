@@ -135,6 +135,8 @@ jobs:
       # CI 出口返回 429，导致依赖解析失败而非代码问题（run 45145668345 即此）。
       # 这里只对「依赖解析类」失败重试**一次**，其它失败照旧立刻红，不许掩盖真问题。
       - name: Build debug APK（依赖解析失败自动重试一次）
+        env:
+          AMAP_API_KEY: ${{ secrets.AMAP_API_KEY }}
         run: |
           set +e
           flutter build apk --debug > /tmp/apk1.log 2>&1
