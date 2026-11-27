@@ -19,6 +19,8 @@ import 'package:love_space/core/api/api_client.dart' as api;
 import 'package:love_space/core/sse/sse_client.dart';
 import 'package:love_space/features/chat/chat_toast.dart'
     show ChatToastHost, chatToastProvider;
+import 'package:love_space/features/period/period_engine.dart'
+    show dayNum, dayStr, spaceTodayIso;
 import 'package:love_space/features/period/period_page.dart';
 import 'package:love_space/features/personal/personal_controller.dart';
 
@@ -76,8 +78,9 @@ class _Adapter implements HttpClientAdapter {
   }
 }
 
-/// 「今天」= 段开始日的次日（待确认窗口内）
-const String kStartIso = '2026-11-20';
+/// 「今天」（按空间 UTC+8 口径，与 PeriodPage 同源）与待确认起始日（today - 1）
+String _todayIso() => spaceTodayIso(DateTime.now().toUtc());
+String _startIso() => dayStr(dayNum(_todayIso()) - 1);
 
 ProviderContainer _setup(_Store s) {
   final dio = Dio(BaseOptions(
@@ -126,16 +129,19 @@ Future<void> _flush(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
-_Store _pendingStore() => _Store([
-      {
-        'id': 'p1',
-        'kind': 'period',
-        'author': 'u1',
-        'body': {'start': kStartIso, 'length': 1},
-        'created': _ts('${kStartIso}T09:00:00+08:00'),
-        'updated': _ts('${kStartIso}T09:00:00+08:00'),
-      },
-    ]);
+_Store _pendingStore() {
+  final start = _startIso();
+  return _Store([
+    {
+      'id': 'p1',
+      'kind': 'period',
+      'author': 'u1',
+      'body': {'start': start, 'length': 1},
+      'created': _ts('${start}T09:00:00+08:00'),
+      'updated': _ts('${start}T09:00:00+08:00'),
+    },
+  ]);
+}
 
 void main() {
   testWidgets('① pending 态 Hero 卡有「月经走了」；点击走 planEnd + 顶部通知 + 待确认消失',
@@ -201,9 +207,15 @@ void main() {
 
   testWidgets('④ 预测依据：有样本显示「基于近 N 次校准 · 周期 X 天（±Y 天）」',
       (tester) async {
-    // 4 段、间隔 28 → 3 个有效 gap，spread 0
+    // 4 段、间隔 28 → 3 个有效 gap，spread 0（按空间今天相对推算，永不过期）
+    final todayN = dayNum(_todayIso());
+    final lastIso = dayStr(todayN - 10);
     final s = _Store([
-      for (final start in ['2026-08-03', '2026-08-31', '2026-09-28'])
+      for (final start in [
+        dayStr(todayN - 94),
+        dayStr(todayN - 66),
+        dayStr(todayN - 38),
+      ])
         {
           'id': 'p-$start',
           'kind': 'period',
@@ -216,9 +228,9 @@ void main() {
         'id': 'p-last',
         'kind': 'period',
         'author': 'u1',
-        'body': {'start': '2026-10-26', 'length': 1},
-        'created': _ts('2026-10-26T09:00:00+08:00'),
-        'updated': _ts('2026-10-26T09:00:00+08:00'),
+        'body': {'start': lastIso, 'length': 1},
+        'created': _ts('${lastIso}T09:00:00+08:00'),
+        'updated': _ts('${lastIso}T09:00:00+08:00'),
       },
     ]);
     final c = _setup(s);

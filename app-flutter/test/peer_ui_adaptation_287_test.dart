@@ -23,6 +23,8 @@ import 'package:love_space/core/sse/sse_client.dart';
 import 'package:love_space/core/theme/tokens.dart';
 import 'package:love_space/features/chat/chat_toast.dart'
     show ChatToastController, ChatToastMessage, ChatToastTone, chatToastProvider;
+import 'package:love_space/features/period/period_engine.dart'
+    show dayNum, dayStr, spaceTodayIso;
 import 'package:love_space/features/period/period_page.dart';
 import 'package:love_space/features/personal/personal_controller.dart'
     show personalCurrentUserProvider;
@@ -281,12 +283,13 @@ _Adapter _extremeAdapter({bool halted = false}) => _Adapter((o) {
         return _json({'items': <Object?>[]});
       }
       if (p == '/api/records') {
+        final periodStart = dayStr(dayNum(spaceTodayIso(DateTime.now().toUtc())) - 2);
         return _json([
           {
             'id': 'p1',
             'kind': 'period',
             'author': 'u1',
-            'body': {'start': '2026-11-25', 'length': 5, 'cycle': 28},
+            'body': {'start': periodStart, 'length': 5, 'cycle': 28},
             'created': _now - 86400,
             'updated': _now - 86400,
           }
