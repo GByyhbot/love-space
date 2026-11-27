@@ -1937,7 +1937,8 @@ def peer_location(request: Request, body: dict = Body(default=...),
             c.execute('INSERT INTO peer_location_points'
                       '(id,user,ts,lat,lng,acc,speed,backfill,created) '
                       'VALUES (?,?,?,?,?,?,?,?,?)',
-                      (pid, user['id'], float(pt['ts']), plat,
+                      # 写侧归一：任何版本客户端发毫秒进来都按秒落库（ts>1e11 → /1000）
+                      (pid, user['id'], db.ts_to_sec(pt['ts']), plat,
                        plng, pt.get('acc'), pt.get('speed'),
                        1 if pt.get('backfill') else 0, now()))
             accepted += 1
@@ -2029,6 +2030,11 @@ def peer_status(user=Depends(current_user)):
         rows = c.execute('SELECT * FROM peer_location_latest WHERE user IN (?,?)',
                          (user['id'], pid)).fetchall()
         by_user = {r['user']: dict(r) for r in rows}
+        # 读侧兜底：时间列按秒下发（ts>1e11 → /1000，见 db.ts_to_sec，不许删）
+        for _row in by_user.values():
+            for _k in ('updated', 'state_updated'):
+                if _row.get(_k) is not None:
+                    _row[_k] = db.ts_to_sec(_row[_k])
         peer_rev = c.execute(
             "SELECT value FROM app_state WHERE key='peer_revision'").fetchone()[0]
         current_app = peer_agg.current_app(c, pid, peer_policy)

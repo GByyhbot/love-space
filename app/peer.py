@@ -1015,6 +1015,10 @@ def cleanup_expired(c, now):
     point_cut = now - POINT_RETENTION_DAYS * 86400
     event_cut = now - EVENT_RETENTION_DAYS * 86400
     c.execute('DELETE FROM peer_location_points WHERE created<?', (point_cut,))
+    # 毫秒→秒迁移留下的原行备份同口径滚动删除（表只在存量库迁移时才建）
+    if c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",
+                 (db.PEER_TS_BACKUP_TABLE,)).fetchone():
+        c.execute(f'DELETE FROM {db.PEER_TS_BACKUP_TABLE} WHERE created<?', (point_cut,))
     c.execute(
         "DELETE FROM peer_events WHERE source='auto' AND created<?",
         (event_cut,),

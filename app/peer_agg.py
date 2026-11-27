@@ -206,10 +206,15 @@ def track_for(c, user_id, day, policy):
     """
     level = policy.get('location_level', 'exact')
     start, end = day_bounds(c, day)
-    rows = c.execute(
+    # 🔴 读侧防御常驻（轨迹时间戳单位修复令，不许以后顺手删）：写侧已归一为秒、
+    # 存量已迁移，但仍把同一天的**毫秒区间**一并捞出并按 ts>1e11 → /1000 换算——
+    # 防迁移漏网、老备份恢复、或绕过写侧的老数据让轨迹页再次「这一天没有轨迹记录」。
+    raw = c.execute(
         'SELECT ts,lat,lng,acc,speed FROM peer_location_points '
-        'WHERE user=? AND ts>=? AND ts<? ORDER BY ts',
-        (user_id, start, end)).fetchall()
+        'WHERE user=? AND ((ts>=? AND ts<?) OR (ts>=? AND ts<?)) ORDER BY ts',
+        (user_id, start, end, start * 1000.0, end * 1000.0)).fetchall()
+    rows = [{'ts': db.ts_to_sec(r['ts']), 'lat': r['lat'], 'lng': r['lng'],
+             'acc': r['acc'], 'speed': r['speed']} for r in raw]
     if level == 'off':
         return {'level': 'off', 'points': [], 'stays': [], 'segments': [],
                 'distance_m': 0.0, 'latest': None}
@@ -231,7 +236,7 @@ def track_for(c, user_id, day, policy):
             'distance_m': None,  # 不足 500m 的精度不提供，端上不显示距离
             'latest': ({'lat': grid_round(latest['lat']),
                         'lng': grid_round(latest['lng']),
-                        'updated': latest['updated']} if latest else None),
+                        'updated': db.ts_to_sec(latest['updated'])} if latest else None),
         }
 
     pts = filter_points(rows)
@@ -246,7 +251,7 @@ def track_for(c, user_id, day, policy):
         'segments': speed_segments(pts),
         'distance_m': round(total_distance_m(pts), 1),
         'latest': ({'lat': latest['lat'], 'lng': latest['lng'],
-                    'updated': latest['updated']} if latest else None),
+                    'updated': db.ts_to_sec(latest['updated'])} if latest else None),
     }
 
 

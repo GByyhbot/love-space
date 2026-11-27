@@ -82,6 +82,20 @@ def now():
     return time.time()
 
 
+# 🔴 peer 时间戳单位口径（轨迹时间戳单位修复令）：peer 全系时间列一律 **unix 秒**。
+# 定位管线（App 端 PeerLocNative）自始以**毫秒**上报 points[].ts，读侧按秒切日 →
+# `/api/peer/track` 恒空。阈值 1e11：作秒是公元 5138 年、作毫秒是 1973 年，
+# 两种单位在真实数据里不会跨过它，故 `> 1e11` 即可无歧义判为毫秒。
+# 写侧归一 / 存量迁移 / 读侧兜底三处共用这一个函数，**不许以后顺手删**。
+TS_MS_THRESHOLD = 1e11
+
+
+def ts_to_sec(value):
+    """把可能是毫秒的 unix 时间戳归一为秒（秒级输入原样返回，不会被二次除）。"""
+    v = float(value)
+    return v / 1000.0 if v > TS_MS_THRESHOLD else v
+
+
 def dumps(value):
     return json.dumps(value, ensure_ascii=False, separators=(',', ':'))
 
@@ -466,7 +480,49 @@ MIGRATIONS = {
     3: ('media 加 transcript 列（ASR 转写缓存，可空）',
         lambda c: None if 'transcript' in {r[1] for r in c.execute('PRAGMA table_info(media)')}
         else c.execute('ALTER TABLE media ADD COLUMN transcript TEXT')),
+    # 轨迹时间戳单位修复令：peer 轨迹点 ts 毫秒 → 秒（先备份原行，幂等，秒级数据不动）
+    4: ('peer_location_points.ts 毫秒归一为秒（含 latest.updated/state_updated 兜底）',
+        lambda c: migrate_peer_ts_to_sec(c)),
 }
+
+
+PEER_TS_BACKUP_TABLE = 'peer_location_points_ms_backup'
+
+
+def migrate_peer_ts_to_sec(c):
+    """存量 peer 时间戳毫秒 → 秒。返回 {'points': n, 'latest_updated': n, 'latest_state_updated': n}。
+
+    · 只动 `> TS_MS_THRESHOLD` 的行：秒级数据零误伤；跑完再跑一次影响 0 行（幂等）。
+    · 动之前把待改的原行整行拷进 `peer_location_points_ms_backup`（按 id 去重），
+      备份行随轨迹保留期一起滚动删除（peer.cleanup_expired），不永久留存位置数据。
+    · 条数写进 app_state `peer_ts_ms_migrated`，部署回执据此对账。
+    · peer_events.ts / peer_usage_daily.updated 本来就是秒，**不在本迁移范围内**。
+    """
+    t = TS_MS_THRESHOLD
+    n_points = c.execute('SELECT count(*) FROM peer_location_points WHERE ts>?', (t,)).fetchone()[0]
+    if n_points:
+        c.execute(f'CREATE TABLE IF NOT EXISTS {PEER_TS_BACKUP_TABLE}('
+                  'id TEXT PRIMARY KEY, user TEXT NOT NULL, ts REAL NOT NULL,'
+                  'lat REAL NOT NULL, lng REAL NOT NULL, acc REAL, speed REAL,'
+                  'backfill INTEGER NOT NULL DEFAULT 0, created REAL NOT NULL,'
+                  'backed_up REAL NOT NULL)')
+        c.execute(f'INSERT OR IGNORE INTO {PEER_TS_BACKUP_TABLE}'
+                  '(id,user,ts,lat,lng,acc,speed,backfill,created,backed_up) '
+                  'SELECT id,user,ts,lat,lng,acc,speed,backfill,created,? '
+                  'FROM peer_location_points WHERE ts>?', (now(), t))
+        c.execute('UPDATE peer_location_points SET ts=ts/1000.0 WHERE ts>?', (t,))
+    n_upd = c.execute('UPDATE peer_location_latest SET updated=updated/1000.0 '
+                      'WHERE updated>?', (t,)).rowcount
+    n_state = c.execute('UPDATE peer_location_latest SET state_updated=state_updated/1000.0 '
+                        'WHERE state_updated>?', (t,)).rowcount
+    if n_points or n_upd or n_state:
+        c.execute("INSERT INTO app_state(key,value) VALUES ('peer_ts_ms_migrated',?) "
+                  'ON CONFLICT(key) DO UPDATE SET value=value+excluded.value', (n_points,))
+        import logging
+        logging.getLogger('love').info(
+            'peer 时间戳毫秒→秒迁移：points %d 条（原行已备份到 %s），latest.updated %d，'
+            'latest.state_updated %d', n_points, PEER_TS_BACKUP_TABLE, n_upd, n_state)
+    return {'points': n_points, 'latest_updated': n_upd, 'latest_state_updated': n_state}
 
 
 def apply_migrations(c):
