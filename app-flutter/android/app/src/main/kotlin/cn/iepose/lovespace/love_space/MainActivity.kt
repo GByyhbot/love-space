@@ -18,5 +18,11 @@ class MainActivity : AudioServiceActivity() {
         // 2.8.0 第 0 步 · 路线 B：原生 LocationManager 采集桥
         //（MethodChannel peer_loc/native：toggle/status/exportFatal 一口价）
         PeerLocNative.register(flutterEngine.dartExecutor.binaryMessenger, this)
+        // 高德 3D 地图配置与轨迹大图 PlatformView（仅轨迹页签大图使用）
+        AmapConfigChannel.register(flutterEngine.dartExecutor.binaryMessenger, this)
+        flutterEngine.platformViewsController.registry.registerViewFactory(
+            AmapConfigChannel.VIEW_TYPE,
+            AmapTrackViewFactory(flutterEngine.dartExecutor.binaryMessenger)
+        )
     }
 }

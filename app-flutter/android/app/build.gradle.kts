@@ -30,6 +30,17 @@ val hasReleaseSigning = (keystorePropsFile != null &&
     ksStoreFile != null && ksStorePass != null &&
     ksKeyAlias != null && ksKeyPass != null)
 
+// 高德地图 Android 3D SDK Key（优先环境变量 AMAP_API_KEY，其次 local.properties 的 amap.api.key；
+// 缺省为空串，运行时自动优雅回退自绘轨迹画布，绝不白屏或阻断本地/CI 构建）。
+val localProps = Properties()
+val localPropsFile = rootProject.file("local.properties")
+if (localPropsFile.isFile) {
+    localPropsFile.inputStream().use { localProps.load(it) }
+}
+val amapApiKey: String = (System.getenv("AMAP_API_KEY")
+    ?: localProps.getProperty("amap.api.key")
+    ?: "").trim()
+
 android {
     namespace = "cn.iepose.lovespace.love_space"
     compileSdk = flutter.compileSdkVersion
@@ -63,6 +74,7 @@ android {
         // flag during build.
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        manifestPlaceholders["AMAP_API_KEY"] = amapApiKey
     }
 
     signingConfigs {
@@ -103,6 +115,8 @@ flutter {
 // 2.1.4 需 AGP 8.4+，本工程 AGP 9.1.0 满足）
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
+    // 高德地图 Android 3D SDK（轨迹页签大图真地图 PlatformView；支持 AGP 9.1 / Java 17）
+    implementation("com.amap.api:3dmap:9.8.3")
     // 2.8.0 fix7：静止心跳判定（HeartbeatGate）走 JVM 单测，不依赖真机
     testImplementation("junit:junit:4.13.2")
 }

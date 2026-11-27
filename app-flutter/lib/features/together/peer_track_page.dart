@@ -25,6 +25,7 @@ import '../../core/ui/empty_view.dart';
 import '../../core/ui/error_view.dart';
 import '../../core/ui/liquid_glass.dart';
 import '../../core/ui/progress.dart';
+import 'amap_track_map.dart';
 import 'track_replay.dart';
 
 /// 等比例余弦修正画布投影（支持 2~3 点、共线点、全天数百点与 street 仅停留点模式）。
@@ -499,17 +500,23 @@ class _PeerTrackPageState extends ConsumerState<PeerTrackPage> {
                       builder: (context, t, _) {
                         final reading =
                             t == null ? null : pointAt(side.points, t);
-                        return CustomPaint(
-                          key: const Key('track-canvas'),
-                          painter: _TrackPainter(
-                            side: side,
-                            pathColor: cs.primary,
-                            driveColor: cs.tertiary,
-                            stayColor: cs.secondary,
-                            gridColor: cs.outlineVariant,
-                            reading: reading,
-                            labelColor: cs.onSurface,
-                            bgLabel: cs.surface,
+                        return AmapTrackMapWidget(
+                          side: side,
+                          replayLat: reading?.lat,
+                          replayLng: reading?.lng,
+                          pathColor: cs.primary,
+                          fallbackBuilder: (_) => CustomPaint(
+                            key: const Key('track-canvas'),
+                            painter: _TrackPainter(
+                              side: side,
+                              pathColor: cs.primary,
+                              driveColor: cs.tertiary,
+                              stayColor: cs.secondary,
+                              gridColor: cs.outlineVariant,
+                              reading: reading,
+                              labelColor: cs.onSurface,
+                              bgLabel: cs.surface,
+                            ),
                           ),
                         );
                       },

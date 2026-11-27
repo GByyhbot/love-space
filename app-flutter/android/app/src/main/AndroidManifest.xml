@@ -3,6 +3,8 @@
     <!-- INTERNET 权限必须在 main 清单声明：debug/profile 清单自带的仅覆盖开发构建，
          release 合并清单若无此条，真机上所有 socket 直接被系统拒绝（2026-11-11 真机事故）。 -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE"/>
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
@@ -71,6 +73,10 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+        <!-- 高德地图 Android 3D SDK Key（通过 AMAP_API_KEY 环境变量或 local.properties 注入） -->
+        <meta-data
+            android:name="com.amap.api.v2.apikey"
+            android:value="${AMAP_API_KEY}" />
         <!-- 2.4.5 甲组：flutter_foreground_task 11 的前台服务（service name 是插件
              硬约定不许改）。type=specialUse（依据见上方权限注释）；subtype 用英文
              避免 aapt 对非 ASCII property 的兼容风险。插件 manifest 自带 BOOT
