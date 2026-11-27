@@ -98,24 +98,25 @@ class _PeriodPageState extends ConsumerState<PeriodPage> {
       body: RefreshIndicator(
         onRefresh: () => ref.read(periodControllerProvider.notifier).load(),
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, Spacing.pageBottom),
+          padding: const EdgeInsets.fromLTRB(
+              Spacing.pagePad, Spacing.md, Spacing.pagePad, Spacing.pageBottom),
           children: [
             // headBar（heading 的副标题；标题在 AppBar）
             Text(periodHeadingSub,
                 style: theme.textTheme.bodySmall
                     ?.copyWith(color: cs.outline)),
-            const SizedBox(height: 12),
+            const SizedBox(height: Spacing.md),
             // hero（空态走 :489）
             _heroCard(context, d, rows, today, utcNow),
             // warnBlock（踩线才提示，正常时整块不存在）
             _warnBlock(context, d),
             // entry：数据分析入口卡（段 C 活入口，非死卡；对齐 period.js:517）
-            const SizedBox(height: 12),
+            const SizedBox(height: Spacing.md),
             _analysisEntry(context),
-            const SizedBox(height: 12),
+            const SizedBox(height: Spacing.md),
             // top：整月日历
             _calendarCard(context, grid, today, selected),
-            const SizedBox(height: 12),
+            const SizedBox(height: Spacing.md),
             // log：当天（选中日）记录卡
             _logCard(context, d, rows, selected, today, nowTime),
             // symBlock：症状统计

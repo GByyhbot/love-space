@@ -11,6 +11,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api/api_client.dart' as api;
 import '../../core/config.dart';
 import '../../core/theme/tokens.dart';
+import '../../core/theme/typography.dart';
 import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
 import 'settings_state.dart';
 
@@ -82,7 +83,7 @@ class _LinksPageState extends ConsumerState<LinksPage> {
                     color: row.current
                         ? cs.primaryContainer.withValues(alpha: 0.45)
                         : cs.surfaceContainerHighest,
-                    borderRadius: BorderRadius.circular(9),
+                    borderRadius: BorderRadius.circular(AppRadius.small),
                   ),
                   child: Row(
                     children: [
@@ -108,13 +109,15 @@ class _LinksPageState extends ConsumerState<LinksPage> {
                       ),
                       Text(
                         row.ms < 0 ? '不可达' : '${row.ms} ms',
-                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                              color: row.ms < 0
-                                  ? cs.error
-                                  : row.ms <= 300
-                                      ? cs.primary
-                                      : cs.tertiary,
-                            ),
+                        style: AppType.numeric(
+                          Theme.of(context),
+                          base: Theme.of(context).textTheme.labelSmall,
+                          color: row.ms < 0
+                              ? cs.error
+                              : row.ms <= 300
+                                  ? cs.primary
+                                  : cs.tertiary,
+                        ),
                       ),
                       if (identical(row, best))
                         Padding(

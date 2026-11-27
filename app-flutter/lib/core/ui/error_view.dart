@@ -10,6 +10,7 @@ library;
 
 import 'package:flutter/material.dart';
 import '../../core/theme/tokens.dart';
+import '../../core/theme/typography.dart';
 
 class AppErrorView extends StatelessWidget {
   const AppErrorView({
@@ -31,11 +32,10 @@ class AppErrorView extends StatelessWidget {
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           Icon(Icons.error_outline_rounded,
               size: 44, color: theme.colorScheme.error),
-          const SizedBox(height: 12),
+          const SizedBox(height: Spacing.md),
           Text(detail,
               textAlign: TextAlign.center,
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: theme.colorScheme.error)),
+              style: AppType.caption(theme, color: theme.colorScheme.error)),
           const SizedBox(height: Spacing.gap),
           OutlinedButton.icon(
             onPressed: onRetry,

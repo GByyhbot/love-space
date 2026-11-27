@@ -7,6 +7,7 @@ library;
 import 'package:flutter/material.dart';
 
 import '../../core/theme/tokens.dart';
+import '../../core/theme/typography.dart';
 
 /// 单个选项。[leading] 可选（封面缩略图/彩色字徽等自定义头部）。
 class SelectionOption<T> {
@@ -36,7 +37,7 @@ Future<T?> showSelectionSheet<T>({
     context: context,
     isScrollControlled: true,
     shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.lg))),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xl))),
     builder: (ctx) => SafeArea(
       child: ConstrainedBox(
         constraints: BoxConstraints(
@@ -65,11 +66,15 @@ Future<T?> showSelectionSheet<T>({
                           borderRadius: BorderRadius.circular(3),
                         ),
                       ),
-                      Text(title, style: Theme.of(ctx).textTheme.titleMedium),
+                      Text(title, style: AppType.title(Theme.of(ctx))),
                     ],
                   ),
                 ),
                 IconButton(
+                  constraints: const BoxConstraints(
+                    minWidth: AppTouch.minTarget,
+                    minHeight: AppTouch.minTarget,
+                  ),
                   onPressed: () => Navigator.pop(ctx),
                   icon: const Icon(Icons.close_rounded),
                 ),

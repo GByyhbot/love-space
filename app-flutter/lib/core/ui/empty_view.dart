@@ -7,6 +7,7 @@ library;
 
 import 'package:flutter/material.dart';
 import '../../core/theme/tokens.dart';
+import '../../core/theme/typography.dart';
 
 class AppEmptyView extends StatelessWidget {
   const AppEmptyView({
@@ -29,15 +30,11 @@ class AppEmptyView extends StatelessWidget {
       padding: padding,
       child: Column(children: [
         Icon(icon, size: 44, color: theme.colorScheme.outline),
-        const SizedBox(height: 12),
-        Text(title,
-            textAlign: TextAlign.center,
-            style: theme.textTheme.titleMedium),
+        const SizedBox(height: Spacing.md),
+        Text(title, textAlign: TextAlign.center, style: AppType.title(theme)),
         const SizedBox(height: Spacing.gap),
         Text(hint,
-            textAlign: TextAlign.center,
-            style: theme.textTheme.bodySmall
-                ?.copyWith(color: theme.colorScheme.outline)),
+            textAlign: TextAlign.center, style: AppType.caption(theme)),
       ]),
     );
   }

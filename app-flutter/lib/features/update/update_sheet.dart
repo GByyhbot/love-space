@@ -21,6 +21,7 @@ import 'package:open_filex/open_filex.dart';
 
 import '../../core/api/api_client.dart' show dioProvider;
 import '../../core/theme/tokens.dart';
+import '../../core/theme/typography.dart';
 import '../chat/chat_toast.dart' show chatToastProvider;
 import 'update_service.dart';
 import 'update_trace.dart';
@@ -40,7 +41,7 @@ Future<void> showUpdateSheet(
     backgroundColor: Colors.transparent,
     shape: const RoundedRectangleBorder(
         borderRadius:
-            BorderRadius.vertical(top: Radius.circular(AppRadius.lg))),
+            BorderRadius.vertical(top: Radius.circular(AppRadius.xl))),
     builder: (_) => _UpdateSheet(release: release),
   );
 }
@@ -226,7 +227,7 @@ class _UpdateSheetState extends ConsumerState<_UpdateSheet> {
         decoration: BoxDecoration(
           color: theme.colorScheme.surface,
           borderRadius: const BorderRadius.vertical(
-              top: Radius.circular(AppRadius.lg)),
+              top: Radius.circular(AppRadius.xl)),
         ),
         child: Column(mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -301,8 +302,11 @@ class _UpdateSheetState extends ConsumerState<_UpdateSheet> {
               _total > 0
                   ? '${_channel.isEmpty ? '下载中' : _channel} · ${(_received / _total * 100).toStringAsFixed(0)}%（${_sizeLabel(_received)} / ${_sizeLabel(_total)}）'
                   : '${_channel.isEmpty ? '下载中' : _channel} · 连接中…',
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: theme.colorScheme.outline),
+              style: AppType.numeric(
+                theme,
+                base: theme.textTheme.bodySmall,
+                color: theme.colorScheme.outline,
+              ),
             ),
             if (_channelStatus.isNotEmpty)
               Text(

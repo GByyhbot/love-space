@@ -116,7 +116,7 @@ class _SpaceInfoPageState extends ConsumerState<SpaceInfoPage> {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: Spacing.lg),
                     // 相恋日期：字段原样搬（选日期按钮 + 当前值文案）。
                     Row(
                       children: [
@@ -142,7 +142,7 @@ class _SpaceInfoPageState extends ConsumerState<SpaceInfoPage> {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: Spacing.xs),
                     Text(
                       '日期决定首页「在一起第几天」从哪天算起。',
                       style: theme.textTheme.bodySmall

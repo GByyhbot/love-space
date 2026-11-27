@@ -142,7 +142,7 @@ class _BackupsPageState extends ConsumerState<BackupsPage> {
       return ListView(
         children: <Widget>[
           Padding(
-            padding: const EdgeInsets.all(24),
+            padding: const EdgeInsets.all(Spacing.xxl),
             child: Text(
               _error!,
               key: const Key('backups-error'),

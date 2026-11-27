@@ -10,6 +10,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_client.dart' as api;
 import '../../core/theme/tokens.dart';
+import '../../core/theme/typography.dart';
 import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
 import 'export_api.dart';
 
@@ -64,9 +65,8 @@ class _ExportPageState extends ConsumerState<ExportPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(exportCardTitle,
-                        style: Theme.of(context).textTheme.titleSmall),
-                    const SizedBox(height: 10),
+                    Text(exportCardTitle, style: AppType.title(Theme.of(context))),
+                    const SizedBox(height: Spacing.md),
                     row(
                       ExportKind.records,
                       'settings-export-records',

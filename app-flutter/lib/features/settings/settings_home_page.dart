@@ -25,7 +25,9 @@ import 'package:package_info_plus/package_info_plus.dart';
 
 import '../../core/api/api_client.dart' as api;
 import '../../core/config.dart';
+import '../../core/theme/app_icons.dart';
 import '../../core/theme/tokens.dart';
+import '../../core/theme/typography.dart';
 import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
 import '../update/update_service.dart' show manualCheck;
 import 'settings_state.dart';
@@ -268,13 +270,10 @@ class _SettingsHomePageState extends ConsumerState<SettingsHomePage> {
         child: ListTile(
           key: key,
           leading: Text(emoji, style: const TextStyle(fontSize: 22)),
-          title: Text(title),
-          subtitle: Text(subtitle,
-              style: Theme.of(context)
-                  .textTheme
-                  .bodySmall
-                  ?.copyWith(color: Theme.of(context).colorScheme.outline)),
-          trailing: const Icon(Icons.chevron_right),
+          title: Text(title, style: AppType.body(Theme.of(context))),
+          subtitle: Text(subtitle, style: AppType.caption(Theme.of(context))),
+          trailing: Icon(AppIcons.chevronRight,
+              color: Theme.of(context).colorScheme.outline),
           onTap: onTap,
         ),
       );

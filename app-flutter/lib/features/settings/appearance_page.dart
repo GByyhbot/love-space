@@ -274,14 +274,14 @@ class _AppearancePageState extends ConsumerState<AppearancePage> {
               Positioned(
                 right: 0,
                 top: 0,
-                child: Container(
-                  width: 20,
-                  height: 20,
-                  decoration:
-                      BoxDecoration(color: seed, shape: BoxShape.circle),
-                  child: const Icon(Icons.check,
-                      size: 13, color: Colors.white),
-                ),
+                    child: Container(
+                      width: 20,
+                      height: 20,
+                      decoration:
+                          BoxDecoration(color: seed, shape: BoxShape.circle),
+                      child: const Icon(Icons.check_rounded,
+                          size: 13, color: Colors.white),
+                    ),
               ),
           ],
         ),
