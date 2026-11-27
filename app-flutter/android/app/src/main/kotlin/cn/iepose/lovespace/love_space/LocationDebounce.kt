@@ -30,7 +30,7 @@ object LocationDebounceConfig {
 
     // ── Layer 4: Moving lightweight smoother ──
     const val SMOOTH_WINDOW_SIZE = 3
-    val SMOOTH_WEIGHTS = doubleArrayOf(0.2, 0.3, 0.5)
+    val SMOOTH_WEIGHTS = doubleArrayOf(0.05, 0.15, 0.80)
     const val TURN_BYPASS_DEG = 60.0
 
     // ── Adaptive sampling & failure backoff ──
@@ -120,6 +120,7 @@ class LocationDebouncer {
     private var lastReliable: RawFix? = null
     private var outsideStreak: Int = 0
     private var pendingAnchor: RawFix? = null
+    private var postTurnBypassRemaining: Int = 0
     private val pendingBounce = ArrayList<RawFix>(LocationDebounceConfig.BOUNCE_MAX_CYCLES)
     private val clusterWindow = ArrayList<RawFix>()
     private val smoothWindow = ArrayList<RawFix>(LocationDebounceConfig.SMOOTH_WINDOW_SIZE)
@@ -136,6 +137,7 @@ class LocationDebouncer {
         lastReliable = null
         outsideStreak = 0
         pendingAnchor = null
+        postTurnBypassRemaining = 0
         pendingBounce.clear()
         clusterWindow.clear()
         smoothWindow.clear()
@@ -227,6 +229,7 @@ class LocationDebouncer {
                 anchor = null
                 outsideStreak = 0
                 pendingAnchor = null
+                postTurnBypassRemaining = 0
                 pendingBounce.clear()
                 clusterWindow.clear()
                 smoothWindow.clear()
@@ -253,6 +256,7 @@ class LocationDebouncer {
             } else {
                 // Sustained move away from A: accept new baseline cleanly.
                 pendingAnchor = null
+                postTurnBypassRemaining = 0
                 pendingBounce.clear()
                 clusterWindow.clear()
                 smoothWindow.clear()
@@ -305,6 +309,12 @@ class LocationDebouncer {
         }
         smoothWindow.add(fix)
 
+        // Point right after a detected corner is also emitted raw (no smoothing pull-in).
+        if (postTurnBypassRemaining > 0) {
+            postTurnBypassRemaining--
+            return DebounceOutcome.Emit(fix, state, isAnchor = false)
+        }
+
         if (smoothWindow.size < LocationDebounceConfig.SMOOTH_WINDOW_SIZE) {
             return DebounceOutcome.Emit(fix, state, isAnchor = false)
         }
@@ -322,6 +332,7 @@ class LocationDebouncer {
                 // Keep turn corner unsmoothed & reset tail so previous branch does not pull next segment.
                 smoothWindow.clear()
                 smoothWindow.add(p2)
+                postTurnBypassRemaining = 1
                 return DebounceOutcome.Emit(p2, state, isAnchor = false)
             }
         }
