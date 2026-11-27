@@ -225,6 +225,7 @@ Future<void> peerStateCollectionAutoStart({
     final settings = await fetchPeerSettings(await dio());
     await syncStateCollection(eventsOn: settings.events);
     await applyPeerPolicy(settings.policy);
+    await pullUsageSamples();
   } catch (_) {
     // 未登录 / 网络不可用：保持原生默认（未开），下次进页面再同步
   }

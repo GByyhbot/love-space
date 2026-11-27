@@ -1,6 +1,68 @@
 package cn.iepose.lovespace.love_space
 
 /**
+ * Pure place-formatting and re-geocode throttling rules for Android Geocoder results.
+ * Separated from Android framework types so it runs directly on JVM unit tests.
+ */
+internal object PlaceFormatter {
+    private val genericNames = setOf("", "中国", "中华人民共和国")
+
+    fun formatAddress(
+        adminArea: String?,
+        locality: String?,
+        subLocality: String?,
+        thoroughfare: String?,
+        featureName: String?,
+        addressLine: String?,
+    ): String {
+        val parts = ArrayList<String>(3)
+        fun addUnique(raw: String?) {
+            val s = raw?.trim() ?: return
+            if (s.isEmpty() || s in genericNames) return
+            if (s.all { it.isDigit() || it == '.' || it == '-' || it == ',' || it == ' ' }) return
+            if (parts.any { it == s || it.contains(s) || s.contains(it) }) return
+            parts.add(s)
+        }
+        val loc = locality?.trim()?.takeIf { it.isNotEmpty() && it !in genericNames }
+        val adm = adminArea?.trim()?.takeIf { it.isNotEmpty() && it !in genericNames }
+        addUnique(loc ?: adm)
+        addUnique(subLocality)
+        addUnique(thoroughfare)
+        if (parts.size < 3) {
+            val feat = featureName?.trim()
+            if (!feat.isNullOrEmpty() && !feat.all { it.isDigit() }) {
+                addUnique(feat)
+            }
+        }
+        var joined = parts.joinToString("")
+        if (joined.isEmpty()) {
+            val line = addressLine?.trim()?.removePrefix("中国")?.trim().orEmpty()
+            if (line.isNotEmpty() && line !in genericNames) {
+                joined = line
+            }
+        }
+        joined = joined.trim()
+        return if (joined.length > 24) joined.substring(0, 24) else joined
+    }
+
+    fun shouldRegeocode(
+        lastLat: Double?,
+        lastLng: Double?,
+        lastAtMs: Long,
+        lat: Double,
+        lng: Double,
+        nowMs: Long,
+    ): Boolean {
+        if (lastLat == null || lastLng == null || lastAtMs <= 0L) return true
+        if (nowMs - lastAtMs >= 10 * 60_000L) return true
+        val dLat = (lat - lastLat) * 111_320.0
+        val avgLatRad = Math.toRadians((lat + lastLat) * 0.5)
+        val dLng = (lng - lastLng) * 111_320.0 * kotlin.math.cos(avgLatRad)
+        return kotlin.math.hypot(dLat, dLng) >= 150.0
+    }
+}
+
+/**
  * 2.8.7 全量施工令 · 应用使用采集的**纯逻辑**（不碰 Android API，JVM 单测直测）。
  *
  * 原生侧只做「取事件 → 配对 → 折叠 → 脱敏 → 投递」，不做任何网络与存储

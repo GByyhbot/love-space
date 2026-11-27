@@ -269,16 +269,18 @@ class LiquidPillSegmented<T> extends StatelessWidget {
 /// 状态灯语义档。
 enum LivePillTone { active, idle, warn }
 
-/// 在线 / 休眠 / 停用胶囊状态灯（单行省略，带小圆点）。
+/// 在线 / 休眠 / 停用胶囊状态灯（默认单行省略，[ellipsis]=false 时完整展示不截断）。
 class LiveStatusPill extends StatelessWidget {
   const LiveStatusPill({
     super.key,
     required this.label,
     this.tone = LivePillTone.active,
+    this.ellipsis = true,
   });
 
   final String label;
   final LivePillTone tone;
+  final bool ellipsis;
 
   @override
   Widget build(BuildContext context) {
@@ -301,6 +303,16 @@ class LiveStatusPill extends StatelessWidget {
           cs.error,
         ),
     };
+    final textWidget = Text(
+      label,
+      maxLines: ellipsis ? 1 : 2,
+      softWrap: !ellipsis,
+      overflow: ellipsis ? TextOverflow.ellipsis : TextOverflow.visible,
+      style: theme.textTheme.labelSmall?.copyWith(
+        color: fg,
+        fontWeight: FontWeight.w600,
+      ),
+    );
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
@@ -316,17 +328,7 @@ class LiveStatusPill extends StatelessWidget {
             decoration: BoxDecoration(color: dot, shape: BoxShape.circle),
           ),
           const SizedBox(width: 5),
-          Flexible(
-            child: Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.labelSmall?.copyWith(
-                color: fg,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
+          Flexible(child: textWidget),
         ],
       ),
     );

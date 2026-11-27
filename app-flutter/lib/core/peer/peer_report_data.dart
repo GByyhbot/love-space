@@ -41,6 +41,7 @@ class PeerLatest {
     this.net,
     this.wifi,
     this.stateUpdated,
+    this.placeName = '',
   });
 
   final double? lat;
@@ -65,6 +66,9 @@ class PeerLatest {
   /// 定位停了但状态还在动时，靠它说明「状态仍然新鲜」。
   final double? stateUpdated;
 
+  /// Reverse-geocoded place name from Android system Geocoder (empty if unknown).
+  final String placeName;
+
   static PeerLatest? fromJson(Object? raw) {
     if (raw is! Map) return null;
     final j = raw.cast<String, dynamic>();
@@ -86,6 +90,7 @@ class PeerLatest {
       net: netRaw.isEmpty ? null : netRaw,
       wifi: wifiRaw.isEmpty ? null : wifiRaw,
       stateUpdated: (j['state_updated'] as num?)?.toDouble(),
+      placeName: (j['place_name'] ?? '').toString().trim(),
     );
   }
 }

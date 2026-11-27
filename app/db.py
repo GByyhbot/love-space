@@ -300,6 +300,8 @@ def init():
         _latest_cols = {r[1] for r in c.execute('PRAGMA table_info(peer_location_latest)')}
         if 'state_updated' not in _latest_cols:
             c.execute('ALTER TABLE peer_location_latest ADD COLUMN state_updated REAL')
+        if 'place_name' not in _latest_cols:
+            c.execute("ALTER TABLE peer_location_latest ADD COLUMN place_name TEXT NOT NULL DEFAULT ''")
 
         # 仅对携带 client_id 的手动报备做幂等防重（弱网重试不重复入流）
         c.execute(

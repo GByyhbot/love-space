@@ -161,11 +161,21 @@ void main() {
     // 2.8.7 全量重构：原「TA 的报备」块并入顶部状态大卡与今日足迹卡
     expect(find.text('TA 的状态'), findsOneWidget);
     expect(find.text('我的报备'), findsOneWidget);
-    expect(find.text('82% · 未充电'), findsOneWidget, reason: '电量与充电原值呈现');
+    expect(find.byKey(const Key('peer-card-battery')), findsOneWidget,
+        reason: '右侧电量圆环唯一展示');
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('peer-card-battery')),
+        matching: find.text('82%'),
+      ),
+      findsOneWidget,
+      reason: '电量数值呈现',
+    );
     // 2.8.7 第三段：网络改由顶部状态卡呈现，按口径说人话（不再暴露 cell 原值）
     expect(find.text('移动数据'), findsOneWidget, reason: '移动数据说人话');
-    expect(find.text('39.916300, 116.397200'), findsOneWidget,
-        reason: '坐标按 GCJ-02 原值展示');
+    expect(find.text('39.916300, 116.397200'), findsNothing,
+        reason: '状态卡绝不直接展示裸经纬度坐标');
+    expect(find.textContaining('位置已更新'), findsOneWidget);
     expect(find.textContaining('今日报备'), findsOneWidget,
         reason: '接口给得出就显示');
     expect(find.textContaining('3 点'), findsOneWidget);

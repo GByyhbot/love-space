@@ -1,34 +1,47 @@
 package cn.iepose.lovespace.love_space
 
 import android.Manifest
+import android.app.Activity
 import android.app.AlarmManager
 import android.app.AppOpsManager
+import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.usage.UsageEvents
 import android.app.usage.UsageStatsManager
 import android.content.BroadcastReceiver
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.location.Address
+import android.location.Geocoder
 import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
+import android.net.Uri
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.os.PowerManager
 import android.os.SystemClock
 import android.provider.Settings
+import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import io.flutter.plugin.common.MethodChannel
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.OutputStreamWriter
+import java.lang.ref.WeakReference
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.Locale
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.sin
@@ -156,6 +169,24 @@ object PeerLocNative {
     private var lastError: String? = null
     private var receivedCount = 0
     private var lastReceivedAt = 0L
+    private var lastFlushWallMs = 0L
+
+    // Diagnostics & activity reference
+    private var activityRef: WeakReference<Activity>? = null
+    private var lastStateEmitMs = 0L
+    private var lastUsagePullMs = 0L
+    private var lastUsageEmitMs = 0L
+    private var lastUsageRawCount = 0
+    private var lastPolicySummary = ""
+    private var appOff = false
+
+    // System Geocoder cache (Android OS Geocoder only; WGS84 inputs, throttled)
+    private val geocodeExecutor = Executors.newSingleThreadExecutor()
+    @Volatile private var cachedPlaceName = ""
+    @Volatile private var lastGeocodeLat: Double? = null
+    @Volatile private var lastGeocodeLng: Double? = null
+    @Volatile private var lastGeocodeAtMs = 0L
+    @Volatile private var geocodeInFlight = false
 
     // fix7 心跳定时器态
     private var heartbeatReceiver: BroadcastReceiver? = null
@@ -172,6 +203,9 @@ object PeerLocNative {
     fun register(messenger: io.flutter.plugin.common.BinaryMessenger, context: Context) {
         appContext = context.applicationContext
         stateMessenger = messenger
+        if (context is Activity) {
+            activityRef = WeakReference(context)
+        }
         MethodChannel(messenger, CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
                 // ── 2.8.0 fix4 胶水重做：单一原生入口（一口价）──────────
@@ -221,6 +255,16 @@ object PeerLocNative {
                 // 是否真的豁免由系统决定，本层只回传「意图是否送出」。
                 "batteryIgnored" -> result.success(batteryIgnored(context))
                 "requestIgnoreBattery" -> result.success(requestIgnoreBattery(context))
+                "permissions" -> result.success(permissions(context))
+                "openAppSettings" -> result.success(openAppSettings(context))
+                "openNotificationSettings" -> result.success(openNotificationSettings(context))
+                "openAutoStartSettings" -> result.success(openAutoStartSettings(context))
+                "requestLocationPermission" -> {
+                    val args = call.arguments() as? Map<*, *>
+                    result.success(requestLocationPermission(context, args?.get("background") == true))
+                }
+                "requestNotificationPermission" -> result.success(requestNotificationPermission(context))
+                "diagnostics" -> result.success(diagnostics(context))
                 else -> result.notImplemented()
             }
         }
@@ -356,6 +400,154 @@ object PeerLocNative {
         false
     }
 
+    private fun notificationsEnabled(context: Context): Boolean = try {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            val nm = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+            nm?.areNotificationsEnabled() ?: true
+        } else {
+            true
+        }
+    } catch (_: Exception) {
+        true
+    }
+
+    private fun findAutoStartIntent(context: Context): Intent? {
+        val candidates = listOf(
+            ComponentName("com.miui.securitycenter", "com.miui.permcenter.autostart.AutoStartManagementActivity"),
+            ComponentName("com.coloros.safecenter", "com.coloros.safecenter.permission.startup.StartupAppListActivity"),
+            ComponentName("com.coloros.safecenter", "com.coloros.safecenter.startupapp.StartupAppListActivity"),
+            ComponentName("com.oppo.safe", "com.oppo.safe.permission.startup.StartupAppListActivity"),
+            ComponentName("com.iqoo.secure", "com.iqoo.secure.ui.phoneoptimize.AddWhiteListActivity"),
+            ComponentName("com.iqoo.secure", "com.iqoo.secure.ui.phoneoptimize.BgStartUpManagerActivity"),
+            ComponentName("com.huawei.systemmanager", "com.huawei.systemmanager.startupmgr.ui.StartupNormalAppListActivity"),
+            ComponentName("com.huawei.systemmanager", "com.huawei.systemmanager.optimize.process.ProtectActivity"),
+            ComponentName("com.samsung.android.lool", "com.samsung.android.sm.battery.ui.BatteryActivity"),
+        )
+        val pm = context.packageManager
+        for (cn in candidates) {
+            val intent = Intent().setComponent(cn).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            try {
+                if (pm.resolveActivity(intent, PackageManager.MATCH_DEFAULT_ONLY) != null) {
+                    return intent
+                }
+            } catch (_: Exception) {}
+        }
+        return null
+    }
+
+    fun permissions(context: Context): Map<String, Any?> {
+        val ctx = context.applicationContext ?: context
+        val mfg = (Build.MANUFACTURER ?: "").lowercase(Locale.ROOT)
+        return mapOf(
+            "fine" to fineGranted(ctx),
+            "background" to backgroundGranted(ctx),
+            "usage" to hasUsageAccess(ctx),
+            "notification" to notificationsEnabled(ctx),
+            "batteryIgnored" to batteryIgnored(ctx),
+            "manufacturer" to mfg,
+            "autoStartIntentSupported" to (findAutoStartIntent(ctx) != null),
+        )
+    }
+
+    fun openAppSettings(context: Context): Boolean = try {
+        val intent = Intent(
+            Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+            Uri.parse("package:${context.packageName}"),
+        ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        context.startActivity(intent)
+        true
+    } catch (_: Exception) {
+        false
+    }
+
+    fun openNotificationSettings(context: Context): Boolean = try {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            context.startActivity(intent)
+            true
+        } else {
+            openAppSettings(context)
+        }
+    } catch (_: Exception) {
+        openAppSettings(context)
+    }
+
+    fun openAutoStartSettings(context: Context): Boolean {
+        val intent = findAutoStartIntent(context) ?: return false
+        return try {
+            context.startActivity(intent)
+            true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    fun requestLocationPermission(context: Context, background: Boolean): Boolean {
+        val act = activityRef?.get() ?: return false
+        return try {
+            if (!background) {
+                ActivityCompat.requestPermissions(
+                    act,
+                    arrayOf(
+                        Manifest.permission.ACCESS_FINE_LOCATION,
+                        Manifest.permission.ACCESS_COARSE_LOCATION,
+                    ),
+                    2871,
+                )
+                true
+            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                ActivityCompat.requestPermissions(
+                    act,
+                    arrayOf(Manifest.permission.ACCESS_BACKGROUND_LOCATION),
+                    2872,
+                )
+                true
+            } else {
+                false
+            }
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    fun requestNotificationPermission(context: Context): Boolean {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val act = activityRef?.get()
+            if (act != null) {
+                return try {
+                    ActivityCompat.requestPermissions(
+                        act,
+                        arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+                        2873,
+                    )
+                    true
+                } catch (_: Exception) {
+                    openNotificationSettings(context)
+                }
+            }
+        }
+        return openNotificationSettings(context)
+    }
+
+    fun diagnostics(context: Context): Map<String, Any?> {
+        val ctx = context.applicationContext ?: context
+        return mapOf(
+            "location" to status(),
+            "state" to stateStatus(),
+            "usage" to usageStatus(ctx),
+            "permissions" to permissions(ctx),
+            "lastFlushAt" to lastFlushWallMs,
+            "lastStateEmitAt" to lastStateEmitMs,
+            "lastUsagePullAt" to lastUsagePullMs,
+            "lastUsageEmitAt" to lastUsageEmitMs,
+            "lastUsageRawCount" to lastUsageRawCount,
+            "policySummary" to lastPolicySummary,
+            "policyHalted" to policyHalted,
+        )
+    }
+
     /** 原生侧 fatal 落盘（注册类/采集类问题堆栈原文，logcat 截断兜底）。 */
     private fun fatal(context: Context, msg: String) {
         try {
@@ -444,12 +636,20 @@ object PeerLocNative {
     /** 状态事件投递给 Dart（入队与冲刷都在 Dart 侧，原生不碰网络）。 */
     private fun emitState(kind: String, payload: Map<String, Any?>) {
         val messenger = stateMessenger ?: return
-        try {
-            MethodChannel(messenger, CHANNEL)
-                .invokeMethod("onStateSample", mapOf("kind" to kind, "payload" to payload))
-            stateEmitted += 1
-        } catch (e: Exception) {
-            log("emitState failed: ${e.message}") // 投递失败只记日志，不阻断采集
+        val invoke = Runnable {
+            try {
+                MethodChannel(messenger, CHANNEL)
+                    .invokeMethod("onStateSample", mapOf("kind" to kind, "payload" to payload))
+                stateEmitted += 1
+                lastStateEmitMs = nowMs()
+            } catch (e: Exception) {
+                log("emitState failed: ${e.message}") // 投递失败只记日志，不阻断采集
+            }
+        }
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            invoke.run()
+        } else {
+            handler.post(invoke)
         }
     }
 
@@ -490,7 +690,8 @@ object PeerLocNative {
         ssidLastEmitMs = 0L
         unlockWindowStartMs = 0L
         unlockCount = 0
-        screenOnAtMs = 0L
+        val pm = ctx.getSystemService(Context.POWER_SERVICE) as? PowerManager
+        screenOnAtMs = if (pm?.isInteractive == true) nowMs() else 0L
 
         val filter = IntentFilter().apply {
             addAction(Intent.ACTION_BATTERY_CHANGED)
@@ -695,6 +896,11 @@ object PeerLocNative {
     /** 手动拉一次（Dart 在 App 回前台/进页面时调用）。返回本次投递的会话数。 */
     fun pullUsage(ctx: Context): Map<String, Any?> {
         val c = ctx.applicationContext ?: ctx
+        lastUsagePullMs = nowMs()
+        if (!usageEnabled && !policyHalted && usageFull && !appOff && hasUsageAccess(c)) {
+            loadUsageState(c)
+            usageEnabled = true
+        }
         val n = drainUsage(c)
         return mapOf("sessions" to n, "detail" to usageStatus(c))
     }
@@ -718,9 +924,12 @@ object PeerLocNative {
         foldShort = policy["fold_short"] != false
         usageFull = (policy["usage_level"] ?: "full") != "off"
         appStream = (policy["app_level"] ?: "stream") == "stream"
-        val appOff = (policy["app_level"] ?: "stream") == "off"
+        appOff = (policy["app_level"] ?: "stream") == "off"
         val locLevel = (policy["location_level"] ?: "exact").toString()
+        val netLevel = (policy["network_level"] ?: "ssid").toString()
         gridStreet = locLevel == "street"
+        lastPolicySummary =
+            "halted=$policyHalted usage=${policy["usage_level"] ?: "full"} app=${policy["app_level"] ?: "stream"} loc=$locLevel net=$netLevel"
 
         if (policyHalted) {
             stopStateCollection()
@@ -780,6 +989,7 @@ object PeerLocNative {
                 kind == UsageGates.EVENT_RESUMED))
         }
         raw.sortBy { it.ts }
+        lastUsageRawCount = raw.size
 
         val open = UsageGates.sanitizeOpen(
             if (usageOpenPkg.isNotEmpty() && usageOpenStart > 0)
@@ -850,12 +1060,20 @@ object PeerLocNative {
 
     private fun emitUsage(kind: String, payload: Map<String, Any?>) {
         val messenger = stateMessenger ?: return
-        try {
-            MethodChannel(messenger, CHANNEL)
-                .invokeMethod("onUsageSample", mapOf("kind" to kind, "payload" to payload))
-            usageEmitted += 1
-        } catch (e: Exception) {
-            log("emitUsage failed: ${e.message}")
+        val invoke = Runnable {
+            try {
+                MethodChannel(messenger, CHANNEL)
+                    .invokeMethod("onUsageSample", mapOf("kind" to kind, "payload" to payload))
+                usageEmitted += 1
+                lastUsageEmitMs = nowMs()
+            } catch (e: Exception) {
+                log("emitUsage failed: ${e.message}")
+            }
+        }
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            invoke.run()
+        } else {
+            handler.post(invoke)
         }
     }
 
@@ -1088,10 +1306,12 @@ object PeerLocNative {
         }
         val lat = src?.getDouble("lat") ?: prev!!.getDouble("lat")
         val lng = src?.getDouble("lng") ?: prev!!.getDouble("lng")
+        val pn = cachedPlaceName
         lastSent = JSONObject().apply {
             put("lat", lat); put("lng", lng)
             put("battery", readBattery()); put("charging", readCharging())
             put("net", readNet()); put("wifi", readWifi())
+            if (pn.isNotEmpty()) put("place_name", pn)
             put("ts", nowMs.toDouble())
         }
         lastSentAt = atElapsed
@@ -1099,11 +1319,68 @@ object PeerLocNative {
         flush()
     }
 
+    /** Android OS Geocoder reverse lookup on single background thread (no third-party APIs). */
+    private fun maybeGeocodeAsync(ctx: Context, wgsLat: Double, wgsLng: Double) {
+        val now = System.currentTimeMillis()
+        if (geocodeInFlight) return
+        if (!PlaceFormatter.shouldRegeocode(
+                lastGeocodeLat, lastGeocodeLng, lastGeocodeAtMs, wgsLat, wgsLng, now)) {
+            return
+        }
+        if (!Geocoder.isPresent()) return
+        geocodeInFlight = true
+        val appCtx = ctx.applicationContext ?: ctx
+        geocodeExecutor.execute {
+            try {
+                val geocoder = Geocoder(appCtx, Locale.CHINA)
+                var first: Address? = null
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    val latch = CountDownLatch(1)
+                    geocoder.getFromLocation(wgsLat, wgsLng, 1) { list ->
+                        first = list.firstOrNull()
+                        latch.countDown()
+                    }
+                    latch.await(3, TimeUnit.SECONDS)
+                } else {
+                    @Suppress("DEPRECATION")
+                    first = geocoder.getFromLocation(wgsLat, wgsLng, 1)?.firstOrNull()
+                }
+                val addr = first
+                val formatted = if (addr != null) {
+                    PlaceFormatter.formatAddress(
+                        adminArea = addr.adminArea,
+                        locality = addr.locality,
+                        subLocality = addr.subLocality,
+                        thoroughfare = addr.thoroughfare,
+                        featureName = addr.featureName,
+                        addressLine = if (addr.maxAddressLineIndex >= 0) addr.getAddressLine(0) else null,
+                    )
+                } else {
+                    ""
+                }
+                if (formatted.isNotEmpty()) {
+                    cachedPlaceName = formatted
+                }
+                lastGeocodeLat = wgsLat
+                lastGeocodeLng = wgsLng
+                lastGeocodeAtMs = System.currentTimeMillis()
+            } catch (e: Exception) {
+                log("geocode failed (ignored): ${e.message}")
+                lastGeocodeLat = wgsLat
+                lastGeocodeLng = wgsLng
+                lastGeocodeAtMs = System.currentTimeMillis()
+            } finally {
+                geocodeInFlight = false
+            }
+        }
+    }
+
     // ── 采集与判定 ──────────────────────────────────────────────────────
 
     private fun onLocation(location: Location) {
         receivedCount++
         lastReceivedAt = System.currentTimeMillis()
+        appContext?.let { maybeGeocodeAsync(it, location.latitude, location.longitude) }
         val acc = if (location.hasAccuracy()) location.accuracy.toDouble() else 9999.0
         // 精度过滤：acc>100 丢弃
         if (acc > ACC_DROP_M) {
@@ -1164,10 +1441,12 @@ object PeerLocNative {
             }
         }
         lastEnqueued = point
+        val pn = cachedPlaceName
         lastSent = JSONObject().apply {
             put("lat", gcj.first); put("lng", gcj.second)
             put("battery", readBattery()); put("charging", readCharging())
             put("net", readNet()); put("wifi", readWifi())
+            if (pn.isNotEmpty()) put("place_name", pn)
             put("ts", System.currentTimeMillis().toDouble())
         }
         lastSentAt = SystemClock.elapsedRealtime()
@@ -1296,6 +1575,7 @@ object PeerLocNative {
                     }
                     reportedCount += accepted
                     lastFlushAt = SystemClock.elapsedRealtime()
+                    lastFlushWallMs = System.currentTimeMillis()
                     log("flush ok n=${ids.size} accepted=$accepted " +
                         "(reported=$reportedCount, queue=${queue.size})")
                 } else {

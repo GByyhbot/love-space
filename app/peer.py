@@ -447,6 +447,8 @@ def trim_snapshot(row, policy):
     if not policy.get('battery', True):
         out['battery'] = None
         out['charging'] = None
+    if policy.get('location_level') == 'off':
+        out['place_name'] = ''
     return out
 
 

@@ -217,11 +217,11 @@ void main() {
       expect(find.byKey(const Key('peer-card-battery')), findsOneWidget);
       expect(find.byKey(const Key('peer-card-net')), findsOneWidget);
       expect(find.byKey(const Key('peer-card-active')), findsOneWidget);
-      expect(find.byKey(const Key('peer-card-usage')), findsOneWidget);
+      expect(find.byKey(const Key('peer-card-usage')), findsNothing);
 
-      expect(find.text('82% · 未充电'), findsOneWidget);
+      expect(find.text('82%'), findsOneWidget);
+      expect(find.text('82% · 未充电'), findsNothing);
       expect(find.text('Wi-Fi（home）'), findsOneWidget);
-      expect(find.text('亮屏 1 小时 5 分钟 · 解锁 12 次'), findsOneWidget);
       expect(find.textContaining('长时间无更新'), findsNothing,
           reason: '10 分钟前不算失联');
       // 状态卡在最顶上（在手机使用/足迹/时间线之前）
@@ -245,7 +245,7 @@ void main() {
           reason: '电量取不到就不许出现「未知」占位');
       expect(find.byKey(const Key('peer-card-net')), findsNothing);
       expect(find.byKey(const Key('peer-card-active')), findsOneWidget);
-      expect(find.byKey(const Key('peer-card-usage')), findsOneWidget);
+      expect(find.byKey(const Key('peer-card-usage')), findsNothing);
       // 卡内不许出现「未知」这类假占位（报备块的「最近报备 未知」是另一回事，
       // 那是既有口径，不归状态卡管）
       expect(

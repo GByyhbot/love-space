@@ -233,6 +233,8 @@ class ReportOutbox {
   Future<int> telemetryCount() async =>
       (await load()).where((e) => e.isTelemetry).length;
 
+  DateTime? lastFlushedAt;
+
   /// 串行补发。**进锁即返回 skipped 的那一批什么都不做**（防三路并发重入）。
   Future<FlushResult> flush(Dio dio) async {
     if (_flushing) return const FlushResult(skipped: true);
@@ -274,6 +276,9 @@ class ReportOutbox {
         }
       }
       await save(kept);
+      if (sent > 0) {
+        lastFlushedAt = DateTime.now();
+      }
       return FlushResult(
         sent: sent,
         dropped: dropped,

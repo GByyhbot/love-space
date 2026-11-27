@@ -8,6 +8,7 @@
 /// · 自己侧未授权 / 全缺 → 引导卡，不摆假 0。
 library;
 
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -15,8 +16,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/api/api_client.dart' as api;
+import '../../core/peer/peer_permissions.dart';
+import '../../core/peer/peer_state_collector.dart'
+    show openUsageAccessSettings, pullUsageSamples;
 import '../../core/peer/peer_usage_data.dart';
-import '../../core/peer/state_event_text.dart' show durationTextZh;
+import '../../core/peer/state_event_text.dart'
+    show durationTextZh, usageDeltaText;
 import '../../core/theme/tokens.dart';
 import '../../core/ui/empty_view.dart';
 import '../../core/ui/error_view.dart';
@@ -30,11 +35,13 @@ class PeerPhonePage extends ConsumerStatefulWidget {
   ConsumerState<PeerPhonePage> createState() => _PeerPhonePageState();
 }
 
-class _PeerPhonePageState extends ConsumerState<PeerPhonePage> {
+class _PeerPhonePageState extends ConsumerState<PeerPhonePage>
+    with WidgetsBindingObserver {
   PeerUsageDay? _data;
   bool _loading = false;
   String? _error;
   bool _peerView = true;
+  PeerPermissionSnapshot? _perms;
 
   /// 子视图索引：0=软件时间流，1=使用排行 Top5，2=网络切换记录。
   int _subTab = 0;
@@ -45,7 +52,33 @@ class _PeerPhonePageState extends ConsumerState<PeerPhonePage> {
   @override
   void initState() {
     super.initState();
-    Future.microtask(_load);
+    WidgetsBinding.instance.addObserver(this);
+    Future.microtask(() async {
+      await _loadPerms();
+      await pullUsageSamples();
+      await _load();
+    });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(pullUsageSamples());
+      unawaited(_loadPerms());
+      unawaited(_load());
+    }
+  }
+
+  Future<void> _loadPerms() async {
+    final p = await peerPermissionStatus();
+    if (!mounted) return;
+    setState(() => _perms = p);
   }
 
   Future<void> _load() async {
@@ -104,19 +137,27 @@ class _PeerPhonePageState extends ConsumerState<PeerPhonePage> {
               )
             else if (side.hidden)
               _closedCard(theme, cs, side)
-            else if (_allEmpty(side))
-              _emptyCard(theme, cs)
             else ...[
-              _statsGrid(theme, cs, side),
-              const SizedBox(height: 12),
-              if (side.hourly != null)
-                _hourlyCard(theme, cs, side)
-              else
-                _hintCard(theme, cs, 'TA 只共享亮屏总时长，不共享小时分布'),
-              const SizedBox(height: 12),
-              _subTabSwitcher(),
-              const SizedBox(height: 10),
-              _subTabBody(theme, cs, side),
+              if (!_peerView &&
+                  _perms?.channelAvailable == true &&
+                  _perms?.usage == false) ...[
+                _usagePermHintCard(theme, cs),
+                const SizedBox(height: 12),
+              ],
+              if (_allEmpty(side))
+                _emptyCard(theme, cs)
+              else ...[
+                _statsGrid(theme, cs, side),
+                const SizedBox(height: 12),
+                if (side.hourly != null)
+                  _hourlyCard(theme, cs, side)
+                else
+                  _hintCard(theme, cs, 'TA 只共享亮屏总时长，不共享小时分布'),
+                const SizedBox(height: 12),
+                _subTabSwitcher(),
+                const SizedBox(height: 10),
+                _subTabBody(theme, cs, side),
+              ],
             ],
           ],
         ),
@@ -185,6 +226,44 @@ class _PeerPhonePageState extends ConsumerState<PeerPhonePage> {
         ]),
       );
 
+  Widget _usagePermHintCard(ThemeData theme, ColorScheme cs) => _card(
+        cs,
+        key: const Key('phone-usage-perm-hint'),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Icon(Icons.privacy_tip_outlined, size: 20, color: cs.error),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '未开启「应用使用情况访问权限」',
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      color: cs.error,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '开启后才能在本机统计每日亮屏与软件使用时长',
+                    style:
+                        theme.textTheme.bodySmall?.copyWith(color: cs.outline),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            FilledButton.tonal(
+              key: const Key('phone-usage-perm-go'),
+              onPressed: openUsageAccessSettings,
+              child: const Text('去授权'),
+            ),
+          ],
+        ),
+      );
+
   Widget _emptyCard(ThemeData theme, ColorScheme cs) => _card(
         cs,
         key: const Key('phone-empty'),
@@ -208,12 +287,12 @@ class _PeerPhonePageState extends ConsumerState<PeerPhonePage> {
       );
 
   Widget _statsGrid(ThemeData theme, ColorScheme cs, PeerUsageSide side) {
-    final screenSub = side.screenSec != null && side.yesterdayScreenSec != null
-        ? _delta(side.screenSec!, side.yesterdayScreenSec!)
-        : null;
-    final unlockSub = (side.unlocks != null &&
-            side.unlocks! > 0 &&
-            (side.screenSec ?? 0) > 0)
+    final screenSub = usageDeltaText(side.screenSec, side.yesterdayScreenSec);
+    final hasScreen = side.screenSec != null && side.screenSec! > 0;
+    final hasUnlocks = side.unlocks != null && side.unlocks! > 0;
+    final hasLongest =
+        side.longestSessionSec != null && side.longestSessionSec! > 0;
+    final unlockSub = (hasUnlocks && hasScreen)
         ? '平均 ${durationTextZh(side.screenSec! ~/ side.unlocks!)}'
         : null;
     final netHead = side.networkEvents?.isNotEmpty == true
@@ -238,11 +317,11 @@ class _PeerPhonePageState extends ConsumerState<PeerPhonePage> {
                     theme,
                     cs,
                     label: '总使用时长',
-                    value: side.screenSec == null
-                        ? '—'
-                        : durationTextZh(side.screenSec!),
+                    value: !hasScreen ? '—' : durationTextZh(side.screenSec!),
                     sub: screenSub,
-                    subWarn: (side.screenSec ?? 0) > (side.yesterdayScreenSec ?? 0),
+                    subWarn: hasScreen &&
+                        (side.yesterdayScreenSec ?? 0) > 0 &&
+                        side.screenSec! > side.yesterdayScreenSec!,
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -251,7 +330,7 @@ class _PeerPhonePageState extends ConsumerState<PeerPhonePage> {
                     theme,
                     cs,
                     label: '解锁次数',
-                    value: side.unlocks == null ? '—' : '${side.unlocks} 次',
+                    value: !hasUnlocks ? '—' : '${side.unlocks} 次',
                     sub: unlockSub,
                   ),
                 ),
@@ -268,7 +347,7 @@ class _PeerPhonePageState extends ConsumerState<PeerPhonePage> {
                     theme,
                     cs,
                     label: '最长连续',
-                    value: side.longestSessionSec == null
+                    value: !hasLongest
                         ? '—'
                         : durationTextZh(side.longestSessionSec!),
                   ),
@@ -350,12 +429,6 @@ class _PeerPhonePageState extends ConsumerState<PeerPhonePage> {
           ],
         ),
       );
-
-  String _delta(int today, int yesterday) {
-    final diff = today - yesterday;
-    if (diff == 0) return '与昨日持平';
-    return '较昨日 ${diff > 0 ? '+' : '-'}${durationTextZh(diff.abs())}';
-  }
 
   int _defaultSelectedHour(List<int> hourly) {
     var bestNight = -1;
@@ -732,16 +805,12 @@ class _PeerPhonePageState extends ConsumerState<PeerPhonePage> {
                     borderRadius: BorderRadius.circular(9),
                   ),
                   alignment: Alignment.center,
-                  child: Text(
-                    list[i].net == 'wifi'
-                        ? 'W'
-                        : (list[i].net == 'cell' ? '5G' : '—'),
-                    style: tabularStyle(
-                      theme.textTheme.labelSmall?.copyWith(
-                        color: cs.onSurfaceVariant,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
+                  child: Icon(
+                    networkIconFor(list[i].net),
+                    size: 17,
+                    color: list[i].net == 'none'
+                        ? cs.error
+                        : cs.onSurfaceVariant,
                   ),
                 ),
                 const SizedBox(width: 10),

@@ -19,6 +19,7 @@
 /// 明确不做：商业地图 SDK（示意画布自绘）、语音贴、调用外部逆地理。
 library;
 
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -27,8 +28,10 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/api/api_client.dart' as api;
 import '../../core/peer/peer_locator.dart';
+import '../../core/peer/peer_permissions.dart';
 import '../../core/peer/peer_report_api.dart';
 import '../../core/peer/peer_report_data.dart';
+import '../../core/peer/peer_state_collector.dart' show pullUsageSamples;
 import '../../core/peer/peer_status_card.dart';
 import '../../core/peer/peer_track_data.dart';
 import '../../core/peer/peer_usage_data.dart';
@@ -51,16 +54,18 @@ class PeerReportPage extends ConsumerStatefulWidget {
   ConsumerState<PeerReportPage> createState() => _PeerReportPageState();
 }
 
-class _PeerReportPageState extends ConsumerState<PeerReportPage> {
+class _PeerReportPageState extends ConsumerState<PeerReportPage>
+    with WidgetsBindingObserver {
   PeerReport? _data;
   bool _loading = false;
   String? _error;
 
-  /// 我的侧实态（原生单一事实源）+ 期望态 + 电池豁免。
+  /// 我的侧实态（原生单一事实源）+ 期望态 + 电池豁免 + 权限快照。
   bool _running = false;
   int? _queue;
   bool _expectedOn = false;
   bool? _batteryIgnored;
+  PeerPermissionSnapshot? _perms;
 
   /// 今日设备状态汇总（2.8.7；`GET /api/peer/state-daily` 当日）。
   PeerStateDaily? _stateDaily;
@@ -88,7 +93,115 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     Future.microtask(_load);
+    Future.microtask(_checkPermissionsOnOpen);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_loadPermissions());
+      unawaited(pullUsageSamples());
+      unawaited(_loadMine());
+      unawaited(_load(silent: true));
+    }
+  }
+
+  Future<void> _loadPermissions() async {
+    final p = await peerPermissionStatus();
+    if (!mounted) return;
+    setState(() => _perms = p);
+  }
+
+  Future<void> _checkPermissionsOnOpen() async {
+    final p = await peerPermissionStatus();
+    if (!mounted) return;
+    setState(() => _perms = p);
+    if (!await shouldShowProactivePermissionPrompt(p) || !mounted) return;
+    await markProactivePermissionPromptShown();
+    if (!mounted) return;
+    await _showMissingPermSheet(p);
+  }
+
+  Future<void> _showMissingPermSheet(PeerPermissionSnapshot p) async {
+    final missing = <String>[
+      if (!p.fine) '精确定位（实时位置与附近地点）',
+      if (!p.background) '后台位置（熄屏与切后台持续报备）',
+      if (!p.usage) '应用使用情况访问（手机使用与亮屏统计）',
+      if (!p.notification) '系统通知（消息与低电量提醒）',
+      if (!p.batteryIgnored) '忽略电池优化（避免后台被系统冻结）',
+    ];
+    if (missing.isEmpty) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) {
+        final theme = Theme.of(ctx);
+        final cs = theme.colorScheme;
+        return SafeArea(
+          child: Padding(
+            key: const Key('peer-perm-prompt-sheet'),
+            padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '开启完整报备能力',
+                  style: theme.textTheme.titleMedium
+                      ?.copyWith(fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  '检测到以下系统权限尚未开启，可能导致对方看不到你的位置或手机使用时长：',
+                  style: theme.textTheme.bodySmall?.copyWith(color: cs.outline),
+                ),
+                const SizedBox(height: 10),
+                for (final item in missing)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 3),
+                    child: Row(children: [
+                      Icon(Icons.circle, size: 6, color: cs.primary),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(item, style: theme.textTheme.bodySmall),
+                      ),
+                    ]),
+                  ),
+                const SizedBox(height: 16),
+                Row(children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      key: const Key('peer-perm-prompt-later'),
+                      onPressed: () => Navigator.of(ctx).pop(),
+                      child: const Text('稍后再说'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: FilledButton(
+                      key: const Key('peer-perm-prompt-go'),
+                      onPressed: () {
+                        Navigator.of(ctx).pop();
+                        context.push('/settings/peer-share');
+                      },
+                      child: const Text('去补齐'),
+                    ),
+                  ),
+                ]),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   /// [silent] = SSE peer 段触发的静默刷新：不切 loading、不清旧值。
@@ -292,12 +405,6 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage> {
           padding:
               const EdgeInsets.fromLTRB(16, 12, 16, Spacing.pageBottom + 16),
           children: [
-            Text('TA 最近报备的位置与电量，都在这里。',
-                style:
-                    theme.textTheme.bodySmall?.copyWith(color: cs.outline)),
-            const SizedBox(height: 12),
-            // 失败横幅只在「有旧值可灰显」时出现（无旧值走下方全屏错误态，
-            // 避免出现两个「重试」）
             if (_error != null && d != null) _errorBanner(cs, theme, d),
             if (_loading && d == null)
               const AppProgress()
@@ -425,10 +532,7 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage> {
 
     final card = buildPeerStatusCard(peer: st.peer, daily: _stateDaily);
     final live = _peerLiveLine(st);
-    final stayLine = _peerStayLine();
-    final locationLine = (stayLine == null && st.peer != null)
-        ? coordText(st.peer)
-        : stayLine;
+    final locationLine = _peerLocationLine(st);
     // 对方从无任何上报：给一句空态（不当故障、不摆空壳卡）
     if (card == null && live.isEmpty && locationLine == null) {
       if (st.peer == null) {
@@ -444,7 +548,7 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage> {
               padding: EdgeInsets.symmetric(vertical: 24),
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 14),
         ];
       }
       return const <Widget>[];
@@ -452,9 +556,13 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage> {
     final battery = st.peer?.battery;
     final lowBattery =
         battery != null && battery <= 20 && st.peer?.charging != true;
+    final metaRows = card?.rows
+            .where((r) => r.id != 'battery' && r.id != 'usage')
+            .toList(growable: false) ??
+        const <PeerStatusRow>[];
     return [
       _sectionTitle(theme, 'TA 的状态'),
-      const SizedBox(height: Spacing.gap),
+      const SizedBox(height: 8),
       _card(
         cs,
         key: const Key('peer-status-card'),
@@ -468,33 +576,33 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(children: [
-                      Flexible(
-                        child: Text(
+                    Wrap(
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: 8,
+                      runSpacing: 4,
+                      children: [
+                        Text(
                           name,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: theme.textTheme.titleMedium
                               ?.copyWith(fontWeight: FontWeight.w700),
                         ),
-                      ),
-                      if (live.isNotEmpty) ...[
-                        const SizedBox(width: 8),
-                        Flexible(
-                          child: LiveStatusPill(
+                        if (live.isNotEmpty)
+                          LiveStatusPill(
                             key: const Key('peer-live-line'),
                             label: live,
+                            ellipsis: false,
                             tone: st.peerCurrentApp != null
                                 ? LivePillTone.active
                                 : (card?.stale == true
                                     ? LivePillTone.warn
                                     : LivePillTone.idle),
                           ),
-                        ),
                       ],
-                    ]),
+                    ),
                     if (locationLine != null) ...[
-                      const SizedBox(height: 5),
+                      const SizedBox(height: 4),
                       Row(children: [
                         Icon(Icons.place_outlined,
                             size: 14, color: cs.outline),
@@ -516,14 +624,18 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage> {
               ),
               if (battery != null) ...[
                 const SizedBox(width: 10),
-                BatteryRing(battery: battery, charging: st.peer?.charging),
+                BatteryRing(
+                  key: const Key('peer-card-battery'),
+                  battery: battery,
+                  charging: st.peer?.charging,
+                ),
               ],
             ],
           ),
           // 距离（任一方无坐标就不显示——不显示 0、不估算）
           if (distanceLine(st.mine, st.peer) case final dist?)
             Padding(
-              padding: const EdgeInsets.only(top: 8),
+              padding: const EdgeInsets.only(top: 6),
               child: Text(
                 dist,
                 key: const Key('peer-distance'),
@@ -532,19 +644,20 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage> {
                 ),
               ),
             ),
-          if (card != null) ...[
-            const SizedBox(height: 12),
+          if (metaRows.isNotEmpty) ...[
+            const SizedBox(height: 10),
             LayoutBuilder(builder: (ctx, box) {
               return Wrap(
                 spacing: 8,
-                runSpacing: 8,
+                runSpacing: 6,
                 children: [
-                  for (final r in card.rows)
+                  for (final r in metaRows)
                     _statusMetaChip(
                       theme,
                       cs,
                       r,
                       maxWidth: box.maxWidth,
+                      peerNet: st.peer?.net,
                       lowBattery: r.id == 'battery' && lowBattery,
                     ),
                 ],
@@ -553,13 +666,13 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage> {
           ],
           if (st.peerClosedOff)
             Padding(
-              padding: const EdgeInsets.only(top: 10),
+              padding: const EdgeInsets.only(top: 8),
               child: Text('TA 已关闭位置共享（以下为最后一次报备）',
                   style: theme.textTheme.bodySmall?.copyWith(color: cs.error)),
             ),
         ]),
       ),
-      const SizedBox(height: 16),
+      const SizedBox(height: 14),
     ];
   }
 
@@ -568,13 +681,14 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage> {
     ColorScheme cs,
     PeerStatusRow r, {
     required double maxWidth,
+    String? peerNet,
     bool lowBattery = false,
   }) {
     final warn = r.warn || lowBattery;
     final icon = switch (r.id) {
       'battery' =>
         lowBattery ? Icons.battery_alert_rounded : Icons.battery_std_rounded,
-      'net' => Icons.wifi_rounded,
+      'net' => networkIconFor(peerNet),
       'active' => Icons.schedule_rounded,
       'usage' => Icons.smartphone_rounded,
       _ => Icons.info_outline_rounded,
@@ -665,6 +779,20 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage> {
     return s.ongoing ? '${s.displayName} · 已停留 $dur' : '${s.displayName} · 停留 $dur';
   }
 
+  /// 地点文案优先级：① peer_places 停留点名；② 原生 Geocoder `place_name`；③「位置已更新 · 相对时间」。
+  /// 绝不把裸经纬度坐标展示给用户。
+  String? _peerLocationLine(PeerStatusData st) {
+    final stayLine = _peerStayLine();
+    if (stayLine != null) return stayLine;
+    final p = st.peer;
+    if (p == null) return null;
+    if (p.placeName.isNotEmpty) return p.placeName;
+    if (p.updated != null && p.updated! > 0) {
+      return '位置已更新 · ${relativeTimeZh(p.updated!)}';
+    }
+    return '位置已更新';
+  }
+
   /// 手机使用卡：三列横向概览大数字 + 当前正在使用胶囊；点进手机页。
   ///
   /// 分档降级：screen_only 只有两个数；app off 只是少当前应用行；usage off / 停用
@@ -673,6 +801,14 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage> {
     final usage = _usage?.peer;
     final halt = d.status.peerHalt;
     final hidden = usage == null || usage.hidden;
+    final hasScreen = usage?.screenSec != null && usage!.screenSec! > 0;
+    final hasUnlocks = usage?.unlocks != null && usage!.unlocks! > 0;
+    final hasLongest =
+        usage?.longestSessionSec != null && usage!.longestSessionSec! > 0;
+    final hasAnyUsage = hasScreen || hasUnlocks || hasLongest;
+    final delta = usage == null
+        ? null
+        : usageDeltaText(usage.screenSec, usage.yesterdayScreenSec);
     return [
       _sectionTitle(theme, '手机使用'),
       const SizedBox(height: Spacing.gap),
@@ -707,9 +843,7 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage> {
                   theme,
                   cs,
                   label: '今日亮屏',
-                  value: usage.screenSec == null
-                      ? '—'
-                      : durationTextZh(usage.screenSec!),
+                  value: !hasScreen ? '—' : durationTextZh(usage.screenSec!),
                 ),
               ),
               const SizedBox(width: 8),
@@ -718,7 +852,7 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage> {
                   theme,
                   cs,
                   label: '解锁',
-                  value: usage.unlocks == null ? '—' : '${usage.unlocks} 次',
+                  value: !hasUnlocks ? '—' : '${usage.unlocks} 次',
                 ),
               ),
               const SizedBox(width: 8),
@@ -727,16 +861,21 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage> {
                   theme,
                   cs,
                   label: '最长连续',
-                  value: usage.longestSessionSec == null
+                  value: !hasLongest
                       ? '—'
                       : durationTextZh(usage.longestSessionSec!),
                 ),
               ),
             ]),
-            if (usage.yesterdayScreenSec != null && usage.screenSec != null) ...[
+            if (!hasAnyUsage) ...[
+              const SizedBox(height: 8),
+              _hintLine(theme, cs, '对方今天还没有使用数据'),
+            ],
+            if (delta != null) ...[
               const SizedBox(height: 8),
               Text(
-                '较昨日 ${_deltaText(usage.screenSec!, usage.yesterdayScreenSec!)}',
+                delta,
+                key: const Key('peer-usage-delta'),
                 style: tabularStyle(
                   theme.textTheme.bodySmall?.copyWith(color: cs.outline),
                 ),
@@ -775,18 +914,69 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage> {
           ],
         ]),
       ),
-      const SizedBox(height: 16),
+      const SizedBox(height: 14),
     ];
   }
 
-  /// 今日足迹卡：左侧迷你轨迹缩略图 + 右侧距离/停留点/地名串联；点进轨迹页。
+  /// 今日足迹卡：有轨迹点/停留点时左侧显示迷你轨迹图；空态隐藏缩略图、左对齐文案。
   List<Widget> _footprintSection(ThemeData theme, ColorScheme cs, PeerReport d) {
     final track = _track?.peer;
     final halt = d.status.peerHalt;
     final hidden = track == null || track.hidden;
+    final hasTrackData =
+        track != null && (track.points.isNotEmpty || track.stays.isNotEmpty);
     final names = (track?.stays ?? const <PeerTrackStay>[])
         .map((s) => s.displayName)
         .toList(growable: false);
+    final summaryCol = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (!hasTrackData)
+          _hintLine(
+            theme,
+            cs,
+            track?.isStreet == true
+                ? '今天还没有足迹记录（仅街区共享）'
+                : '今天还没有足迹记录',
+          )
+        else if (track.isStreet)
+          _hintLine(
+            theme,
+            cs,
+            '仅街区共享 · ${track.stays.length} 个停留点（不提供精确距离）',
+          )
+        else
+          Text(
+            '已移动 ${_distanceText(track.distanceM)} · ${track.stays.length} 个停留点',
+            key: const Key('peer-footprint-line'),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: tabularStyle(
+              theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        if (names.isNotEmpty) ...[
+          const SizedBox(height: 4),
+          Text(
+            names.take(5).join(' → '),
+            style: theme.textTheme.bodySmall?.copyWith(color: cs.outline),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+        if (d.peerTodayPoints != null && d.peerTodayPoints! > 0) ...[
+          const SizedBox(height: 4),
+          Text(
+            '今日报备 ${d.peerTodayPoints} 点',
+            style: tabularStyle(
+              theme.textTheme.labelSmall?.copyWith(color: cs.outline),
+            ),
+          ),
+        ],
+      ],
+    );
     return [
       _sectionTitle(theme, '今日足迹'),
       const SizedBox(height: Spacing.gap),
@@ -814,11 +1004,14 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage> {
             _hintLine(theme, cs, halt.isPaused ? 'TA 已暂停报备，看不到足迹' : 'TA 已完全关闭报备')
           else if (hidden)
             _hintLine(theme, cs, 'TA 未共享位置与足迹')
+          else if (!hasTrackData)
+            summaryCol
           else
             Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 _MiniTrackThumbnail(
+                  key: const Key('peer-footprint-thumb'),
                   track: track,
                   pathColor: cs.primary,
                   stayColor: cs.secondary,
@@ -826,56 +1019,12 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage> {
                   borderColor: cs.outlineVariant.withValues(alpha: 0.6),
                 ),
                 const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (track.isStreet)
-                        _hintLine(
-                          theme,
-                          cs,
-                          '仅街区共享 · ${track.stays.length} 个停留点（不提供精确距离）',
-                        )
-                      else
-                        Text(
-                          '已移动 ${_distanceText(track.distanceM)} · ${track.stays.length} 个停留点',
-                          key: const Key('peer-footprint-line'),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: tabularStyle(
-                            theme.textTheme.titleSmall?.copyWith(
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ),
-                      if (names.isNotEmpty) ...[
-                        const SizedBox(height: 4),
-                        Text(
-                          names.take(5).join(' → '),
-                          style: theme.textTheme.bodySmall
-                              ?.copyWith(color: cs.outline),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
-                      if (d.peerTodayPoints != null) ...[
-                        const SizedBox(height: 4),
-                        Text(
-                          '今日报备 ${d.peerTodayPoints} 点',
-                          style: tabularStyle(
-                            theme.textTheme.labelSmall
-                                ?.copyWith(color: cs.outline),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
+                Expanded(child: summaryCol),
               ],
             ),
         ]),
       ),
-      const SizedBox(height: 16),
+      const SizedBox(height: 14),
     ];
   }
 
@@ -883,13 +1032,6 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage> {
     if (m == null) return '—';
     if (m < 1000) return '${m.round()} 米';
     return '${(m / 1000).toStringAsFixed(1)} 公里';
-  }
-
-  String _deltaText(int today, int yesterday) {
-    final diff = today - yesterday;
-    if (diff == 0) return '与昨日持平';
-    final sign = diff > 0 ? '+' : '-';
-    return '$sign${durationTextZh(diff.abs())}';
   }
 
   Widget _hintLine(ThemeData theme, ColorScheme cs, String text) => Text(
@@ -1003,6 +1145,36 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage> {
               ? '未知（通道未注册）'
               : (_batteryIgnored! ? '已豁免' : '未豁免'),
         ),
+        if (_perms != null &&
+            _perms!.channelAvailable &&
+            (!_perms!.fine || !_perms!.background)) ...[
+          const SizedBox(height: 8),
+          Container(
+            key: const Key('report-mine-loc-perm-hint'),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              color: cs.errorContainer.withValues(alpha: 0.35),
+              borderRadius: BorderRadius.circular(kGlassInnerRadius),
+              border: Border.all(color: cs.error.withValues(alpha: 0.35)),
+            ),
+            child: Row(children: [
+              Icon(Icons.location_off_outlined, size: 16, color: cs.error),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  !_perms!.fine
+                      ? '未开启定位权限，对方看不到你的实时位置'
+                      : '仅授予「使用期间」定位，息屏/切后台后将无法持续报备',
+                  style: theme.textTheme.bodySmall?.copyWith(color: cs.error),
+                ),
+              ),
+              TextButton(
+                onPressed: () => context.push('/settings/peer-share'),
+                child: const Text('去开启'),
+              ),
+            ]),
+          ),
+        ],
       ]),
     );
   }
@@ -1311,6 +1483,7 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage> {
 /// 今日足迹卡左侧迷你轨迹缩略图（同心圆角 12；无底图自绘）。
 class _MiniTrackThumbnail extends StatelessWidget {
   const _MiniTrackThumbnail({
+    super.key,
     required this.track,
     required this.pathColor,
     required this.stayColor,

@@ -103,3 +103,14 @@ String? peerScreenLine(bool closedOff, int screenSec, int unlocks) {
   ];
   return parts.join(' · ');
 }
+
+/// Formats today vs yesterday screen duration delta without negative signs
+/// (e.g. `比昨天多 12 分钟` / `比昨天少 6 分钟` / `与昨日持平`), or null when missing.
+String? usageDeltaText(int? todaySec, int? yesterdaySec) {
+  if (todaySec == null || todaySec <= 0) return null;
+  if (yesterdaySec == null || yesterdaySec <= 0) return null;
+  final diff = todaySec - yesterdaySec;
+  if (diff == 0) return '与昨日持平';
+  final dur = durationTextZh(diff.abs());
+  return diff > 0 ? '比昨天多 $dur' : '比昨天少 $dur';
+}

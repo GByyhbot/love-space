@@ -1947,17 +1947,20 @@ def peer_location(request: Request, body: dict = Body(default=...),
             llat, llng = float(latest['lat']), float(latest['lng'])
             if street:
                 llat, llng = peer_agg.grid_round(llat), peer_agg.grid_round(llng)
+            raw_place = latest.get('place_name')
+            place_name = raw_place.strip()[:80] if isinstance(raw_place, str) else ''
             c.execute('INSERT INTO peer_location_latest'
-                      '(user,lat,lng,acc,speed,battery,charging,net,wifi,updated) '
-                      'VALUES (?,?,?,?,?,?,?,?,?,?) '
+                      '(user,lat,lng,acc,speed,battery,charging,net,wifi,place_name,updated) '
+                      'VALUES (?,?,?,?,?,?,?,?,?,?,?) '
                       'ON CONFLICT(user) DO UPDATE SET lat=excluded.lat,'
                       'lng=excluded.lng,acc=excluded.acc,speed=excluded.speed,'
                       'battery=excluded.battery,charging=excluded.charging,'
-                      'net=excluded.net,wifi=excluded.wifi,updated=excluded.updated',
+                      'net=excluded.net,wifi=excluded.wifi,'
+                      'place_name=excluded.place_name,updated=excluded.updated',
                       (user['id'], llat, llng,
                        latest.get('acc'), latest.get('speed'),
                        latest.get('battery'), latest.get('charging'),
-                       latest.get('net'), latest.get('wifi'), now()))
+                       latest.get('net'), latest.get('wifi'), place_name, now()))
         _bump_peer(c)
     return {'ok': True, 'accepted': accepted}
 

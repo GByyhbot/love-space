@@ -16,8 +16,10 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/api/api_client.dart' as api;
 import '../../core/peer/peer_locator.dart';
+import '../../core/peer/peer_permissions.dart';
 import '../../core/peer/peer_policy.dart';
 import '../../core/peer/peer_report_api.dart';
+import '../../core/peer/peer_report_queue.dart';
 import '../../core/peer/peer_state_collector.dart';
 import '../../core/theme/tokens.dart';
 import '../../core/ui/error_view.dart';
@@ -33,17 +35,61 @@ class PeerShareSettingsPage extends ConsumerStatefulWidget {
       _PeerShareSettingsPageState();
 }
 
-class _PeerShareSettingsPageState extends ConsumerState<PeerShareSettingsPage> {
+class _PeerShareSettingsPageState extends ConsumerState<PeerShareSettingsPage>
+    with WidgetsBindingObserver {
   PeerShareSettings? _settings;
   List<PeerPolicyAuditItem> _audit = const [];
   String? _error;
   bool _saving = false;
   bool _running = false;
+  PeerPermissionSnapshot _perms = PeerPermissionSnapshot.unavailable;
+  PeerDiagnosticsSnapshot _diag = PeerDiagnosticsSnapshot.unavailable;
+  int _outboxTelemetry = 0;
+  bool _showAutoStartGuide = false;
+  bool _diagRefreshing = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     Future.microtask(_load);
+    Future.microtask(() => _refreshNativeAndDiag());
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_refreshNativeAndDiag(pullUsage: true));
+    }
+  }
+
+  Future<void> _refreshNativeAndDiag({bool pullUsage = false}) async {
+    if (pullUsage) {
+      await pullUsageSamples();
+    }
+    final results = await Future.wait<Object?>([
+      peerVerifyStatus(),
+      peerPermissionStatus(),
+      peerDiagnosticsStatus(),
+    ]);
+    if (!mounted) return;
+    final status = (results[0] as Map?) ?? const {};
+    setState(() {
+      _running = status['running'] == true;
+      _perms = results[1] as PeerPermissionSnapshot;
+      _diag = results[2] as PeerDiagnosticsSnapshot;
+    });
+    unawaited(
+      reportOutbox.telemetryCount().then((n) {
+        if (mounted) setState(() => _outboxTelemetry = n);
+      }).catchError((_) {}),
+    );
   }
 
   Future<void> _load() async {
@@ -94,6 +140,7 @@ class _PeerShareSettingsPageState extends ConsumerState<PeerShareSettingsPage> {
       ref
           .read(chatToastProvider.notifier)
           .show(toast ?? '已生效（对方立刻看到）', tone: ChatToastTone.success);
+      unawaited(_refreshNativeAndDiag());
       // 审计流水刷新（本次变更已落服务端）
       try {
         final audit = await fetchPolicyAudit(dio);
@@ -135,6 +182,8 @@ class _PeerShareSettingsPageState extends ConsumerState<PeerShareSettingsPage> {
                 children: [
                   _statusStrip(theme, cs, s),
                   const SizedBox(height: Spacing.gap),
+                  _permissionCenter(theme, cs),
+                  const SizedBox(height: Spacing.gap),
                   _dangerZone(theme, cs, s),
                   const SizedBox(height: Spacing.gap),
                   _pauseZone(theme, cs, s),
@@ -146,6 +195,8 @@ class _PeerShareSettingsPageState extends ConsumerState<PeerShareSettingsPage> {
                   _entries(theme, cs),
                   const SizedBox(height: Spacing.gap),
                   _auditSection(theme, cs),
+                  const SizedBox(height: Spacing.gap),
+                  _diagnosticsSection(theme, cs),
                   if (_saving)
                     Padding(
                       padding: const EdgeInsets.only(top: Spacing.gap),
@@ -315,6 +366,116 @@ class _PeerShareSettingsPageState extends ConsumerState<PeerShareSettingsPage> {
     );
   }
 
+  Future<bool> _maybePromptMissingPerm({
+    required String title,
+    required String reason,
+    required Future<void> Function() onAuthorize,
+  }) async {
+    final goSave = await showModalBottomSheet<bool>(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) {
+        final theme = Theme.of(ctx);
+        final cs = theme.colorScheme;
+        return SafeArea(
+          child: Padding(
+            key: const Key('peer-jit-perm-sheet'),
+            padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title,
+                    style: theme.textTheme.titleMedium
+                        ?.copyWith(fontWeight: FontWeight.w700)),
+                const SizedBox(height: 6),
+                Text(reason,
+                    style:
+                        theme.textTheme.bodySmall?.copyWith(color: cs.outline)),
+                const SizedBox(height: 16),
+                Row(children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      key: const Key('peer-jit-save-anyway'),
+                      onPressed: () => Navigator.of(ctx).pop(true),
+                      child: const Text('仍先保存'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: FilledButton(
+                      key: const Key('peer-jit-authorize'),
+                      onPressed: () async {
+                        Navigator.of(ctx).pop(false);
+                        await onAuthorize();
+                        await _refreshNativeAndDiag();
+                      },
+                      child: const Text('去授权'),
+                    ),
+                  ),
+                ]),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+    return goSave == true;
+  }
+
+  Future<void> _onPickLocLevel(PeerPolicy p, LocLevel v) async {
+    if (v == p.locLevel) return;
+    final raising = v.index < p.locLevel.index; // exact(0) < street(1) < off(2)
+    if (raising && _perms.channelAvailable && (!_perms.fine || !_perms.background)) {
+      final missingBg = _perms.fine && !_perms.background;
+      final proceed = await _maybePromptMissingPerm(
+        title: missingBg ? '缺少后台定位权限' : '缺少精确定位权限',
+        reason: missingBg
+            ? '仅授予「使用期间」定位时，息屏或切后台后无法持续上报位置。'
+            : '开启位置共享需要系统授予精确定位权限，否则对方看不到实时位置。',
+        onAuthorize: () async {
+          final ok = await peerRequestLocationPermission(
+            background: missingBg,
+          );
+          if (!ok) await peerOpenAppSettings();
+        },
+      );
+      if (!proceed || !mounted) return;
+    }
+    await _applyPolicy(p.copyWith(locLevel: v),
+        toast: '位置与轨迹已调为${v.label}');
+  }
+
+  Future<void> _onPickUsageLevel(PeerPolicy p, UsageLevel v) async {
+    if (v == p.usageLevel) return;
+    final raising = v.index < p.usageLevel.index; // full(0) < screenOnly(1) < off(2)
+    if (raising && _perms.channelAvailable && !_perms.usage) {
+      final proceed = await _maybePromptMissingPerm(
+        title: '缺少「使用情况访问权限」',
+        reason: '统计每日亮屏时长与解锁记录需要在系统设置允许本应用访问使用情况。',
+        onAuthorize: openUsageAccessSettings,
+      );
+      if (!proceed || !mounted) return;
+    }
+    await _applyPolicy(p.copyWith(usageLevel: v),
+        toast: '手机使用已调为${v.label}');
+  }
+
+  Future<void> _onPickAppLevel(PeerPolicy p, AppLevel v) async {
+    if (v == p.appLevel) return;
+    final raising = v.index < p.appLevel.index; // stream(0) < top5(1) < off(2)
+    if (raising && _perms.channelAvailable && !_perms.usage) {
+      final proceed = await _maybePromptMissingPerm(
+        title: '缺少「使用情况访问权限」',
+        reason: '查看正在使用的应用或 Top5 排行需要先授予系统使用情况访问权限。',
+        onAuthorize: openUsageAccessSettings,
+      );
+      if (!proceed || !mounted) return;
+    }
+    await _applyPolicy(p.copyWith(appLevel: v),
+        toast: '软件记录已调为${v.label}');
+  }
+
   Widget _levels(ThemeData theme, ColorScheme cs, PeerShareSettings s) {
     final p = s.policy;
     return LiquidGlassCard(
@@ -329,8 +490,7 @@ class _PeerShareSettingsPageState extends ConsumerState<PeerShareSettingsPage> {
           value: p.locLevel,
           values: LocLevel.values,
           label: (v) => v.label,
-          onPick: (v) => _applyPolicy(p.copyWith(locLevel: v),
-              toast: '位置与轨迹已调为${v.label}'),
+          onPick: (v) => _onPickLocLevel(p, v),
         ),
         Divider(height: 1, color: cs.outlineVariant.withValues(alpha: 0.45)),
         _levelGroup<UsageLevel>(
@@ -342,8 +502,7 @@ class _PeerShareSettingsPageState extends ConsumerState<PeerShareSettingsPage> {
           value: p.usageLevel,
           values: UsageLevel.values,
           label: (v) => v.label,
-          onPick: (v) => _applyPolicy(p.copyWith(usageLevel: v),
-              toast: '手机使用已调为${v.label}'),
+          onPick: (v) => _onPickUsageLevel(p, v),
         ),
         Divider(height: 1, color: cs.outlineVariant.withValues(alpha: 0.45)),
         _levelGroup<AppLevel>(
@@ -355,8 +514,7 @@ class _PeerShareSettingsPageState extends ConsumerState<PeerShareSettingsPage> {
           value: p.appLevel,
           values: AppLevel.values,
           label: (v) => v.label,
-          onPick: (v) => _applyPolicy(p.copyWith(appLevel: v),
-              toast: '软件记录已调为${v.label}'),
+          onPick: (v) => _onPickAppLevel(p, v),
         ),
         Divider(height: 1, color: cs.outlineVariant.withValues(alpha: 0.45)),
         _levelGroup<NetLevel>(
@@ -587,4 +745,366 @@ class _PeerShareSettingsPageState extends ConsumerState<PeerShareSettingsPage> {
     String two(int v) => v.toString().padLeft(2, '0');
     return '${two(d.month)}-${two(d.day)} ${two(d.hour)}:${two(d.minute)}';
   }
+
+  String _fmtMs(int? ms) {
+    if (ms == null || ms <= 0) return '无';
+    return _fmtDateTime(DateTime.fromMillisecondsSinceEpoch(ms));
+  }
+
+  String _fmtDateTime(DateTime? d) {
+    if (d == null) return '无';
+    String two(int v) => v.toString().padLeft(2, '0');
+    return '${two(d.hour)}:${two(d.minute)}:${two(d.second)}';
+  }
+
+  Widget _permissionCenter(ThemeData theme, ColorScheme cs) {
+    final readyCount = [
+      _perms.usage,
+      _perms.fine,
+      _perms.background,
+      _perms.notification,
+      _perms.batteryIgnored,
+    ].where((e) => e).length;
+    final summaryText =
+        _perms.channelAvailable ? '$readyCount/5 已就绪' : '原生通道未连接';
+    return LiquidGlassCard(
+      key: const Key('peer-perm-center'),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Text(
+            '权限与采集状态',
+            style: theme.textTheme.titleSmall
+                ?.copyWith(fontWeight: FontWeight.w700),
+          ),
+          const Spacer(),
+          Text(
+            summaryText,
+            style: tabularStyle(
+              theme.textTheme.labelMedium?.copyWith(
+                color: !_perms.channelAvailable
+                    ? cs.outline
+                    : (_perms.allGranted ? cs.primary : cs.error),
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ]),
+        if (_perms.channelAvailable) ...[
+          const SizedBox(height: 6),
+          _permRow(
+            theme,
+            cs,
+            rowKey: const Key('peer-perm-usage'),
+            btnKey: const Key('peer-perm-usage-btn'),
+            title: '应用使用情况访问',
+            desc: '统计亮屏时长与正在使用的应用',
+            granted: _perms.usage,
+            onGrant: () async {
+              await openUsageAccessSettings();
+              await _refreshNativeAndDiag(pullUsage: true);
+            },
+          ),
+          _permDivider(cs),
+          _permRow(
+            theme,
+            cs,
+            rowKey: const Key('peer-perm-fine'),
+            btnKey: const Key('peer-perm-fine-btn'),
+            title: '精确定位',
+            desc: '采集最新位置与 Wi-Fi SSID',
+            granted: _perms.fine,
+            onGrant: () async {
+              final ok = await peerRequestLocationPermission(background: false);
+              if (!ok) await peerOpenAppSettings();
+              await _refreshNativeAndDiag();
+            },
+          ),
+          _permDivider(cs),
+          _permRow(
+            theme,
+            cs,
+            rowKey: const Key('peer-perm-bg'),
+            btnKey: const Key('peer-perm-bg-btn'),
+            title: '后台始终定位',
+            desc: '息屏或切后台后持续更新足迹',
+            granted: _perms.background,
+            grantedLabel:
+                _perms.background ? '已开启' : (_perms.fine ? '仅前台' : '未开启'),
+            onGrant: () async {
+              final ok = await peerRequestLocationPermission(
+                background: _perms.fine,
+              );
+              if (!ok) await peerOpenAppSettings();
+              await _refreshNativeAndDiag();
+            },
+          ),
+          _permDivider(cs),
+          _permRow(
+            theme,
+            cs,
+            rowKey: const Key('peer-perm-notify'),
+            btnKey: const Key('peer-perm-notify-btn'),
+            title: '系统通知',
+            desc: '保证前台保活常驻通知与重要提醒送达',
+            granted: _perms.notification,
+            onGrant: () async {
+              await peerRequestNotificationPermission();
+              await _refreshNativeAndDiag();
+            },
+          ),
+          _permDivider(cs),
+          _permRow(
+            theme,
+            cs,
+            rowKey: const Key('peer-perm-battery'),
+            btnKey: const Key('peer-perm-battery-btn'),
+            title: '忽略电池优化',
+            desc: '避免系统 Doze 限制定时心跳与使用采样',
+            granted: _perms.batteryIgnored,
+            grantedLabel: _perms.batteryIgnored ? '已豁免' : '未豁免',
+            onGrant: () async {
+              await peerRequestIgnoreBatterySetting();
+              await _refreshNativeAndDiag();
+            },
+          ),
+          _permDivider(cs),
+          Padding(
+            key: const Key('peer-perm-autostart'),
+            padding: const EdgeInsets.symmetric(vertical: 5),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('厂商自启动 / 后台保护',
+                            style: theme.textTheme.bodyMedium
+                                ?.copyWith(fontWeight: FontWeight.w600)),
+                        const SizedBox(height: 2),
+                        Text('系统后台查杀白名单（部分机型需手动开启）',
+                            style: theme.textTheme.bodySmall
+                                ?.copyWith(color: cs.outline)),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  FilledButton.tonal(
+                    key: const Key('peer-perm-autostart-btn'),
+                    onPressed: () async {
+                      final opened = await peerOpenAutoStartSettings();
+                      if (!opened && mounted) {
+                        setState(() => _showAutoStartGuide = true);
+                      }
+                    },
+                    child: Text(_perms.autoStartIntentSupported ? '去开启' : '查看指引'),
+                  ),
+                ]),
+                if (_showAutoStartGuide ||
+                    (_perms.channelAvailable &&
+                        !_perms.autoStartIntentSupported))
+                  Padding(
+                    key: const Key('peer-perm-autostart-guide'),
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Text(
+                      autoStartGuideForManufacturer(_perms.manufacturer),
+                      style:
+                          theme.textTheme.bodySmall?.copyWith(color: cs.outline),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ]),
+    );
+  }
+
+  Widget _permDivider(ColorScheme cs) => Divider(
+        height: 1,
+        color: cs.outlineVariant.withValues(alpha: 0.4),
+      );
+
+  Widget _permRow(
+    ThemeData theme,
+    ColorScheme cs, {
+    required Key rowKey,
+    required Key btnKey,
+    required String title,
+    required String desc,
+    required bool granted,
+    String? grantedLabel,
+    required VoidCallback onGrant,
+  }) {
+    final badgeText = grantedLabel ?? (granted ? '已开启' : '未开启');
+    return Padding(
+      key: rowKey,
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      child: Row(children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(children: [
+                Flexible(
+                  child: Text(
+                    title,
+                    style: theme.textTheme.bodyMedium
+                        ?.copyWith(fontWeight: FontWeight.w600),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: (granted
+                            ? cs.primaryContainer
+                            : cs.errorContainer)
+                        .withValues(alpha: 0.65),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    badgeText,
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: granted ? cs.onPrimaryContainer : cs.error,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ]),
+              if (!granted) ...[
+                const SizedBox(height: 2),
+                Text(desc,
+                    style:
+                        theme.textTheme.bodySmall?.copyWith(color: cs.outline)),
+              ],
+            ],
+          ),
+        ),
+        if (!granted) ...[
+          const SizedBox(width: 8),
+          FilledButton.tonal(
+            key: btnKey,
+            onPressed: onGrant,
+            child: const Text('去授权'),
+          ),
+        ],
+      ]),
+    );
+  }
+
+  Future<void> _runDiagnosticPull() async {
+    if (_diagRefreshing) return;
+    setState(() => _diagRefreshing = true);
+    try {
+      final n = await pullUsageSamples();
+      final dio = await ref.read(api.dioProvider.future);
+      final flushRes = await reportOutbox.flush(dio);
+      await _refreshNativeAndDiag(pullUsage: false);
+      if (!mounted) return;
+      ref.read(chatToastProvider.notifier).show(
+            '自检完成 · 拉取 $n 条，补传 ${flushRes.sent} 条',
+            tone: ChatToastTone.success,
+          );
+    } catch (e) {
+      if (!mounted) return;
+      ref.read(chatToastProvider.notifier).show(
+            '自检拉取失败：${api.errorDetail(e)}',
+            tone: ChatToastTone.error,
+          );
+    } finally {
+      if (mounted) setState(() => _diagRefreshing = false);
+    }
+  }
+
+  Widget _diagnosticsSection(ThemeData theme, ColorScheme cs) => LiquidGlassCard(
+        key: const Key('peer-diagnostics-card'),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Expanded(
+              child: Text('采集自检',
+                  style: theme.textTheme.titleSmall
+                      ?.copyWith(fontWeight: FontWeight.w700)),
+            ),
+            FilledButton.tonal(
+              key: const Key('peer-diag-refresh'),
+              onPressed: _diagRefreshing ? null : _runDiagnosticPull,
+              child: Text(_diagRefreshing ? '拉取中…' : '立即自检拉取'),
+            ),
+          ]),
+          const SizedBox(height: 8),
+          _diagRow(
+            theme,
+            cs,
+            '定位采集',
+            _diag.channelAvailable
+                ? '${_diag.locRunning ? '运行中' : '未运行'} · 收点 ${_diag.locReceived} · 已报 ${_diag.locReported} · 队列 ${_diag.locQueue}'
+                : '原生通道未连接',
+          ),
+          _diagRow(
+            theme,
+            cs,
+            '最近定位/冲刷',
+            '${_fmtMs(_diag.lastReceivedAtMs)} / ${_fmtMs(_diag.lastFlushAtMs)}',
+          ),
+          _diagRow(
+            theme,
+            cs,
+            '设备状态采集',
+            '${_diag.stateEnabled ? '运行中' : '已停'} · 已投递 ${_diag.stateEmitted} 条 · 最近 ${_fmtMs(_diag.lastStateEmitAtMs)}',
+          ),
+          _diagRow(
+            theme,
+            cs,
+            '使用统计采集',
+            '${_diag.usageEnabled ? '运行中' : '已停'}（权限${_diag.usageGranted ? '已授' : '未授'}）· 已投递 ${_diag.usageEmitted} 条 · 游标 ${_fmtMs(_diag.usageCursorMs)}',
+          ),
+          _diagRow(
+            theme,
+            cs,
+            '最近拉取/投递',
+            '拉 ${_fmtMs(_diag.lastUsagePullAtMs)}（原始 ${_diag.lastUsageRawCount} 条）· 投 ${_fmtMs(_diag.lastUsageEmitAtMs)}',
+          ),
+          _diagRow(
+            theme,
+            cs,
+            '端侧遥测队列',
+            '待发 $_outboxTelemetry 条 · 最近冲刷 ${_fmtDateTime(reportOutbox.lastFlushedAt)}',
+          ),
+          _diagRow(
+            theme,
+            cs,
+            '当前策略摘要',
+            _diag.policySummary.isEmpty ? '尚未下发' : _diag.policySummary,
+          ),
+          if (_diag.locError != null)
+            _diagRow(theme, cs, '最近错误', _diag.locError!, warn: true),
+        ]),
+      );
+
+  Widget _diagRow(ThemeData theme, ColorScheme cs, String label, String value,
+          {bool warn = false}) =>
+      Padding(
+        padding: const EdgeInsets.symmetric(vertical: 3),
+        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          SizedBox(
+            width: 96,
+            child: Text(label,
+                style: theme.textTheme.bodySmall?.copyWith(color: cs.outline)),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: tabularStyle(
+                theme.textTheme.bodySmall?.copyWith(
+                  color: warn ? cs.error : cs.onSurface,
+                ),
+              ),
+            ),
+          ),
+        ]),
+      );
 }
