@@ -48,11 +48,18 @@ class _ThrottledAdapter implements HttpClientAdapter {
     }
     final slow = _isSlow(host);
     if (slow) {
-      // 慢通道：50ms/400B ≈ 8KB/s（< 测试阈值 10KB/s → 判慢；80 chunks
-      // = 4s 流长，判慢触发点（rampUp 1.5s + 窗口 2s）在中途即中止）
+      // 慢通道：50ms/一个 chunk（< 测试阈值 10KB/s → 判慢；80 chunks = 4s 流长，
+      // 判慢触发点（rampUp 1.5s + 窗口 2s）在中途即中止）。
+      //
+      // 🔴 直连与代理的**速率必须可区分**：全慢用例要断言「定在直连收尾」，
+      // 若各通道速率完全相同，谁最快只取决于窗口抖动——本用例因此长期 flaky
+      // （CI 实测 直连 7.9KB/s vs gh-proxy 8.1KB/s → 选了代理，断言假红）。
+      // 直连 400B/50ms ≈ 8KB/s、代理 300B/50ms ≈ 6KB/s：都仍是「慢」，
+      // 但直连稳定是实测最快候选，断言才有确定的语义。
+      final chunk = host == 'github.com' ? 400 : 300;
       final body = Stream<Uint8List>.periodic(
         const Duration(milliseconds: 50),
-        (n) => Uint8List.fromList(utf8.encode('S' * 400)),
+        (n) => Uint8List.fromList(utf8.encode('S' * chunk)),
       ).take(80);
       return ResponseBody(body, -1);
     }
