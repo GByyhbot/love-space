@@ -20,6 +20,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api/api_client.dart';
 import '../../core/chat/chat_models.dart' show ChatMedia;
+import '../../core/theme/app_icons.dart';
 import '../../core/theme/tokens.dart';
 import '../../core/timeline/timeline_data.dart';
 import '../../core/ui/avatar_media.dart';
@@ -46,7 +47,7 @@ Future<void> showRecordStorySheet(
     backgroundColor: Colors.transparent,
     shape: const RoundedRectangleBorder(
         borderRadius:
-            BorderRadius.vertical(top: Radius.circular(AppRadius.lg))),
+            BorderRadius.vertical(top: Radius.circular(AppRadius.xl))),
     builder: (_) => _RecordStorySheet(record: record, me: me),
   );
 }
@@ -211,7 +212,7 @@ class _RecordStorySheetState extends ConsumerState<_RecordStorySheet> {
         decoration: BoxDecoration(
           color: theme.colorScheme.surface,
           borderRadius: const BorderRadius.vertical(
-              top: Radius.circular(AppRadius.lg)),
+              top: Radius.circular(AppRadius.xl)),
         ),
         child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
@@ -274,10 +275,10 @@ class _RecordStorySheetState extends ConsumerState<_RecordStorySheet> {
               ),
               Container(
                 padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: Spacing.xs),
                 decoration: BoxDecoration(
                   color: theme.colorScheme.primary.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(99),
+                  borderRadius: BorderRadius.circular(AppRadius.pill),
                 ),
                 child: Text(
                   yearsAgo <= 0 ? '今年的今天' : '$yearsAgo 年前的今天',
@@ -380,7 +381,7 @@ class _RecordStorySheetState extends ConsumerState<_RecordStorySheet> {
                         visualDensity: VisualDensity.compact,
                         onPressed: () =>
                             _deleteComment(c['id']?.toString() ?? ''),
-                        icon: Icon(Icons.delete_outline_rounded,
+                        icon: Icon(AppIcons.trash,
                             size: 18, color: theme.colorScheme.error),
                       ),
                   ]),
@@ -399,14 +400,13 @@ class _RecordStorySheetState extends ConsumerState<_RecordStorySheet> {
                           isDense: true),
                     ),
                   ),
-                  const SizedBox(width: 8),
-                const SizedBox(height: 8),
-                // 2.4.10：发送走三连变。
-                SubmitMorphButton(
-                  key: const Key('story-comment-send'),
-                  label: '发送',
-                        onSubmit: _sendComment,
-                ),
+                  const SizedBox(width: Spacing.sm),
+                  // 2.4.10：发送走三连变。
+                  SubmitMorphButton(
+                    key: const Key('story-comment-send'),
+                    label: '发送',
+                    onSubmit: _sendComment,
+                  ),
                 ]),
               ]),
             ),

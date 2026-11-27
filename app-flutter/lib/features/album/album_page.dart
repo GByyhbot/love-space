@@ -28,8 +28,10 @@ import '../settings/settings_widgets.dart'
     show SettingsSegmented, filledFieldDecoration, showFormSheet;
 import 'album_cover_tile.dart';
 import '../timeline/composer_sheet.dart';
+import '../../core/theme/app_icons.dart';
 import '../../core/theme/motion.dart';
 import '../../core/theme/tokens.dart';
+import '../../core/theme/typography.dart';
 
 /// 网格缩略图尺寸（3 列）：cell = (屏宽 - 左右 32 - 两道 8) / 3
 double albumCellSize(double screenWidth) => (screenWidth - 32 - 16) / 3;
@@ -226,7 +228,7 @@ class _AlbumPageState extends ConsumerState<AlbumPage> {
                 borderRadius: BorderRadius.circular(13) /* 2.4.1 网格圆角 13 */,
               ),
               child: Center(
-                child: Icon(Icons.photo_library_rounded,
+                child: Icon(AppIcons.photo,
                     size: 28, color: selected ? cs.primary : cs.outline),
               ),
             ),
@@ -349,7 +351,7 @@ class _AlbumPageState extends ConsumerState<AlbumPage> {
                 borderRadius: BorderRadius.circular(13) /* 2.4.1 网格圆角 13 */,
               ),
               child: Center(
-                child: Icon(Icons.add_rounded, size: 28, color: cs.primary),
+                child: Icon(AppIcons.add, size: 28, color: cs.primary),
               ),
             ),
           ),
@@ -620,13 +622,12 @@ class _AlbumPageState extends ConsumerState<AlbumPage> {
       child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
         Icon(Icons.photo_library_outlined, size: 44,
             color: theme.colorScheme.outline),
-        const SizedBox(height: 12),
+        const SizedBox(height: Spacing.md),
         Text(filtered ? '这个相册还没有照片' : '还没有照片，先去记录第一刻吧',
-            style: theme.textTheme.titleMedium),
+            style: AppType.title(theme)),
         const SizedBox(height: Spacing.gap),
         Text(filtered ? '换个相册，或看看全部照片。' : '在时光里发一张图，就会收进这里。',
-            style: theme.textTheme.bodySmall
-                ?.copyWith(color: theme.colorScheme.outline)),
+            style: AppType.caption(theme)),
         if (error != null) ...[
           const SizedBox(height: 10),
           Text(error,

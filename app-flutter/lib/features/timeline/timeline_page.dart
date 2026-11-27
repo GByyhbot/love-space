@@ -140,11 +140,11 @@ class _TimelinePageState extends ConsumerState<TimelinePage> {
             prefixIcon: const Icon(AppIcons.search),
             isDense: true,
             border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(AppRadius.medium),
+              borderRadius: BorderRadius.circular(14),
               borderSide: BorderSide(color: cs.outlineVariant),
             ),
             enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(AppRadius.medium),
+              borderRadius: BorderRadius.circular(14),
               borderSide: BorderSide(color: cs.outlineVariant),
             ),
           ),

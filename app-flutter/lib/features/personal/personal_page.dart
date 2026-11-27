@@ -28,7 +28,10 @@ import '../../core/ui/hold_to_confirm.dart' show HoldToConfirmButton;
 import '../../core/ui/submit_morph.dart' show SubmitMorphButton;
 import '../timeline/composer_sheet.dart';
 import 'personal_controller.dart';
+import '../../core/theme/app_icons.dart';
+import '../../core/theme/motion.dart';
 import '../../core/theme/tokens.dart';
+import '../../core/theme/typography.dart';
 
 /// tab 数据表（可扩展：7-C 追加第 5 项 personal_wish，绝不预置死卡）。
 /// hint 逐字对齐 Web app.js:1489 / :1302：
@@ -126,8 +129,8 @@ class _PersonalPageState extends ConsumerState<PersonalPage> {
     target = target.clamp(0.0, _tabsCtrl.position.maxScrollExtent);
     if ((target - offset).abs() > 1) {
       await _tabsCtrl.animateTo(target,
-          duration: const Duration(milliseconds: 220),
-          curve: Curves.easeOut);
+          duration: Motion.base,
+          curve: Motion.springCurve);
     }
   }
 
@@ -296,7 +299,7 @@ class _TabFrame extends ConsumerWidget {
                 key: const Key('personal-entry'),
                 // 2.4.1 第 11 项③：实心主色胶囊 + 加号前缀（行为不变）。
                 onPressed: onEntry,
-                icon: const Icon(Icons.add_rounded, size: 18),
+                icon: const Icon(AppIcons.add, size: 18),
                 label: Text(entryLabel!),
               ),
             ),
@@ -340,11 +343,9 @@ class _TabFrame extends ConsumerWidget {
                       size: 30, color: theme.colorScheme.outline),
                 ),
                 const SizedBox(height: 14),
-                Text(emptyTitle, style: theme.textTheme.titleMedium),
-                const SizedBox(height: 4),
-                Text(emptyHint,
-                    style: theme.textTheme.bodySmall
-                        ?.copyWith(color: theme.colorScheme.outline)),
+                Text(emptyTitle, style: AppType.title(theme)),
+                const SizedBox(height: Spacing.xs),
+                Text(emptyHint, style: AppType.caption(theme)),
                 if (emptyEntryLabel != null && onEntry != null) ...[
                   const SizedBox(height: 14),
                   FilledButton.tonal(
@@ -454,11 +455,11 @@ class _DiaryTile extends ConsumerWidget {
               tooltip: '删除日记',
               visualDensity: VisualDensity.compact,
               onPressed: () => confirmPrivateDelete(context, ref, record.id),
-              icon: Icon(Icons.delete_outline_rounded,
+              icon: Icon(AppIcons.trash,
                   size: 20, color: theme.colorScheme.error),
             ),
           ]),
-          Text(_recordTitle(record), style: theme.textTheme.titleSmall),
+          Text(_recordTitle(record), style: AppType.title(theme)),
           const SizedBox(height: 4),
           Text((record.body['content'] ?? '').toString(),
               maxLines: 3,

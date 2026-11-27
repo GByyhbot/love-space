@@ -27,6 +27,7 @@ import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
 import '../settings/settings_widgets.dart'
     show filledFieldDecoration, showFormSheet;
 import 'together_controller.dart';
+import '../../core/theme/app_icons.dart';
 import '../../core/theme/tokens.dart';
 
 String _createdLabel(double created) {
@@ -43,7 +44,7 @@ String _createdLabel(double created) {
 Widget toolFab(BuildContext context,
     {required String tooltip,
     required VoidCallback onPressed,
-    IconData icon = Icons.add_rounded}) {
+    IconData icon = AppIcons.add}) {
   final cs = Theme.of(context).colorScheme;
   return FloatingActionButton.extended(
     tooltip: tooltip,
@@ -61,12 +62,12 @@ Widget toolFab(BuildContext context,
 Widget toolMetaChip(ThemeData theme, ColorScheme cs, String label,
     {bool emphasized = false}) {
   return Container(
-    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+    padding: const EdgeInsets.symmetric(horizontal: Spacing.sm, vertical: 3),
     decoration: BoxDecoration(
         color: emphasized
             ? cs.primary.withValues(alpha: 0.12)
             : cs.surfaceContainerHighest.withValues(alpha: 0.6),
-        borderRadius: BorderRadius.circular(999)),
+        borderRadius: BorderRadius.circular(AppRadius.pill)),
     child: Text(label,
         style: theme.textTheme.labelSmall?.copyWith(
             color: emphasized

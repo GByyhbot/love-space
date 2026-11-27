@@ -23,7 +23,9 @@ import '../settings/settings_widgets.dart'
     show filledFieldDecoration, showFormSheet;
 import 'together_controller.dart';
 import 'tool_pages.dart' show toolFab, toolMetaChip;
+import '../../core/theme/app_icons.dart';
 import '../../core/theme/tokens.dart';
+import '../../core/theme/typography.dart';
 
 /// annual 三态显示文案（逐字对齐 Web recordCard anniversary meta，app.js:857）
 String annualLabel(dynamic annual) =>
@@ -121,8 +123,8 @@ class _AnniversaryPageState extends ConsumerState<AnniversaryPage> {
             const SizedBox(width: 8),
             Expanded(
               child: Text('$authorName · ${(r.body['date'] ?? '')}',
-                  style: theme.textTheme.labelSmall
-                      ?.copyWith(color: cs.outline)),
+                  style: AppType.caption(theme)
+                      .copyWith(fontFeatures: AppType.tabularFeatures)),
             ),
             if (own)
               PopupMenuButton<String>(
@@ -260,7 +262,7 @@ Future<void> _showForm(
                   .colorScheme
                   .surfaceContainerHighest
                   .withValues(alpha: 0.5),
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(AppRadius.small),
             ),
             child: Row(children: [
               Text('日期', style: Theme.of(context).textTheme.labelSmall),
@@ -268,7 +270,7 @@ Future<void> _showForm(
               Text(dateCtrl.text.isEmpty ? '请选择' : dateCtrl.text,
                   style: Theme.of(context).textTheme.bodyMedium),
               const SizedBox(width: 6),
-              Icon(Icons.chevron_right_rounded,
+              Icon(AppIcons.chevronRight,
                   size: 18, color: Theme.of(context).colorScheme.outline),
             ]),
           ),

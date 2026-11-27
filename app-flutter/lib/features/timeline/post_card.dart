@@ -27,8 +27,10 @@ import 'comment_sheet.dart';
 import 'composer_sheet.dart';
 import 'image_viewer.dart';
 import 'timeline_controller.dart';
+import '../../core/theme/app_icons.dart';
 import '../../core/theme/motion.dart';
 import '../../core/theme/tokens.dart';
+import '../../core/theme/typography.dart';
 
 /// post 卡片
 class PostCard extends ConsumerWidget {
@@ -235,14 +237,13 @@ class PostCard extends ConsumerWidget {
           ),
         // footer：时间戳 + 点赞/评论按钮（段二 B：本地翻转 + 评论 Sheet）
         Padding(
-          padding: const EdgeInsets.only(top: 4),
+          padding: const EdgeInsets.only(top: Spacing.xs),
           child: Row(children: [
-            Icon(Icons.access_time_rounded, size: 13,
+            Icon(AppIcons.time, size: 13,
                 color: theme.colorScheme.outline),
-            const SizedBox(width: 4),
+            const SizedBox(width: Spacing.xs),
             Text(timelineDateLabel(record.created),
-                style: theme.textTheme.bodySmall
-                    ?.copyWith(color: theme.colorScheme.outline)),
+                style: AppType.caption(theme)),
             const Spacer(),
             // 点赞 toggle（2.4.10 第 01 项爆粒子）：状态与计数同一处，
             // 点击走控制器乐观翻转 + 失败回滚；动画只跟随已确认状态
@@ -259,8 +260,8 @@ class PostCard extends ConsumerWidget {
               LikeCountLabel(
                 liked: liked,
                 count: record.likes.length,
-                style: theme.textTheme.bodySmall
-                    ?.copyWith(color: theme.colorScheme.outline),
+                style: AppType.caption(theme)
+                    .copyWith(fontFeatures: AppType.tabularFeatures),
               ),
             ]),
             const SizedBox(width: 6),
@@ -269,7 +270,7 @@ class PostCard extends ConsumerWidget {
               borderRadius: BorderRadius.circular(AppRadius.card),
               onTap: () => showCommentSheet(context, rid: record.id, me: me),
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: Spacing.xs),
                 child: Row(mainAxisSize: MainAxisSize.min, children: [
                   Icon(Icons.mode_comment_rounded, size: 15,
                       color: theme.colorScheme.outline),
@@ -277,8 +278,8 @@ class PostCard extends ConsumerWidget {
                   Text(record.comments.isEmpty
                       ? '评论'
                       : '${record.comments.length}',
-                      style: theme.textTheme.bodySmall
-                          ?.copyWith(color: theme.colorScheme.outline)),
+                      style: AppType.caption(theme)
+                          .copyWith(fontFeatures: AppType.tabularFeatures)),
                 ]),
               ),
             ),

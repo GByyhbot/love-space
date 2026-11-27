@@ -15,7 +15,9 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/api/api_client.dart' show dioProvider, Record;
 import '../../core/chat/chat_models.dart' show ChatMedia;
+import '../../core/theme/app_icons.dart';
 import '../../core/theme/tokens.dart';
+import '../../core/theme/typography.dart';
 import '../../core/together/together_data.dart' show kindLabel;
 import '../chat/media_bubble_widgets.dart' show MediaImageView;
 
@@ -195,12 +197,9 @@ Widget cardHeader(BuildContext context, String emoji, String title) {
   final theme = Theme.of(context);
   return Row(children: [
     Expanded(
-      child: Text('$emoji $title',
-          style: theme.textTheme.titleMedium?.copyWith(
-            fontWeight: FontWeight.w600,
-          )),
+      child: Text('$emoji $title', style: AppType.title(theme)),
     ),
-    Icon(Icons.chevron_right_rounded,
+    Icon(AppIcons.chevronRight,
         size: 20, color: theme.colorScheme.outline),
   ]);
 }
@@ -255,11 +254,11 @@ class _OtdPreviewRow extends StatelessWidget {
         .toString();
     return Row(children: [
       Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        padding: const EdgeInsets.symmetric(horizontal: Spacing.sm, vertical: 3),
         decoration: BoxDecoration(
           color: theme.colorScheme.surfaceContainerHighest
               .withValues(alpha: 0.55),
-          borderRadius: BorderRadius.circular(99),
+          borderRadius: BorderRadius.circular(AppRadius.pill),
         ),
         child: Text('$year 年的今天', style: theme.textTheme.labelSmall),
       ),
@@ -322,14 +321,15 @@ class YearbookCard extends ConsumerWidget {
   Widget _stat(ThemeData theme, String num, String label) => Expanded(
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           Text(num,
-              style: theme.textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.w600,
-                letterSpacing: -0.3,
+              style: AppType.numeric(
+                theme,
+                base: theme.textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: -0.3,
+                ),
               )),
           const SizedBox(height: 2),
-          Text(label,
-              style: theme.textTheme.labelSmall
-                  ?.copyWith(color: theme.colorScheme.outline)),
+          Text(label, style: AppType.caption(theme)),
         ]),
       );
 }

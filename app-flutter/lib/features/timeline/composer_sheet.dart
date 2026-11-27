@@ -26,7 +26,9 @@ import 'image_viewer.dart' show ImageViewerPage;
 import '../chat/voice_recorder.dart';
 import 'composer_store.dart';
 import 'timeline_controller.dart';
+import '../../core/theme/app_icons.dart';
 import '../../core/theme/tokens.dart';
+import '../../core/theme/typography.dart';
 import '../../core/ui/selection_sheet.dart';
 import '../settings/settings_widgets.dart'
     show GlassActionBar, filledFieldDecoration;
@@ -57,7 +59,7 @@ Future<void> showComposerSheet(
     context: context,
     isScrollControlled: true,
     shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.lg))),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xl))),
     builder: (_) => ComposerSheet(
       editRecord: editRecord,
       editKind: editKind,
@@ -723,7 +725,7 @@ class _ComposerSheetState extends ConsumerState<ComposerSheet> {
             Row(children: [
               Expanded(child: Text(
                   widget.isEdit ? '编辑这一刻' : '记录此刻',
-                  style: theme.textTheme.titleMedium)),
+                  style: AppType.title(theme))),
               Container(
                 width: 34,
                 height: 34,
@@ -935,15 +937,16 @@ class _ComposerSheetState extends ConsumerState<ComposerSheet> {
                             style: theme.textTheme.bodyMedium),
                       ),
                       const SizedBox(width: 6),
-                      Icon(Icons.chevron_right_rounded,
+                      Icon(AppIcons.chevronRight,
                           size: 18, color: theme.colorScheme.outline),
                     ]),
                   ),
                 ),
                 if (_albumsLoading)
-                  const Padding(
-                    padding: EdgeInsets.only(top: 4),
-                    child: Text('加载相册中…', style: TextStyle(color: Colors.grey)),
+                  Padding(
+                    padding: const EdgeInsets.only(top: Spacing.xs),
+                    child: Text('加载相册中…',
+                        style: AppType.caption(theme)),
                   ),
               ]),
             ),

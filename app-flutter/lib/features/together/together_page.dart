@@ -268,7 +268,6 @@ class _TogetherPageState extends ConsumerState<TogetherPage> {
     final badgeBg =
         dark ? tint.$2.withValues(alpha: 0.22) : tint.$1;
     final badgeBorder = tint.$2.withValues(alpha: dark ? 0.35 : 0.14);
-    final innerRadius = AppRadius.concentric(AppRadius.large, Spacing.sm);
     // 2.4.10 附录 B ②：按压四段——按下即微缩 0.97，松手回弹。
     return PressableScale(
       onTap: onTap,
@@ -289,13 +288,13 @@ class _TogetherPageState extends ConsumerState<TogetherPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // emoji 收进 36px 圆角方底座（同心圆角 12）。
+            // emoji 收进 35px 圆角方底座（底座圆角 11 保留 2.4.1 护栏）。
             Container(
-              width: 36,
-              height: 36,
+              width: 35,
+              height: 35,
               decoration: BoxDecoration(
                 color: badgeBg,
-                borderRadius: BorderRadius.circular(innerRadius),
+                borderRadius: BorderRadius.circular(11),
                 border: Border.all(color: badgeBorder),
               ),
               alignment: Alignment.center,

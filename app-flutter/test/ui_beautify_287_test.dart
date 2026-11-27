@@ -14,11 +14,14 @@ import 'package:love_space/core/theme/app_icons.dart';
 import 'package:love_space/core/theme/motion.dart';
 import 'package:love_space/core/theme/tokens.dart';
 import 'package:love_space/core/theme/typography.dart';
+import 'package:love_space/features/album/album_page.dart';
 import 'package:love_space/features/auth/auth_state.dart';
 import 'package:love_space/features/chat/chat_toast.dart'
     show ChatToastController, ChatToastMessage, ChatToastTone, chatToastProvider;
 import 'package:love_space/features/home/home_page.dart';
+import 'package:love_space/features/personal/personal_page.dart';
 import 'package:love_space/features/timeline/timeline_page.dart';
+import 'package:love_space/features/together/anniversary_page.dart';
 import 'package:love_space/features/together/together_page.dart';
 
 class _StubAdapter implements HttpClientAdapter {
@@ -243,6 +246,26 @@ void main() {
       testWidgets('TogetherPage 360dp-$tag', (tester) async {
         await _pumpPage(tester, const TogetherPage(active: true), brightness: b);
         expect(find.text('关于我们，还有好多好多'), findsOneWidget);
+      });
+    }
+  });
+
+  group('甲三·内容组 360dp × 深浅双主题零溢出', () {
+    for (final b in <Brightness>[Brightness.light, Brightness.dark]) {
+      final tag = b == Brightness.light ? 'light' : 'dark';
+      testWidgets('AlbumPage 360dp-$tag', (tester) async {
+        await _pumpPage(tester, const AlbumPage(active: true), brightness: b);
+        expect(find.text('把喜欢的瞬间，装进口袋'), findsOneWidget);
+      });
+
+      testWidgets('PersonalPage 360dp-$tag', (tester) async {
+        await _pumpPage(tester, const PersonalPage(), brightness: b);
+        expect(find.text('我的小角落'), findsOneWidget);
+      });
+
+      testWidgets('AnniversaryPage 360dp-$tag', (tester) async {
+        await _pumpPage(tester, const AnniversaryPage(), brightness: b);
+        expect(find.text('纪念日'), findsOneWidget);
       });
     }
   });

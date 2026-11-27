@@ -38,7 +38,9 @@ import '../../core/chat/chat_media.dart';
 import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
 import '../timeline/image_viewer.dart' show mediaFileExtension;
 import 'album_controller.dart';
+import '../../core/theme/app_icons.dart';
 import '../../core/theme/motion.dart';
+import '../../core/theme/typography.dart';
 
 class AlbumViewerPage extends ConsumerStatefulWidget {
   const AlbumViewerPage({
@@ -208,7 +210,7 @@ class _AlbumViewerPageState extends ConsumerState<AlbumViewerPage> {
         if (target != _index) {
           _page.animateToPage(target,
               duration: Motion.base,
-              curve: Curves.easeOut);
+              curve: Motion.springCurve);
         }
       } else if (dy > _dismissThreshold) {
         _triggerDismiss();
@@ -360,14 +362,17 @@ class _AlbumViewerPageState extends ConsumerState<AlbumViewerPage> {
               child: Row(children: [
                 IconButton(
                   tooltip: '返回',
-                  icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+                  icon: const Icon(AppIcons.back, color: Colors.white),
                   onPressed: () => Navigator.of(context).pop(_index),
                 ),
                 // 段 C 字阶收编：页码 15px → bodyLarge（±1px 收敛固有）；
                 // Colors.white 为图上覆盖层白名单口径，不动。
                 Text('${_index + 1} / ${widget.photos.length}',
-                    style: Theme.of(context).textTheme.bodyLarge
-                        ?.copyWith(color: Colors.white)),
+                    style: AppType.numeric(
+                      Theme.of(context),
+                      base: Theme.of(context).textTheme.bodyLarge,
+                      color: Colors.white,
+                    )),
                 const Spacer(),
                 if (widget.albumId.isNotEmpty)
                   IconButton(
