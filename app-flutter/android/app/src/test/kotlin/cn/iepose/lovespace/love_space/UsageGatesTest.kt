@@ -27,9 +27,9 @@ class UsageGatesTest {
         )
         assertEquals(1, r.sessions.size)
         assertEquals("com.a", r.sessions[0].pkg)
-        assertEquals(1000, r.sessions[0].start)
-        assertEquals(61000, r.sessions[0].end)
-        assertEquals(60, r.sessions[0].durSec)
+        assertEquals(1000L, r.sessions[0].start)
+        assertEquals(61000L, r.sessions[0].end)
+        assertEquals(60L, r.sessions[0].durSec)
         assertNull(r.open)
     }
 
@@ -45,9 +45,9 @@ class UsageGatesTest {
         )
         assertEquals(2, r.sessions.size)
         assertEquals("com.a", r.sessions[0].pkg)
-        assertEquals(5000, r.sessions[0].end)
+        assertEquals(5000L, r.sessions[0].end)
         assertEquals("com.b", r.sessions[1].pkg)
-        assertEquals(4000, r.sessions[1].durSec)
+        assertEquals(4000L, r.sessions[1].durSec)
     }
 
     @Test
@@ -61,7 +61,7 @@ class UsageGatesTest {
             ),
         )
         assertEquals(1, r.sessions.size)
-        assertEquals(1000, r.sessions[0].start)
+        assertEquals(1000L, r.sessions[0].start)
     }
 
     @Test
@@ -75,7 +75,7 @@ class UsageGatesTest {
             ),
         )
         assertEquals(1, r.sessions.size)
-        assertEquals(3000, r.sessions[0].end)
+        assertEquals(3000L, r.sessions[0].end)
     }
 
     @Test
@@ -89,8 +89,8 @@ class UsageGatesTest {
         val second = UsageGates.pairIncremental(
             first.open, listOf(ev("com.a", 61000, false)))
         assertEquals(1, second.sessions.size)
-        assertEquals(1000, second.sessions[0].start)
-        assertEquals(60000, second.sessions[0].durSec)
+        assertEquals(1000L, second.sessions[0].start)
+        assertEquals(60000L, second.sessions[0].durSec)
         assertNull(second.open)
     }
 
@@ -103,7 +103,7 @@ class UsageGatesTest {
             listOf(ev("com.b", 3000, true), ev("com.b", 9000, false)))
         assertEquals(2, second.sessions.size)
         assertEquals("com.a", second.sessions[0].pkg)
-        assertEquals(3000, second.sessions[0].end)
+        assertEquals(3000L, second.sessions[0].end)
         assertEquals("com.b", second.sessions[1].pkg)
     }
 
@@ -155,9 +155,9 @@ class UsageGatesTest {
 
     @Test
     fun `cursor never runs into future and stays when batch empty`() {
-        assertEquals(5000, UsageGates.advanceCursor(0, 5000, 9000))
-        assertEquals(5000, UsageGates.advanceCursor(5000, 0, 9000))
-        assertEquals(9000, UsageGates.advanceCursor(0, 12000, 9000))
+        assertEquals(5000L, UsageGates.advanceCursor(0, 5000L, 9000L))
+        assertEquals(5000L, UsageGates.advanceCursor(5000L, 0L, 9000L))
+        assertEquals(9000L, UsageGates.advanceCursor(0L, 12000L, 9000L))
     }
 
     @Test
