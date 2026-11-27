@@ -16,6 +16,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/api/api_client.dart' as api;
 import '../../core/peer/peer_permissions.dart' show networkIconFor;
 import '../../core/peer/peer_report_api.dart' show PeerEventItem, fetchPeerEvents;
+import '../../core/peer/peer_report_data.dart' show PeerReport, fetchPeerReport;
 import '../../core/peer/peer_track_data.dart';
 import '../../core/theme/app_icons.dart';
 import '../../core/theme/tokens.dart';
@@ -223,6 +224,7 @@ class PeerTrackPage extends ConsumerStatefulWidget {
 
 class _PeerTrackPageState extends ConsumerState<PeerTrackPage> {
   PeerTrackDay? _data;
+  PeerReport? _report;
   List<PeerEventItem> _events = const [];
   bool _loading = false;
   String? _error;
@@ -263,11 +265,18 @@ class _PeerTrackPageState extends ConsumerState<PeerTrackPage> {
       } catch (_) {
         // 事件流拿不到只影响回放读数，不影响轨迹本身
       }
+      PeerReport? report;
+      try {
+        report = await fetchPeerReport(dio, date: _date);
+      } catch (_) {
+        // 状态摘要非必需，拉不到时仍正常展示轨迹并走点列/围栏地名
+      }
       if (!mounted) return;
       _timer?.cancel();
       _tNotifier.value = null;
       setState(() {
         _data = data;
+        _report = report;
         _events = events;
         _error = null;
         _loading = false;
@@ -282,10 +291,22 @@ class _PeerTrackPageState extends ConsumerState<PeerTrackPage> {
     }
   }
 
-  PeerTrackSide get _side =>
-      _peerView
-          ? (_data?.peer ?? const PeerTrackSide())
-          : (_data?.mine ?? const PeerTrackSide());
+  PeerTrackSide get _side {
+    final raw = _peerView
+        ? (_data?.peer ?? const PeerTrackSide())
+        : (_data?.mine ?? const PeerTrackSide());
+    final st = _peerView ? _report?.status.peer : _report?.status.mine;
+    final sideEvents = _events
+        .where((e) => e.mine == !_peerView)
+        .toList(growable: false);
+    return resolveTrackSideStays(
+      raw,
+      statusLatestLat: st?.lat,
+      statusLatestLng: st?.lng,
+      statusLatestPlaceName: st?.placeName ?? '',
+      sideEvents: sideEvents,
+    );
+  }
 
   void _togglePlay() {
     final points = _side.points;
@@ -329,77 +350,65 @@ class _PeerTrackPageState extends ConsumerState<PeerTrackPage> {
     final hasReplay =
         _data != null && !side.hidden && side.points.length >= 2;
     final topInset = widget.embedded ? ShellChromeScope.topInsetOf(context) : 0.0;
-    final body = Stack(
+    final body = RefreshIndicator(
+      edgeOffset: topInset,
+      color: cs.primary,
+      backgroundColor: theme.brightness == Brightness.dark
+          ? cs.surfaceContainerHigh
+          : cs.surface,
+      onRefresh: _load,
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: EdgeInsets.fromLTRB(
+          16,
+          topInset + 12,
+          16,
+          widget.embedded ? Spacing.pageBottom + 80 : Spacing.pageBottom,
+        ),
         children: [
-          RefreshIndicator(
-            edgeOffset: topInset,
-            color: cs.primary,
-            backgroundColor: theme.brightness == Brightness.dark
-                ? cs.surfaceContainerHigh
-                : cs.surface,
-            onRefresh: _load,
-            child: ListView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: EdgeInsets.fromLTRB(
-                16,
-                topInset + 12,
-                16,
-                hasReplay
-                    ? (widget.embedded ? 216 : 156)
-                    : (widget.embedded ? Spacing.pageBottom + 64 : Spacing.pageBottom),
+          _topBar(theme, cs),
+          const SizedBox(height: 12),
+          if (_loading && _data == null)
+            const AppProgress()
+          else if (_data == null)
+            AppErrorView(
+              detail: '轨迹拉不到：${_error ?? api.genericErrorText}',
+              onRetry: _load,
+            )
+          else if (side.hidden)
+            _closedCard(theme, cs, side)
+          else if (side.isStreet && side.stays.isEmpty)
+            _card(
+              cs,
+              child: const AppEmptyView(
+                icon: AppIcons.locationOff,
+                title: '这一天没有轨迹记录',
+                hint: '仅街区共享时只显示停留点，不保留精确轨迹',
+                padding: EdgeInsets.symmetric(vertical: 24),
               ),
-              children: [
-                _topBar(theme, cs),
-                const SizedBox(height: 12),
-                if (_loading && _data == null)
-                  const AppProgress()
-                else if (_data == null)
-                  AppErrorView(
-                    detail: '轨迹拉不到：${_error ?? api.genericErrorText}',
-                    onRetry: _load,
-                  )
-                else if (side.hidden)
-                  _closedCard(theme, cs, side)
-                else if (side.isStreet && side.stays.isEmpty)
-                  _card(
-                    cs,
-                    child: const AppEmptyView(
-                      icon: AppIcons.locationOff,
-                      title: '这一天没有轨迹记录',
-                      hint: '仅街区共享时只显示停留点，不保留精确轨迹',
-                      padding: EdgeInsets.symmetric(vertical: 24),
-                    ),
-                  )
-                else if (side.points.isEmpty && side.stays.isEmpty)
-                  _card(
-                    cs,
-                    child: const AppEmptyView(
-                      icon: AppIcons.track,
-                      title: '这一天没有轨迹记录',
-                      hint: '不开定位或当天没走动，都不会画线',
-                      padding: EdgeInsets.symmetric(vertical: 24),
-                    ),
-                  )
-                else ...[
-                  _canvasCard(theme, cs, side),
-                  const SizedBox(height: 12),
-                  _staysCard(theme, cs, side),
-                ],
-              ],
-            ),
-          ),
-          if (hasReplay)
-            Positioned(
-              left: 16,
-              right: widget.embedded ? 78 : 16,
-              bottom: widget.embedded ? 82 : 12,
-              child: SafeArea(
-                top: false,
-                child: _replayBar(theme, cs, side),
+            )
+          else if (side.points.isEmpty && side.stays.isEmpty)
+            _card(
+              cs,
+              child: const AppEmptyView(
+                icon: AppIcons.track,
+                title: '这一天没有轨迹记录',
+                hint: '不开定位或当天没走动，都不会画线',
+                padding: EdgeInsets.symmetric(vertical: 24),
               ),
-            ),
+            )
+          else ...[
+            _canvasCard(theme, cs, side),
+            const SizedBox(height: 12),
+            if (hasReplay) ...[
+              _replayBar(theme, cs, side),
+              const SizedBox(height: 12),
+            ],
+            _staysCard(theme, cs, side),
+          ],
         ],
-      );
+      ),
+    );
     if (widget.embedded) return body;
     return Scaffold(
       appBar: AppBar(title: const Text('今日轨迹')),
@@ -657,9 +666,9 @@ class _PeerTrackPageState extends ConsumerState<PeerTrackPage> {
         final net = netAt(nets, t);
         final batt = batteryAt(batteries, t);
         final speed = speedKmhAt(points, t);
-        return LiquidGlassSurface(
+        return LiquidGlassCard(
           key: const Key('track-replay'),
-          borderRadius: BorderRadius.circular(kGlassSheetRadius),
+          radius: kGlassSheetRadius,
           padding: const EdgeInsets.fromLTRB(12, 10, 14, 12),
           child: Column(
             mainAxisSize: MainAxisSize.min,

@@ -18,6 +18,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:love_space/core/api/api_client.dart' as api;
 import 'package:love_space/core/chat/chat_media.dart'
     show chatBaseProvider, mediaCookieHeadersProvider;
+import 'package:love_space/core/ui/apple_ui.dart' show AppleIconBadge;
+import 'package:love_space/core/ui/liquid_glass.dart' show LiquidGlassCard;
 import 'package:love_space/features/chat/chat_toast.dart' show ChatToastHost;
 import 'package:love_space/features/together/calendar_page.dart';
 import 'package:love_space/features/auth/auth_state.dart';
@@ -206,7 +208,7 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('未选中提示卡：主题色浅底圆角卡 + 图标底座', (tester) async {
+    testWidgets('未选中提示卡：单层透明玻璃卡 + 图标徽章底座', (tester) async {
       final adapter = _withMe((options, i) {
         return _json({'month': '2026-01', 'days': {}});
       });
@@ -214,24 +216,13 @@ void main() {
       addTearDown(container.dispose);
       await _warmAuth(tester, container);
       await _pumpPage(tester, container, const CalendarPage());
-      final pageCtx = tester.element(find.byType(CalendarPage));
-      final cs = Theme.of(pageCtx).colorScheme;
-      // 提示卡 Container：primary 浅底（0.08 alpha）+ 圆角 + Row(图标底座)
-      final hintW = tester.widget<Container>(find.byWidgetPredicate((w) =>
-              w is Container &&
-              w.decoration is BoxDecoration &&
-              (w.decoration as BoxDecoration).color != null &&
-              (w.decoration as BoxDecoration).color!.a > 0 &&
-              (w.decoration as BoxDecoration).borderRadius != null &&
-              w.child is Row &&
-              ((w.child as Row).children.first is Container)));
-      final dec = hintW.decoration as BoxDecoration;
-      expect(dec.color, cs.primary.withValues(alpha: 0.08),
-          reason: '提示卡=主题色浅底');
-      // 白底圆角方形图标底座（cs.surface）
-      final iconBase = (hintW.child! as Row).children.first as Container;
-      expect((iconBase.decoration as BoxDecoration).color, cs.surface,
-          reason: '图标底座=表面白底圆角方形');
+      final hintFinder = find.byKey(const Key('calendar-hint-card'));
+      expect(hintFinder, findsOneWidget);
+      expect(tester.widget(hintFinder), isA<LiquidGlassCard>());
+      expect(
+        find.descendant(of: hintFinder, matching: find.byType(AppleIconBadge)),
+        findsOneWidget,
+      );
     });
   });
 

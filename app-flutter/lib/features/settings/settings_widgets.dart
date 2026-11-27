@@ -15,6 +15,7 @@ import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
 
+import '../../core/theme/tokens.dart' show AppRadius;
 import '../../core/ui/apple_ui.dart';
 import '../../core/ui/submit_morph.dart';
 
@@ -230,32 +231,37 @@ class GlassActionBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final bright = Theme.of(context).brightness;
-    // 玻璃底：bg 80% 不透明等效（Web 顶栏 color-mix 口径，style.css:2108）。
-    final glassColor = bright == Brightness.dark
-        ? const Color(0xCC231B1D)
-        : const Color(0xCCFAF8F9);
-    Widget bar = Container(
-      decoration: BoxDecoration(
-        color: glassColor,
-        border: Border(
-          top: BorderSide(
-            color: cs.outlineVariant.withValues(alpha: 0.6),
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final inSheet = !safeAreaBottom;
+    // 总纲：直接改造旧操作条背景为单层 iOS 磨砂玻璃，禁止与底框双层叠加。
+    final radius = inSheet
+        ? BorderRadius.circular(AppRadius.medium)
+        : const BorderRadius.vertical(top: Radius.circular(AppRadius.xl));
+    final glassColor = dark
+        ? Colors.white.withValues(alpha: inSheet ? 0.08 : 0.10)
+        : cs.surface.withValues(alpha: inSheet ? 0.78 : 0.84);
+    final rimColor = dark
+        ? Colors.white.withValues(alpha: 0.16)
+        : cs.outlineVariant.withValues(alpha: 0.55);
+    return ClipRRect(
+      key: const Key('glass-action-bar'),
+      borderRadius: radius,
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+        child: Container(
+          decoration: BoxDecoration(
+            color: glassColor,
+            borderRadius: radius,
+            border: inSheet
+                ? Border.all(color: rimColor, width: 0.8)
+                : Border(top: BorderSide(color: rimColor, width: 0.8)),
           ),
+          child: safeAreaBottom
+              ? SafeArea(top: false, child: _buttons(cs))
+              : _buttons(cs),
         ),
       ),
-      child: safeAreaBottom
-          ? SafeArea(top: false, child: _buttons(cs))
-          : _buttons(cs),
     );
-    // 毛玻璃（静态区允许，冻结教训 #3）。
-    bar = ClipRect(
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
-        child: bar,
-      ),
-    );
-    return bar;
   }
 
   Widget _buttons(ColorScheme cs) {

@@ -10,9 +10,12 @@
 /// · off    → `level=off`，`closed_off=true`（既有明示口径）。
 library;
 
+import 'dart:math' as math;
+
 import 'package:dio/dio.dart';
 
 import '../api/api_client.dart';
+import 'peer_report_api.dart' show PeerEventItem;
 import 'peer_usage_data.dart' show PeerHalt;
 
 /// 一个轨迹点（已滤波，GCJ-02）。
@@ -23,6 +26,7 @@ class PeerTrackPoint {
     required this.lng,
     this.acc,
     this.speed,
+    this.placeName = '',
   });
 
   final double ts;
@@ -30,6 +34,7 @@ class PeerTrackPoint {
   final double lng;
   final double? acc;
   final double? speed;
+  final String placeName;
 
   static PeerTrackPoint? fromJson(Object? raw) {
     if (raw is! Map) return null;
@@ -43,6 +48,7 @@ class PeerTrackPoint {
       lng: lng,
       acc: (raw['acc'] as num?)?.toDouble(),
       speed: (raw['speed'] as num?)?.toDouble(),
+      placeName: (raw['place_name'] ?? '').toString().trim(),
     );
   }
 }
@@ -66,11 +72,20 @@ class PeerTrackStay {
   final double? leftAt;
   final int durationSec;
 
-  /// 空串 = `peer_places` 没命中 → 端上写「停留点」，**不许编地名**。
+  /// 空串 = 尚未命中地名 → 端上写「停留点」，**不许编地名**。
   final String placeName;
 
   bool get ongoing => leftAt == null;
   String get displayName => placeName.isEmpty ? '停留点' : placeName;
+
+  PeerTrackStay withPlaceName(String name) => PeerTrackStay(
+        lat: lat,
+        lng: lng,
+        arrivedAt: arrivedAt,
+        leftAt: leftAt,
+        durationSec: durationSec,
+        placeName: name.trim(),
+      );
 
   static PeerTrackStay? fromJson(Object? raw) {
     if (raw is! Map) return null;
@@ -84,7 +99,7 @@ class PeerTrackStay {
       arrivedAt: arrived,
       leftAt: (raw['left_at'] as num?)?.toDouble(),
       durationSec: (raw['duration_sec'] as num?)?.toInt() ?? 0,
-      placeName: (raw['place_name'] ?? '').toString(),
+      placeName: (raw['place_name'] ?? '').toString().trim(),
     );
   }
 }
@@ -134,6 +149,7 @@ class PeerTrackSide {
     this.latestLat,
     this.latestLng,
     this.latestUpdated,
+    this.latestPlaceName = '',
   });
 
   final bool closedOff;
@@ -148,10 +164,25 @@ class PeerTrackSide {
   final double? latestLat;
   final double? latestLng;
   final double? latestUpdated;
+  final String latestPlaceName;
 
   bool get hidden => closedOff || halted.halted;
   bool get isStreet => level == 'street';
   bool get hasTrack => points.isNotEmpty;
+
+  PeerTrackSide withStays(List<PeerTrackStay> resolvedStays) => PeerTrackSide(
+        closedOff: closedOff,
+        halted: halted,
+        level: level,
+        points: points,
+        stays: resolvedStays,
+        segments: segments,
+        distanceM: distanceM,
+        latestLat: latestLat,
+        latestLng: latestLng,
+        latestUpdated: latestUpdated,
+        latestPlaceName: latestPlaceName,
+      );
 
   static PeerTrackSide fromJson(Object? raw) {
     final j = raw is Map ? raw.cast<String, dynamic>() : const <String, dynamic>{};
@@ -172,8 +203,102 @@ class PeerTrackSide {
       latestLat: (latest?['lat'] as num?)?.toDouble(),
       latestLng: (latest?['lng'] as num?)?.toDouble(),
       latestUpdated: (latest?['updated'] as num?)?.toDouble(),
+      latestPlaceName: (latest?['place_name'] ?? '').toString().trim(),
     );
   }
+}
+
+/// 停留点地名真实来源解析（绝不前端现编）：
+/// 1. 空间内已命名的停留点名称（[PeerTrackStay.placeName] / `peer_places`）；
+/// 2. 停留时段 `[arrivedAt, leftAt]` 内轨迹点自带的系统地名（`points[].place_name`）；
+/// 3. 今日卡同源的 `latest.place_name`（150m 围栏半径内且优先 ongoing/临近停留点）
+///    或该停留时段内含地名的主动报备；
+/// 4. 均未命中时返回 `'停留点'`。
+String resolveStayPlaceName(
+  PeerTrackStay stay, {
+  List<PeerTrackPoint> points = const <PeerTrackPoint>[],
+  double? latestLat,
+  double? latestLng,
+  String latestPlaceName = '',
+  List<PeerEventItem> events = const <PeerEventItem>[],
+}) {
+  final direct = stay.placeName.trim();
+  if (direct.isNotEmpty) return direct;
+
+  final endTs = stay.leftAt ?? double.infinity;
+  for (var i = points.length - 1; i >= 0; i--) {
+    final pt = points[i];
+    if (pt.ts >= stay.arrivedAt && pt.ts <= endTs) {
+      final pn = pt.placeName.trim();
+      if (pn.isNotEmpty) return pn;
+    }
+  }
+
+  final latestName = latestPlaceName.trim();
+  if (latestName.isNotEmpty &&
+      latestLat != null &&
+      latestLng != null &&
+      _stayDistMeters(stay.lat, stay.lng, latestLat, latestLng) <= 150.0) {
+    return latestName;
+  }
+
+  for (final e in events) {
+    if (!e.isManualReport) continue;
+    final pn = e.placeName.trim();
+    if (pn.isEmpty) continue;
+    if (e.ts >= stay.arrivedAt - 300 && e.ts <= endTs + 300) {
+      return pn;
+    }
+  }
+
+  return '停留点';
+}
+
+PeerTrackSide resolveTrackSideStays(
+  PeerTrackSide side, {
+  double? statusLatestLat,
+  double? statusLatestLng,
+  String statusLatestPlaceName = '',
+  List<PeerEventItem> sideEvents = const <PeerEventItem>[],
+}) {
+  if (side.stays.isEmpty) return side;
+  final lat = side.latestLat ?? statusLatestLat;
+  final lng = side.latestLng ?? statusLatestLng;
+  final placeName = side.latestPlaceName.isNotEmpty
+      ? side.latestPlaceName
+      : statusLatestPlaceName;
+
+  var changed = false;
+  final next = <PeerTrackStay>[];
+  for (final s in side.stays) {
+    final resolved = resolveStayPlaceName(
+      s,
+      points: side.points,
+      latestLat: lat,
+      latestLng: lng,
+      latestPlaceName: placeName,
+      events: sideEvents,
+    );
+    if (resolved != '停留点' && resolved != s.placeName) {
+      changed = true;
+      next.add(s.withPlaceName(resolved));
+    } else {
+      next.add(s);
+    }
+  }
+  return changed ? side.withStays(List<PeerTrackStay>.unmodifiable(next)) : side;
+}
+
+double _stayDistMeters(double lat1, double lng1, double lat2, double lng2) {
+  const r = 6371000.0;
+  final dLat = (lat2 - lat1) * math.pi / 180.0;
+  final dLng = (lng2 - lng1) * math.pi / 180.0;
+  final a = math.sin(dLat / 2) * math.sin(dLat / 2) +
+      math.cos(lat1 * math.pi / 180.0) *
+          math.cos(lat2 * math.pi / 180.0) *
+          math.sin(dLng / 2) *
+          math.sin(dLng / 2);
+  return 2 * r * math.atan2(math.sqrt(a), math.sqrt(1 - a));
 }
 
 class PeerTrackDay {

@@ -33,6 +33,7 @@ import '../../core/peer/peer_report_api.dart';
 import '../../core/peer/peer_report_data.dart';
 import '../../core/peer/peer_state_collector.dart' show pullUsageSamples;
 import '../../core/peer/peer_status_card.dart';
+import '../../core/peer/timeline_folding.dart';
 import '../../core/peer/peer_track_data.dart';
 import '../../core/peer/peer_usage_data.dart';
 import '../../core/peer/state_event_text.dart';
@@ -93,6 +94,7 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage>
   /// 今日事件流（P0 新增；`GET /api/peer/events` 当日）。
   PeerEventsDay? _day;
   bool _dayLoading = false;
+  final Set<String> _expandedFoldKeys = <String>{};
   String? _dayError;
 
   /// 正在回应的事件 id（非空即禁用全部回应按钮，防弱网连点重复推送）。
@@ -1312,8 +1314,9 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage>
     ColorScheme cs,
     List<PeerEventItem> events,
   ) {
-    // 排序的权威在 `sortEventsForTimeline`（fetch 时已排）；这里只渲染，
-    // 不再二次排序，避免两处口径漂移。
+    // 排序的权威在 `sortEventsForTimeline`（fetch 时已排）；这里只在呈现层把
+    // 连续同类高频状态事件折叠汇总，不删不改原始事件。
+    final entries = foldTimelineEvents(events);
     return Stack(children: [
       Positioned(
         left: 7,
@@ -1322,38 +1325,173 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage>
         child: Container(width: 1, color: cs.outlineVariant),
       ),
       Column(children: [
-        for (final e in events)
-          Padding(
-            padding: const EdgeInsets.only(bottom: Spacing.gap),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                SizedBox(
-                  width: 15,
-                  child: Padding(
-                    // 圆点对齐各自形态的标题行：卡片有 16 内边距，简行只有 2
-                    padding: EdgeInsets.only(top: e.isManualReport ? 22 : 6),
-                    child: Align(
-                      alignment: Alignment.topCenter,
-                      child: Container(
-                        width: 8,
-                        height: 8,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: e.isManualReport
-                              ? cs.primary
-                              : cs.outlineVariant,
+        for (final entry in entries)
+          switch (entry) {
+            TimelineSingleEntry(:final event) => Padding(
+                padding: const EdgeInsets.only(bottom: Spacing.gap),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(
+                      width: 15,
+                      child: Padding(
+                        // 圆点对齐各自形态的标题行：卡片有 16 内边距，简行只有 2
+                        padding:
+                            EdgeInsets.only(top: event.isManualReport ? 22 : 6),
+                        child: Align(
+                          alignment: Alignment.topCenter,
+                          child: Container(
+                            width: 8,
+                            height: 8,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: event.isManualReport
+                                  ? cs.primary
+                                  : cs.outlineVariant,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    Expanded(child: _eventCard(theme, cs, event)),
+                  ],
+                ),
+              ),
+            TimelineFoldedGroup() => Padding(
+                padding: const EdgeInsets.only(bottom: Spacing.gap),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(
+                      width: 15,
+                      child: Padding(
+                        padding: const EdgeInsets.only(top: 10),
+                        child: Align(
+                          alignment: Alignment.topCenter,
+                          child: Container(
+                            width: 8,
+                            height: 8,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: cs.secondary.withValues(alpha: 0.72),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    Expanded(child: _foldedGroupCard(theme, cs, entry)),
+                  ],
+                ),
+              ),
+          },
+      ]),
+    ]);
+  }
+
+  Widget _foldedGroupCard(
+    ThemeData theme,
+    ColorScheme cs,
+    TimelineFoldedGroup group,
+  ) {
+    final dark = theme.brightness == Brightness.dark;
+    final expanded = _expandedFoldKeys.contains(group.groupKey);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Material(
+          type: MaterialType.transparency,
+          borderRadius: BorderRadius.circular(AppRadius.sm),
+          child: InkWell(
+            key: Key('report-fold-${group.groupKey}'),
+            borderRadius: BorderRadius.circular(AppRadius.sm),
+            onTap: () => setState(() {
+              if (expanded) {
+                _expandedFoldKeys.remove(group.groupKey);
+              } else {
+                _expandedFoldKeys.add(group.groupKey);
+              }
+            }),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: dark
+                    ? Colors.white.withValues(alpha: 0.05)
+                    : cs.surface.withValues(alpha: 0.68),
+                borderRadius: BorderRadius.circular(AppRadius.sm),
+                border: Border.all(
+                  color: dark
+                      ? Colors.white.withValues(alpha: 0.10)
+                      : cs.outlineVariant.withValues(alpha: 0.45),
+                  width: 0.7,
+                ),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      group.summaryText,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: cs.onSurfaceVariant,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 6, vertical: 1.5),
+                    decoration: BoxDecoration(
+                      color: cs.primary.withValues(alpha: dark ? 0.18 : 0.10),
+                      borderRadius: BorderRadius.circular(AppRadius.pill),
+                    ),
+                    child: Text(
+                      '${group.events.length} 条',
+                      style: tabularStyle(
+                        theme.textTheme.labelSmall?.copyWith(
+                          color: cs.primary,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                     ),
                   ),
-                ),
-                Expanded(child: _eventCard(theme, cs, e)),
+                  const SizedBox(width: 4),
+                  Text(
+                    relativeTimeZh(group.latestTs),
+                    style: tabularStyle(
+                      theme.textTheme.bodySmall
+                          ?.copyWith(color: cs.onSurfaceVariant),
+                    ),
+                  ),
+                  const SizedBox(width: 2),
+                  Icon(
+                    expanded
+                        ? Icons.expand_less_rounded
+                        : Icons.expand_more_rounded,
+                    size: 16,
+                    color: cs.onSurfaceVariant,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        if (expanded)
+          Padding(
+            padding: const EdgeInsets.only(left: 10, top: 6),
+            child: Column(
+              children: [
+                for (final item in group.events)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: _eventCard(theme, cs, item),
+                  ),
               ],
             ),
           ),
-      ]),
-    ]);
+      ],
+    );
   }
 
   Widget _eventCard(ThemeData theme, ColorScheme cs, PeerEventItem e) {
