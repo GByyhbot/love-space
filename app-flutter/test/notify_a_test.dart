@@ -1183,7 +1183,7 @@ void main() {
           reason: '设置主页提醒行 key 在位');
       expect(home.contains("context.push('/channels')"), isTrue,
           reason: '提醒行 → /channels 跳转在位');
-      expect(home.contains("emoji: '🔔'"), isTrue);
+      expect(home.contains('Icons.notifications_rounded'), isTrue);
       expect(home.contains("title: '提醒设置'"), isTrue);
       final String together = File(
               'lib/features/together/together_page.dart')

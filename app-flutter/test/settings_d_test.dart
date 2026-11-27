@@ -638,8 +638,9 @@ void main() {
       ]) {
         expect(find.byKey(Key(key)), findsNothing, reason: '$key 卡不再存在');
       }
-      // 工具区不受瘦身影响：工具卡文案仍在位（宽卡 emoji 与标题分开渲染）。
-      expect(find.text('🌸'), findsOneWidget, reason: '生理期宽卡 emoji 在位');
+      // 工具区不受瘦身影响：生理期宽卡矢量图标与标题在位（真改版式令 emoji → AppleIconBadge）。
+      expect(find.byIcon(Icons.spa_rounded), findsOneWidget,
+          reason: '生理期宽卡矢量图标在位');
       expect(find.text('生理期'), findsOneWidget,
           reason: '生理期宽卡标题在位（瘦身不得误伤工具区）');
     });

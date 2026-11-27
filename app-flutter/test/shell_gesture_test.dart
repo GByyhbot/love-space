@@ -167,8 +167,8 @@ void main() {
       });
       final container = await _container(adapter);
       await _pumpShell(tester, container);
-      expect(find.byType(BackdropFilter), findsOneWidget,
-          reason: '前置：壳层浮层（Dock 玻璃）在位');
+      expect(find.byType(BackdropFilter), findsNWidgets(2),
+          reason: '前置：壳层固定真玻璃（顶栏 + Dock）共两处在位');
       for (final (i, label) in [
         (1, '时光'),
         (2, '相册'),

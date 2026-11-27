@@ -322,8 +322,8 @@ void main() {
       }
       expect(navWidths.toSet().length, 1,
           reason: '五 tab 严格等宽（Expanded ×5）');
-      // 扫宽后的六档也要求 Dock 玻璃静态区存在（BackdropFilter 仅 Dock 一处）
-      expect(find.byType(BackdropFilter), findsOneWidget);
+      // 真玻璃壳层（主要页面真改版式令）：固定顶栏 AppleGlassAppBar + 固定底栏 WebDock 共 2 处 BackdropFilter
+      expect(find.byType(BackdropFilter), findsNWidgets(2));
     });
   });
 

@@ -166,7 +166,7 @@ void main() {
 
     expect(find.textContaining('通道未注册（致命）'), findsOneWidget,
         reason: '致命态必须常驻可见');
-    await tester.tap(find.text('导出 peer-loc-fatal 日志'));
+    await tester.tap(find.text('导出定位诊断日志'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 200));
 
