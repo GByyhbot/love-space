@@ -15,6 +15,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/sse/sse_client.dart';
 import '../../core/api/api_client.dart' as api;
 import '../../core/peer/peer_report_data.dart';
+import '../../core/ui/liquid_glass.dart';
 import '../../core/ui/pressable_scale.dart' show PressableScale;
 import '../../core/ui/page_heading.dart';
 import '../../core/together/together_data.dart';
@@ -539,52 +540,44 @@ class _PeerReportCardState extends ConsumerState<_PeerReportCard> {
       if (next.value?.peer == true) _load();
     });
 
-    return Container(
-      margin: EdgeInsets.zero,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        border: Border.all(color: cs.outlineVariant),
-        color: cs.surface,
-      ),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        onTap: () => context.push('/together/peer-report'),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
-          child: Row(children: [
-            Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: cs.primaryContainer.withValues(alpha: 0.55),
-                border: Border.all(color: cs.outlineVariant),
-              ),
-              alignment: Alignment.center,
-              child: Icon(Icons.my_location_rounded,
-                  size: 22, color: cs.onSurfaceVariant),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('报备信息', style: theme.textTheme.titleMedium),
-                  const SizedBox(height: 2),
-                  Text(
-                    _summary,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodySmall
-                        ?.copyWith(color: cs.outline),
-                  ),
-                ],
-              ),
-            ),
-            Icon(Icons.chevron_right_rounded, color: cs.outline),
-          ]),
+    return LiquidGlassCard(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+      onTap: () => context.push('/together/peer-report'),
+      child: Row(children: [
+        Container(
+          width: 48,
+          height: 48,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: cs.primaryContainer.withValues(alpha: 0.55),
+            border: Border.all(color: cs.outlineVariant),
+          ),
+          alignment: Alignment.center,
+          child: Icon(Icons.my_location_rounded,
+              size: 22, color: cs.onSurfaceVariant),
         ),
-      ),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('报备信息',
+                  style: theme.textTheme.titleMedium
+                      ?.copyWith(fontWeight: FontWeight.w700)),
+              const SizedBox(height: 2),
+              Text(
+                _summary,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: tabularStyle(
+                  theme.textTheme.bodySmall?.copyWith(color: cs.outline),
+                ),
+              ),
+            ],
+          ),
+        ),
+        Icon(Icons.chevron_right_rounded, color: cs.outline),
+      ]),
     );
   }
 }

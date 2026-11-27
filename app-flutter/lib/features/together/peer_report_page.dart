@@ -19,6 +19,8 @@
 /// 明确不做：商业地图 SDK（示意画布自绘）、语音贴、调用外部逆地理。
 library;
 
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -35,6 +37,8 @@ import '../../core/sse/sse_client.dart';
 import '../../core/theme/tokens.dart';
 import '../../core/ui/empty_view.dart';
 import '../../core/ui/error_view.dart';
+import '../../core/ui/liquid_glass.dart';
+import '../../core/ui/pressable_scale.dart';
 import '../../core/ui/progress.dart';
 import '../auth/auth_state.dart';
 import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
@@ -245,18 +249,48 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage> {
     final d = _data;
     return Scaffold(
       appBar: AppBar(title: const Text('报备信息')),
-      // 互动抽屉入口（原型底部 + 按钮）：戳一下 / 抱抱 / 提醒
-      floatingActionButton: FloatingActionButton.extended(
-        key: const Key('report-poke-fab'),
-        onPressed: () => showPeerPokeSheet(context, ref),
-        icon: const Icon(Icons.favorite_outline),
-        label: const Text('想 TA 一下'),
+      // 互动抽屉入口（原型底部悬浮液态玻璃胶囊 + 按钮）：戳一下 / 抱抱 / 提醒
+      floatingActionButton: PressableScale(
+        onTap: () => showPeerPokeSheet(context, ref),
+        child: LiquidGlassSurface(
+          key: const Key('report-poke-fab'),
+          borderRadius: BorderRadius.circular(999),
+          tint: cs.primaryContainer.withValues(alpha: 0.86),
+          child: Material(
+            type: MaterialType.transparency,
+            borderRadius: BorderRadius.circular(999),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(999),
+              onTap: () => showPeerPokeSheet(context, ref),
+              child: Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 18, vertical: 13),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.favorite_outline,
+                        size: 18, color: cs.onPrimaryContainer),
+                    const SizedBox(width: 8),
+                    Text(
+                      '想 TA 一下',
+                      style: theme.textTheme.labelLarge?.copyWith(
+                        color: cs.onPrimaryContainer,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
       ),
       body: RefreshIndicator(
         onRefresh: () => _load(),
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, Spacing.pageBottom),
+          padding:
+              const EdgeInsets.fromLTRB(16, 12, 16, Spacing.pageBottom + 16),
           children: [
             Text('TA 最近报备的位置与电量，都在这里。',
                 style:
@@ -322,11 +356,12 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage> {
         text,
         style: theme.textTheme.titleSmall?.copyWith(
           fontWeight: FontWeight.w700, // 段 C 口径：w700 上限，不用 w800
+          letterSpacing: -0.2,
         ),
       );
 
-  /// 对方状态大卡（报备页顶部，照原型）：头像+名字 / 实时状态 / 位置与停留 /
-  /// 电量 / 网络 / 最后活跃（含 6 小时失联警示）。
+  /// 对方状态大卡（报备页顶部，照原型）：头像+名字 / 实时状态 / 右侧电量圆环 /
+  /// 位置与停留 / 同心状态芯片（电量 / 网络 / 最后活跃 / 今日使用）。
   ///
   /// 铁律不变：取不到的项整行不出现，一行都没有则整卡不出现；停用（全局关闭/
   /// 暂停中）时整卡换原型形态「已完全关闭报备 / 已暂停至 x」。
@@ -344,20 +379,43 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage> {
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Row(children: [
               _peerAvatar(cs, name),
-              const SizedBox(width: 10),
+              const SizedBox(width: 12),
               Expanded(
-                child: Text(name,
-                    style: theme.textTheme.titleSmall
-                        ?.copyWith(fontWeight: FontWeight.w700)),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.titleMedium
+                          ?.copyWith(fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 4),
+                    LiveStatusPill(
+                      label: halt.isPaused ? '已暂停报备' : '已关闭报备',
+                      tone: LivePillTone.warn,
+                    ),
+                  ],
+                ),
               ),
             ]),
-            const SizedBox(height: 10),
-            Text(
-              halt.isPaused
-                  ? '已暂停至 ${absoluteTimeZh(halt.until)}'
-                  : '已完全关闭报备 · 对方不可见',
-              key: const Key('peer-halted-line'),
-              style: theme.textTheme.bodyMedium?.copyWith(color: cs.error),
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: cs.errorContainer.withValues(alpha: 0.32),
+                borderRadius: BorderRadius.circular(kGlassInnerRadius),
+                border: Border.all(color: cs.error.withValues(alpha: 0.35)),
+              ),
+              child: Text(
+                halt.isPaused
+                    ? '已暂停至 ${absoluteTimeZh(halt.until)}'
+                    : '已完全关闭报备 · 对方不可见',
+                key: const Key('peer-halted-line'),
+                style: theme.textTheme.bodyMedium?.copyWith(color: cs.error),
+              ),
             ),
           ]),
         ),
@@ -391,6 +449,9 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage> {
       }
       return const <Widget>[];
     }
+    final battery = st.peer?.battery;
+    final lowBattery =
+        battery != null && battery <= 20 && st.peer?.charging != true;
     return [
       _sectionTitle(theme, 'TA 的状态'),
       const SizedBox(height: Spacing.gap),
@@ -398,69 +459,101 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage> {
         cs,
         key: const Key('peer-status-card'),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [
-            _peerAvatar(cs, name),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(name,
-                      style: theme.textTheme.titleSmall
-                          ?.copyWith(fontWeight: FontWeight.w700)),
-                  if (live.isNotEmpty)
-                    Text(
-                      live,
-                      key: const Key('peer-live-line'),
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: st.peerCurrentApp != null
-                            ? cs.primary
-                            : cs.outline,
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ]),
-          if (locationLine != null) ...[
-            const SizedBox(height: 10),
-            Row(children: [
-              Icon(Icons.place_outlined, size: 14, color: cs.outline),
-              const SizedBox(width: 4),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              _peerAvatar(cs, name),
+              const SizedBox(width: 12),
               Expanded(
-                child: Text(
-                  locationLine,
-                  key: const Key('peer-stay-line'),
-                  style: theme.textTheme.bodyMedium,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(children: [
+                      Flexible(
+                        child: Text(
+                          name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w700),
+                        ),
+                      ),
+                      if (live.isNotEmpty) ...[
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: LiveStatusPill(
+                            key: const Key('peer-live-line'),
+                            label: live,
+                            tone: st.peerCurrentApp != null
+                                ? LivePillTone.active
+                                : (card?.stale == true
+                                    ? LivePillTone.warn
+                                    : LivePillTone.idle),
+                          ),
+                        ),
+                      ],
+                    ]),
+                    if (locationLine != null) ...[
+                      const SizedBox(height: 5),
+                      Row(children: [
+                        Icon(Icons.place_outlined,
+                            size: 14, color: cs.outline),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            locationLine,
+                            key: const Key('peer-stay-line'),
+                            style: theme.textTheme.bodySmall
+                                ?.copyWith(color: cs.onSurfaceVariant),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ]),
+                    ],
+                  ],
                 ),
               ),
-            ]),
-          ],
+              if (battery != null) ...[
+                const SizedBox(width: 10),
+                BatteryRing(battery: battery, charging: st.peer?.charging),
+              ],
+            ],
+          ),
           // 距离（任一方无坐标就不显示——不显示 0、不估算）
           if (distanceLine(st.mine, st.peer) case final dist?)
             Padding(
-              padding: const EdgeInsets.only(top: 6),
-              child: Text(dist,
-                  key: const Key('peer-distance'),
-                  style: theme.textTheme.bodySmall?.copyWith(color: cs.outline)),
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                dist,
+                key: const Key('peer-distance'),
+                style: tabularStyle(
+                  theme.textTheme.bodySmall?.copyWith(color: cs.outline),
+                ),
+              ),
             ),
           if (card != null) ...[
-            const SizedBox(height: 6),
-            for (final r in card.rows)
-              _kv(
-                theme,
-                cs,
-                r.label,
-                r.value,
-                key: Key('peer-card-${r.id}'),
-                warn: r.warn,
-              ),
+            const SizedBox(height: 12),
+            LayoutBuilder(builder: (ctx, box) {
+              return Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final r in card.rows)
+                    _statusMetaChip(
+                      theme,
+                      cs,
+                      r,
+                      maxWidth: box.maxWidth,
+                      lowBattery: r.id == 'battery' && lowBattery,
+                    ),
+                ],
+              );
+            }),
           ],
           if (st.peerClosedOff)
             Padding(
-              padding: const EdgeInsets.only(top: 6),
+              padding: const EdgeInsets.only(top: 10),
               child: Text('TA 已关闭位置共享（以下为最后一次报备）',
                   style: theme.textTheme.bodySmall?.copyWith(color: cs.error)),
             ),
@@ -468,6 +561,62 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage> {
       ),
       const SizedBox(height: 16),
     ];
+  }
+
+  Widget _statusMetaChip(
+    ThemeData theme,
+    ColorScheme cs,
+    PeerStatusRow r, {
+    required double maxWidth,
+    bool lowBattery = false,
+  }) {
+    final warn = r.warn || lowBattery;
+    final icon = switch (r.id) {
+      'battery' =>
+        lowBattery ? Icons.battery_alert_rounded : Icons.battery_std_rounded,
+      'net' => Icons.wifi_rounded,
+      'active' => Icons.schedule_rounded,
+      'usage' => Icons.smartphone_rounded,
+      _ => Icons.info_outline_rounded,
+    };
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxWidth: maxWidth),
+      child: Container(
+        key: Key('peer-card-${r.id}'),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: warn
+              ? cs.errorContainer.withValues(alpha: 0.42)
+              : cs.surfaceContainerHighest.withValues(alpha: 0.55),
+          borderRadius: BorderRadius.circular(kGlassInnerRadius),
+          border: Border.all(
+            color: warn
+                ? cs.error.withValues(alpha: 0.45)
+                : cs.outlineVariant.withValues(alpha: 0.6),
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 14, color: warn ? cs.error : cs.primary),
+            const SizedBox(width: 5),
+            Flexible(
+              child: Text(
+                r.value,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: tabularStyle(
+                  theme.textTheme.labelMedium?.copyWith(
+                    color: warn ? cs.error : cs.onSurface,
+                    fontWeight: warn ? FontWeight.w600 : FontWeight.w500,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   /// 对方名字（未绑定时给「TA」——不编名字）。
@@ -481,11 +630,15 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage> {
   }
 
   Widget _peerAvatar(ColorScheme cs, String name) => CircleAvatar(
-        radius: 18,
+        radius: 22,
         backgroundColor: cs.primaryContainer,
         child: Text(
           name.isEmpty ? 'TA' : name.characters.first,
-          style: TextStyle(color: cs.onPrimaryContainer, fontSize: 15),
+          style: TextStyle(
+            color: cs.onPrimaryContainer,
+            fontSize: 17,
+            fontWeight: FontWeight.w700,
+          ),
         ),
       );
 
@@ -512,16 +665,15 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage> {
     return s.ongoing ? '${s.displayName} · 已停留 $dur' : '${s.displayName} · 停留 $dur';
   }
 
-  /// 手机使用卡：大数字 + 最长连续 + 当前正在使用；点进手机页。
+  /// 手机使用卡：三列横向概览大数字 + 当前正在使用胶囊；点进手机页。
   ///
-  /// 分档降级：screen_only 只有两个数；app off 只是少两行；usage off / 停用
+  /// 分档降级：screen_only 只有两个数；app off 只是少当前应用行；usage off / 停用
   /// 整卡换关闭态（点进去看明细）。
   List<Widget> _usageSection(ThemeData theme, ColorScheme cs, PeerReport d) {
     final usage = _usage?.peer;
     final halt = d.status.peerHalt;
     final hidden = usage == null || usage.hidden;
     return [
-      const SizedBox(height: 0),
       _sectionTitle(theme, '手机使用'),
       const SizedBox(height: Spacing.gap),
       _tappableCard(
@@ -529,6 +681,21 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage> {
         key: const Key('peer-usage-card'),
         onTap: () => context.push('/together/peer-report/phone'),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Text(
+              '手机使用速览',
+              style: theme.textTheme.labelMedium?.copyWith(color: cs.outline),
+            ),
+            const Spacer(),
+            Text(
+              '查看时间流 ›',
+              style: theme.textTheme.labelMedium?.copyWith(
+                color: cs.primary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ]),
+          const SizedBox(height: 10),
           if (halt.halted)
             _hintLine(theme, cs, halt.isPaused ? 'TA 已暂停报备，看不到使用情况' : 'TA 已完全关闭报备')
           else if (hidden)
@@ -536,53 +703,89 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage> {
           else ...[
             Row(children: [
               Expanded(
-                child: _bigStat(theme, cs,
-                    label: '今日亮屏',
-                    value: usage.screenSec == null
-                        ? '—'
-                        : durationTextZh(usage.screenSec!)),
-              ),
-              Expanded(
-                child: _bigStat(theme, cs,
-                    label: '解锁',
-                    value: usage.unlocks == null ? '—' : '${usage.unlocks} 次'),
-              ),
-            ]),
-            const SizedBox(height: 8),
-            if (usage.longestSessionSec != null)
-              _kv(theme, cs, '最长连续', durationTextZh(usage.longestSessionSec!)),
-            if (usage.currentApp != null)
-              _kv(theme, cs, '正在使用',
-                  '${usage.currentApp!.app} · ${durationTextZh(((DateTime.now().millisecondsSinceEpoch / 1000) - (usage.currentApp!.since ?? 0)).round())}'),
-            if (usage.yesterdayScreenSec != null && usage.screenSec != null)
-              _kv(theme, cs, '较昨日', _deltaText(usage.screenSec!, usage.yesterdayScreenSec!)),
-            if (_usageLine(usage) case final line?)
-              Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Text(
-                  line,
-                  key: const Key('peer-card-usage'),
-                  style: theme.textTheme.bodySmall?.copyWith(color: cs.outline),
+                child: _bigStat(
+                  theme,
+                  cs,
+                  label: '今日亮屏',
+                  value: usage.screenSec == null
+                      ? '—'
+                      : durationTextZh(usage.screenSec!),
                 ),
               ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _bigStat(
+                  theme,
+                  cs,
+                  label: '解锁',
+                  value: usage.unlocks == null ? '—' : '${usage.unlocks} 次',
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _bigStat(
+                  theme,
+                  cs,
+                  label: '最长连续',
+                  value: usage.longestSessionSec == null
+                      ? '—'
+                      : durationTextZh(usage.longestSessionSec!),
+                ),
+              ),
+            ]),
+            if (usage.yesterdayScreenSec != null && usage.screenSec != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                '较昨日 ${_deltaText(usage.screenSec!, usage.yesterdayScreenSec!)}',
+                style: tabularStyle(
+                  theme.textTheme.bodySmall?.copyWith(color: cs.outline),
+                ),
+              ),
+            ],
+            if (usage.currentApp != null) ...[
+              const SizedBox(height: 10),
+              Container(
+                width: double.infinity,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                decoration: BoxDecoration(
+                  color: cs.primaryContainer.withValues(alpha: 0.45),
+                  borderRadius: BorderRadius.circular(kGlassInnerRadius),
+                ),
+                child: Row(children: [
+                  Icon(Icons.smartphone_rounded,
+                      size: 15, color: cs.onPrimaryContainer),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      '正在使用 ${usage.currentApp!.app} · ${durationTextZh(((DateTime.now().millisecondsSinceEpoch / 1000) - (usage.currentApp!.since ?? 0)).round())}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: tabularStyle(
+                        theme.textTheme.bodySmall?.copyWith(
+                          color: cs.onPrimaryContainer,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
+                ]),
+              ),
+            ],
           ],
-          const SizedBox(height: 6),
-          Text('查看手机使用明细 ›',
-              style: theme.textTheme.bodySmall?.copyWith(color: cs.primary)),
         ]),
       ),
       const SizedBox(height: 16),
     ];
   }
 
-  /// 今日足迹卡：已移动距离 + 停留点数 + 地名串联；点进轨迹页。
+  /// 今日足迹卡：左侧迷你轨迹缩略图 + 右侧距离/停留点/地名串联；点进轨迹页。
   List<Widget> _footprintSection(ThemeData theme, ColorScheme cs, PeerReport d) {
     final track = _track?.peer;
     final halt = d.status.peerHalt;
     final hidden = track == null || track.hidden;
     final names = (track?.stays ?? const <PeerTrackStay>[])
-        .map((s) => s.placeName)
-        .where((n) => n.isNotEmpty)
+        .map((s) => s.displayName)
         .toList(growable: false);
     return [
       _sectionTitle(theme, '今日足迹'),
@@ -592,55 +795,92 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage> {
         key: const Key('peer-footprint-card'),
         onTap: () => context.push('/together/peer-report/track'),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Text(
+              '今日足迹',
+              style: theme.textTheme.labelMedium?.copyWith(color: cs.outline),
+            ),
+            const Spacer(),
+            Text(
+              '轨迹回放 ›',
+              style: theme.textTheme.labelMedium?.copyWith(
+                color: cs.primary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ]),
+          const SizedBox(height: 10),
           if (halt.halted)
             _hintLine(theme, cs, halt.isPaused ? 'TA 已暂停报备，看不到足迹' : 'TA 已完全关闭报备')
           else if (hidden)
             _hintLine(theme, cs, 'TA 未共享位置与足迹')
-          else if (track.isStreet)
-            _hintLine(theme, cs,
-                '仅街区共享 · ${track.stays.length} 个停留点（不提供精确距离）')
-          else ...[
-            Text(
-              '已移动 ${_distanceText(track.distanceM)} · ${track.stays.length} 个停留点',
-              key: const Key('peer-footprint-line'),
-              style: theme.textTheme.bodyMedium,
-            ),
-            if (names.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Text(
-                  names.take(5).join(' → '),
-                  style: theme.textTheme.bodySmall?.copyWith(color: cs.outline),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
+          else
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                _MiniTrackThumbnail(
+                  track: track,
+                  pathColor: cs.primary,
+                  stayColor: cs.secondary,
+                  bgColor: cs.surfaceContainerHighest.withValues(alpha: 0.45),
+                  borderColor: cs.outlineVariant.withValues(alpha: 0.6),
                 ),
-              ),
-          ],
-          if (d.peerTodayPoints != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 6),
-              child: Text('今日报备 ${d.peerTodayPoints} 点',
-                  style: theme.textTheme.bodySmall?.copyWith(color: cs.outline)),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (track.isStreet)
+                        _hintLine(
+                          theme,
+                          cs,
+                          '仅街区共享 · ${track.stays.length} 个停留点（不提供精确距离）',
+                        )
+                      else
+                        Text(
+                          '已移动 ${_distanceText(track.distanceM)} · ${track.stays.length} 个停留点',
+                          key: const Key('peer-footprint-line'),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: tabularStyle(
+                            theme.textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      if (names.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          names.take(5).join(' → '),
+                          style: theme.textTheme.bodySmall
+                              ?.copyWith(color: cs.outline),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                      if (d.peerTodayPoints != null) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          '今日报备 ${d.peerTodayPoints} 点',
+                          style: tabularStyle(
+                            theme.textTheme.labelSmall
+                                ?.copyWith(color: cs.outline),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
             ),
-          const SizedBox(height: 6),
-          Text('查看今日轨迹 ›',
-              style: theme.textTheme.bodySmall?.copyWith(color: cs.primary)),
         ]),
       ),
       const SizedBox(height: 16),
     ];
   }
 
-  /// 「亮屏 X · 解锁 N 次」一行（两个数都缺就给 null，不写 0）。
-  String? _usageLine(PeerUsageSide usage) {
-    final parts = <String>[
-      if ((usage.screenSec ?? 0) > 0) '亮屏 ${durationTextZh(usage.screenSec!)}',
-      if ((usage.unlocks ?? 0) > 0) '解锁 ${usage.unlocks} 次',
-    ];
-    return parts.isEmpty ? null : parts.join(' · ');
-  }
-
-  String _distanceText(double? m) {    if (m == null) return '—';
+  String _distanceText(double? m) {
+    if (m == null) return '—';
     if (m < 1000) return '${m.round()} 米';
     return '${(m / 1000).toStringAsFixed(1)} 公里';
   }
@@ -660,11 +900,27 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage> {
   Widget _bigStat(ThemeData theme, ColorScheme cs,
           {required String label, required String value}) =>
       Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(value,
-            style: theme.textTheme.headlineSmall
-                ?.copyWith(fontWeight: FontWeight.w700)),
-        Text(label,
-            style: theme.textTheme.bodySmall?.copyWith(color: cs.outline)),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Text(
+            value,
+            maxLines: 1,
+            style: tabularStyle(
+              theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+                letterSpacing: -0.3,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: theme.textTheme.labelSmall?.copyWith(color: cs.outline),
+        ),
       ]);
 
   Widget _tappableCard(
@@ -673,11 +929,10 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage> {
     VoidCallback? onTap,
     Key? key,
   }) =>
-      InkWell(
+      LiquidGlassCard(
         key: key,
         onTap: onTap,
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        child: _card(cs, child: child),
+        child: child,
       );
 
   /// 状态采集三态：采集中 / 因「报备共享」关闭而暂停 / 采集未运行。
@@ -699,12 +954,28 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage> {
       cs,
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
+          CircleAvatar(
+            radius: 16,
+            backgroundColor: cs.secondaryContainer,
+            child: Text(
+              '我',
+              style: TextStyle(
+                color: cs.onSecondaryContainer,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
           Expanded(
             child: Text(
               d.status.myPolicy.isHalted
                   ? (d.status.myPolicy.globalOff ? '已完全关闭报备' : '已暂停报备')
                   : '我的报备运行中',
-              style: theme.textTheme.bodyMedium,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.titleSmall
+                  ?.copyWith(fontWeight: FontWeight.w700),
             ),
           ),
           TextButton(
@@ -713,6 +984,7 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage> {
             child: const Text('对方视角预览'),
           ),
         ]),
+        const SizedBox(height: 6),
         if (mine?.battery != null)
           _kv(theme, cs, '我的电量', '${mine!.battery}%'),
         if (myUsage?.screenSec != null)
@@ -864,72 +1136,83 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage> {
             ),
           ),
           const SizedBox(width: 8),
-          Text(
-            relativeTimeZh(e.ts),
-            style: theme.textTheme.bodySmall?.copyWith(color: cs.outline),
+        Text(
+          relativeTimeZh(e.ts),
+          style: tabularStyle(
+            theme.textTheme.bodySmall?.copyWith(color: cs.outline),
           ),
-        ]),
-      );
-    }
-    final extra = <Widget>[
-      if (e.note.isNotEmpty)
-        Text(e.note, style: theme.textTheme.bodyMedium),
-      if (e.placeName.isNotEmpty)
-        Padding(
-          padding: const EdgeInsets.only(top: 2),
-          child: Row(children: [
-            Icon(Icons.place_outlined, size: 13, color: cs.outline),
-            const SizedBox(width: 3),
-            Expanded(
-              child: Text(
-                e.placeName,
-                style: theme.textTheme.bodySmall?.copyWith(color: cs.outline),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ]),
         ),
-    ];
-    return Container(
-      key: Key('report-event-${e.id}'),
-      width: double.infinity,
-      padding: const EdgeInsets.all(Spacing.cardPad),
-      decoration: BoxDecoration(
-        color: cs.surface,
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        border: Border.all(color: cs.outlineVariant),
-      ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          Text(e.mine ? '我' : 'TA',
-              style: theme.textTheme.labelSmall?.copyWith(color: cs.outline)),
-          const SizedBox(width: 6),
-          Expanded(
-            child: Text(
-              timelineEventText(e),
-              style: theme.textTheme.titleSmall?.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          const SizedBox(width: 8),
-          Text(
-            relativeTimeZh(e.ts),
-            style: theme.textTheme.bodySmall?.copyWith(color: cs.outline),
-          ),
-        ]),
-        if (extra.isNotEmpty) ...[
-          const SizedBox(height: 6),
-          ...extra,
-        ],
-        const SizedBox(height: Spacing.gap),
-        _ackArea(theme, cs, e),
       ]),
     );
   }
+  final extra = <Widget>[
+    if (e.note.isNotEmpty)
+      Text(e.note, style: theme.textTheme.bodyMedium),
+    if (e.placeName.isNotEmpty)
+      Padding(
+        padding: const EdgeInsets.only(top: 2),
+        child: Row(children: [
+          Icon(Icons.place_outlined, size: 13, color: cs.outline),
+          const SizedBox(width: 3),
+          Expanded(
+            child: Text(
+              e.placeName,
+              style: theme.textTheme.bodySmall?.copyWith(color: cs.outline),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ]),
+      ),
+  ];
+  return LiquidGlassCard(
+    key: Key('report-event-${e.id}'),
+    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Row(children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          decoration: BoxDecoration(
+            color: e.mine
+                ? cs.primaryContainer.withValues(alpha: 0.65)
+                : cs.secondaryContainer.withValues(alpha: 0.65),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Text(
+            e.mine ? '我' : 'TA',
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: e.mine ? cs.onPrimaryContainer : cs.onSecondaryContainer,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            timelineEventText(e),
+            style: theme.textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          relativeTimeZh(e.ts),
+          style: tabularStyle(
+            theme.textTheme.bodySmall?.copyWith(color: cs.outline),
+          ),
+        ),
+      ]),
+      if (extra.isNotEmpty) ...[
+        const SizedBox(height: 6),
+        ...extra,
+      ],
+      const SizedBox(height: Spacing.gap),
+      _ackArea(theme, cs, e),
+    ]),
+  );
+}
 
   /// 回应区：
   /// · 对方未 ack → 三个按钮；点击后整区禁用/loading 直到接口返回；
@@ -980,17 +1263,8 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage> {
     );
   }
 
-  Widget _card(ColorScheme cs, {required Widget child, Key? key}) => Container(
-        key: key,
-        width: double.infinity,
-        padding: const EdgeInsets.all(Spacing.cardPad),
-        decoration: BoxDecoration(
-          color: cs.surface,
-          borderRadius: BorderRadius.circular(AppRadius.card),
-          border: Border.all(color: cs.outlineVariant),
-        ),
-        child: child,
-      );
+  Widget _card(ColorScheme cs, {required Widget child, Key? key}) =>
+      LiquidGlassCard(key: key, child: child);
 
   /// 时间行：相对 + 绝对并列；无时间戳给「未知」（不拼出「未知 · 未知」）。
   String _timeLine(double? updated) => updated == null || updated <= 0
@@ -1020,12 +1294,138 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage> {
             Expanded(
               child: Text(
                 value,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: warn ? cs.error : null,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: tabularStyle(
+                  theme.textTheme.bodyMedium?.copyWith(
+                    color: warn ? cs.error : null,
+                  ),
                 ),
               ),
             ),
           ],
         ),
       );
+}
+
+/// 今日足迹卡左侧迷你轨迹缩略图（同心圆角 12；无底图自绘）。
+class _MiniTrackThumbnail extends StatelessWidget {
+  const _MiniTrackThumbnail({
+    required this.track,
+    required this.pathColor,
+    required this.stayColor,
+    required this.bgColor,
+    required this.borderColor,
+  });
+
+  final PeerTrackSide track;
+  final Color pathColor;
+  final Color stayColor;
+  final Color bgColor;
+  final Color borderColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 104,
+      height: 68,
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(kGlassInnerRadius),
+        border: Border.all(color: borderColor),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(kGlassInnerRadius),
+        child: (track.points.isEmpty && track.stays.isEmpty)
+            ? Center(
+                child: Icon(Icons.route_outlined,
+                    size: 24, color: pathColor.withValues(alpha: 0.65)),
+              )
+            : CustomPaint(
+                painter: _MiniTrackPainter(
+                  track: track,
+                  pathColor: pathColor,
+                  stayColor: stayColor,
+                ),
+              ),
+      ),
+    );
+  }
+}
+
+class _MiniTrackPainter extends CustomPainter {
+  const _MiniTrackPainter({
+    required this.track,
+    required this.pathColor,
+    required this.stayColor,
+  });
+
+  final PeerTrackSide track;
+  final Color pathColor;
+  final Color stayColor;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final lats = <double>[
+      for (final p in track.points) p.lat,
+      for (final s in track.stays) s.lat,
+    ];
+    final lngs = <double>[
+      for (final p in track.points) p.lng,
+      for (final s in track.stays) s.lng,
+    ];
+    if (lats.isEmpty) return;
+
+    var minLat = lats.first, maxLat = lats.first;
+    var minLng = lngs.first, maxLng = lngs.first;
+    for (var i = 1; i < lats.length; i++) {
+      minLat = math.min(minLat, lats[i]);
+      maxLat = math.max(maxLat, lats[i]);
+      minLng = math.min(minLng, lngs[i]);
+      maxLng = math.max(maxLng, lngs[i]);
+    }
+    final centerLat = (minLat + maxLat) / 2;
+    final cosLat = math.cos(centerLat * math.pi / 180.0).clamp(0.2, 1.0);
+    final spanLat = math.max(maxLat - minLat, 1e-4);
+    final spanLng = math.max((maxLng - minLng) * cosLat, 1e-4);
+
+    const pad = 10.0;
+    final w = math.max(1.0, size.width - pad * 2);
+    final h = math.max(1.0, size.height - pad * 2);
+    final scale = math.min(w / spanLng, h / spanLat);
+    final dxOff = pad + (w - spanLng * scale) / 2;
+    final dyOff = pad + (h - spanLat * scale) / 2;
+
+    Offset toPx(double lat, double lng) {
+      final x = dxOff + (lng - minLng) * cosLat * scale;
+      final y = dyOff + (maxLat - lat) * scale;
+      return Offset(x, y);
+    }
+
+    if (!track.isStreet && track.points.length >= 2) {
+      final path = Path();
+      final p0 = toPx(track.points.first.lat, track.points.first.lng);
+      path.moveTo(p0.dx, p0.dy);
+      for (var i = 1; i < track.points.length; i++) {
+        final p = toPx(track.points[i].lat, track.points[i].lng);
+        path.lineTo(p.dx, p.dy);
+      }
+      canvas.drawPath(
+        path,
+        Paint()
+          ..color = pathColor
+          ..strokeWidth = 2.0
+          ..style = PaintingStyle.stroke
+          ..strokeCap = StrokeCap.round
+          ..strokeJoin = StrokeJoin.round,
+      );
+    }
+    for (final s in track.stays) {
+      canvas.drawCircle(toPx(s.lat, s.lng), 3.5, Paint()..color = stayColor);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_MiniTrackPainter old) =>
+      old.track != track || old.pathColor != pathColor;
 }

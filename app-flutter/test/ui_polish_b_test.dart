@@ -526,12 +526,16 @@ void main() {
     // 2.4.9（主人明示例外）：动态卡磨砂背景加入白名单——磨砂层长在卡片
     // 组件自身 Stack 底层、由卡片自身圆角 ClipRRect 裁剪（冻结教训口径
     // 不放宽：仍是白名单制，且不许在列表内容之上另铺独立覆盖层）。
+    // 2.8.7 界面适配优化令：liquid_glass.dart 仅 `LiquidGlassSurface` 含
+    // BackdropFilter，且严格限用于固定浮层（回放悬浮条/互动抽屉/悬浮胶囊），
+    // 滚动列表卡片（LiquidGlassCard）禁用 BackdropFilter。
     expect(blurFiles.toSet(),
         everyElement(anyOf('web_chrome.dart', 'settings_widgets.dart',
-            'post_card.dart')),
+            'post_card.dart', 'liquid_glass.dart')),
         reason: 'BackdropFilter 白名单：web_chrome.dart（Dock 静态区）+ '
             'settings_widgets.dart（底部玻璃操作栏静态区，2.4.1）+ '
-            'post_card.dart（动态卡磨砂自身背景层，2.4.9 主人明示例外）');
+            'post_card.dart（动态卡磨砂自身背景层，2.4.9 主人明示例外）+ '
+            'liquid_glass.dart（固定浮层 LiquidGlassSurface，2.8.7）');
 
     // ⑩ token 收敛只改取值来源：三个必改语义色源码已无写死色（剥注释后）
     final timelineCode = codeOnly(

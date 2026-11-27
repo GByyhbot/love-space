@@ -15,6 +15,7 @@ import '../../core/peer/peer_usage_data.dart';
 import '../../core/peer/state_event_text.dart' show durationTextZh;
 import '../../core/theme/tokens.dart';
 import '../../core/ui/error_view.dart';
+import '../../core/ui/liquid_glass.dart';
 import '../../core/ui/progress.dart';
 import 'peer_preview.dart';
 
@@ -204,15 +205,5 @@ class _PeerPreviewPageState extends ConsumerState<PeerPreviewPage> {
 
   Widget _card(ThemeData theme, ColorScheme cs,
           {required Widget child, Key? key}) =>
-      Container(
-        key: key,
-        width: double.infinity,
-        padding: const EdgeInsets.all(Spacing.cardPad),
-        decoration: BoxDecoration(
-          color: cs.surface,
-          borderRadius: BorderRadius.circular(AppRadius.card),
-          border: Border.all(color: cs.outlineVariant),
-        ),
-        child: child,
-      );
+      LiquidGlassCard(key: key, child: child);
 }

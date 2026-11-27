@@ -11,6 +11,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api/api_client.dart' as api;
 import '../../core/peer/peer_report_api.dart';
 import '../../core/peer/peer_report_queue.dart';
+import '../../core/ui/liquid_glass.dart';
 import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
 
 /// 四条快捷提醒（原型文案）。
@@ -29,7 +30,7 @@ Future<void> showPeerPokeSheet(
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      showDragHandle: true,
+      backgroundColor: Colors.transparent,
       builder: (_) => _PokeSheet(outbox: outbox ?? reportOutbox, ref: ref),
     );
 
@@ -93,86 +94,103 @@ class _PokeSheetState extends State<_PokeSheet> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    return Padding(
-      padding: EdgeInsets.only(
-        left: 16,
-        right: 16,
-        top: 4,
-        bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+    return LiquidGlassSurface(
+      borderRadius: const BorderRadius.vertical(
+        top: Radius.circular(kGlassSheetRadius),
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('想 TA 一下',
-              style: theme.textTheme.titleMedium
-                  ?.copyWith(fontWeight: FontWeight.w700)),
-          const SizedBox(height: 10),
-          Row(children: [
-            Expanded(
-              child: FilledButton.tonal(
-                key: const Key('poke-send-poke'),
-                onPressed: _sending ? null : () => _send('poke', '戳了你一下'),
-                child: const Text('👉 戳一下'),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: FilledButton.tonal(
-                key: const Key('poke-send-hug'),
-                onPressed: _sending ? null : () => _send('hug', '抱了抱你'),
-                child: const Text('🫂 抱抱'),
-              ),
-            ),
-          ]),
-          const SizedBox(height: 14),
-          Text('提醒 TA',
-              style: theme.textTheme.titleSmall
-                  ?.copyWith(fontWeight: FontWeight.w700)),
-          const SizedBox(height: 6),
-          Wrap(spacing: 8, runSpacing: 8, children: [
-            for (final t in kCareQuickTexts)
-              ActionChip(
-                key: Key('poke-care-$t'),
-                label: Text(t),
-                onPressed: _sending ? null : () => _send('care', t),
-              ),
-          ]),
-          const SizedBox(height: 12),
-          Row(children: [
-            Expanded(
-              child: TextField(
-                key: const Key('poke-custom-input'),
-                controller: _textCtrl,
-                maxLength: 40,
-                decoration: const InputDecoration(
-                  hintText: '自己说一句…',
-                  counterText: '',
-                  isDense: true,
+      padding: EdgeInsets.only(
+        left: 18,
+        right: 18,
+        top: 10,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+      ),
+      child: SafeArea(
+        top: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 38,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 12),
+                decoration: BoxDecoration(
+                  color: cs.outlineVariant,
+                  borderRadius: BorderRadius.circular(2),
                 ),
-                onSubmitted: (v) {
-                  final t = v.trim();
-                  if (t.isNotEmpty) _send('care', t);
-                },
               ),
             ),
-            const SizedBox(width: 8),
-            FilledButton(
-              key: const Key('poke-custom-send'),
-              onPressed: _sending
-                  ? null
-                  : () {
-                      final t = _textCtrl.text.trim();
-                      if (t.isEmpty) return;
-                      _send('care', t);
-                    },
-              child: const Text('发送'),
-            ),
-          ]),
-          const SizedBox(height: 6),
-          Text('每类每小时最多 6 次',
-              style: theme.textTheme.bodySmall?.copyWith(color: cs.outline)),
-        ],
+            Text('想 TA 一下',
+                style: theme.textTheme.titleMedium
+                    ?.copyWith(fontWeight: FontWeight.w700)),
+            const SizedBox(height: 12),
+            Row(children: [
+              Expanded(
+                child: FilledButton.tonal(
+                  key: const Key('poke-send-poke'),
+                  onPressed: _sending ? null : () => _send('poke', '戳了你一下'),
+                  child: const Text('👉 戳一下'),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: FilledButton.tonal(
+                  key: const Key('poke-send-hug'),
+                  onPressed: _sending ? null : () => _send('hug', '抱了抱你'),
+                  child: const Text('🫂 抱抱'),
+                ),
+              ),
+            ]),
+            const SizedBox(height: 14),
+            Text('提醒 TA',
+                style: theme.textTheme.titleSmall
+                    ?.copyWith(fontWeight: FontWeight.w700)),
+            const SizedBox(height: 8),
+            Wrap(spacing: 8, runSpacing: 8, children: [
+              for (final t in kCareQuickTexts)
+                ActionChip(
+                  key: Key('poke-care-$t'),
+                  label: Text(t),
+                  onPressed: _sending ? null : () => _send('care', t),
+                ),
+            ]),
+            const SizedBox(height: 12),
+            Row(children: [
+              Expanded(
+                child: TextField(
+                  key: const Key('poke-custom-input'),
+                  controller: _textCtrl,
+                  maxLength: 40,
+                  decoration: const InputDecoration(
+                    hintText: '自己说一句…',
+                    counterText: '',
+                    isDense: true,
+                  ),
+                  onSubmitted: (v) {
+                    final t = v.trim();
+                    if (t.isNotEmpty) _send('care', t);
+                  },
+                ),
+              ),
+              const SizedBox(width: 8),
+              FilledButton(
+                key: const Key('poke-custom-send'),
+                onPressed: _sending
+                    ? null
+                    : () {
+                        final t = _textCtrl.text.trim();
+                        if (t.isEmpty) return;
+                        _send('care', t);
+                      },
+                child: const Text('发送'),
+              ),
+            ]),
+            const SizedBox(height: 6),
+            Text('每类每小时最多 6 次',
+                style: theme.textTheme.bodySmall?.copyWith(color: cs.outline)),
+          ],
+        ),
       ),
     );
   }

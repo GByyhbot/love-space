@@ -21,6 +21,7 @@ import '../../core/peer/peer_report_api.dart';
 import '../../core/peer/peer_state_collector.dart';
 import '../../core/theme/tokens.dart';
 import '../../core/ui/error_view.dart';
+import '../../core/ui/liquid_glass.dart';
 import '../../core/ui/progress.dart';
 import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
 
@@ -173,27 +174,53 @@ class _PeerShareSettingsPageState extends ConsumerState<PeerShareSettingsPage> {
     }
     return Container(
       key: const Key('peer-share-status'),
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
       decoration: BoxDecoration(
-        color: (p.isHalted ? cs.errorContainer : cs.secondaryContainer)
-            .withValues(alpha: 0.4),
-        borderRadius: BorderRadius.circular(AppRadius.sm),
+        color: (p.isHalted ? cs.errorContainer : cs.primaryContainer)
+            .withValues(alpha: 0.45),
+        borderRadius: BorderRadius.circular(kGlassInnerRadius),
+        border: Border.all(
+          color: (p.isHalted ? cs.error : cs.primary).withValues(alpha: 0.35),
+        ),
       ),
-      child: Text(line,
-          style: theme.textTheme.bodySmall?.copyWith(
-            color: p.isHalted ? cs.error : cs.onSurface,
-          )),
+      child: Row(children: [
+        Icon(
+          p.isHalted
+              ? Icons.pause_circle_outline
+              : (_running ? Icons.check_circle_outline : Icons.info_outline),
+          size: 16,
+          color: p.isHalted ? cs.error : cs.primary,
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            line,
+            style: tabularStyle(
+              theme.textTheme.bodySmall?.copyWith(
+                color: p.isHalted ? cs.error : cs.onSurface,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ),
+      ]),
     );
   }
 
   Widget _dangerZone(ThemeData theme, ColorScheme cs, PeerShareSettings s) {
     final off = s.policy.globalOff;
-    return Card(
-      color: cs.errorContainer.withValues(alpha: 0.25),
+    return LiquidGlassCard(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+      tint: cs.errorContainer.withValues(alpha: 0.24),
+      borderColor: cs.error.withValues(alpha: 0.30),
       child: ListTile(
         key: const Key('peer-share-off'),
         leading: Icon(off ? Icons.lock : Icons.lock_open, color: cs.error),
-        title: Text(off ? '完全关闭报备（已开启）' : '完全关闭报备'),
+        title: Text(
+          off ? '完全关闭报备（已开启）' : '完全关闭报备',
+          style: theme.textTheme.titleSmall
+              ?.copyWith(fontWeight: FontWeight.w700),
+        ),
         subtitle: Text('一停全停：定位、状态、使用、网络、电量都不再上报；对方立刻看到关闭态',
             style: theme.textTheme.bodySmall?.copyWith(color: cs.outline)),
         trailing: Switch(
@@ -238,60 +265,60 @@ class _PeerShareSettingsPageState extends ConsumerState<PeerShareSettingsPage> {
   Widget _pauseZone(ThemeData theme, ColorScheme cs, PeerShareSettings s) {
     final p = s.policy;
     final now = DateTime.now();
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('暂停报备',
-              style: theme.textTheme.titleSmall
-                  ?.copyWith(fontWeight: FontWeight.w700)),
-          const SizedBox(height: 2),
-          Text(
-            p.isPaused
-                ? '当前暂停至 ${_fmt(p.pausedUntil)}，恢复后中间这段不补报'
-                : '暂停期间不采集、不上报；恢复后不补报这段',
-            style: theme.textTheme.bodySmall?.copyWith(color: cs.outline),
+    return LiquidGlassCard(
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text('暂停报备',
+            style: theme.textTheme.titleSmall
+                ?.copyWith(fontWeight: FontWeight.w700)),
+        const SizedBox(height: 4),
+        Text(
+          p.isPaused
+              ? '当前暂停至 ${_fmt(p.pausedUntil)}，恢复后中间这段不补报'
+              : '暂停期间不采集、不上报；恢复后不补报这段',
+          style: tabularStyle(
+            theme.textTheme.bodySmall?.copyWith(color: cs.outline),
           ),
-          const SizedBox(height: 8),
-          Wrap(spacing: 8, children: [
-            FilledButton.tonal(
-              key: const Key('peer-share-pause-2h'),
-              onPressed: p.globalOff || _saving
+        ),
+        const SizedBox(height: 10),
+        Wrap(spacing: 8, runSpacing: 8, children: [
+          FilledButton.tonal(
+            key: const Key('peer-share-pause-2h'),
+            onPressed: p.globalOff || _saving
+                ? null
+                : () => _applyPolicy(
+                      p.copyWith(pausedUntil: pauseUntilHours(now, 2)),
+                      toast: '已暂停 2 小时',
+                    ),
+            child: const Text('暂停 2 小时'),
+          ),
+          FilledButton.tonal(
+            key: const Key('peer-share-pause-morning'),
+            onPressed: p.globalOff || _saving
+                ? null
+                : () => _applyPolicy(
+                      p.copyWith(pausedUntil: pauseUntilNextMorning(now)),
+                      toast: '已暂停到明早 8 点',
+                    ),
+            child: const Text('暂停到明早 8 点'),
+          ),
+          if (p.isPaused)
+            OutlinedButton(
+              key: const Key('peer-share-resume'),
+              onPressed: _saving
                   ? null
-                  : () => _applyPolicy(
-                        p.copyWith(pausedUntil: pauseUntilHours(now, 2)),
-                        toast: '已暂停 2 小时',
-                      ),
-              child: const Text('暂停 2 小时'),
+                  : () => _applyPolicy(p.copyWith(pausedUntil: null),
+                      toast: '已恢复报备'),
+              child: const Text('恢复'),
             ),
-            FilledButton.tonal(
-              key: const Key('peer-share-pause-morning'),
-              onPressed: p.globalOff || _saving
-                  ? null
-                  : () => _applyPolicy(
-                        p.copyWith(pausedUntil: pauseUntilNextMorning(now)),
-                        toast: '已暂停到明早 8 点',
-                      ),
-              child: const Text('暂停到明早 8 点'),
-            ),
-            if (p.isPaused)
-              OutlinedButton(
-                key: const Key('peer-share-resume'),
-                onPressed: _saving
-                    ? null
-                    : () => _applyPolicy(p.copyWith(pausedUntil: null),
-                        toast: '已恢复报备'),
-                child: const Text('恢复'),
-              ),
-          ]),
         ]),
-      ),
+      ]),
     );
   }
 
   Widget _levels(ThemeData theme, ColorScheme cs, PeerShareSettings s) {
     final p = s.policy;
-    return Card(
+    return LiquidGlassCard(
+      padding: EdgeInsets.zero,
       child: Column(children: [
         _levelGroup<LocLevel>(
           theme,
@@ -305,7 +332,7 @@ class _PeerShareSettingsPageState extends ConsumerState<PeerShareSettingsPage> {
           onPick: (v) => _applyPolicy(p.copyWith(locLevel: v),
               toast: '位置与轨迹已调为${v.label}'),
         ),
-        const Divider(height: 1),
+        Divider(height: 1, color: cs.outlineVariant.withValues(alpha: 0.45)),
         _levelGroup<UsageLevel>(
           theme,
           cs,
@@ -318,7 +345,7 @@ class _PeerShareSettingsPageState extends ConsumerState<PeerShareSettingsPage> {
           onPick: (v) => _applyPolicy(p.copyWith(usageLevel: v),
               toast: '手机使用已调为${v.label}'),
         ),
-        const Divider(height: 1),
+        Divider(height: 1, color: cs.outlineVariant.withValues(alpha: 0.45)),
         _levelGroup<AppLevel>(
           theme,
           cs,
@@ -331,7 +358,7 @@ class _PeerShareSettingsPageState extends ConsumerState<PeerShareSettingsPage> {
           onPick: (v) => _applyPolicy(p.copyWith(appLevel: v),
               toast: '软件记录已调为${v.label}'),
         ),
-        const Divider(height: 1),
+        Divider(height: 1, color: cs.outlineVariant.withValues(alpha: 0.45)),
         _levelGroup<NetLevel>(
           theme,
           cs,
@@ -358,28 +385,76 @@ class _PeerShareSettingsPageState extends ConsumerState<PeerShareSettingsPage> {
     required List<T> values,
     required String Function(T) label,
     required void Function(T) onPick,
-  }) =>
-      Padding(
-        padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(title,
-              style: theme.textTheme.titleSmall
-                  ?.copyWith(fontWeight: FontWeight.w700)),
-          Text(desc,
-              style: theme.textTheme.bodySmall?.copyWith(color: cs.outline)),
-          const SizedBox(height: 6),
-          Wrap(spacing: 6, runSpacing: 6, children: [
-            for (final v in values)
-              ChoiceChip(
-                key: Key('peer-level-$key-${_wire(v)}'),
-                label: Text(label(v)),
-                selected: v == value,
-                onSelected: _saving ? null : (_) => onPick(v),
-              ),
-          ]),
-          const SizedBox(height: 4),
-        ]),
-      );
+  }) {
+    final dark = theme.brightness == Brightness.dark;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(title,
+            style: theme.textTheme.titleSmall
+                ?.copyWith(fontWeight: FontWeight.w700)),
+        const SizedBox(height: 2),
+        Text(desc,
+            style: theme.textTheme.bodySmall?.copyWith(color: cs.outline)),
+        const SizedBox(height: 10),
+        Container(
+          padding: const EdgeInsets.all(3),
+          decoration: BoxDecoration(
+            color: cs.surfaceContainerHighest.withValues(alpha: dark ? 0.5 : 0.7),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: cs.outlineVariant.withValues(alpha: dark ? 0.45 : 0.6),
+            ),
+          ),
+          child: Row(
+            children: [
+              for (final v in values)
+                Expanded(
+                  child: ChoiceChip(
+                    key: Key('peer-level-$key-${_wire(v)}'),
+                    showCheckmark: false,
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    side: BorderSide.none,
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+                    labelPadding: const EdgeInsets.symmetric(horizontal: 4),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(11),
+                    ),
+                    backgroundColor: Colors.transparent,
+                    selectedColor: _wire(v) == 'off'
+                        ? cs.errorContainer.withValues(alpha: 0.72)
+                        : (dark ? cs.primaryContainer : cs.surface),
+                    label: Center(
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          label(v),
+                          maxLines: 1,
+                          style: theme.textTheme.labelMedium?.copyWith(
+                            fontWeight:
+                                v == value ? FontWeight.w700 : FontWeight.w500,
+                            color: v == value
+                                ? (_wire(v) == 'off'
+                                    ? cs.error
+                                    : (dark
+                                        ? cs.onPrimaryContainer
+                                        : cs.onSurface))
+                                : cs.outline,
+                          ),
+                        ),
+                      ),
+                    ),
+                    selected: v == value,
+                    onSelected: _saving ? null : (_) => onPick(v),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ]),
+    );
+  }
 
   String _wire<T>(T v) {
     if (v is LocLevel) return v.wire;
@@ -391,7 +466,8 @@ class _PeerShareSettingsPageState extends ConsumerState<PeerShareSettingsPage> {
 
   Widget _extras(ThemeData theme, ColorScheme cs, PeerShareSettings s) {
     final p = s.policy;
-    return Card(
+    return LiquidGlassCard(
+      padding: EdgeInsets.zero,
       child: Column(children: [
         SwitchListTile(
           key: const Key('peer-share-events'),
@@ -403,7 +479,7 @@ class _PeerShareSettingsPageState extends ConsumerState<PeerShareSettingsPage> {
               : (v) => _save(s.copyWith(events: v),
                   toast: v ? '已开启报备共享' : '已关闭报备共享'),
         ),
-        const Divider(height: 1),
+        Divider(height: 1, color: cs.outlineVariant.withValues(alpha: 0.45)),
         SwitchListTile(
           key: const Key('peer-share-battery'),
           title: const Text('电量与充电'),
@@ -414,6 +490,7 @@ class _PeerShareSettingsPageState extends ConsumerState<PeerShareSettingsPage> {
               : (v) => _applyPolicy(p.copyWith(battery: v),
                   toast: v ? '已开启电量共享' : '已关闭电量共享'),
         ),
+        Divider(height: 1, color: cs.outlineVariant.withValues(alpha: 0.45)),
         SwitchListTile(
           key: const Key('peer-share-battery-alert'),
           title: const Text('低电量提醒'),
@@ -424,6 +501,7 @@ class _PeerShareSettingsPageState extends ConsumerState<PeerShareSettingsPage> {
               : (v) => _applyPolicy(p.copyWith(batteryAlert: v),
                   toast: v ? '已开启低电量提醒' : '已关闭低电量提醒'),
         ),
+        Divider(height: 1, color: cs.outlineVariant.withValues(alpha: 0.45)),
         SwitchListTile(
           key: const Key('peer-share-fold'),
           title: const Text('折叠短暂切换'),
@@ -437,7 +515,8 @@ class _PeerShareSettingsPageState extends ConsumerState<PeerShareSettingsPage> {
     );
   }
 
-  Widget _entries(ThemeData theme, ColorScheme cs) => Card(
+  Widget _entries(ThemeData theme, ColorScheme cs) => LiquidGlassCard(
+        padding: EdgeInsets.zero,
         child: Column(children: [
           ListTile(
             key: const Key('peer-share-sensitive'),
@@ -446,12 +525,14 @@ class _PeerShareSettingsPageState extends ConsumerState<PeerShareSettingsPage> {
             subtitle: Text(
               '已勾选 ${_settings?.policy.sensitivePkgs.length ?? 0} 个 · '
               '在对方那边只显示「其他应用」',
-              style: theme.textTheme.bodySmall?.copyWith(color: cs.outline),
+              style: tabularStyle(
+                theme.textTheme.bodySmall?.copyWith(color: cs.outline),
+              ),
             ),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => context.push('/settings/peer-share/sensitive'),
           ),
-          const Divider(height: 1),
+          Divider(height: 1, color: cs.outlineVariant.withValues(alpha: 0.45)),
           ListTile(
             key: const Key('peer-share-preview'),
             leading: const Icon(Icons.remove_red_eye_outlined),
@@ -463,37 +544,41 @@ class _PeerShareSettingsPageState extends ConsumerState<PeerShareSettingsPage> {
         ]),
       );
 
-  Widget _auditSection(ThemeData theme, ColorScheme cs) => Card(
+  Widget _auditSection(ThemeData theme, ColorScheme cs) => LiquidGlassCard(
         key: const Key('peer-share-audit'),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('变更记录（双方可见，不可删除）',
-                style: theme.textTheme.titleSmall
-                    ?.copyWith(fontWeight: FontWeight.w700)),
-            const SizedBox(height: 6),
-            if (_audit.isEmpty)
-              Text('还没有调整记录',
-                  style: theme.textTheme.bodySmall?.copyWith(color: cs.outline))
-            else
-              for (final a in _audit.take(20))
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 3),
-                  child: Row(children: [
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('变更记录（双方可见，不可删除）',
+              style: theme.textTheme.titleSmall
+                  ?.copyWith(fontWeight: FontWeight.w700)),
+          const SizedBox(height: 8),
+          if (_audit.isEmpty)
+            Text('还没有调整记录',
+                style: theme.textTheme.bodySmall?.copyWith(color: cs.outline))
+          else
+            for (final a in _audit.take(20))
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                     SizedBox(
-                      width: 88,
-                      child: Text(_fmt(a.ts),
-                          style: theme.textTheme.bodySmall
-                              ?.copyWith(color: cs.outline)),
+                      width: 90,
+                      child: Text(
+                        _fmt(a.ts),
+                        style: tabularStyle(
+                          theme.textTheme.bodySmall
+                              ?.copyWith(color: cs.outline),
+                        ),
+                      ),
                     ),
                     Expanded(
                       child: Text('${a.mine ? '我' : 'TA'} ${a.detail}',
                           style: theme.textTheme.bodySmall),
                     ),
-                  ]),
+                  ],
                 ),
-          ]),
-        ),
+              ),
+        ]),
       );
 
   String _fmt(double? ts) {

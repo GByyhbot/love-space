@@ -16,6 +16,7 @@ import '../../core/peer/peer_state_collector.dart';
 import '../../core/theme/tokens.dart';
 import '../../core/ui/empty_view.dart';
 import '../../core/ui/error_view.dart';
+import '../../core/ui/liquid_glass.dart';
 import '../../core/ui/progress.dart';
 import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
 
@@ -127,18 +128,40 @@ class _PeerSensitivePageState extends ConsumerState<PeerSensitivePage> {
                                 ?.copyWith(color: cs.outline),
                           ),
                           const SizedBox(height: Spacing.gap),
-                          for (final a in sorted)
-                            SwitchListTile(
-                              key: Key('sensitive-${a['pkg']}'),
-                              title: Text(a['label'] ?? ''),
-                              subtitle: Text(a['pkg'] ?? '',
-                                  style: theme.textTheme.bodySmall
-                                      ?.copyWith(color: cs.outline)),
-                              value: selected.contains(a['pkg']),
-                              onChanged: _saving
-                                  ? null
-                                  : (v) => _toggle(a['pkg']!, v),
+                          LiquidGlassCard(
+                            padding: EdgeInsets.zero,
+                            child: Column(
+                              children: [
+                                for (var i = 0; i < sorted.length; i++) ...[
+                                  if (i > 0)
+                                    Divider(
+                                      height: 1,
+                                      color: cs.outlineVariant
+                                          .withValues(alpha: 0.45),
+                                    ),
+                                  SwitchListTile(
+                                    key: Key('sensitive-${sorted[i]['pkg']}'),
+                                    title: Text(
+                                      sorted[i]['label'] ?? '',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    subtitle: Text(
+                                      sorted[i]['pkg'] ?? '',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: theme.textTheme.bodySmall
+                                          ?.copyWith(color: cs.outline),
+                                    ),
+                                    value: selected.contains(sorted[i]['pkg']),
+                                    onChanged: _saving
+                                        ? null
+                                        : (v) => _toggle(sorted[i]['pkg']!, v),
+                                  ),
+                                ],
+                              ],
                             ),
+                          ),
                         ],
                       ),
       ),

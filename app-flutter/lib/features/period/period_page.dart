@@ -26,6 +26,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/api/api_client.dart' as api;
 import '../../core/ui/hold_to_confirm.dart' show HoldToConfirmButton;
+import '../../core/ui/liquid_glass.dart';
 import '../../core/sse/sse_client.dart';
 import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
 import '../personal/personal_controller.dart';
@@ -140,19 +141,15 @@ class _PeriodPageState extends ConsumerState<PeriodPage> {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     if (d.items.isEmpty) {
-      return Card(
-        margin: EdgeInsets.zero,
-        child: Padding(
-          padding: const EdgeInsets.all(Spacing.cardPad),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(periodEmptyTitle, style: theme.textTheme.titleMedium),
-                const SizedBox(height: Spacing.gap),
-                Text(periodEmptyText,
-                    style: theme.textTheme.bodySmall
-                        ?.copyWith(color: cs.outline)),
-              ]),
-        ),
+      return LiquidGlassCard(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(periodEmptyTitle,
+              style: theme.textTheme.titleMedium
+                  ?.copyWith(fontWeight: FontWeight.w700)),
+          const SizedBox(height: Spacing.gap),
+          Text(periodEmptyText,
+              style: theme.textTheme.bodySmall?.copyWith(color: cs.outline)),
+        ]),
       );
     }
 
@@ -164,104 +161,104 @@ class _PeriodPageState extends ConsumerState<PeriodPage> {
     final cursor = phaseCursor(d);
     final dayRows = periodDayRowsOf(rows);
 
-    return Card(
-      margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.all(Spacing.cardPad),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Expanded(
-              child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(greetWord(utcNow),
-                        style: theme.textTheme.bodySmall
+    return LiquidGlassCard(
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Expanded(
+            child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(greetWord(utcNow),
+                      style: theme.textTheme.bodySmall
+                          ?.copyWith(color: cs.outline)),
+                  const SizedBox(height: 4),
+                  Text(heroTitle(d, today),
+                      style: theme.textTheme.titleMedium
+                          ?.copyWith(fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 4),
+                  Text(heroTip(d, today),
+                      style: theme.textTheme.bodySmall
+                          ?.copyWith(color: cs.outline)),
+                  if (fert != null) ...[
+                    const SizedBox(height: Spacing.gap),
+                    Wrap(crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          Text('受孕概率 ',
+                              style: theme.textTheme.bodySmall),
+                          Text(fert[0],
+                              style: theme.textTheme.titleSmall?.copyWith(
+                                  color: cs.primary,
+                                  fontWeight: FontWeight.bold)),
+                          const SizedBox(width: 6),
+                          Text(fert[1],
+                              style: theme.textTheme.bodySmall
+                                  ?.copyWith(color: cs.outline)),
+                        ]),
+                    // 🔴 免责原文逐字（`:228`，**带句号**），不给百分比。
+                    const SizedBox(height: 2),
+                    Text(fertilityNote,
+                        style: theme.textTheme.labelSmall
                             ?.copyWith(color: cs.outline)),
-                    const SizedBox(height: 4),
-                    Text(heroTitle(d, today),
-                        style: theme.textTheme.titleMedium),
-                    const SizedBox(height: 4),
-                    Text(heroTip(d, today),
-                        style: theme.textTheme.bodySmall
-                            ?.copyWith(color: cs.outline)),
-                    if (fert != null) ...[
-                      const SizedBox(height: Spacing.gap),
-                      Wrap(crossAxisAlignment: WrapCrossAlignment.center,
-                          children: [
-                            Text('受孕概率 ',
-                                style: theme.textTheme.bodySmall),
-                            Text(fert[0],
-                                style: theme.textTheme.titleSmall?.copyWith(
-                                    color: cs.primary,
-                                    fontWeight: FontWeight.bold)),
-                            const SizedBox(width: 6),
-                            Text(fert[1],
-                                style: theme.textTheme.bodySmall
-                                    ?.copyWith(color: cs.outline)),
-                          ]),
-                      // 🔴 免责原文逐字（`:228`，**带句号**），不给百分比。
-                      const SizedBox(height: 2),
-                      Text(fertilityNote,
-                          style: theme.textTheme.labelSmall
-                              ?.copyWith(color: cs.outline)),
-                    ],
-                  ]),
-            ),
-            const SizedBox(width: 12),
-            Column(children: [
-              Semantics(
-                label: '周期第 $dayIn 天，共 $cyc 天',
-                child: _CycleRing(dayIn: dayIn, percent: heroPercent(d)),
-              ),
-              const SizedBox(height: 4),
-              Text('周期第 $dayIn 天', style: theme.textTheme.labelSmall),
-            ]),
-          ]),
-          const SizedBox(height: 12),
-          // `:488` 下次预计（月/日 + 参考值 + 还有/已推迟）
-          Text(heroNextLine(d),
-              style: theme.textTheme.bodySmall?.copyWith(color: cs.outline)),
-          // 2.8.2 待确认：经期该结束却没人确认 —— 说清现在算第几天，
-          // 操作入口在下方「今天」日卡（月经走了 / 月经又来了）
-          if (d.pending != null) ...[
-            const SizedBox(height: 10),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: periodStageColor(context).withValues(alpha: 0.10),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: periodStageColor(context)),
-              ),
-              child: Text(
-                  '经期第 ${d.pending!.days} 天（待确认）：走了就点上面「月经走了」，还在就点「还在经期」',
-                  style: theme.textTheme.labelSmall?.copyWith(
-                      color: periodStageColor(context),
-                      fontWeight: FontWeight.w700)),
-            ),
-          ],
-          const SizedBox(height: 12),
-          // phaseBar `:281-289`：四段相对天数权重 + 今天游标
-          _phaseBar(context, segs, cursor, ph?.phase),
-          const SizedBox(height: 10),
-          // 2.8.7 令三·2：预测依据（0 样本默认 / 有样本校准次数 / 超期推迟）
-          Text(
-            _predictionBasis(d),
-            key: const Key('period-prediction-basis'),
-            style: theme.textTheme.labelSmall?.copyWith(color: cs.outline),
+                  ],
+                ]),
           ),
-          const SizedBox(height: 10),
-          // 2.8.7 令三·2：主操作直接放在 Hero 卡内（经期中/待确认 → 走了+还在；否则 → 今天来了）
-          _heroActions(context, d, today),
-          const SizedBox(height: 14),
-          // `:488` 三联统计（记录天数 = 日记录行数）
-          Row(children: [
-            _heroStat(context, '平均周期', '${d.cycle}', '天'),
-            _heroStat(context, '平均经期', '${d.length}', '天'),
-            _heroStat(context, '记录天数', '${dayRows.length}', '天'),
+          const SizedBox(width: 12),
+          Column(children: [
+            Semantics(
+              label: '周期第 $dayIn 天，共 $cyc 天',
+              child: _CycleRing(dayIn: dayIn, percent: heroPercent(d)),
+            ),
+            const SizedBox(height: 4),
+            Text('周期第 $dayIn 天',
+                style: tabularStyle(theme.textTheme.labelSmall)),
           ]),
         ]),
-      ),
+        const SizedBox(height: 12),
+        // `:488` 下次预计（月/日 + 参考值 + 还有/已推迟）
+        Text(heroNextLine(d),
+            style: tabularStyle(
+                theme.textTheme.bodySmall?.copyWith(color: cs.outline))),
+        // 2.8.2 待确认：经期该结束却没人确认 —— 说清现在算第几天，
+        // 操作入口在下方「今天」日卡（月经走了 / 月经又来了）
+        if (d.pending != null) ...[
+          const SizedBox(height: 10),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: periodStageColor(context).withValues(alpha: 0.10),
+              borderRadius: BorderRadius.circular(kGlassInnerRadius),
+              border: Border.all(color: periodStageColor(context)),
+            ),
+            child: Text(
+                '经期第 ${d.pending!.days} 天（待确认）：走了就点上面「月经走了」，还在就点「还在经期」',
+                style: theme.textTheme.labelSmall?.copyWith(
+                    color: periodStageColor(context),
+                    fontWeight: FontWeight.w700)),
+          ),
+        ],
+        const SizedBox(height: 12),
+        // phaseBar `:281-289`：四段相对天数权重 + 今天游标
+        _phaseBar(context, segs, cursor, ph?.phase),
+        const SizedBox(height: 10),
+        // 2.8.7 令三·2：预测依据（0 样本默认 / 有样本校准次数 / 超期推迟）
+        Text(
+          _predictionBasis(d),
+          key: const Key('period-prediction-basis'),
+          style: tabularStyle(
+              theme.textTheme.labelSmall?.copyWith(color: cs.outline)),
+        ),
+        const SizedBox(height: 10),
+        // 2.8.7 令三·2：主操作直接放在 Hero 卡内（经期中/待确认 → 走了+还在；否则 → 今天来了）
+        _heroActions(context, d, today),
+        const SizedBox(height: 14),
+        // `:488` 三联统计（记录天数 = 日记录行数）
+        Row(children: [
+          _heroStat(context, '平均周期', '${d.cycle}', '天'),
+          _heroStat(context, '平均经期', '${d.length}', '天'),
+          _heroStat(context, '记录天数', '${dayRows.length}', '天'),
+        ]),
+      ]),
     );
   }
 
@@ -332,7 +329,13 @@ class _PeriodPageState extends ConsumerState<PeriodPage> {
                   ?.copyWith(color: Theme.of(context).colorScheme.outline)),
           const SizedBox(height: 2),
           Row(mainAxisSize: MainAxisSize.min, children: [
-            Text(value, style: Theme.of(context).textTheme.titleMedium),
+            Text(
+              value,
+              style: tabularStyle(Theme.of(context)
+                  .textTheme
+                  .titleMedium
+                  ?.copyWith(fontWeight: FontWeight.w700)),
+            ),
             Text(unit, style: Theme.of(context).textTheme.labelSmall),
           ]),
         ]),
@@ -404,39 +407,36 @@ class _PeriodPageState extends ConsumerState<PeriodPage> {
     final cs = theme.colorScheme;
     return Padding(
       padding: const EdgeInsets.only(top: 12),
-      child: Card(
-        margin: EdgeInsets.zero,
-        color: cs.errorContainer.withValues(alpha: 0.35),
-        child: Padding(
-          padding: const EdgeInsets.all(Spacing.cardPad),
-          child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(warnBlockTitle,
-                    style: theme.textTheme.titleSmall
-                        ?.copyWith(color: cs.error)),
-                const SizedBox(height: Spacing.gap),
-                for (final w in warns)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 4),
-                    child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // G11（必改）：项目符号原 Colors.black54 深色下
-                          // 对比不足；与相邻 bodySmall 同源 onSurface。
-                          Text('· ',
-                              style: TextStyle(color: cs.onSurface)),
-                          Expanded(
-                              child: Text(w,
-                                  style: theme.textTheme.bodySmall)),
-                        ]),
-                  ),
-                const SizedBox(height: 4),
-                Text(warnBlockNote,
-                    style: theme.textTheme.labelSmall
-                        ?.copyWith(color: cs.outline)),
-              ]),
-        ),
+      child: LiquidGlassCard(
+        tint: cs.errorContainer.withValues(alpha: 0.35),
+        borderColor: cs.error.withValues(alpha: 0.35),
+        child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(warnBlockTitle,
+                  style: theme.textTheme.titleSmall?.copyWith(
+                      color: cs.error, fontWeight: FontWeight.w700)),
+              const SizedBox(height: Spacing.gap),
+              for (final w in warns)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // G11（必改）：项目符号原 Colors.black54 深色下
+                        // 对比不足；与相邻 bodySmall 同源 onSurface。
+                        Text('· ',
+                            style: TextStyle(color: cs.onSurface)),
+                        Expanded(
+                            child: Text(w,
+                                style: theme.textTheme.bodySmall)),
+                      ]),
+                ),
+              const SizedBox(height: 4),
+              Text(warnBlockNote,
+                  style: theme.textTheme.labelSmall
+                      ?.copyWith(color: cs.outline)),
+            ]),
       ),
     );
   }
@@ -445,32 +445,28 @@ class _PeriodPageState extends ConsumerState<PeriodPage> {
   Widget _analysisEntry(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    return Card(
-      margin: EdgeInsets.zero,
-      child: InkWell(
-        key: const Key('period-analysis-entry'),
-        borderRadius: BorderRadius.circular(AppRadius.card),
-        onTap: () => context.push('/period/analysis'),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          child: Row(children: [
-            const Text('📊', style: TextStyle(fontSize: 24)),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('数据分析', style: theme.textTheme.titleMedium),
-                    const SizedBox(height: 2),
-                    Text('周期、流量、痛经、体温的变化',
-                        style: theme.textTheme.bodySmall
-                            ?.copyWith(color: cs.outline)),
-                  ]),
-            ),
-            Icon(Icons.chevron_right_rounded, color: cs.outline),
-          ]),
+    return LiquidGlassCard(
+      key: const Key('period-analysis-entry'),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      onTap: () => context.push('/period/analysis'),
+      child: Row(children: [
+        const Text('📊', style: TextStyle(fontSize: 24)),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('数据分析',
+                    style: theme.textTheme.titleSmall
+                        ?.copyWith(fontWeight: FontWeight.w700)),
+                const SizedBox(height: 2),
+                Text('周期、流量、痛经、体温的变化',
+                    style: theme.textTheme.bodySmall
+                        ?.copyWith(color: cs.outline)),
+              ]),
         ),
-      ),
+        Icon(Icons.chevron_right_rounded, color: cs.outline),
+      ]),
     );
   }
 
@@ -480,62 +476,71 @@ class _PeriodPageState extends ConsumerState<PeriodPage> {
       String today, String selected) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    return Card(
-      margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          // 月份栏：‹ / 今天 / ›
-          Row(children: [
-            Text('${grid.month} 月', style: theme.textTheme.titleMedium),
-            const SizedBox(width: 6),
-            Text('${grid.year} 年',
-                style: theme.textTheme.bodySmall
-                    ?.copyWith(color: cs.outline)),
-            const Spacer(),
-            IconButton(
-              tooltip: '上个月',
-              icon: const Text('‹', style: TextStyle(fontSize: 24)),
-              onPressed: () => _shiftMonth(-1, selected),
-            ),
-            TextButton(
-              onPressed: () => setState(() => _selectedDay = today),
-              child: const Text('今天'),
-            ),
-            IconButton(
-              tooltip: '下个月',
-              icon: const Text('›', style: TextStyle(fontSize: 24)),
-              onPressed: () => _shiftMonth(1, selected),
-            ),
-          ]),
-          const SizedBox(height: Spacing.gap),
-          // 星期行
-          Row(children: [
-            for (var i = 0; i < 7; i++)
-              Expanded(
-                child: Center(
-                  child: Text(const ['日', '一', '二', '三', '四', '五', '六'][i],
-                      style: theme.textTheme.labelSmall?.copyWith(
-                          color: (i == 0 || i == 6) ? cs.error : cs.outline)),
-                ),
+    return LiquidGlassCard(
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        // 月份栏：‹ / 今天 / ›
+        Row(children: [
+          Expanded(
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              Flexible(
+                child: Text('${grid.month} 月',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: tabularStyle(theme.textTheme.titleSmall
+                        ?.copyWith(fontWeight: FontWeight.w700))),
               ),
-          ]),
-          const SizedBox(height: Spacing.gap),
-          // 整月网格（lead 个空格 + 逐日格子）。
-          // 🔴 不用嵌套 GridView(shrinkWrap)：外层已是 ListView（viewport），
-          // 嵌套 shrinkWrap viewport 会让首帧布局反复震荡；按周切 Row 最稳。
-          _calendarRows(context, grid),
-          const SizedBox(height: 10),
-          // 图例四项（Web period.js:294 lg-pill 四项）：色源全部走
-          // 2.3.9 主题变量语义表——预测经期用 period 色 α（方块 α.55，
-          // Web「浅粉虚线=推算」同源浅化；p-pred 底 rgba(period,.06) :1655）；
-          // 排卵日与排卵期同用 --fertile（style.css:61/:1511），消灭原
-          // 0xFF7E57C2/0xFF9575CD 两套紫并存。
-          // 2.8.7 令三·1：**一行紧凑图例**，只留四态主项（实记/待确认/预测/排卵易孕）。
-          // 四态样式各自与日历格子一一对应：实心 = 实记、虚框 = 待确认、
-          // 点框 = 预测、圆环 = 排卵易孕。宽屏不换行、393 宽也放得下。
-          Padding(
-            padding: const EdgeInsets.only(top: 8),
+              const SizedBox(width: 6),
+              Text('${grid.year} 年',
+                  maxLines: 1,
+                  style: tabularStyle(theme.textTheme.bodySmall
+                      ?.copyWith(color: cs.outline))),
+            ]),
+          ),
+          IconButton(
+            tooltip: '上个月',
+            visualDensity: VisualDensity.compact,
+            icon: const Text('‹', style: TextStyle(fontSize: 24)),
+            onPressed: () => _shiftMonth(-1, selected),
+          ),
+          TextButton(
+            style: TextButton.styleFrom(
+              visualDensity: VisualDensity.compact,
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+            ),
+            onPressed: () => setState(() => _selectedDay = today),
+            child: const Text('今天'),
+          ),
+          IconButton(
+            tooltip: '下个月',
+            visualDensity: VisualDensity.compact,
+            icon: const Text('›', style: TextStyle(fontSize: 24)),
+            onPressed: () => _shiftMonth(1, selected),
+          ),
+        ]),
+        const SizedBox(height: Spacing.gap),
+        // 星期行
+        Row(children: [
+          for (var i = 0; i < 7; i++)
+            Expanded(
+              child: Center(
+                child: Text(const ['日', '一', '二', '三', '四', '五', '六'][i],
+                    style: theme.textTheme.labelSmall?.copyWith(
+                        color: (i == 0 || i == 6) ? cs.error : cs.outline)),
+              ),
+            ),
+        ]),
+        const SizedBox(height: Spacing.gap),
+        // 整月网格（lead 个空格 + 逐日格子）。
+        // 🔴 不用嵌套 GridView(shrinkWrap)：外层已是 ListView（viewport），
+        // 嵌套 shrinkWrap viewport 会让首帧布局反复震荡；按周切 Row 最稳。
+        _calendarRows(context, grid),
+        const SizedBox(height: 10),
+        // 2.8.7 令三·1 + 界面适配优化令：一行紧凑四态图例，FittedBox 保证 360dp 绝不换行溢出
+        Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
             child: Row(
               key: const Key('period-legend'),
               children: [
@@ -549,8 +554,8 @@ class _PeriodPageState extends ConsumerState<PeriodPage> {
               ],
             ),
           ),
-        ]),
-      ),
+        ),
+      ]),
     );
   }
 
@@ -703,12 +708,12 @@ class _PeriodPageState extends ConsumerState<PeriodPage> {
                   ),
                 ),
               Text('${cell.day}',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  style: tabularStyle(Theme.of(context).textTheme.bodySmall?.copyWith(
                     fontWeight: cell.isToday || cell.isStart
                         ? FontWeight.bold
                         : FontWeight.normal,
                     color: _cellText(cell, cs),
-                  )),
+                  ))),
               if (cell.pending)
                 Positioned(
                   top: 3,
@@ -809,17 +814,18 @@ class _PeriodPageState extends ConsumerState<PeriodPage> {
     final isToday = day == today;
     final head = isToday ? '$dateLabel · 今天' : '$dateLabel · 历史记录';
 
-    return Card(
-      margin: const EdgeInsets.only(top: 12),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: LiquidGlassCard(
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [
             Expanded(
               child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(head, style: theme.textTheme.titleSmall),
+                    Text(head,
+                        style: theme.textTheme.titleSmall
+                            ?.copyWith(fontWeight: FontWeight.w700)),
                     const SizedBox(height: 2),
                     Text(on
                         ? '经期第 ${n - hit.ep.start + 1} 天'
@@ -835,60 +841,75 @@ class _PeriodPageState extends ConsumerState<PeriodPage> {
           Row(children: [
             const Text('🩸', style: TextStyle(fontSize: 18)),
             const SizedBox(width: 8),
-            const SizedBox(width: 44, child: Text('经期')),
-            const Spacer(),
+            const Text('经期'),
+            const SizedBox(width: 8),
             // 历史日期弱化主按钮（令三·4）：今天用实心主按钮，历史一律降一档，
             // 但补录/修改仍然可用（不删功能，只降视觉权重）。
-            if (on) ...[
-              OutlinedButton(
-                key: const Key('period-log-end'),
-                onPressed: _busy
-                    ? null
-                    : () => _runAction(
-                        () => planEnd(d, day), '月经走了'),
-                child: const Text('月经走了'),
+            // 小屏（360dp）下用 Expanded + Wrap 防右侧溢出。
+            Expanded(
+              child: Wrap(
+                alignment: WrapAlignment.end,
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  if (on) ...[
+                    OutlinedButton(
+                      key: const Key('period-log-end'),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 14),
+                      ),
+                      onPressed: _busy
+                          ? null
+                          : () => _runAction(
+                              () => planEnd(d, day), '月经走了'),
+                      child: const Text('月经走了'),
+                    ),
+                    if (isToday)
+                      FilledButton.tonal(
+                        key: const Key('period-log-more'),
+                        style: FilledButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 14),
+                        ),
+                        onPressed: _busy
+                            ? null
+                            : () => _runAction(
+                                () => planMore(d, day), '月经又来了'),
+                        child: const Text('月经又来了'),
+                      )
+                    else
+                      TextButton(
+                        key: const Key('period-log-more'),
+                        onPressed: _busy
+                            ? null
+                            : () => _runAction(
+                                () => planMore(d, day), '月经又来了'),
+                        child: const Text('月经又来了'),
+                      ),
+                  ] else if (isToday)
+                    FilledButton(
+                      key: const Key('period-log-start'),
+                      onPressed: _busy
+                          ? null
+                          : () => _runAction(
+                              () => planStart(d, day,
+                                  clientId: api.newClientId()),
+                              '月经来了'),
+                      child: const Text('月经来了'),
+                    )
+                  else
+                    OutlinedButton(
+                      key: const Key('period-log-start'),
+                      onPressed: _busy
+                          ? null
+                          : () => _runAction(
+                              () => planStart(d, day,
+                                  clientId: api.newClientId()),
+                              '月经来了'),
+                      child: const Text('补录月经来了'),
+                    ),
+                ],
               ),
-              const SizedBox(width: 6),
-              if (isToday)
-                FilledButton.tonal(
-                  key: const Key('period-log-more'),
-                  onPressed: _busy
-                      ? null
-                      : () => _runAction(
-                          () => planMore(d, day), '月经又来了'),
-                  child: const Text('月经又来了'),
-                )
-              else
-                TextButton(
-                  key: const Key('period-log-more'),
-                  onPressed: _busy
-                      ? null
-                      : () => _runAction(
-                          () => planMore(d, day), '月经又来了'),
-                  child: const Text('月经又来了'),
-                ),
-            ] else if (isToday)
-              FilledButton(
-                key: const Key('period-log-start'),
-                onPressed: _busy
-                    ? null
-                    : () => _runAction(
-                        () => planStart(d, day,
-                            clientId: api.newClientId()),
-                        '月经来了'),
-                child: const Text('月经来了'),
-              )
-            else
-              OutlinedButton(
-                key: const Key('period-log-start'),
-                onPressed: _busy
-                    ? null
-                    : () => _runAction(
-                        () => planStart(d, day,
-                            clientId: api.newClientId()),
-                        '月经来了'),
-                child: const Text('补录月经来了'),
-              ),
+            ),
           ]),
           const Divider(height: 14),
           // 9 字段行
@@ -985,12 +1006,13 @@ class _PeriodPageState extends ConsumerState<PeriodPage> {
     if (summary.items.isEmpty) return const SizedBox.shrink();
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    return Card(
-      margin: const EdgeInsets.only(top: 12),
-      child: Padding(
-        padding: const EdgeInsets.all(Spacing.cardPad),
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: LiquidGlassCard(
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('常出现的症状', style: theme.textTheme.titleSmall),
+          Text('常出现的症状',
+              style: theme.textTheme.titleSmall
+                  ?.copyWith(fontWeight: FontWeight.w700)),
           const SizedBox(height: Spacing.gap),
           for (final s in summary.items)
             Padding(
@@ -1008,7 +1030,8 @@ class _PeriodPageState extends ConsumerState<PeriodPage> {
                   ),
                 ),
                 const SizedBox(width: 8),
-                Text('${s.count} 次', style: theme.textTheme.labelSmall),
+                Text('${s.count} 次',
+                    style: tabularStyle(theme.textTheme.labelSmall)),
               ]),
             ),
           const SizedBox(height: 4),
@@ -1042,10 +1065,10 @@ class _PeriodPageState extends ConsumerState<PeriodPage> {
         '$authorLabel 记录',
       ].join(' · ');
 
-      out.add(Card(
-        margin: const EdgeInsets.only(top: 12),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
+      out.add(Padding(
+        padding: const EdgeInsets.only(top: 12),
+        child: LiquidGlassCard(
+          padding: const EdgeInsets.fromLTRB(16, 14, 10, 14),
           child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -1061,11 +1084,12 @@ class _PeriodPageState extends ConsumerState<PeriodPage> {
                         children: [
                           Text('${int.parse(startIso.substring(5, 7))} 月 '
                               '${int.parse(startIso.substring(8, 10))} 日开始',
-                              style: theme.textTheme.titleSmall),
+                              style: theme.textTheme.titleSmall
+                                  ?.copyWith(fontWeight: FontWeight.w700)),
                           const SizedBox(height: 2),
                           Text(subtitle,
-                              style: theme.textTheme.labelSmall
-                                  ?.copyWith(color: cs.outline)),
+                              style: tabularStyle(theme.textTheme.labelSmall
+                                  ?.copyWith(color: cs.outline))),
                         ]),
                   ),
                   PopupMenuButton<String>(
@@ -1160,13 +1184,13 @@ class _CycleRing extends StatelessWidget {
         ),
         child: Center(
           child: Text('$dayIn',
-              style: Theme.of(context)
+              style: tabularStyle(Theme.of(context)
                   .textTheme
                   .titleMedium
                   ?.copyWith(
                     fontWeight: FontWeight.w700,
                     color: periodInkColor(context),
-                  )),
+                  ))),
         ),
       ),
     );
