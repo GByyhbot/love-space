@@ -55,3 +55,37 @@ def test_post_peer_location_persists_and_truncates_place_name(client_a, client_b
         {'location_level': 'street', 'network_level': 'ssid', 'battery': True},
     )
     assert street_kept['place_name'] == '浦东新区'
+
+
+def test_trim_snapshot_off_clears_coords_and_street_keeps_them():
+    trimmed = peer.trim_snapshot(
+        {
+            'lat': 31.23,
+            'lng': 121.47,
+            'acc': 12.5,
+            'speed': 1.8,
+            'place_name': '张江镇',
+        },
+        {'location_level': 'off', 'network_level': 'ssid', 'battery': True},
+    )
+    assert trimmed['lat'] is None
+    assert trimmed['lng'] is None
+    assert trimmed['acc'] is None
+    assert trimmed['speed'] is None
+    assert trimmed['place_name'] == ''
+
+    street_kept = peer.trim_snapshot(
+        {
+            'lat': 31.23,
+            'lng': 121.47,
+            'acc': 12.5,
+            'speed': 1.8,
+            'place_name': '浦东新区',
+        },
+        {'location_level': 'street', 'network_level': 'ssid', 'battery': True},
+    )
+    assert street_kept['lat'] == 31.23
+    assert street_kept['lng'] == 121.47
+    assert street_kept['acc'] == 12.5
+    assert street_kept['speed'] == 1.8
+    assert street_kept['place_name'] == '浦东新区'
