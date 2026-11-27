@@ -22,7 +22,6 @@ import 'features/settings/export_page.dart';
 import 'features/settings/invite_page.dart';
 import 'features/settings/links_page.dart';
 import 'features/settings/notify_settings_page.dart';
-import 'features/settings/peer_share_settings_page.dart';
 import 'features/settings/settings_home_page.dart';
 import 'features/settings/space_info_page.dart';
 import 'features/settings/settings_state.dart';
@@ -44,9 +43,7 @@ import 'features/together/calendar_page.dart';
 import 'features/together/dashboard_page.dart';
 import 'features/together/ledger_page.dart';
 import 'features/together/music_page.dart';
-import 'features/together/peer_report_page.dart';
-import 'features/together/peer_track_page.dart';
-import 'features/together/peer_phone_page.dart';
+import 'features/together/peer_hub_page.dart';
 import 'features/together/peer_preview_page.dart';
 import 'features/settings/peer_sensitive_page.dart';
 import 'features/together/question_habit_pages.dart';
@@ -188,11 +185,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
           path: '/settings/notify',
           builder: (_, _) => const NotifySettingsPage()),
-      // 2.8.0 P1：伴侣四项共享开关页（设置主页「连接与提醒」组入口，
-      // 也是报备 422「去开启」的跳转目标；一律 context.push）
+      // 2.8.0 P1 / 真改版式令：落入四页签报备中心「设置」页签（tab 3），兼容旧路由
       GoRoute(
           path: '/settings/peer-share',
-          builder: (_, _) => const PeerShareSettingsPage()),
+          builder: (_, _) => const PeerHubPage(initialTab: 3)),
       GoRoute(
           path: '/settings/export', builder: (_, _) => const ExportPage()),
       GoRoute(
@@ -286,20 +282,19 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (_, _) => const DashboardPage(),
       ),
       GoRoute(path: '/together/weekly', builder: (_, _) => const WeeklyPage()),
-      // 2.8.0 报备信息（只读展示层）：hub 摘要卡 push 进入；二级页规范
-      // （AppBar 自动返回 + 系统手势回「我们」页，keep 原 tab 栈）。
+      // 2.8.0 / 真改版式令：一屏四页签报备中心（今日/轨迹/手机/设置），
+      // 全部既有路径映射到对应 initialTab，零断链。
       GoRoute(
         path: '/together/peer-report',
-        builder: (_, _) => const PeerReportPage(),
+        builder: (_, _) => const PeerHubPage(initialTab: 0),
       ),
-      // 2.8.7 全量：足迹卡 → 轨迹页、手机使用卡 → 手机页（一律 push）
       GoRoute(
         path: '/together/peer-report/track',
-        builder: (_, _) => const PeerTrackPage(),
+        builder: (_, _) => const PeerHubPage(initialTab: 1),
       ),
       GoRoute(
         path: '/together/peer-report/phone',
-        builder: (_, _) => const PeerPhonePage(),
+        builder: (_, _) => const PeerHubPage(initialTab: 2),
       ),
       // 报备设置页的两个子页：对方视角预览 / 敏感软件多选
       GoRoute(

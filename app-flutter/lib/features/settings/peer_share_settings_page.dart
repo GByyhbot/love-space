@@ -24,13 +24,16 @@ import '../../core/peer/peer_state_collector.dart';
 import '../../core/theme/app_icons.dart';
 import '../../core/theme/tokens.dart';
 import '../../core/theme/typography.dart';
+import '../../core/ui/apple_ui.dart';
 import '../../core/ui/error_view.dart';
 import '../../core/ui/liquid_glass.dart';
 import '../../core/ui/progress.dart';
 import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
 
 class PeerShareSettingsPage extends ConsumerStatefulWidget {
-  const PeerShareSettingsPage({super.key});
+  const PeerShareSettingsPage({super.key, this.embedded = false});
+
+  final bool embedded;
 
   @override
   ConsumerState<PeerShareSettingsPage> createState() =>
@@ -170,17 +173,21 @@ class _PeerShareSettingsPageState extends ConsumerState<PeerShareSettingsPage>
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     final s = _settings;
-    return Scaffold(
-      appBar: AppBar(title: const Text('报备设置')),
-      body: SafeArea(
+    final topInset = widget.embedded ? ShellChromeScope.topInsetOf(context) : 0.0;
+    final body = SafeArea(
+        top: !widget.embedded,
         child: s == null
             ? (_error != null
                 ? AppErrorView(detail: _error!, onRetry: _load)
                 : const AppProgress())
             : ListView(
                 key: const Key('peer-share-scroll'),
-                padding:
-                    const EdgeInsets.fromLTRB(16, 12, 16, Spacing.pageBottom),
+                padding: EdgeInsets.fromLTRB(
+                  16,
+                  topInset + 12,
+                  16,
+                  widget.embedded ? Spacing.pageBottom + 64 : Spacing.pageBottom,
+                ),
                 children: [
                   _statusStrip(theme, cs, s),
                   const SizedBox(height: Spacing.sm),
@@ -207,7 +214,11 @@ class _PeerShareSettingsPageState extends ConsumerState<PeerShareSettingsPage>
                     ),
                 ],
               ),
-      ),
+      );
+    if (widget.embedded) return body;
+    return Scaffold(
+      appBar: AppBar(title: const Text('报备设置')),
+      body: body,
     );
   }
 

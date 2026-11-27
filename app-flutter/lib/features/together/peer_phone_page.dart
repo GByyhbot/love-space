@@ -25,13 +25,21 @@ import '../../core/peer/state_event_text.dart'
 import '../../core/theme/motion.dart';
 import '../../core/theme/tokens.dart';
 import '../../core/theme/typography.dart';
+import '../../core/ui/apple_ui.dart';
 import '../../core/ui/empty_view.dart';
 import '../../core/ui/error_view.dart';
 import '../../core/ui/liquid_glass.dart';
 import '../../core/ui/progress.dart';
 
 class PeerPhonePage extends ConsumerStatefulWidget {
-  const PeerPhonePage({super.key});
+  const PeerPhonePage({
+    super.key,
+    this.embedded = false,
+    this.onSwitchTab,
+  });
+
+  final bool embedded;
+  final ValueChanged<int>? onSwitchTab;
 
   @override
   ConsumerState<PeerPhonePage> createState() => _PeerPhonePageState();
@@ -120,13 +128,17 @@ class _PeerPhonePageState extends ConsumerState<PeerPhonePage>
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     final side = _side;
-    return Scaffold(
-      appBar: AppBar(title: const Text('手机使用')),
-      body: RefreshIndicator(
+    final topInset = widget.embedded ? ShellChromeScope.topInsetOf(context) : 0.0;
+    final body = RefreshIndicator(
         onRefresh: _load,
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, Spacing.pageBottom),
+          padding: EdgeInsets.fromLTRB(
+            16,
+            topInset + 12,
+            16,
+            widget.embedded ? Spacing.pageBottom + 64 : Spacing.pageBottom,
+          ),
           children: [
             _topBar(theme, cs, side),
             const SizedBox(height: 12),
@@ -163,7 +175,11 @@ class _PeerPhonePageState extends ConsumerState<PeerPhonePage>
             ],
           ],
         ),
-      ),
+      );
+    if (widget.embedded) return body;
+    return Scaffold(
+      appBar: AppBar(title: const Text('手机使用')),
+      body: body,
     );
   }
 

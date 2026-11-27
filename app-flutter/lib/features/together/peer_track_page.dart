@@ -20,6 +20,7 @@ import '../../core/peer/peer_track_data.dart';
 import '../../core/theme/app_icons.dart';
 import '../../core/theme/tokens.dart';
 import '../../core/theme/typography.dart';
+import '../../core/ui/apple_ui.dart';
 import '../../core/ui/empty_view.dart';
 import '../../core/ui/error_view.dart';
 import '../../core/ui/liquid_glass.dart';
@@ -206,7 +207,14 @@ List<StayLabelPlacement> layoutStayLabels({
 }
 
 class PeerTrackPage extends ConsumerStatefulWidget {
-  const PeerTrackPage({super.key});
+  const PeerTrackPage({
+    super.key,
+    this.embedded = false,
+    this.onSwitchTab,
+  });
+
+  final bool embedded;
+  final ValueChanged<int>? onSwitchTab;
 
   @override
   ConsumerState<PeerTrackPage> createState() => _PeerTrackPageState();
@@ -319,9 +327,8 @@ class _PeerTrackPageState extends ConsumerState<PeerTrackPage> {
     final side = _side;
     final hasReplay =
         _data != null && !side.hidden && side.points.length >= 2;
-    return Scaffold(
-      appBar: AppBar(title: const Text('今日轨迹')),
-      body: Stack(
+    final topInset = widget.embedded ? ShellChromeScope.topInsetOf(context) : 0.0;
+    final body = Stack(
         children: [
           RefreshIndicator(
             onRefresh: _load,
@@ -329,9 +336,11 @@ class _PeerTrackPageState extends ConsumerState<PeerTrackPage> {
               physics: const AlwaysScrollableScrollPhysics(),
               padding: EdgeInsets.fromLTRB(
                 16,
-                12,
+                topInset + 12,
                 16,
-                hasReplay ? 156 : Spacing.pageBottom,
+                hasReplay
+                    ? (widget.embedded ? 216 : 156)
+                    : (widget.embedded ? Spacing.pageBottom + 64 : Spacing.pageBottom),
               ),
               children: [
                 _topBar(theme, cs),
@@ -376,15 +385,19 @@ class _PeerTrackPageState extends ConsumerState<PeerTrackPage> {
           if (hasReplay)
             Positioned(
               left: 16,
-              right: 16,
-              bottom: 12,
+              right: widget.embedded ? 78 : 16,
+              bottom: widget.embedded ? 82 : 12,
               child: SafeArea(
                 top: false,
                 child: _replayBar(theme, cs, side),
               ),
             ),
         ],
-      ),
+      );
+    if (widget.embedded) return body;
+    return Scaffold(
+      appBar: AppBar(title: const Text('今日轨迹')),
+      body: body,
     );
   }
 

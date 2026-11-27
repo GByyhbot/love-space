@@ -40,6 +40,7 @@ import '../../core/sse/sse_client.dart';
 import '../../core/theme/app_icons.dart';
 import '../../core/theme/tokens.dart';
 import '../../core/theme/typography.dart';
+import '../../core/ui/apple_ui.dart';
 import '../../core/ui/empty_view.dart';
 import '../../core/ui/error_view.dart';
 import '../../core/ui/liquid_glass.dart';
@@ -50,7 +51,17 @@ import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
 import 'peer_poke_sheet.dart';
 
 class PeerReportPage extends ConsumerStatefulWidget {
-  const PeerReportPage({super.key});
+  const PeerReportPage({
+    super.key,
+    this.embedded = false,
+    this.onSwitchTab,
+  });
+
+  /// 嵌入 [PeerHubPage] 四页签壳时置 true（隐藏内层 AppBar 与重复 FAB）。
+  final bool embedded;
+
+  /// 在四页签壳内直接切页签（0=今日 1=轨迹 2=手机 3=设置）。
+  final ValueChanged<int>? onSwitchTab;
 
   @override
   ConsumerState<PeerReportPage> createState() => _PeerReportPageState();
@@ -362,9 +373,44 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage>
     });
 
     final d = _data;
+    final topInset = widget.embedded ? ShellChromeScope.topInsetOf(context) : 0.0;
+    final body = RefreshIndicator(
+        onRefresh: () => _load(),
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: EdgeInsets.fromLTRB(
+            16,
+            topInset + 12,
+            16,
+            widget.embedded ? Spacing.pageBottom + 64 : Spacing.pageBottom + 16,
+          ),
+          children: [
+            if (_error != null && d != null) _errorBanner(cs, theme, d),
+            if (_loading && d == null)
+              const AppProgress()
+            else if (d == null)
+              // 无旧值：全屏错误态（文案统一「状态未知：<原文>」+ 重试）
+              AppErrorView(
+                detail: '状态未知：${_error ?? api.genericErrorText}',
+                onRetry: _load,
+              )
+            else ...[
+              // 照原型自上而下：状态大卡 → 手机使用 → 今日足迹 → 动态流 → 我方
+              ..._statusSection(theme, cs, d),
+              ..._usageSection(theme, cs, d),
+              ..._footprintSection(theme, cs, d),
+              ..._eventsSection(theme, cs),
+              _sectionTitle(theme, '我的报备'),
+              const SizedBox(height: Spacing.gap),
+              _mineBlock(theme, cs, d),
+            ],
+          ],
+        ),
+      );
+    if (widget.embedded) return body;
     return Scaffold(
       appBar: AppBar(title: const Text('报备信息')),
-      // 互动抽屉入口（原型底部悬浮液态玻璃胶囊 + 按钮）：戳一下 / 抱抱 / 提醒
+      // 互动抽屉入口（独立页模式保留原 FAB，嵌入四页签壳时由 PeerHubPage 统一承载）
       floatingActionButton: PressableScale(
         onTap: () => showPeerPokeSheet(context, ref),
         child: LiquidGlassSurface(
@@ -400,35 +446,7 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage>
           ),
         ),
       ),
-      body: RefreshIndicator(
-        onRefresh: () => _load(),
-        child: ListView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding:
-              const EdgeInsets.fromLTRB(16, 12, 16, Spacing.pageBottom + 16),
-          children: [
-            if (_error != null && d != null) _errorBanner(cs, theme, d),
-            if (_loading && d == null)
-              const AppProgress()
-            else if (d == null)
-              // 无旧值：全屏错误态（文案统一「状态未知：<原文>」+ 重试）
-              AppErrorView(
-                detail: '状态未知：${_error ?? api.genericErrorText}',
-                onRetry: _load,
-              )
-            else ...[
-              // 照原型自上而下：状态大卡 → 手机使用 → 今日足迹 → 动态流 → 我方
-              ..._statusSection(theme, cs, d),
-              ..._usageSection(theme, cs, d),
-              ..._footprintSection(theme, cs, d),
-              ..._eventsSection(theme, cs),
-              _sectionTitle(theme, '我的报备'),
-              const SizedBox(height: Spacing.gap),
-              _mineBlock(theme, cs, d),
-            ],
-          ],
-        ),
-      ),
+      body: body,
     );
   }
 
@@ -817,7 +835,13 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage>
       _tappableCard(
         cs,
         key: const Key('peer-usage-card'),
-        onTap: () => context.push('/together/peer-report/phone'),
+        onTap: () {
+          if (widget.onSwitchTab != null) {
+            widget.onSwitchTab!(2);
+          } else {
+            context.push('/together/peer-report/phone');
+          }
+        },
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [
             Text(
@@ -1004,7 +1028,13 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage>
       _tappableCard(
         cs,
         key: const Key('peer-footprint-card'),
-        onTap: () => context.push('/together/peer-report/track'),
+        onTap: () {
+          if (widget.onSwitchTab != null) {
+            widget.onSwitchTab!(1);
+          } else {
+            context.push('/together/peer-report/track');
+          }
+        },
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [
             Text(
@@ -1254,7 +1284,13 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage>
                 ),
               ),
               TextButton(
-                onPressed: () => context.push('/settings/peer-share'),
+                onPressed: () {
+                  if (widget.onSwitchTab != null) {
+                    widget.onSwitchTab!(3);
+                  } else {
+                    context.push('/settings/peer-share');
+                  }
+                },
                 child: const Text('去开启'),
               ),
             ]),
