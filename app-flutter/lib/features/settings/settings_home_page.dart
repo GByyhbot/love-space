@@ -25,9 +25,8 @@ import 'package:package_info_plus/package_info_plus.dart';
 
 import '../../core/api/api_client.dart' as api;
 import '../../core/config.dart';
-import '../../core/theme/app_icons.dart';
 import '../../core/theme/tokens.dart';
-import '../../core/theme/typography.dart';
+import '../../core/ui/apple_ui.dart';
 import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
 import '../update/update_service.dart' show manualCheck;
 import 'settings_state.dart';
@@ -119,164 +118,150 @@ class _SettingsHomePageState extends ConsumerState<SettingsHomePage> {
     final cs = theme.colorScheme;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('设置')),
-      body: RefreshIndicator(
-        onRefresh: _checkUpdate,
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, Spacing.pageBottom),
-          children: [
-            // 页头副题（沿用原全量页逐字；标题在 AppBar）
-            Text('管理空间、账号和数据。',
-                style: theme.textTheme.bodySmall?.copyWith(color: cs.outline)),
-            const SizedBox(height: 12),
-            _heading(context, '外观'),
-            _row(
-              context,
-              key: const Key('settings-home-space'),
-              emoji: '🏡',
-              title: '空间信息',
-              subtitle: '空间名称与相恋日期',
-              // 2.4.1 第 1 项：弹窗机制退役（关闭弹窗会连 /settings 一起
-              // 带走掉回原 tab），改独立路由页；二级页一律 push 禁 go。
-              onTap: () => context.push('/settings/space'),
-            ),
-            _row(
-              context,
-              key: const Key('settings-home-theme'),
-              emoji: '🎨',
-              title: '主题与外观',
-              subtitle: '主题色、夜间模式与动效',
-              onTap: () => context.push('/settings/theme'),
-            ),
-            _row(
-              context,
-              key: const Key('settings-home-cover'),
-              emoji: '🖼️',
-              title: '主页背景',
-              subtitle: '换一张首页封面照片',
-              onTap: () => context.push('/settings/cover'),
-            ),
-            _row(
-              context,
-              key: const Key('settings-home-chat-bg'),
-              emoji: '🌄',
-              title: '聊天背景',
-              subtitle: '聊天壁纸与文字对比度',
-              onTap: () => context.push('/settings/chat-wallpaper'),
-            ),
-            _row(
-              context,
-              key: const Key('settings-home-chat-bubble'),
-              emoji: '💬',
-              title: '聊天气泡',
-              subtitle: '两千多款气泡皮肤随手挑',
-              onTap: () => context.push('/settings/chat-bubble'),
-            ),
-            const SizedBox(height: 16),
-            _heading(context, '连接与提醒'),
-            _row(
-              context,
-              key: const Key('settings-home-remind'),
-              emoji: '🔔',
-              title: '提醒设置',
-              subtitle: '通知渠道与提醒偏好',
-              onTap: () => context.push('/channels'),
-            ),
-            _row(
-              context,
-              key: const Key('settings-home-links'),
-              emoji: '📡',
-              title: '线路与连接',
-              subtitle: '链路检测与手动切线路',
-              onTap: () => context.push('/settings/links'),
-            ),
-            // 2.4.5 乙组第 3 项：消息通知独立页（权限/服务状态/测试通知/
-            // 小米放行引导）
-            _row(
-              context,
-              key: const Key('settings-home-notify'),
-              emoji: '📬',
-              title: '消息通知',
-              subtitle: 'App 后台收 TA 的消息提醒',
-              onTap: () => context.push('/settings/notify'),
-            ),
-            // 2.8.0 P1：四项共享开关页（也是报备 422「去开启」的跳转目标）
-            _row(
-              context,
-              key: const Key('settings-home-peer-share'),
-              emoji: '🛡️',
-              title: '伴侣共享与守护',
-              subtitle: '位置、轨迹、报备与使用报告共享开关',
-              onTap: () => context.push('/settings/peer-share'),
-            ),
-            const SizedBox(height: 16),
-            // 2.8.0 第 0 步：定位验证包临时开关（分支 experiment/peer-loc-verify，
-            // 机主确认后主体接线替换为正式设置页；本卡不进 main）
-            const PeerVerifyCard(),
-            const SizedBox(height: 16),
-            _heading(context, '数据与账号'),
-            _row(
-              context,
-              key: const Key('settings-home-export'),
-              emoji: '📦',
-              title: '数据导出',
-              subtitle: '记录打包、Markdown 与日历订阅',
-              onTap: () => context.push('/settings/export'),
-            ),
-            _row(
-              context,
-              key: const Key('settings-home-backups'),
-              emoji: '🗄️',
-              title: '备份与存储',
-              subtitle: '完整备份与存储占用（管理员）',
-              onTap: () => context.push('/backups'),
-            ),
-            _row(
-              context,
-              key: const Key('settings-home-invite'),
-              emoji: '💌',
-              title: '邀请另一半入住',
-              subtitle: '生成专属邀请链接发给 TA',
-              onTap: () => context.push('/settings/invite'),
-            ),
-            const SizedBox(height: 20),
-            _heading(context, '关于'),
-            _aboutCard(context),
-          ],
+      backgroundColor: appleCanvasColor(theme),
+      appBar: AppBar(
+        title: const Text('设置'),
+        backgroundColor: Colors.transparent,
+        surfaceTintColor: Colors.transparent,
+        scrolledUnderElevation: 0,
+      ),
+      body: ApplePageBackground(
+        child: RefreshIndicator(
+          onRefresh: _checkUpdate,
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, Spacing.pageBottom),
+            children: [
+              // 页头副题（沿用原全量页逐字；标题在 AppBar）
+              Padding(
+                padding: const EdgeInsets.only(left: 4, bottom: 14),
+                child: Text(
+                  '管理空间、账号和数据。',
+                  style: theme.textTheme.bodySmall?.copyWith(color: cs.outline),
+                ),
+              ),
+              AppleGroupedSection(
+                title: '外观',
+                children: [
+                  AppleGroupedRow(
+                    key: const Key('settings-home-space'),
+                    icon: Icons.home_rounded,
+                    tone: AppleIconTone.coral,
+                    title: '空间信息',
+                    subtitle: '空间名称与相恋日期',
+                    onTap: () => context.push('/settings/space'),
+                  ),
+                  AppleGroupedRow(
+                    key: const Key('settings-home-theme'),
+                    icon: Icons.palette_rounded,
+                    tone: AppleIconTone.purple,
+                    title: '主题与外观',
+                    subtitle: '主题色、夜间模式与动效',
+                    onTap: () => context.push('/settings/theme'),
+                  ),
+                  AppleGroupedRow(
+                    key: const Key('settings-home-cover'),
+                    icon: Icons.photo_rounded,
+                    tone: AppleIconTone.sky,
+                    title: '主页背景',
+                    subtitle: '换一张首页封面照片',
+                    onTap: () => context.push('/settings/cover'),
+                  ),
+                  AppleGroupedRow(
+                    key: const Key('settings-home-chat-bg'),
+                    icon: Icons.wallpaper_rounded,
+                    tone: AppleIconTone.teal,
+                    title: '聊天背景',
+                    subtitle: '聊天壁纸与文字对比度',
+                    onTap: () => context.push('/settings/chat-wallpaper'),
+                  ),
+                  AppleGroupedRow(
+                    key: const Key('settings-home-chat-bubble'),
+                    icon: Icons.chat_bubble_rounded,
+                    tone: AppleIconTone.pink,
+                    title: '聊天气泡',
+                    subtitle: '两千多款气泡皮肤随手挑',
+                    onTap: () => context.push('/settings/chat-bubble'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 18),
+              AppleGroupedSection(
+                title: '连接与提醒',
+                children: [
+                  AppleGroupedRow(
+                    key: const Key('settings-home-remind'),
+                    icon: Icons.notifications_rounded,
+                    tone: AppleIconTone.rose,
+                    title: '提醒设置',
+                    subtitle: '通知渠道与提醒偏好',
+                    onTap: () => context.push('/channels'),
+                  ),
+                  AppleGroupedRow(
+                    key: const Key('settings-home-links'),
+                    icon: Icons.wifi_tethering_rounded,
+                    tone: AppleIconTone.blue,
+                    title: '线路与连接',
+                    subtitle: '链路检测与手动切线路',
+                    onTap: () => context.push('/settings/links'),
+                  ),
+                  AppleGroupedRow(
+                    key: const Key('settings-home-notify'),
+                    icon: Icons.mark_chat_unread_rounded,
+                    tone: AppleIconTone.indigo,
+                    title: '消息通知',
+                    subtitle: 'App 后台收 TA 的消息提醒',
+                    onTap: () => context.push('/settings/notify'),
+                  ),
+                  AppleGroupedRow(
+                    key: const Key('settings-home-peer-share'),
+                    icon: Icons.shield_rounded,
+                    tone: AppleIconTone.emerald,
+                    title: '伴侣共享与守护',
+                    subtitle: '位置、轨迹、报备与使用报告共享开关',
+                    onTap: () => context.push('/settings/peer-share'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 18),
+              const PeerVerifyCard(),
+              const SizedBox(height: 18),
+              AppleGroupedSection(
+                title: '数据与账号',
+                children: [
+                  AppleGroupedRow(
+                    key: const Key('settings-home-export'),
+                    icon: Icons.inventory_2_rounded,
+                    tone: AppleIconTone.amber,
+                    title: '数据导出',
+                    subtitle: '记录打包、Markdown 与日历订阅',
+                    onTap: () => context.push('/settings/export'),
+                  ),
+                  AppleGroupedRow(
+                    key: const Key('settings-home-backups'),
+                    icon: Icons.cloud_done_rounded,
+                    tone: AppleIconTone.slate,
+                    title: '备份与存储',
+                    subtitle: '完整备份与存储占用（管理员）',
+                    onTap: () => context.push('/backups'),
+                  ),
+                  AppleGroupedRow(
+                    key: const Key('settings-home-invite'),
+                    icon: Icons.favorite_rounded,
+                    tone: AppleIconTone.rose,
+                    title: '邀请另一半入住',
+                    subtitle: '生成专属邀请链接发给 TA',
+                    onTap: () => context.push('/settings/invite'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 18),
+              _aboutCard(context),
+            ],
+          ),
         ),
       ),
     );
   }
-
-  Widget _heading(BuildContext context, String text) => Padding(
-        padding: const EdgeInsets.only(top: 6, bottom: 8),
-        child: Text(
-          text,
-          style: Theme.of(context).textTheme.titleSmall
-              ?.copyWith(color: Theme.of(context).colorScheme.primary),
-        ),
-      );
-
-  /// 分组索引行：标题 + 副题 + 右箭头，只跳转不放内容本体。
-  Widget _row(
-    BuildContext context, {
-    required Key key,
-    required String emoji,
-    required String title,
-    required String subtitle,
-    required VoidCallback onTap,
-  }) => Card(
-        margin: const EdgeInsets.only(bottom: 10),
-        child: ListTile(
-          key: key,
-          leading: Text(emoji, style: const TextStyle(fontSize: 22)),
-          title: Text(title, style: AppType.body(Theme.of(context))),
-          subtitle: Text(subtitle, style: AppType.caption(Theme.of(context))),
-          trailing: Icon(AppIcons.chevronRight,
-              color: Theme.of(context).colorScheme.outline),
-          onTap: onTap,
-        ),
-      );
 
   /// 2.4.15：init 错误原文压成一行摘要（去换行，截 90 字符）。
   String _shortErr(String raw) {
@@ -292,21 +277,27 @@ class _SettingsHomePageState extends ConsumerState<SettingsHomePage> {
     // /api/status 的 apk_version 不再驱动「可更新到」提示；服务端版本展示
     // 与「复制 App 下载链接」原样保留（B3 口径）。
     final link = s == null ? '' : apkDownloadLink(s, AppConfig.builtinMainRoute);
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(Spacing.cardPad),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Text('💕', style: TextStyle(fontSize: 26)),
-              title: const Text('恋爱空间'),
-              subtitle: Text(
-                _pkgVersion.isEmpty ? '版本加载中…' : 'APK v$_pkgVersion ($_pkgBuild)',
-                style: Theme.of(context).textTheme.bodySmall,
+    return AppleGroupedSection(
+      title: '关于',
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(Spacing.cardPad),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const AppleIconBadge(
+                  icon: Icons.favorite_rounded,
+                  tone: AppleIconTone.rose,
+                  size: 38,
+                ),
+                title: const Text('恋爱空间'),
+                subtitle: Text(
+                  _pkgVersion.isEmpty ? '版本加载中…' : 'APK v$_pkgVersion ($_pkgBuild)',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
               ),
-            ),
             // 2.5.9 裁定⑥：通知服务状态行（服务运行/SSE 最近事件/最近判定/错误）
             Builder(builder: (context) {
               final NotifyDiag d = ref.read(notifyStatusProvider);
@@ -416,6 +407,7 @@ class _SettingsHomePageState extends ConsumerState<SettingsHomePage> {
           ],
         ),
       ),
+      ],
     );
   }
 }
@@ -545,24 +537,29 @@ class PeerVerifyCardState extends ConsumerState<PeerVerifyCard> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(0, 4, 0, 4),
-        child: Column(children: [
-          SwitchListTile(
-            secondary: const Text('📍', style: TextStyle(fontSize: 22)),
-            title: const Text('位置共享（定位验证包）'),
-            subtitle: Text(
-                _on
-                    ? '开启中 · 数据仅存自家 NAS · 轨迹保留 15 天'
-                    : '第 0 步真机验证 · 原生 LocationManager 三 provider · 25m 位移/5min 心跳',
-                style: Theme.of(context)
-                    .textTheme
-                    .bodySmall
-                    ?.copyWith(color: cs.outline)),
-            value: _on,
-            onChanged: _busy ? null : _toggle,
-          ),
+    return AppleGroupedSection(
+      title: '位置共享',
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(0, 4, 0, 4),
+          child: Column(children: [
+            SwitchListTile(
+              secondary: const AppleIconBadge(
+                icon: Icons.my_location_rounded,
+                tone: AppleIconTone.emerald,
+              ),
+              title: const Text('位置共享'),
+              subtitle: Text(
+                  _on
+                      ? '开启中 · 数据仅存自家空间 · 轨迹保留 15 天'
+                      : '后台定位上报 · 数据仅存自家空间 · 轨迹保留 15 天',
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodySmall
+                      ?.copyWith(color: cs.outline)),
+              value: _on,
+              onChanged: _busy ? null : _toggle,
+            ),
           if (_summary.isNotEmpty)
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
@@ -658,11 +655,12 @@ class PeerVerifyCardState extends ConsumerState<PeerVerifyCard> {
           TextButton.icon(
             onPressed: _exportFatal,
             icon: const Icon(Icons.bug_report, size: 16),
-            label: const Text('导出 peer-loc-fatal 日志'),
+            label: const Text('导出定位诊断日志'),
           ),
           const SizedBox(height: 4),
         ]),
       ),
+      ],
     );
   }
 }

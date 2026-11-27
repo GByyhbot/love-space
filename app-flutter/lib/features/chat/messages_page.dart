@@ -18,6 +18,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 
 import '../../core/api/api_client.dart';
+import '../../core/ui/apple_ui.dart';
 import '../../core/ui/hold_to_confirm.dart' show HoldToConfirmButton;
 import '../../core/cache/low_freq_cache.dart';
 import '../../core/chat/chat_bubbles.dart';
@@ -384,12 +385,26 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
     // 视觉上就是「点输入框背景往上跑、点工具栏又落回来」。
     final fullHeight = MediaQuery.sizeOf(context).height;
     return Scaffold(
-      backgroundColor: immersive ? Colors.black : null,
+      backgroundColor: immersive ? Colors.black : appleCanvasColor(Theme.of(context)),
       appBar: AppBar(
         titleSpacing: 0,
         // 五处外壳同一底色同一透明度（聊天页外壳契约，见 chat_chrome.dart）
         backgroundColor: chatChromeColor(Theme.of(context), immersive: immersive),
         foregroundColor: immersive ? Colors.white : null,
+        surfaceTintColor: Colors.transparent,
+        scrolledUnderElevation: 0,
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(0.6),
+          child: Container(
+            height: 0.6,
+            color: immersive
+                ? Colors.white.withValues(alpha: 0.14)
+                : Theme.of(context)
+                    .colorScheme
+                    .outlineVariant
+                    .withValues(alpha: 0.45),
+          ),
+        ),
         systemOverlayStyle:
             chatChromeOverlayStyle(Theme.of(context), immersive: immersive),
         // 二级页通则：automaticallyImplyLeading 不关，自动返回箭头 + 手势都回上一页
@@ -500,15 +515,38 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
             child: AnimatedOpacity(
               opacity: ref.watch(chatRecordProvider) != null ? 0 : 1,
               duration: Motion.base,
-              child: ChatCompose(
-                immersive: immersive,
-                dark: true,
-                replyNotifier: _replyNotifier,
-                onOpenSearch: () => setState(() {
-                  _searchOpen = true;
-                  _searchCtrl.clear();
-                }),
-                onOpenWallpaper: () => showWallpaperSheet(context),
+              // 悬浮玻璃输入容器外包层（不动 chat_compose.dart 本体）
+              child: Container(
+                margin: const EdgeInsets.fromLTRB(10, 4, 10, 8),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(
+                    color: immersive
+                        ? Colors.white.withValues(alpha: 0.16)
+                        : Theme.of(context)
+                            .colorScheme
+                            .outlineVariant
+                            .withValues(alpha: 0.45),
+                    width: 0.8,
+                  ),
+                  boxShadow: appleCardShadows(
+                    immersive ||
+                        Theme.of(context).brightness == Brightness.dark,
+                  ),
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(24),
+                  child: ChatCompose(
+                    immersive: immersive,
+                    dark: true,
+                    replyNotifier: _replyNotifier,
+                    onOpenSearch: () => setState(() {
+                      _searchOpen = true;
+                      _searchCtrl.clear();
+                    }),
+                    onOpenWallpaper: () => showWallpaperSheet(context),
+                  ),
+                ),
               ),
             ),
           ),

@@ -130,7 +130,8 @@ void main() {
     expect(src.contains('periodStageColor(context)'), isTrue,
         reason: '生理期宽卡柔光取 period_colors（--period light/dark）');
     expect(src.contains('flutter'), isTrue);
-    expect(src.contains('Radius.circular(11)'), isTrue, reason: '底座圆角 11');
+    expect(src.contains('AppleGroupedSection'), isTrue,
+        reason: '11 项工具已按主要页面真改版式令迁入 Apple 分组容器与矢量图标');
     // 无设置入口守卫保留（2.4.0）。
     expect(src.contains('settings-hub-'), isFalse);
   });
