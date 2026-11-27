@@ -18,7 +18,10 @@ import '../../core/ui/selection_sheet.dart';
 import '../auth/auth_state.dart';
 import 'post_card.dart';
 import 'timeline_controller.dart';
+import '../../core/theme/app_icons.dart';
+import '../../core/theme/motion.dart';
 import '../../core/theme/tokens.dart';
+import '../../core/theme/typography.dart';
 import '../../core/ui/stagger_in.dart' show StaggerIn;
 import '../settings/settings_state.dart' show spaceAppearanceProvider;
 
@@ -134,14 +137,14 @@ class _TimelinePageState extends ConsumerState<TimelinePage> {
           onChanged: _onQueryChanged,
           decoration: InputDecoration(
             hintText: '搜索我们的故事…',
-            prefixIcon: const Icon(Icons.search_rounded),
+            prefixIcon: const Icon(AppIcons.search),
             isDense: true,
             border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(AppRadius.medium),
               borderSide: BorderSide(color: cs.outlineVariant),
             ),
             enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(AppRadius.medium),
               borderSide: BorderSide(color: cs.outlineVariant),
             ),
           ),
@@ -157,8 +160,8 @@ class _TimelinePageState extends ConsumerState<TimelinePage> {
           if (_activeFilterSlot(f) >= 0)
             Positioned.fill(
               child: AnimatedAlign(
-                duration: const Duration(milliseconds: 220),
-                curve: Curves.easeOut,
+                duration: Motion.base,
+                curve: Motion.springCurve,
                 alignment: Alignment(_activeFilterSlot(f) * 2.0 - 1.0, 0),
                 child: FractionallySizedBox(
                   widthFactor: 1 / 3,
@@ -166,7 +169,7 @@ class _TimelinePageState extends ConsumerState<TimelinePage> {
                     margin: const EdgeInsets.symmetric(horizontal: 2),
                     decoration: BoxDecoration(
                       color: cs.primary.withValues(alpha: 0.10),
-                      borderRadius: BorderRadius.circular(99),
+                      borderRadius: BorderRadius.circular(AppRadius.pill),
                     ),
                   ),
                 ),
@@ -297,14 +300,14 @@ class _TimelinePageState extends ConsumerState<TimelinePage> {
     final cs = Theme.of(context).colorScheme;
     return InkWell(
       key: key,
-      borderRadius: BorderRadius.circular(999),
+      borderRadius: BorderRadius.circular(AppRadius.pill),
       onTap: onTap,
       child: Container(
-        height: 40,
+        height: AppTouch.minTarget,
         alignment: Alignment.center,
         decoration: BoxDecoration(
           color: cs.surfaceContainerHighest.withValues(alpha: 0.55),
-          borderRadius: BorderRadius.circular(999),
+          borderRadius: BorderRadius.circular(AppRadius.pill),
           border: Border.all(
             color: active ? cs.primary : cs.outlineVariant,
             width: active ? 1.5 : 1,
@@ -367,14 +370,13 @@ class _TimelinePageState extends ConsumerState<TimelinePage> {
       return Center(
         child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
           Icon(Icons.auto_stories_rounded, size: 44, color: theme.colorScheme.outline),
-          const SizedBox(height: 12),
+          const SizedBox(height: Spacing.md),
           Text(filtered ? '没有符合条件的记录' : '这一页，留给新的故事',
-              style: theme.textTheme.titleMedium),
+              style: AppType.title(theme)),
           const SizedBox(height: Spacing.gap),
           Text(
               filtered ? '换个条件，或清除筛选再试试。' : '可以发照片、文字、视频，或者留下一段声音。',
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: theme.colorScheme.outline)),
+              style: AppType.caption(theme)),
         ]),
       );
     }

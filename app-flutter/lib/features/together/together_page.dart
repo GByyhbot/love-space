@@ -22,7 +22,9 @@ import '../../core/together/together_data.dart';
 import '../period/period_colors.dart' show periodStageColor;
 import '../shell/web_chrome.dart' show webSerifStyle;
 import 'together_controller.dart';
+import '../../core/theme/app_icons.dart';
 import '../../core/theme/tokens.dart';
+import '../../core/theme/typography.dart';
 
 class TogetherPage extends ConsumerStatefulWidget {
   const TogetherPage({super.key, required this.active});
@@ -261,44 +263,49 @@ class _TogetherPageState extends ConsumerState<TogetherPage> {
   }) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
+    final dark = theme.brightness == Brightness.dark;
     final tint = _toolTints[title] ?? (cs.surfaceContainerHighest, cs.onSurface);
+    final badgeBg =
+        dark ? tint.$2.withValues(alpha: 0.22) : tint.$1;
+    final badgeBorder = tint.$2.withValues(alpha: dark ? 0.35 : 0.14);
+    final innerRadius = AppRadius.concentric(AppRadius.large, Spacing.sm);
     // 2.4.10 附录 B ②：按压四段——按下即微缩 0.97，松手回弹。
     return PressableScale(
       onTap: onTap,
       child: InkWell(
       key: cardKey,
-      borderRadius: BorderRadius.circular(20),
+      borderRadius: BorderRadius.circular(AppRadius.large),
       onTap: onTap,
       child: Container(
-        // 2.4.1 第 10 项①：内边距收紧 14→10（约 -25% 高度参考）。
-        padding: const EdgeInsets.all(10),
+        // 2.4.1 第 10 项①：内边距对齐 Spacing.md（12）与 20 大圆角。
+        padding: const EdgeInsets.all(Spacing.md),
         constraints: const BoxConstraints(minHeight: 92),
         decoration: BoxDecoration(
           color: cs.surface,
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(AppRadius.large),
           border: Border.all(color: cs.outlineVariant),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // emoji 收进 35px 圆角方底座（圆角 11，每卡淡彩底 + 同色图形）。
+            // emoji 收进 36px 圆角方底座（同心圆角 12）。
             Container(
-              width: 35,
-              height: 35,
+              width: 36,
+              height: 36,
               decoration: BoxDecoration(
-                color: tint.$1,
-                borderRadius: BorderRadius.circular(11),
+                color: badgeBg,
+                borderRadius: BorderRadius.circular(innerRadius),
+                border: Border.all(color: badgeBorder),
               ),
               alignment: Alignment.center,
               child: Text(emoji, style: const TextStyle(fontSize: 20)),
             ),
             const SizedBox(height: 6),
-            Text(title, style: theme.textTheme.titleSmall), // h3 fs-body
+            Text(title, style: AppType.title(theme)), // h3 fs-body
             const SizedBox(height: 2),
             Text(desc, maxLines: 2, overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.bodySmall?.copyWith(
-                    color: cs.outline)), // p fs-sm muted
+                style: AppType.caption(theme)), // p fs-sm muted
           ],
         ),
       ),
@@ -450,23 +457,22 @@ class _AnniversaryCard extends StatelessWidget {
                     Text(
                       '${a.days}',
                       style: webSerifStyle(28,
-                          color: cs.primary, fontWeight: FontWeight.w600),
+                              color: cs.primary, fontWeight: FontWeight.w600)
+                          .copyWith(fontFeatures: AppType.tabularFeatures),
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: Spacing.sm),
                     Expanded(
                       child: Padding(
-                        padding: const EdgeInsets.only(bottom: 4),
+                        padding: const EdgeInsets.only(bottom: Spacing.xs),
                         child: Text(
                           '天后 · ${(a.record.body['title'] ?? '纪念日')}\n'
                           '${a.due} · 点此管理纪念日',
                           softWrap: true,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: cs.outline,
-                          ),
+                          style: AppType.caption(theme),
                         ),
                       ),
                     ),
-                    Icon(Icons.chevron_right, color: cs.outline),
+                    Icon(AppIcons.chevronRight, color: cs.outline),
                   ],
                 ),
         ),
@@ -576,7 +582,7 @@ class _PeerReportCardState extends ConsumerState<_PeerReportCard> {
             ],
           ),
         ),
-        Icon(Icons.chevron_right_rounded, color: cs.outline),
+        Icon(AppIcons.chevronRight, color: cs.outline),
       ]),
     );
   }

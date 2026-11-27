@@ -18,6 +18,8 @@ import '../auth/auth_state.dart';
 import '../../core/chat/chat_state.dart';
 import '../../core/notify/notify_service.dart' show NotifyCoordinator, onAppResumedReload;
 import '../../core/sse/sse_client.dart';
+import '../../core/theme/app_icons.dart';
+import '../../core/theme/tokens.dart';
 import '../album/album_page.dart';
 import '../home/home_page.dart';
 import '../notify/system_unread_provider.dart';
@@ -166,7 +168,7 @@ class _ShellPageState extends ConsumerState<ShellPage> {
             key: const Key('shell-settings'),
             tooltip: '设置',
             onPressed: () => context.push('/settings'),
-            icon: Icons.settings_outlined,
+            icon: AppIcons.settings,
           ),
           const SizedBox(width: ChromeMetrics.topBtnGap),
           // 头像入口 → 账号资料页（对齐 Web 账号菜单：资料/邀请/退出都在那里）。
@@ -180,7 +182,7 @@ class _ShellPageState extends ConsumerState<ShellPage> {
             // 2.3.7：照片头像（media id 来自 users.avatar）
             avatarId: me?.user.avatar ?? '',
           ),
-          const SizedBox(width: 4),
+          const SizedBox(width: Spacing.xs),
         ],
       ),
       body: Stack(

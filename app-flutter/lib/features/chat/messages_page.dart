@@ -37,6 +37,7 @@ import 'media_bubble_widgets.dart';
 import 'skin_bubble.dart';
 import 'voice_playback.dart';
 import 'wallpaper_sheet.dart';
+import '../../core/theme/app_icons.dart';
 import '../../core/theme/motion.dart';
 import '../../core/theme/tokens.dart';
 
@@ -189,7 +190,7 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
           item('totext', Icons.graphic_eq_rounded, '转文字'),
         item('reply', Icons.reply_rounded, '引用'),
         item('pin', Icons.push_pin_rounded, record.body.pinned ? '取消置顶' : '置顶'),
-        item('moment', Icons.auto_stories_rounded, '记入时光'),
+        item('moment', AppIcons.diary, '记入时光'),
         // 撤回仅本人且 2 分钟窗口内显示（对齐 Web ops；服务端同口径校验）
         if (canRecallChat(record, me.user.id))
           item('recall', Icons.undo_rounded, '撤回',
@@ -231,7 +232,7 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
     await showModalBottomSheet<void>(
       context: context,
       shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xl))),
       builder: (sheetCtx) => _AsrTextSheet(
         mediaId: chatVisualOf(record).voiceMids.first,
         theme: theme,
@@ -584,7 +585,7 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
               onChanged: (_) => setState(() {}),
               decoration: const InputDecoration(
                 hintText: '搜索最近的消息…',
-                prefixIcon: Icon(Icons.search_rounded),
+                prefixIcon: Icon(AppIcons.search),
                 isDense: true,
                 filled: false,
                 border: InputBorder.none,
@@ -593,27 +594,35 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
               ),
             ),
           ),
-          // ✕ 收进胶囊右端的小圆钮（直径 34，底色为胶囊内浅一档的圆）
+          // ✕ 收进胶囊右端的小圆钮（外圈保证 AppTouch.minTarget 热区）
           Tooltip(
             message: '关闭搜索',
-            child: InkWell(
-              onTap: () => setState(() {
-                // 清空搜索词并收起搜索栏，恢复完整列表（真机缺陷 3：此前只清文本）
-                _searchOpen = false;
-                _searchCtrl.clear();
-              }),
-              customBorder: const CircleBorder(),
-              child: Container(
-                key: const Key('search-close-dot'),
-                width: 34,
-                height: 34,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: onDark
-                      ? Colors.white.withValues(alpha: 0.14)
-                      : theme.colorScheme.surfaceContainerHighest,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(
+                minWidth: AppTouch.minTarget,
+                minHeight: AppTouch.minTarget,
+              ),
+              child: InkWell(
+                onTap: () => setState(() {
+                  // 清空搜索词并收起搜索栏，恢复完整列表（真机缺陷 3：此前只清文本）
+                  _searchOpen = false;
+                  _searchCtrl.clear();
+                }),
+                customBorder: const CircleBorder(),
+                child: Center(
+                  child: Container(
+                    key: const Key('search-close-dot'),
+                    width: 34,
+                    height: 34,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: onDark
+                          ? Colors.white.withValues(alpha: 0.14)
+                          : theme.colorScheme.surfaceContainerHighest,
+                    ),
+                    child: const Icon(Icons.close_rounded, size: 18),
+                  ),
                 ),
-                child: const Icon(Icons.close_rounded, size: 18),
               ),
             ),
           ),

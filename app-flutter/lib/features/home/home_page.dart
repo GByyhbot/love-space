@@ -30,7 +30,9 @@ import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
 import '../../core/ui/avatar_media.dart';
 import '../shell/web_chrome.dart';
 import '../settings/settings_widgets.dart' show GlassActionBar;
+import '../../core/theme/app_icons.dart';
 import '../../core/theme/tokens.dart';
+import '../../core/theme/typography.dart';
 import 'home_cards.dart' show OnThisDayCard, YearbookCard, onThisDayProvider, yearbookProvider;
 import 'report_capsule_bar.dart' show ReportCapsuleBar;
 
@@ -533,7 +535,8 @@ class _Hero extends ConsumerWidget {
                           TextSpan(
                             // hero-days strong：serif 42（手机档 :2289）/500
                             text: days == null ? '—' : '$days',
-                            style: webSerifStyle(42, color: daysColor, height: 1.15),
+                            style: webSerifStyle(42, color: daysColor, height: 1.15)
+                                .copyWith(fontFeatures: AppType.tabularFeatures),
                           ),
                           TextSpan(
                             // em「天」：fs-body、常规字族（:2272-2274）
@@ -562,10 +565,10 @@ class _Hero extends ConsumerWidget {
                   ),
                 ),
                 Positioned(
-                  right: 8,
-                  top: 8,
+                  right: Spacing.sm,
+                  top: Spacing.sm,
                   child: Icon(
-                    Icons.edit,
+                    Icons.edit_rounded,
                     size: 16,
                     color: hasCover
                         ? Colors.white.withValues(alpha: 0.8)
@@ -854,13 +857,13 @@ class _TodayCells extends StatelessWidget {
           child: Container(
             decoration: BoxDecoration(
               color: cs.surface,
-              borderRadius: BorderRadius.circular(16), // :496
+              borderRadius: BorderRadius.circular(AppRadius.lg), // :496
               border: Border.all(color: cs.outlineVariant),
             ),
             child: Material(
               color: Colors.transparent,
               child: InkWell(
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(AppRadius.lg),
                 onTap: () => context.push('/together/anniversary'),
                 child: Padding(
                   padding: const EdgeInsets.all(13),
@@ -873,7 +876,7 @@ class _TodayCells extends StatelessWidget {
                           Expanded(
                             child: Text('最近纪念日', style: headerStyle()),
                           ),
-                          Icon(Icons.chevron_right,
+                          Icon(AppIcons.chevronRight,
                               size: 14, color: cs.outline), // tiny-go（:508）
                         ],
                       ),
@@ -899,7 +902,9 @@ class _TodayCells extends StatelessWidget {
                             // countdown-mini strong：serif 26/500（:505），
                             // primary-dark → primary 映射（深浅随主题）
                             Text('${ann.days}',
-                                style: webSerifStyle(26, color: cs.primary)),
+                                style: webSerifStyle(26, color: cs.primary)
+                                    .copyWith(
+                                        fontFeatures: AppType.tabularFeatures)),
                             const SizedBox(width: 6),
                             Text('天后',
                                 style: theme.textTheme.bodySmall
@@ -1252,7 +1257,7 @@ class _DailyQuote extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
       decoration: BoxDecoration(
         color: cs.primaryContainer,
-        borderRadius: BorderRadius.circular(12), // --radius-s（:1906）
+        borderRadius: BorderRadius.circular(AppRadius.small), // --radius-s（:1906）
       ),
       child: Row(
         children: [

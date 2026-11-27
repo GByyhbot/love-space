@@ -31,7 +31,9 @@ import '../../core/together/together_data.dart';
 import '../../core/ui/empty_view.dart';
 import '../../core/ui/error_view.dart';
 import '../../core/ui/progress.dart';
+import '../../core/theme/app_icons.dart';
 import '../../core/theme/tokens.dart';
+import '../../core/theme/typography.dart';
 import '../auth/auth_state.dart';
 import '../chat/chat_toast.dart' show ChatToastTone, chatToastProvider;
 import '../settings/settings_widgets.dart'
@@ -162,7 +164,7 @@ class _MusicPageState extends ConsumerState<MusicPage> {
         context,
         tooltip: '搜歌入单',
         onPressed: () => _showSearch(context, ref),
-        icon: Icons.search_rounded,
+        icon: AppIcons.search,
       ),
       // 底部播放条（App 内播放器）：试听开始出现，播完/停止/离页自动收起
       bottomNavigationBar:
@@ -208,7 +210,7 @@ class _MusicPageState extends ConsumerState<MusicPage> {
               )
             else if (songs.isEmpty)
               AppEmptyView(
-                icon: Icons.music_note_rounded,
+                icon: AppIcons.music,
                 title: '还没有歌',
                 hint: '去放一首属于你们的第一首。',
               )
@@ -256,27 +258,30 @@ class _MusicPageState extends ConsumerState<MusicPage> {
           height: 46,
           decoration: BoxDecoration(
               color: tint.withValues(alpha: 0.14),
-              borderRadius: BorderRadius.circular(14)),
+              borderRadius: BorderRadius.circular(
+                  AppRadius.concentric(AppRadius.large, Spacing.sm))),
           alignment: Alignment.center,
-          child: Icon(online ? Icons.queue_music_rounded : Icons.music_note_rounded,
+          child: Icon(online ? Icons.queue_music_rounded : AppIcons.music,
               size: 24, color: tint),
         ),
-        const SizedBox(width: 12),
+        const SizedBox(width: Spacing.md),
         Expanded(
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text((r.body['title'] ?? '未命名').toString(),
-                style: theme.textTheme.titleMedium),
+                style: AppType.title(theme)),
             if (artist.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(top: 2),
-                child: Text(artist,
-                    style: theme.textTheme.bodySmall
-                        ?.copyWith(color: cs.outline)),
+                child: Text(artist, style: AppType.caption(theme)),
               ),
           ]),
         ),
         if (canPlay)
           IconButton(
+            constraints: const BoxConstraints(
+              minWidth: AppTouch.minTarget,
+              minHeight: AppTouch.minTarget,
+            ),
             tooltip: loading
                 ? '准备中…'
                 : (playing ? (_paused ? '继续试听' : '暂停试听') : '试听'),
@@ -437,7 +442,7 @@ class _MusicPageState extends ConsumerState<MusicPage> {
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
           borderRadius:
-              BorderRadius.vertical(top: Radius.circular(AppRadius.lg))),
+              BorderRadius.vertical(top: Radius.circular(AppRadius.xl))),
       builder: (sheetCtx) => StatefulBuilder(
         builder: (sheetCtx, setSheetState) => Padding(
           padding: EdgeInsets.only(
@@ -732,8 +737,11 @@ class _PreviewBar extends StatelessWidget {
                       ]),
                 ),
                 Text('${_fmtDur(pos)} / ${_fmtDur(dur)}',
-                    style: theme.textTheme.labelSmall
-                        ?.copyWith(color: cs.outline)),
+                    style: AppType.numeric(
+                      theme,
+                      base: theme.textTheme.labelSmall,
+                      color: cs.outline,
+                    )),
               ]),
               const SizedBox(height: Spacing.gap),
               ClipRRect(

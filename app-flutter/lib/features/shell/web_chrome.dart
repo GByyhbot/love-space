@@ -19,6 +19,8 @@ import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart';
 
 import '../../core/theme/motion.dart';
+import '../../core/theme/tokens.dart';
+import '../../core/theme/typography.dart';
 import '../../core/ui/avatar_media.dart';
 
 /// chrome 语义色表（深浅两档显式取值，widget 测试逐值断言）。
@@ -385,7 +387,7 @@ class _WebDockState extends State<WebDock> {
         onTap: () => widget.onTab(tab.$1),
         child: AnimatedContainer(
           duration: Motion.base,
-          curve: Curves.easeOut,
+          curve: Motion.springCurve,
           height: ChromeMetrics.navItemHeight,
           alignment: Alignment.center,
           decoration: BoxDecoration(
@@ -395,7 +397,7 @@ class _WebDockState extends State<WebDock> {
           child: AnimatedScale(
             scale: active ? 1.0 : 0.94,
             duration: Motion.fast,
-            curve: Curves.easeOut,
+            curve: Motion.springCurve,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               mainAxisAlignment: MainAxisAlignment.center,
@@ -504,10 +506,10 @@ class WebBadge extends StatelessWidget {
     final ring = ChromeColors.of(Theme.of(context)).badgeRing;
     return Container(
       constraints: const BoxConstraints(minWidth: ChromeMetrics.badgeMinWidth),
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+      padding: const EdgeInsets.symmetric(horizontal: Spacing.xs, vertical: 3),
       decoration: BoxDecoration(
         color: cs.primary,
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: BorderRadius.circular(AppRadius.pill),
         border: Border.all(color: ring, width: 2),
       ),
       child: Text(
@@ -517,6 +519,7 @@ class WebBadge extends StatelessWidget {
           fontSize: 10,
           height: 1,
           fontWeight: FontWeight.w700,
+          fontFeatures: AppType.tabularFeatures,
           color: cs.onPrimary,
         ),
       ),
