@@ -71,12 +71,16 @@ class _PeerHubPageState extends ConsumerState<PeerHubPage> {
     ),
   ];
 
+  /// 轨迹页是否处于全屏（全屏时隐藏本壳的返回栏 / 底栏 / 悬浮 +）。
+  bool _trackFullscreen = false;
+
   void _setTab(int index) {
     final next = index.clamp(0, 3);
     if (next == _tab) return;
     setState(() {
       _tab = next;
       _activated.add(next);
+      if (next != 1) _trackFullscreen = false;   // 离开轨迹页自动收回全屏态
     });
   }
 
@@ -92,6 +96,9 @@ class _PeerHubPageState extends ConsumerState<PeerHubPage> {
       1 => PeerTrackPage(
           embedded: true,
           onSwitchTab: _setTab,
+          onFullscreenChanged: (v) {
+            if (_trackFullscreen != v) setState(() => _trackFullscreen = v);
+          },
         ),
       2 => PeerPhonePage(
           embedded: true,
@@ -112,11 +119,12 @@ class _PeerHubPageState extends ConsumerState<PeerHubPage> {
     final bottomPad = MediaQuery.paddingOf(context).bottom;
     final topInset = MediaQuery.paddingOf(context).top + kToolbarHeight;
     final meta = _tabs[_tab];
+    final hideChrome = _trackFullscreen && _tab == 1;
 
     return Scaffold(
       backgroundColor: appleCanvasColor(theme),
       extendBodyBehindAppBar: true,
-      appBar: AppleGlassAppBar(
+      appBar: hideChrome ? null : AppleGlassAppBar(
         collapsedTitle: meta.title,
         collapseProgress: 1.0,
         leading: IconButton(
@@ -154,7 +162,7 @@ class _PeerHubPageState extends ConsumerState<PeerHubPage> {
           children: [
             Positioned.fill(
               child: ShellChromeScope(
-                topInset: topInset,
+                topInset: hideChrome ? 0.0 : topInset,
                 child: IndexedStack(
                   index: _tab,
                   children: [
@@ -164,7 +172,7 @@ class _PeerHubPageState extends ConsumerState<PeerHubPage> {
               ),
             ),
             // V3 悬浮 `+` 互动按钮（今日 / 轨迹 / 手机三页展示，设置页隐藏）
-            if (_tab != 3)
+            if (_tab != 3 && !hideChrome)
               Positioned(
                 right: 18,
                 bottom: bottomPad + 92,
@@ -201,7 +209,8 @@ class _PeerHubPageState extends ConsumerState<PeerHubPage> {
                   ),
                 ),
               ),
-            // V3 底部四页签液态玻璃导航栏
+            // V3 底部四页签液态玻璃导航栏（全屏时让位）
+            if (!hideChrome)
             Positioned(
               left: 12,
               right: 12,

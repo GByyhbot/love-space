@@ -121,7 +121,8 @@ class _PeerPhonePageState extends ConsumerState<PeerPhonePage>
       s.hourly == null &&
       s.sessions == null &&
       s.topApps == null &&
-      s.networkEvents == null;
+      s.networkEvents == null &&
+      s.currentNetwork == null;
 
   @override
   Widget build(BuildContext context) {
@@ -318,9 +319,10 @@ class _PeerPhonePageState extends ConsumerState<PeerPhonePage>
     final unlockSub = (hasUnlocks && hasScreen)
         ? '平均 ${durationTextZh(side.screenSec! ~/ side.unlocks!)}'
         : null;
-    final netEvent = side.networkEvents?.isNotEmpty == true
-        ? side.networkEvents!.first
-        : null;
+    // 与今日页状态卡同源：先读 side 的 current_network（peer_location_latest），
+    // 事件流只作兜底（异常③：当天没 state.net 时旧逻辑直接显示「—」）。
+    final netEvent = side.currentNetwork ??
+        (side.networkEvents?.isNotEmpty == true ? side.networkEvents!.first : null);
     final netHead = netEvent != null ? _netShortLabel(netEvent) : '—';
     final netSub = netEvent != null ? _netDetailLabel(netEvent) : null;
 

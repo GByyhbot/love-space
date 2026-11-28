@@ -83,21 +83,32 @@ class NetGate {
     final netChanged = _lastNet != null && _lastNet != net;
     final first = _lastNet == null;
     final ssidChanged = net == 'wifi' && _lastSsid != null && _lastSsid != ssid;
+    // 与 Kotlin StateGates.net 逐字一致（2.8.7 傍晚批 1-2 采集侧）：
+    // ① 从「断网」恢复必报；② Wi-Fi 初连 SSID 由空串补齐必报。
+    final recoveredFromNone = _lastNet == 'none' && net != 'none';
+    final ssidResolved =
+        net == 'wifi' && _lastNet == 'wifi' && (_lastSsid ?? '').isEmpty && ssid.isNotEmpty;
+
+    if (!first && !netChanged && !ssidChanged && !ssidResolved && !recoveredFromNone) {
+      // 🔴 基线只在真正上报后才前进：被防抖压住时保留旧基线，否则切换被永久吞掉
+      return null;
+    }
     _lastNet = net;
     _lastSsid = ssid;
 
-    if (!first && !netChanged && !ssidChanged) return null;
-
-    // SSID 抖动单独冷却；网络类型变化不受 SSID 冷却影响（那是更重要的信号）
+    // SSID 抖动单独冷却；网络类型变化 / 断网恢复 / SSID 补齐不受 SSID 冷却影响
     final lastSsid = _lastSsidEmitMs;
-    if (ssidChanged && !netChanged &&
+    if (ssidChanged && !netChanged && !recoveredFromNone &&
         lastSsid != null &&
         nowMs - lastSsid < kSsidCooldown.inMilliseconds) {
       return null;
     }
 
     final last = _lastEmitMs;
-    if (last != null && nowMs - last < kNetMinInterval.inMilliseconds) return null;
+    if (!recoveredFromNone && !ssidResolved &&
+        last != null && nowMs - last < kNetMinInterval.inMilliseconds) {
+      return null;
+    }
 
     _lastEmitMs = nowMs;
     if (net == 'wifi') _lastSsidEmitMs = nowMs;

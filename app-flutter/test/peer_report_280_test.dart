@@ -160,7 +160,6 @@ void main() {
 
     // 2.8.7 全量重构：原「TA 的报备」块并入顶部状态大卡与今日足迹卡
     expect(find.text('TA 的状态'), findsOneWidget);
-    expect(find.text('我的报备'), findsOneWidget);
     expect(find.byKey(const Key('peer-card-battery')), findsOneWidget,
         reason: '右侧电量圆环唯一展示');
     expect(
@@ -182,14 +181,21 @@ void main() {
     // 距离行：约 845m → 米档
     expect(find.textContaining('距我约'), findsOneWidget);
     expect(find.textContaining('米'), findsWidgets);
+    expect(find.text('状态未知'), findsNothing);
+
+    // 2.8.7 傍晚批 1-1：「我的报备」只在我视角出现 —— TA 视角不得混入
+    expect(find.text('我的报备'), findsNothing,
+        reason: 'TA 视角应纯粹只含对方数据');
+    await tester.tap(find.text('我').last);
+    await tester.pumpAndSettle();
     // 我的报备：实态 / 队列 / 期望态 / 电池豁免（与设置页同源）
+    expect(find.text('我的报备'), findsOneWidget);
     expect(find.text('运行中'), findsOneWidget);
     expect(find.text('2 条'), findsOneWidget);
     expect(find.text('期望开启'), findsOneWidget);
     expect(find.text('已豁免'), findsOneWidget);
     // 最近一次上报：相对 + 绝对并列（绝对时间可断言）
     expect(find.textContaining('2026-11-23 14:30'), findsWidgets);
-    expect(find.text('状态未知'), findsNothing);
   });
 
   testWidgets('② 对方空态：没有报备数据 → 空态文案 + 无距离行', (tester) async {

@@ -710,6 +710,11 @@ object PeerLocNative {
     private var batSeenCharging = -1
     private var batLastEmitMs = 0L
     private var netLastType = ""
+    /**
+     * 待发的「断网」事件：切网瞬间系统先给 onLost，2.5s 内若新网能力回调到达
+     * 就取消它，避免把一次切换记成「断网→恢复」两条（傍晚批 1-2 采集侧缺陷 2）。
+     */
+    private val pendingNetLostRunnable = Runnable { onNetworkType("none", "") }
     private var netLastSsid = ""
     private var netLastEmitMs = 0L
     private var ssidLastEmitMs = 0L
@@ -816,10 +821,15 @@ object PeerLocNative {
             val cm = ctx.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
             val cb = object : ConnectivityManager.NetworkCallback() {
                 override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) {
+                    // 新网已就绪：取消待发的「断网」事件（切网瞬间 onLost 先到是常态）
+                    handler?.removeCallbacks(pendingNetLostRunnable)
                     onNetwork(caps)
                 }
                 override fun onLost(network: Network) {
-                    onNetworkType("none", "")
+                    // 延迟 2.5s：Wi-Fi↔蜂窝切换时 onLost 总先于新网能力回调，
+                    // 立刻报 none 会吃掉 30s 防抖窗并把切换吞掉。
+                    handler?.removeCallbacks(pendingNetLostRunnable)
+                    handler?.postDelayed(pendingNetLostRunnable, 2500L)
                 }
             }
             cm.registerDefaultNetworkCallback(cb)
@@ -843,6 +853,7 @@ object PeerLocNative {
                 cm?.unregisterNetworkCallback(it)
             } catch (_: Exception) {}
         }
+        handler.removeCallbacks(pendingNetLostRunnable)
         stateNetCallback = null
         // 停采清窗口：**不 flush**——不把"停用瞬间"的残值发出去
         unlockCount = 0
@@ -1202,9 +1213,12 @@ object PeerLocNative {
             type = type, ssid = ssid,
             lastType = netLastType, lastSsid = netLastSsid,
             lastEmitMs = netLastEmitMs, ssidLastEmitMs = ssidLastEmitMs, nowMs = now)
+        // 🔴 基线只在**确实上报**后才前进：被防抖压住就保留旧基线，
+        // 否则「onLost 立刻吃满 30s 窗口 → 新网回调被压 → 基线却已改成新类型」
+        // 会永久丢失这次切换（2.8.7 傍晚批 1-2 采集侧缺陷 3）。
+        if (!decision) return
         netLastType = type
         netLastSsid = ssid
-        if (!decision) return
         netLastEmitMs = now
         if (type == "wifi") ssidLastEmitMs = now
         emitState("state.net", mapOf("net" to type, "ssid" to ssid))
@@ -1343,6 +1357,14 @@ object PeerLocNative {
     private fun onHeartbeatTick() {
         heartbeatArmed = false
         heartbeatTicks++
+        // 兜底：国产 ROM 后台常抑制 NetworkCallback → 心跳时主动读一次当前网络，
+        // 只有真变化才会过防抖（不吃额外事件）
+        if (stateEnabled) {
+            val curNet = readNet()
+            if (curNet in setOf("wifi", "cell", "none")) {
+                onNetworkType(curNet, if (curNet == "wifi") readWifi() else "")
+            }
+        }
         // 使用会话的唤醒点之二：心跳 tick（既有静止心跳，不新增定时器）
         appContext?.let { runCatching { drainUsage(it) } }
         val ctx = appContext
@@ -1509,6 +1531,13 @@ object PeerLocNative {
     // ── 采集与判定 ──────────────────────────────────────────────────────
 
     private fun onLocation(location: Location) {
+        // 同上兜底：定位到达时顺手校准一次网络状态（真变化才会发）
+        if (stateEnabled) {
+            val curNet = readNet()
+            if (curNet in setOf("wifi", "cell", "none")) {
+                onNetworkType(curNet, if (curNet == "wifi") readWifi() else "")
+            }
+        }
         receivedCount++
         lastReceivedAt = System.currentTimeMillis()
         appContext?.let { maybeGeocodeAsync(it, location.latitude, location.longitude) }
@@ -1994,10 +2023,18 @@ internal object StateGates {
         val first = lastType.isEmpty()
         val typeChanged = !first && lastType != type
         val ssidChanged = type == "wifi" && lastSsid.isNotEmpty() && lastSsid != ssid
-        if (!first && !typeChanged && !ssidChanged) return false
-        if (ssidChanged && !typeChanged && ssidLastEmitMs > 0L &&
+        // 从「断网」恢复：必报（否则切网被 30s 防抖吞掉）
+        val recoveredFromNone = lastType == "none" && type != "none"
+        // Wi-Fi 初连时 SSID 常先给空串：空 → 非空必须补发一次真实 SSID
+        val ssidResolved = type == "wifi" && lastType == "wifi" &&
+            lastSsid.isEmpty() && ssid.isNotEmpty()
+        if (!first && !typeChanged && !ssidChanged && !ssidResolved && !recoveredFromNone) {
+            return false
+        }
+        if (ssidChanged && !typeChanged && !recoveredFromNone && ssidLastEmitMs > 0L &&
             nowMs - ssidLastEmitMs < SSID_COOLDOWN_MS) return false
-        if (lastEmitMs > 0L && nowMs - lastEmitMs < NET_MIN_INTERVAL_MS) return false
+        if (!recoveredFromNone && !ssidResolved && lastEmitMs > 0L &&
+            nowMs - lastEmitMs < NET_MIN_INTERVAL_MS) return false
         return true
     }
 

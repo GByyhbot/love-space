@@ -328,13 +328,22 @@ void main() {
       expect(find.text('今日时间线'), findsOneWidget);
       double y(String id) =>
           tester.getTopLeft(find.byKey(Key('report-event-$id'))).dy;
-      expect(y('p1'), lessThan(y('m1')), reason: '1 小时前应排在 3 小时前之上');
-      expect(y('m1'), lessThan(y('p2')), reason: '3 小时前应排在 5 小时前之上');
+      // 2.8.7 傍晚批 1-1：默认看 TA —— 只用对方事件排序，我方的 m1 绝不混入
+      expect(y('p1'), lessThan(y('p2')), reason: '1 小时前应排在 5 小时前之上');
+      expect(find.byKey(const Key('report-event-m1')), findsNothing,
+          reason: 'TA 视角不该出现我的报备');
       // 服务器 summary 优先于本地按 payload 拼的文案
       expect(find.text('切到移动数据（服务端）'), findsOneWidget);
       expect(find.text('切到移动数据'), findsNothing);
       expect(find.text('电量 66%，充电中'), findsOneWidget);
+
+      // 切到「我」：我方报备出现，对方事件消失
+      await tester.tap(find.text('我').last);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('report-event-m1')), findsOneWidget);
       expect(find.text('我去加班了'), findsOneWidget);
+      expect(find.byKey(const Key('report-event-p1')), findsNothing,
+          reason: '「我」视角不该混入 TA 的事件');
       // 手填报备保留回应区形态（没发明新组件）
       expect(find.byKey(const Key('report-ack-buttons-m1')), findsNothing,
           reason: '自己的报备不给回应按钮');

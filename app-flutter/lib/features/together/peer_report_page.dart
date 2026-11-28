@@ -75,6 +75,10 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage>
   bool _loading = false;
   String? _error;
 
+  /// 视角：true = 看 TA（默认，与报备语义一致）；false = 看我自己。
+  /// 整页所有区块随它切人（2.8.7 傍晚批 1-1）。
+  bool _peerView = true;
+
   /// 我的侧实态（原生单一事实源）+ 期望态 + 电池豁免 + 权限快照。
   bool _running = false;
   int? _queue;
@@ -328,6 +332,7 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage>
             widget.embedded ? Spacing.pageBottom + 64 : Spacing.pageBottom + 16,
           ),
           children: [
+            _sideToggle(theme, cs),
             if (_error != null && d != null) _errorBanner(cs, theme, d),
             if (_loading && d == null)
               const AppProgress()
@@ -343,9 +348,11 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage>
               ..._usageSection(theme, cs, d),
               ..._footprintSection(theme, cs, d),
               ..._eventsSection(theme, cs),
-              _sectionTitle(theme, '我的报备'),
-              const SizedBox(height: Spacing.gap),
-              _mineBlock(theme, cs, d),
+              if (!_peerView) ...[
+                _sectionTitle(theme, '我的报备'),
+                const SizedBox(height: Spacing.gap),
+                _mineBlock(theme, cs, d),
+              ],
             ],
           ],
         ),
@@ -395,7 +402,7 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage>
 
   /// 失败横幅：状态未知 + 重试；有旧值时标注旧值时间（不许冒充实时）。
   Widget _errorBanner(ColorScheme cs, ThemeData theme, PeerReport? d) {
-    final stale = d?.status.peer?.updated;
+    final stale = _peerView ? d?.status.peer?.updated : d?.status.mine?.updated;
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
@@ -437,11 +444,14 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage>
   /// 暂停中）时整卡换原型形态「已完全关闭报备 / 已暂停至 x」。
   List<Widget> _statusSection(ThemeData theme, ColorScheme cs, PeerReport d) {
     final st = d.status;
-    final halt = st.peerHalt;
-    final name = _partnerName();
+    final mine = !_peerView;
+    final halt = mine ? st.mineHalt : st.peerHalt;
+    final name = mine ? _myName() : _partnerName();
+    final latest = mine ? st.mine : st.peer;
+    final curApp = mine ? st.mineCurrentApp : st.peerCurrentApp;
     if (halt.halted) {
       return [
-        _sectionTitle(theme, 'TA 的状态'),
+        _sectionTitle(theme, mine ? '我的状态' : 'TA 的状态'),
         const SizedBox(height: Spacing.gap),
         _card(
           cs,
@@ -482,7 +492,7 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage>
               child: Text(
                 halt.isPaused
                     ? '已暂停至 ${absoluteTimeZh(halt.until)}'
-                    : '已完全关闭报备 · 对方不可见',
+                    : (mine ? '已完全关闭报备' : '已完全关闭报备 · 对方不可见'),
                 key: const Key('peer-halted-line'),
                 style: theme.textTheme.bodyMedium?.copyWith(color: cs.error),
               ),
@@ -493,21 +503,23 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage>
       ];
     }
 
-    final card = buildPeerStatusCard(peer: st.peer, daily: _stateDaily);
-    final live = _peerLiveLine(st);
-    final locationLine = _peerLocationLine(st);
+    final card = buildPeerStatusCard(peer: latest, daily: _stateDaily, isMine: mine);
+    final live = _peerLiveLine(st, mine: mine);
+    final locationLine = _peerLocationLine(st, mine: mine);
     // 对方从无任何上报：给一句空态（不当故障、不摆空壳卡）
     if (card == null && live.isEmpty && locationLine == null) {
-      if (st.peer == null) {
+      if (latest == null) {
         return [
-          _sectionTitle(theme, 'TA 的状态'),
+          _sectionTitle(theme, mine ? '我的状态' : 'TA 的状态'),
           const SizedBox(height: Spacing.gap),
           _card(
             cs,
-            child: const AppEmptyView(
+            child: AppEmptyView(
               icon: Icons.person_off_outlined,
-              title: 'TA 还没有报备数据',
-              hint: '开通位置共享后这里会显示 TA 的最新报备',
+              title: mine ? '你还没有上报状态' : 'TA 还没有报备数据',
+              hint: mine
+                  ? '在首页点一下快捷报备，这里就有你的状态'
+                  : '开通位置共享后这里会显示 TA 的最新报备',
               padding: EdgeInsets.symmetric(vertical: 24),
             ),
           ),
@@ -516,15 +528,15 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage>
       }
       return const <Widget>[];
     }
-    final battery = st.peer?.battery;
+    final battery = latest?.battery;
     final lowBattery =
-        battery != null && battery <= 20 && st.peer?.charging != true;
+        battery != null && battery <= 20 && latest?.charging != true;
     final metaRows = card?.rows
             .where((r) => r.id != 'battery' && r.id != 'usage')
             .toList(growable: false) ??
         const <PeerStatusRow>[];
     return [
-      _sectionTitle(theme, 'TA 的状态'),
+      _sectionTitle(theme, mine ? '我的状态' : 'TA 的状态'),
       const SizedBox(height: 8),
       _card(
         cs,
@@ -556,7 +568,7 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage>
                             key: const Key('peer-live-line'),
                             label: live,
                             ellipsis: false,
-                            tone: st.peerCurrentApp != null
+                            tone: curApp != null
                                 ? LivePillTone.active
                                 : (card?.stale == true
                                     ? LivePillTone.warn
@@ -590,7 +602,7 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage>
                 BatteryRing(
                   key: const Key('peer-card-battery'),
                   battery: battery,
-                  charging: st.peer?.charging,
+                  charging: latest?.charging,
                 ),
               ],
             ],
@@ -697,6 +709,48 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage>
   }
 
   /// 对方名字（未绑定时给「TA」——不编名字）。
+  /// 「正在使用」已持续秒数：优先用后端一套账算好的 `sec`；
+  /// 旧后端没给时退回本地时钟，但**钳位到最长连续/总量**，杜绝再次
+  /// 显示「1 小时 8 分钟 > 全天 17 分钟」的鬼数。
+  int _liveSec(PeerUsageSide usage) {
+    final app = usage.currentApp;
+    if (app == null) return 0;
+    final cap = usage.longestSessionSec ?? usage.screenSec ?? 86400;
+    if (app.sec != null) return app.sec!.clamp(0, cap);
+    final raw = (DateTime.now().millisecondsSinceEpoch / 1000) - (app.since ?? 0);
+    return raw.round().clamp(0, cap);
+  }
+
+  /// 顶部「TA / 我」切换（与轨迹页/手机页同款组件与位置习惯）。
+  Widget _sideToggle(ThemeData theme, ColorScheme cs) => Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: Row(children: [
+          LiquidPillSegmented<bool>(
+            key: const Key('report-side-toggle'),
+            selected: _peerView,
+            segments: const [
+              LiquidPillSegment(value: true, label: 'TA'),
+              LiquidPillSegment(value: false, label: '我'),
+            ],
+            onChanged: (v) {
+              if (_peerView == v) return;
+              setState(() {
+                _peerView = v;
+                _expandedFoldKeys.clear();
+              });
+            },
+          ),
+          const Spacer(),
+        ]),
+      );
+
+  /// 我自己的昵称（「我」视角的状态卡标题旁用）。
+  String _myName() {
+    final me = ref.watch(authProvider.notifier).me;
+    final n = me?.user.name ?? '';
+    return n.isEmpty ? '我' : n;
+  }
+
   String _partnerName() {
     final me = ref.watch(authProvider.notifier).me;
     if (me == null) return 'TA';
@@ -720,10 +774,10 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage>
       );
 
   /// 实时状态行：`正在使用 X` 优先，其次「N 分钟前活跃」；都取不到给空串。
-  String _peerLiveLine(PeerStatusData st) {
-    final app = st.peerCurrentApp;
+  String _peerLiveLine(PeerStatusData st, {bool mine = false}) {
+    final app = mine ? st.mineCurrentApp : st.peerCurrentApp;
     if (app != null) return '正在使用 ${app.app}';
-    final p = st.peer;
+    final p = mine ? st.mine : st.peer;
     if (p == null) return '';
     final ts = [p.updated, p.stateUpdated]
         .whereType<double>()
@@ -734,8 +788,9 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage>
   }
 
   /// 位置与停留：当日最后一个停留点（含「已停留」）；无停留点 → null。
-  String? _peerStayLine() {
-    final stays = _track?.peer.stays ?? const <PeerTrackStay>[];
+  String? _peerStayLine({bool mine = false}) {
+    final side = mine ? _track?.mine : _track?.peer;
+    final stays = side?.stays ?? const <PeerTrackStay>[];
     if (stays.isEmpty) return null;
     final s = stays.last;
     final dur = durationTextZh(s.durationSec);
@@ -744,10 +799,10 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage>
 
   /// 地点文案优先级：① peer_places 停留点名；② 原生 Geocoder `place_name`；③「位置已更新 · 相对时间」。
   /// 绝不把裸经纬度坐标展示给用户。
-  String? _peerLocationLine(PeerStatusData st) {
-    final stayLine = _peerStayLine();
+  String? _peerLocationLine(PeerStatusData st, {bool mine = false}) {
+    final stayLine = _peerStayLine(mine: mine);
     if (stayLine != null) return stayLine;
-    final p = st.peer;
+    final p = mine ? st.mine : st.peer;
     if (p == null) return null;
     if (p.placeName.isNotEmpty) return p.placeName;
     if (p.updated != null && p.updated! > 0) {
@@ -761,8 +816,9 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage>
   /// 分档降级：screen_only 只有两个数；app off 只是少当前应用行；usage off / 停用
   /// 整卡换关闭态（点进去看明细）。
   List<Widget> _usageSection(ThemeData theme, ColorScheme cs, PeerReport d) {
-    final usage = _usage?.peer;
-    final halt = d.status.peerHalt;
+    final mine = !_peerView;
+    final usage = _peerView ? _usage?.peer : _usage?.mine;
+    final halt = mine ? d.status.mineHalt : d.status.peerHalt;
     final hidden = usage == null || usage.hidden;
     final hasScreen = usage?.screenSec != null && usage!.screenSec! > 0;
     final hasUnlocks = usage?.unlocks != null && usage!.unlocks! > 0;
@@ -802,9 +858,11 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage>
           ]),
           const SizedBox(height: 10),
           if (halt.halted)
-            _hintLine(theme, cs, halt.isPaused ? 'TA 已暂停报备，看不到使用情况' : 'TA 已完全关闭报备')
+            _hintLine(theme, cs, halt.isPaused
+                ? (mine ? '你已暂停报备，无法汇总本机使用' : 'TA 已暂停报备，看不到使用情况')
+                : (mine ? '你已完全关闭报备' : 'TA 已完全关闭报备'))
           else if (hidden)
-            _hintLine(theme, cs, 'TA 未共享手机使用情况')
+            _hintLine(theme, cs, mine ? '今天还没有本机使用数据' : 'TA 未共享手机使用情况')
           else ...[
             Row(children: [
               Expanded(
@@ -866,7 +924,7 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage>
                   const SizedBox(width: Spacing.sm),
                   Expanded(
                     child: Text(
-                      '正在使用 ${usage.currentApp!.app} · ${durationTextZh(((DateTime.now().millisecondsSinceEpoch / 1000) - (usage.currentApp!.since ?? 0)).round())}',
+                      '正在使用 ${usage.currentApp!.app} · ${durationTextZh(_liveSec(usage))}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: AppType.numeric(
@@ -898,8 +956,9 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage>
 
   /// 今日足迹卡：有轨迹点/停留点时左侧显示迷你轨迹图；空态隐藏缩略图、左对齐文案。
   List<Widget> _footprintSection(ThemeData theme, ColorScheme cs, PeerReport d) {
-    final track = _track?.peer;
-    final halt = d.status.peerHalt;
+    final mine = !_peerView;
+    final track = _peerView ? _track?.peer : _track?.mine;
+    final halt = mine ? d.status.mineHalt : d.status.peerHalt;
     final hidden = track == null || track.hidden;
     final hasTrackData =
         track != null &&
@@ -945,7 +1004,7 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage>
             overflow: TextOverflow.ellipsis,
           ),
         ],
-        if (d.peerTodayPoints != null && d.peerTodayPoints! > 0) ...[
+        if (!mine && d.peerTodayPoints != null && d.peerTodayPoints! > 0) ...[
           const SizedBox(height: Spacing.xs),
           Text(
             '今日报备 ${d.peerTodayPoints} 点',
@@ -996,9 +1055,11 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage>
           ]),
           const SizedBox(height: 10),
           if (halt.halted)
-            _hintLine(theme, cs, halt.isPaused ? 'TA 已暂停报备，看不到足迹' : 'TA 已完全关闭报备')
+            _hintLine(theme, cs, halt.isPaused
+              ? (mine ? '你已暂停报备，本机足迹不上报' : 'TA 已暂停报备，看不到足迹')
+              : (mine ? '你已完全关闭报备' : 'TA 已完全关闭报备'))
           else if (hidden)
-            _hintLine(theme, cs, 'TA 未共享位置与足迹')
+            _hintLine(theme, cs, mine ? '今天还没有本机足迹' : 'TA 未共享位置与足迹')
           else if (!hasTrackData)
             summaryCol
           else
@@ -1280,8 +1341,8 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage>
       ));
       return out;
     }
-    // 对方关闭共享：整节明示（对等口径），但仍列出我自己的报备
-    if (day.peerClosedOff) {
+    // 「我」视角不带任何对方关闭提示；「TA」视角才明示（对等口径）
+    if (_peerView && day.peerClosedOff) {
       out.add(_card(
         cs,
         child: Text(
@@ -1290,21 +1351,26 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage>
           style: theme.textTheme.bodySmall?.copyWith(color: cs.error),
         ),
       ));
-      if (day.events.isNotEmpty) out.add(const SizedBox(height: Spacing.gap));
+      if ((_peerView ? day.peerEvents : day.mineEvents).isNotEmpty) {
+        out.add(const SizedBox(height: Spacing.gap));
+      }
     }
-    if (day.events.isEmpty) {
+    final events = _peerView ? day.peerEvents : day.mineEvents;
+    if (events.isEmpty) {
       out.add(_card(
         cs,
         child: AppEmptyView(
           icon: Icons.forum_outlined,
           title: '今天还没有报备',
-          hint: '在首页点一下快捷报备，TA 就能看到',
+          hint: _peerView
+              ? 'TA 发送报备或有状态变化后会显示在这里'
+              : '在首页点一下快捷报备，TA 就能看到',
           padding: const EdgeInsets.symmetric(vertical: 20),
         ),
       ));
       return out;
     }
-    out.add(_timeline(theme, cs, day.events));
+    out.add(_timeline(theme, cs, events));
     return out;
   }
 

@@ -40,12 +40,16 @@ class PeerCurrentApp {
     this.masked = false,
     this.since,
     this.ts,
+    this.sec,
   });
 
   final String app;
   final bool masked;
   final double? since;
   final double? ts;
+
+  /// 后端一套账算出的「已持续秒数」（2.8.7 傍晚批）；旧后端为 null。
+  final int? sec;
 
   static PeerCurrentApp? fromJson(Object? raw) {
     if (raw is! Map) return null;
@@ -57,6 +61,7 @@ class PeerCurrentApp {
       masked: j['masked'] == true,
       since: (j['since'] as num?)?.toDouble(),
       ts: (j['ts'] as num?)?.toDouble(),
+      sec: (j['sec'] as num?)?.toInt(),
     );
   }
 }
@@ -144,6 +149,7 @@ class PeerUsageSide {
     this.foldedCount,
     this.networkEvents,
     this.currentApp,
+    this.currentNetwork,
   });
 
   final bool closedOff;
@@ -162,6 +168,9 @@ class PeerUsageSide {
   final int? foldedCount;
   final List<PeerNetEvent>? networkEvents;
   final PeerCurrentApp? currentApp;
+
+  /// 当前网络（读 side 的 `current_network`，与今日状态卡同源）。旧后端为 null。
+  final PeerNetEvent? currentNetwork;
 
   bool get hidden => closedOff || halted.halted;
 
@@ -190,7 +199,14 @@ class PeerUsageSide {
       foldedCount: (j['folded_count'] as num?)?.toInt(),
       networkEvents: list(j['network_events'], PeerNetEvent.fromJson),
       currentApp: PeerCurrentApp.fromJson(j['current_app']),
+      currentNetwork: _netOf(j['current_network']),
     );
+  }
+
+  static PeerNetEvent? _netOf(Object? raw) {
+    final e = PeerNetEvent.fromJson(raw);
+    if (e == null) return null;
+    return e.net.isEmpty && e.ssid.isEmpty ? null : e;
   }
 }
 

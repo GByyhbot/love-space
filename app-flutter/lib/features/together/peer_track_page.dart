@@ -213,10 +213,14 @@ class PeerTrackPage extends ConsumerStatefulWidget {
     super.key,
     this.embedded = false,
     this.onSwitchTab,
+    this.onFullscreenChanged,
   });
 
   final bool embedded;
   final ValueChanged<int>? onSwitchTab;
+
+  /// 全屏态变化回调（壳层据此隐藏 AppBar / 底栏 / FAB）。
+  final ValueChanged<bool>? onFullscreenChanged;
 
   @override
   ConsumerState<PeerTrackPage> createState() => _PeerTrackPageState();
@@ -281,6 +285,8 @@ class _PeerTrackPageState extends ConsumerState<PeerTrackPage> {
         _error = null;
         _loading = false;
         _playing = false;
+        _cachedSide = null;        // 数据变了：重建解析后的 side
+        _selectedStayIndex = null; // 换日/刷新后旧选中无效
       });
     } catch (e) {
       if (!mounted) return;
@@ -291,7 +297,34 @@ class _PeerTrackPageState extends ConsumerState<PeerTrackPage> {
     }
   }
 
-  PeerTrackSide get _side {
+  /// 全屏态（地图占满整页；仍在同一棵树上，靠 GlobalKey 保 State 与原生相机）。
+  bool _fullscreen = false;
+
+  /// 选中的停留点（进出全屏保留；换人/换日/重载时清空）。
+  int? _selectedStayIndex;
+
+  /// 地图固定 GlobalKey：小窗与全屏必须是同一个 State，否则必重建相机。
+  final GlobalKey _mapKey = GlobalKey(debugLabel: 'peer-track-amap');
+
+  /// 缓存解析后的 side：只在 _load() 完成与切人/切日时重算。
+  /// 原 getter 每次 build 都新建实例（未重写 ==），导致每次 setState 都可能
+  /// 触发原生 setTrackData → recenterCamera，把用户视角重置。
+  PeerTrackSide? _cachedSide;
+
+  PeerTrackSide get _side => _cachedSide ?? _recomputeSide();
+
+  PeerTrackSide _recomputeSide() {
+    _cachedSide = _resolveSide();
+    return _cachedSide!;
+  }
+
+  void _setFullscreen(bool value) {
+    if (_fullscreen == value) return;
+    setState(() => _fullscreen = value);
+    widget.onFullscreenChanged?.call(value);
+  }
+
+  PeerTrackSide _resolveSide() {
     final raw = _peerView
         ? (_data?.peer ?? const PeerTrackSide())
         : (_data?.mine ?? const PeerTrackSide());
@@ -350,6 +383,20 @@ class _PeerTrackPageState extends ConsumerState<PeerTrackPage> {
     final hasReplay =
         _data != null && !side.hidden && side.effectivePoints.length >= 2;
     final topInset = widget.embedded ? ShellChromeScope.topInsetOf(context) : 0.0;
+    if (_fullscreen) {
+      // 全屏态：仍在同一棵树上换布局（绝不用 Navigator/Dialog 新建第二份地图）
+      final full = Scaffold(
+        backgroundColor: cs.surface,
+        body: _fullscreenBody(theme, cs, side, hasReplay),
+      );
+      return PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, _) {
+          if (!didPop) _setFullscreen(false);
+        },
+        child: full,
+      );
+    }
     final body = RefreshIndicator(
       edgeOffset: topInset,
       color: cs.primary,
@@ -409,10 +456,16 @@ class _PeerTrackPageState extends ConsumerState<PeerTrackPage> {
         ],
       ),
     );
-    if (widget.embedded) return body;
-    return Scaffold(
-      appBar: AppBar(title: const Text('今日轨迹')),
-      body: body,
+    final shell = widget.embedded
+        ? body
+        : Scaffold(
+            appBar: AppBar(title: const Text('今日轨迹')),
+            body: body,
+          );
+    return PopScope(
+      canPop: true,
+      onPopInvokedWithResult: (didPop, _) {},
+      child: shell,
     );
   }
 
@@ -431,6 +484,8 @@ class _PeerTrackPageState extends ConsumerState<PeerTrackPage> {
           _tNotifier.value = null;
           _timer?.cancel();
           _playing = false;
+          _cachedSide = null;
+          _selectedStayIndex = null;
         }),
       ),
       const SizedBox(width: 8),
@@ -453,7 +508,11 @@ class _PeerTrackPageState extends ConsumerState<PeerTrackPage> {
             ],
             onChanged: (v) {
               if (_date == v) return;
-              setState(() => _date = v);
+              setState(() {
+                _date = v;
+                _cachedSide = null;
+                _selectedStayIndex = null;
+              });
               _load();
             },
           ),
@@ -495,6 +554,154 @@ class _PeerTrackPageState extends ConsumerState<PeerTrackPage> {
         ]),
       );
 
+  /// 公共地图子树：小窗与全屏**共用同一个 GlobalKey 与同一套手势栈**。
+  /// 进出全屏只是布局重排（同一棵树），不 dispose/create，原生相机与
+  /// 自绘降级的变换矩阵都保留。
+  Widget _buildMapWidget(ColorScheme cs, PeerTrackSide side,
+      {required double bottomOverlayInset}) {
+    return ValueListenableBuilder<double?>(
+      valueListenable: _tNotifier,
+      builder: (context, t, _) {
+        final reading = t == null ? null : pointAt(side.effectivePoints, t);
+        return AmapTrackMapWidget(
+          key: _mapKey,
+          side: side,
+          replayLat: reading?.lat,
+          replayLng: reading?.lng,
+          pathColor: cs.primary,
+          bottomOverlayInset: bottomOverlayInset,
+          fallbackBuilder: (_) => CustomPaint(
+            key: const Key('track-canvas'),
+            painter: _TrackPainter(
+              side: side,
+              pathColor: cs.primary,
+              driveColor: cs.tertiary,
+              stayColor: cs.secondary,
+              gridColor: cs.outlineVariant,
+              reading: reading,
+              labelColor: cs.onSurface,
+              bgLabel: cs.surface,
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  /// 与「回到轨迹」同套胶囊的图标钮（纯 Container+BoxDecoration，不使用背景模糊滤镜）。
+  Widget _mapPillIconButton(
+    ThemeData theme,
+    ColorScheme cs, {
+    required Key key,
+    required IconData icon,
+    required String tooltip,
+    required VoidCallback onTap,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: theme.brightness == Brightness.dark
+            ? cs.surfaceContainerHigh.withValues(alpha: 0.94)
+            : cs.surface.withValues(alpha: 0.96),
+        borderRadius: BorderRadius.circular(AppRadius.pill),
+        border: Border.all(
+          color: cs.outline.withValues(alpha: 0.30),
+          width: 0.9,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.14),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Material(
+        type: MaterialType.transparency,
+        borderRadius: BorderRadius.circular(AppRadius.pill),
+        child: InkWell(
+          key: key,
+          borderRadius: BorderRadius.circular(AppRadius.pill),
+          onTap: onTap,
+          child: Tooltip(
+            message: tooltip,
+            child: Padding(
+              padding: const EdgeInsets.all(9),
+              child: Icon(icon, size: 20, color: cs.onSurface),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 全屏态：地图占满整页；顶部悬浮条（TA/我 + 今天/昨天 + 收起）、
+  /// 紧凑 HUD、底部回放条；停留列表与其他卡片隐藏。
+  Widget _fullscreenBody(
+      ThemeData theme, ColorScheme cs, PeerTrackSide side, bool hasReplay) {
+    final pad = MediaQuery.paddingOf(context);
+    final overlayBottom = hasReplay ? (pad.bottom + 128.0) : (pad.bottom + 16.0);
+    final ready = !side.hidden && side.effectivePoints.isNotEmpty;
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: ready
+              ? _buildMapWidget(cs, side, bottomOverlayInset: overlayBottom)
+              : Container(
+                  color: cs.surfaceContainerHighest.withValues(alpha: 0.35),
+                  alignment: Alignment.center,
+                  child: side.hidden
+                      ? _closedCard(theme, cs, side)
+                      : AppEmptyView(
+                          icon: AppIcons.track,
+                          title: '这一天没有轨迹记录',
+                          hint: '可切回小窗或换一天',
+                          padding: const EdgeInsets.symmetric(vertical: 24),
+                        ),
+                ),
+        ),
+        Positioned(
+          top: pad.top + 8,
+          left: 12,
+          right: 12,
+          child: Row(children: [
+            LiquidPillSegmented<bool>(
+              key: const Key('track-side-toggle'),
+              selected: _peerView,
+              segments: const [
+                LiquidPillSegment(value: true, label: 'TA'),
+                LiquidPillSegment(value: false, label: '我'),
+              ],
+              onChanged: (v) => setState(() {
+                _peerView = v;
+                _tNotifier.value = null;
+                _timer?.cancel();
+                _playing = false;
+                _cachedSide = null;
+                _selectedStayIndex = null;
+              }),
+            ),
+            const Spacer(),
+            _mapPillIconButton(
+              theme,
+              cs,
+              key: const Key('track-fullscreen-exit'),
+              icon: Icons.fullscreen_exit_rounded,
+              tooltip: '退出全屏',
+              onTap: () => _setFullscreen(false),
+            ),
+          ]),
+        ),
+        if (hasReplay)
+          Positioned(
+            left: 12,
+            right: 12,
+            bottom: pad.bottom + 12,
+            child: _replayBar(theme, cs, side),
+          ),
+      ],
+    );
+  }
+
   Widget _canvasCard(ThemeData theme, ColorScheme cs, PeerTrackSide side) {
     return _card(
       cs,
@@ -509,32 +716,20 @@ class _PeerTrackPageState extends ConsumerState<PeerTrackPage> {
                 Positioned.fill(
                   child: Container(
                     color: cs.surfaceContainerHighest.withValues(alpha: 0.38),
-                    child: ValueListenableBuilder<double?>(
-                      valueListenable: _tNotifier,
-                      builder: (context, t, _) {
-                        final reading =
-                            t == null ? null : pointAt(side.effectivePoints, t);
-                        return AmapTrackMapWidget(
-                          side: side,
-                          replayLat: reading?.lat,
-                          replayLng: reading?.lng,
-                          pathColor: cs.primary,
-                          fallbackBuilder: (_) => CustomPaint(
-                            key: const Key('track-canvas'),
-                            painter: _TrackPainter(
-                              side: side,
-                              pathColor: cs.primary,
-                              driveColor: cs.tertiary,
-                              stayColor: cs.secondary,
-                              gridColor: cs.outlineVariant,
-                              reading: reading,
-                              labelColor: cs.onSurface,
-                              bgLabel: cs.surface,
-                            ),
-                          ),
-                        );
-                      },
-                    ),
+                    child: _buildMapWidget(cs, side, bottomOverlayInset: 8),
+                  ),
+                ),
+                // 全屏入口（右上角，HUD 条下方，不挡轨迹与停留点）
+                Positioned(
+                  top: 44,
+                  right: 8,
+                  child: _mapPillIconButton(
+                    theme,
+                    cs,
+                    key: const Key('track-fullscreen-enter'),
+                    icon: Icons.fullscreen_rounded,
+                    tooltip: '全屏查看',
+                    onTap: () => _setFullscreen(true),
                   ),
                 ),
                 // 顶部悬浮 HUD 条（原型一致：实时位置状态 + 里程）
@@ -787,11 +982,16 @@ class _PeerTrackPageState extends ConsumerState<PeerTrackPage> {
 
   Widget _stayRow(
       ThemeData theme, ColorScheme cs, PeerTrackStay s, int index) {
+    final selected = _selectedStayIndex == index - 1;
     return InkWell(
+      key: Key('track-stay-selected-${index - 1}'),
       borderRadius: BorderRadius.circular(AppRadius.small),
       onTap: () {
         _timer?.cancel();
-        if (_playing) setState(() => _playing = false);
+        setState(() {
+          if (_playing) _playing = false;
+          _selectedStayIndex = index - 1;   // 进出全屏保留选中
+        });
         _tNotifier.value = s.arrivedAt;
       },
       child: ConstrainedBox(
@@ -805,7 +1005,9 @@ class _PeerTrackPageState extends ConsumerState<PeerTrackPage> {
             height: 24,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: s.ongoing ? cs.primary : cs.secondaryContainer,
+              color: selected
+                  ? cs.primaryContainer
+                  : (s.ongoing ? cs.primary : cs.secondaryContainer),
             ),
             alignment: Alignment.center,
             child: Text(
@@ -860,6 +1062,7 @@ class _PeerTrackPageState extends ConsumerState<PeerTrackPage> {
   List<PeerNetRecord> _netRecords() {
     final out = <PeerNetRecord>[];
     for (final e in _events) {
+      if (e.mine != !_peerView) continue;   // 与 sideEvents 同口径：只取当前选中一侧
       if (e.type != 'state.net') continue;
       final p = e.payload;
       out.add(PeerNetRecord(
@@ -875,6 +1078,7 @@ class _PeerTrackPageState extends ConsumerState<PeerTrackPage> {
   List<BatteryReading> _batteryReadings() {
     final out = <BatteryReading>[];
     for (final e in _events) {
+      if (e.mine != !_peerView) continue;   // 同上：回放条电量不得混入另一侧
       if (e.type != 'state.battery') continue;
       final level = (e.payload['level'] as num?)?.toInt();
       if (level == null) continue;

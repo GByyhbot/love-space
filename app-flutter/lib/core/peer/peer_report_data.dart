@@ -106,6 +106,8 @@ class PeerStatusData {
     this.mineEventsOn = true,
     this.peerHalt = const PeerHalt(),
     this.peerCurrentApp,
+    this.mineCurrentApp,
+    this.mineHalt = const PeerHalt(),
     this.myPolicy = PeerPolicy.defaults,
     this.peerPolicy = PeerPolicy.defaults,
   });
@@ -131,6 +133,12 @@ class PeerStatusData {
   /// 对方「正在使用」（仅对方 app_level=stream 时给）。
   final PeerCurrentApp? peerCurrentApp;
 
+  /// 我方「正在使用」（2.8.7 傍晚批对称补齐；旧后端缺省 null）。
+  final PeerCurrentApp? mineCurrentApp;
+
+  /// 我方停用态（完全关闭 / 暂停中）——停用时 mine 快照按 policy 裁剪。
+  final PeerHalt mineHalt;
+
   /// 双方分档 policy（我自己那份用于设置页回填与预览）。
   final PeerPolicy myPolicy;
   final PeerPolicy peerPolicy;
@@ -150,6 +158,8 @@ class PeerStatusData {
               : true,
       peerHalt: PeerHalt.fromJson(peer['halted']),
       peerCurrentApp: PeerCurrentApp.fromJson(peer['current_app']),
+      mineCurrentApp: PeerCurrentApp.fromJson(mine['current_app']),
+      mineHalt: PeerHalt.fromJson(mine['halted']),
       myPolicy: PeerPolicy.fromJson(mine['policy']),
       peerPolicy: PeerPolicy.fromJson(peer['policy']),
     );

@@ -9,6 +9,7 @@
 /// · 回放标记随时间轴 [replayPoint] 沿轨迹实时移动。
 library;
 
+import 'dart:convert';
 import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart' show Factory, kIsWeb;
@@ -28,6 +29,7 @@ class AmapTrackMapWidget extends StatefulWidget {
     this.replayLng,
     required this.pathColor,
     required this.fallbackBuilder,
+    this.bottomOverlayInset = 8.0,
     this.forceAndroidForTest,
   });
 
@@ -36,6 +38,9 @@ class AmapTrackMapWidget extends StatefulWidget {
   final double? replayLng;
   final Color pathColor;
   final WidgetBuilder fallbackBuilder;
+
+  /// 底部浮层占位（全屏态回放条在底下时，「回到轨迹」与图例要抬上去）。
+  final double bottomOverlayInset;
 
   /// 测试覆盖：仅在 `flutter test`（Windows/Linux）绕过 `Platform.isAndroid` 判断。
   @visibleForTesting
@@ -150,11 +155,21 @@ class _AmapTrackMapWidgetState extends State<AmapTrackMapWidget> {
         '${dt.minute.toString().padLeft(2, '0')}';
   }
 
+  /// 上次下发给原生的 payload 签名：内容没变就绝不再 setTrackData。
+  ///
+  /// 原生的 setTrackData 里带 recenterCamera，重复下发会把用户拖/缩的视角
+  /// 重置（进出全屏必踩的坑）。签名比对是治本的第一道闸。
+  String? _lastSyncedPayloadJson;
+
   Future<void> _syncTrackData() async {
     final ch = _viewChannel;
     if (ch == null || !mounted) return;
+    final payload = _buildTrackPayload(context);
+    final sig = jsonEncode(payload);
+    if (sig == _lastSyncedPayloadJson) return;
     try {
-      await ch.invokeMethod('setTrackData', _buildTrackPayload(context));
+      await ch.invokeMethod('setTrackData', payload);
+      _lastSyncedPayloadJson = sig;
     } catch (_) {}
   }
 
@@ -185,6 +200,7 @@ class _AmapTrackMapWidgetState extends State<AmapTrackMapWidget> {
   }
 
   void _onPlatformViewCreated(int viewId) {
+    _lastSyncedPayloadJson = null;   // 视图重建：必须重新下发一次
     final ch = MethodChannel('${_viewType}_$viewId');
     _viewChannel = ch;
     ch.setMethodCallHandler((call) async {
@@ -252,7 +268,7 @@ class _AmapTrackMapWidgetState extends State<AmapTrackMapWidget> {
         if (_freeBrowse)
           Positioned(
             right: 8,
-            bottom: 8,
+            bottom: widget.bottomOverlayInset,
             child: Container(
               decoration: BoxDecoration(
                 color: theme.brightness == Brightness.dark

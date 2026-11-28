@@ -528,11 +528,22 @@ void main() {
       final c = makeContainer(adapter);
       await pumpPage(tester, c);
 
+      // 2.8.7 傍晚批 1-1：默认看 TA —— 只渲染对方事件，我方的「等待/已收到」不混入
       expect(find.byKey(const Key('report-ack-buttons-p1')), findsOneWidget);
+      expect(find.byKey(const Key('report-ack-buttons-m1')), findsNothing,
+          reason: 'TA 视角不该出现我的报备');
+      expect(find.text('等待对方回应'), findsNothing,
+          reason: 'TA 视角不混入我方事件的两态文案');
+
+      // 切到「我」：才看到我方两态文案，且不给回应按钮
+      await tester.tap(find.text('我').last);
+      await tester.pumpAndSettle();
       expect(find.text('等待对方回应'), findsOneWidget);
       expect(find.text('对方已收到 🫂'), findsOneWidget);
       expect(find.byKey(const Key('report-ack-buttons-m1')), findsNothing,
           reason: '自己的报备不给回应按钮');
+      expect(find.byKey(const Key('report-ack-buttons-p1')), findsNothing,
+          reason: '「我」视角不该混入 TA 的报备');
     });
 
     testWidgets('点击 ack：请求期间整区禁用（防连点），成功后就地变已回应', (tester) async {

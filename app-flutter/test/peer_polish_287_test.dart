@@ -351,7 +351,9 @@ void main() {
         expect(find.byKey(const Key('peer-usage-delta')), findsOneWidget);
         expect(find.text('比昨天少 6 分钟'), findsOneWidget);
 
-        // Scroll to mine section -> shows degraded location permission hint
+        // 2.8.7 傍晚批 1-1：「我的报备」只在我视角渲染，先切视角再滚动
+        await tester.tap(find.text('我').last);
+        await tester.pumpAndSettle();
         await tester.scrollUntilVisible(
           find.byKey(const Key('report-mine-loc-perm-hint')),
           300,

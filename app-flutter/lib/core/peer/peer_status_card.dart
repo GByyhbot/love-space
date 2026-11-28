@@ -61,6 +61,7 @@ PeerStatusCardData? buildPeerStatusCard({
   required PeerLatest? peer,
   PeerStateDaily? daily,
   DateTime? now,
+  bool isMine = false,
 }) {
   if (peer == null) return null;
   final rows = <PeerStatusRow>[];
@@ -106,8 +107,10 @@ PeerStatusCardData? buildPeerStatusCard({
   //    对方关闭共享、或今天还没有任何数据 → 返回 null，整行不显示。
   final d = daily;
   if (d != null) {
-    final line =
-        peerScreenLine(d.peerClosedOff, d.peerScreenSec, d.peerUnlocks);
+    // 「我」视角读本机那一侧（2.8.7 傍晚批 1-1：状态卡随视角整页切人）
+    final line = isMine
+        ? peerScreenLine(false, d.mineScreenSec, d.mineUnlocks)
+        : peerScreenLine(d.peerClosedOff, d.peerScreenSec, d.peerUnlocks);
     if (line != null) {
       rows.add(PeerStatusRow(id: 'usage', label: '今日使用', value: line));
     }
