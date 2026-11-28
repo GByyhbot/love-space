@@ -2,6 +2,8 @@
 library;
 
 import 'dart:convert';
+import 'dart:io' show Platform;
+
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
@@ -12,6 +14,9 @@ import 'package:love_space/core/api/api_client.dart' as api;
 import 'package:love_space/core/sse/sse_client.dart';
 import 'package:love_space/features/together/peer_track_page.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+const bool _doCapture =
+    bool.fromEnvironment('CAPTURE_FULLSCREEN', defaultValue: false);
 
 class _A implements HttpClientAdapter {
   _A(this.h);
@@ -92,6 +97,13 @@ Future<void> _capture(WidgetTester tester, Brightness brightness, String name) a
 }
 
 void main() {
+  // 与 polish_visual_capture_test 同一约定：截图测试只在 Windows 上、
+  // 且显式 --dart-define=CAPTURE_FULLSCREEN=true 时跑（golden 是本地字体渲染，
+  // Linux CI 逐像素必不同；CI 跳过，出图只在本机做）。
+  if (!_doCapture || !Platform.isWindows) {
+    test('fullscreen capture skipped (needs CAPTURE_FULLSCREEN=true on Windows)', () {});
+    return;
+  }
   TestWidgetsFlutterBinding.ensureInitialized();
   testWidgets('全屏浅色', (t) => _capture(t, Brightness.light, 'light'));
   testWidgets('全屏深色', (t) => _capture(t, Brightness.dark, 'dark'));
