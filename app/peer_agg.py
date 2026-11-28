@@ -558,8 +558,9 @@ def reconcile_usage_day(c, user_id, day, policy, now=None):
     # 🔴 真库口径修正（2.8.7 傍晚批 1-2 施工中发现）：`state.screen` 并不总是
     # 全天的（实测她 11-28 只有 22 条、集中在上午），若严格只用亮屏窗，下午
     # 的 usage.session 会被整段裁掉（Top5 直接归零、与总量脱节）。
-    # 因此取「亮屏窗 ∪ 会话区间」并集：只增不减，恒等式（Top5 ≤ 总量）仍成立，
-    # 也不会重复计数（canonical 用 claimed 去重）。
+    # 因此只把「整段落在所有亮屏窗之外」的孤立会话补进 active_windows
+    # （与窗相交的会话照旧被窗裁剪，跨灭屏切断语义不破）；恒等式仍由构造保证。
+    # 🔴 口径已定稿（Muse 2026-11-28 批准）：不许按原规格「只用亮屏窗」改回去。
     if closed_screen_windows:
         active = closed_screen_windows
         # 只补「落在所有亮屏窗之外」的孤立会话（亮屏事件缺失造成的洞）；
