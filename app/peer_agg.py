@@ -16,6 +16,7 @@
 import datetime as dt
 import json
 import math
+import time
 from zoneinfo import ZoneInfo
 
 from . import db
@@ -395,6 +396,316 @@ def track_for(c, user_id, day, policy):
     }
 
 
+# ── 一套账：区间工具 + 统一对账派生（2.8.7 傍晚批 1-2）─────────────
+# 全部 5 个口径（总量/最长/会话流/Top5/正在使用）都由 reconcile_usage_day
+# 的单一份账派生，从构造上锁死恒等式：
+#   正在使用 ≤ 最长连续 ≤ 总量；Top5 合计 ≤ 全部应用合计 ≤ 总量
+
+def _merge_intervals(intervals, gap=1.0):
+    """合并重叠或间隙 ≤gap 的区间，返回有序互斥列表 [(s, e), ...]。"""
+    items = sorted((float(a), float(b)) for a, b in intervals if float(b) > float(a))
+    out = []
+    for s, e in items:
+        if out and s <= out[-1][1] + gap:
+            out[-1][1] = max(out[-1][1], e)
+        else:
+            out.append([s, e])
+    return [(a, b) for a, b in out]
+
+
+def _intersect_intervals(interval, windows):
+    s, e = float(interval[0]), float(interval[1])
+    out = []
+    for ws, we in windows:
+        a, b = max(s, ws), min(e, we)
+        if b > a:
+            out.append((a, b))
+    return out
+
+
+def _subtract_intervals(intervals, mask):
+    """intervals - mask（都按区间对处理）。"""
+    out = []
+    for s, e in intervals:
+        cur = [(float(s), float(e))]
+        for ms, me in mask:
+            nxt = []
+            for a, b in cur:
+                if me <= a or ms >= b:
+                    nxt.append((a, b))
+                    continue
+                if a < ms:
+                    nxt.append((a, ms))
+                if me < b:
+                    nxt.append((me, b))
+            cur = nxt
+            if not cur:
+                break
+        out.extend(cur)
+    return [(a, b) for a, b in out if b - a > 0]
+
+
+def _kind_rows(c, user_id, kind, lo, hi):
+    """按类型取事件行；带毫秒防御（ts 可能是 ms）。ts 归一为秒。"""
+    # 上界取 hi+1 做闭区间（`ts=?` 的边界事件——如正好落在 now 的那条 usage.now——
+    # 不能被排掉，否则「正在使用」永判无）
+    rows = c.execute(
+        "SELECT ts,payload FROM peer_events WHERE user=? AND type=? AND "
+        '((ts>=? AND ts<?) OR (ts>=? AND ts<?)) ORDER BY ts',
+        (user_id, kind, lo, hi + 1.0, lo * 1000.0, (hi + 1.0) * 1000.0)).fetchall()
+    out = []
+    for r in rows:
+        ts = db.ts_to_sec(r['ts'])
+        if lo - 1 <= ts <= hi + 1:
+            out.append({'ts': ts, 'p': _payload(r)})
+    return out
+
+
+def _hourly_from_windows(windows, start, end):
+    hourly = [0] * 24
+    for s, e in windows:
+        cur = float(s)
+        while cur < e:
+            idx = int((cur - start) // 3600)
+            if idx < 0 or idx > 23:
+                break
+            chunk_end = min(float(e), start + (idx + 1) * 3600)
+            hourly[idx] += int(round(chunk_end - cur))
+            cur = chunk_end
+    return hourly
+
+
+def reconcile_usage_day(c, user_id, day, policy, now=None):
+    """当日使用「一套账」：唯一事实源，5 个口径全部由此派生。
+
+    只读；不写 peer_usage_daily；全无明细时才回退汇总列（且 top 合计 ≤ 总量）。
+    policy 的档位裁剪仍由 usage_daily_for 负责（这里出全量账本）。
+    """
+    start, end = day_bounds(c, day)
+    now_ts = float(now if now is not None else time.time())
+    day_cap = min(float(end), now_ts)
+    is_today = start <= now_ts < end
+    lo, hi = float(start) - 6 * 3600, float(end) + 6 * 3600
+
+    # ── 步骤 1：明细归一 ──
+    closed_windows = []
+    last_off = None
+    for r in _kind_rows(c, user_id, 'state.screen', lo, hi):
+        sec, ts, p = r['p'].get('session_sec'), r['ts'], r['p']
+        if ts <= day_cap and (p.get('on') is False or
+                              (isinstance(sec, (int, float)) and sec > 0)):
+            last_off = max(last_off or 0.0, ts)
+        if isinstance(sec, (int, float)) and sec > 0:
+            s0, e0 = max(float(start), ts - float(sec)), min(day_cap, ts)
+            if e0 > s0:
+                closed_windows.append((s0, e0))
+    closed_screen_windows = _merge_intervals(closed_windows)
+
+    raw_sessions = []
+    for r in _kind_rows(c, user_id, 'usage.session', lo, hi):
+        p, ts = r['p'], r['ts']
+        if p.get('start') is not None:
+            s0 = db.ts_to_sec(p['start'])
+        else:
+            s0 = ts - float(p.get('dur') or 0)
+        e0 = db.ts_to_sec(p['end']) if p.get('end') is not None else ts
+        a, b = max(float(start), float(s0)), min(day_cap, float(e0))
+        if b <= a:
+            continue
+        raw_sessions.append({
+            'app': str(p.get('app') or '').strip() or '某个应用',
+            'masked': p.get('masked') is True,
+            'start': a, 'end': b, 'ts': ts,
+        })
+
+    now_events = []
+    for r in _kind_rows(c, user_id, 'usage.now', lo, day_cap):
+        p, ts = r['p'], r['ts']
+        app = str(p.get('app') or '').strip()
+        if not app:
+            continue
+        since = db.ts_to_sec(p['since']) if p.get('since') is not None else ts
+        now_events.append({'app': app, 'masked': p.get('masked') is True,
+                           'since': float(since), 'ts': ts})
+
+    # ── 步骤 2：正在使用（live_session）校验 ──
+    live = None
+    latest = now_events[-1] if now_events else None
+    if is_today and latest:
+        dead = False
+        if last_off is not None:
+            if latest['ts'] <= last_off + 5.0:
+                dead = True
+            elif latest['since'] < last_off:
+                dead = True
+        if not dead:
+            for s_ in raw_sessions:
+                if s_['end'] >= latest['since'] and (
+                        s_['end'] >= latest['ts'] - 2.0 or s_['start'] > latest['since']):
+                    dead = True
+                    break
+        if not dead and now_ts - latest['ts'] > 600:
+            dead = True
+        if not dead:
+            live_start = max(float(start), latest['since'], last_off or float(start))
+            if day_cap - live_start >= 1.0:
+                live = {'app': latest['app'], 'masked': latest['masked'],
+                        'start': live_start, 'end': day_cap,
+                        'ts': latest['ts'],
+                        'sec': int(round(day_cap - live_start))}
+
+    # ── 步骤 3：权威亮屏窗口 ──
+    # 🔴 真库口径修正（2.8.7 傍晚批 1-2 施工中发现）：`state.screen` 并不总是
+    # 全天的（实测她 11-28 只有 22 条、集中在上午），若严格只用亮屏窗，下午
+    # 的 usage.session 会被整段裁掉（Top5 直接归零、与总量脱节）。
+    # 因此取「亮屏窗 ∪ 会话区间」并集：只增不减，恒等式（Top5 ≤ 总量）仍成立，
+    # 也不会重复计数（canonical 用 claimed 去重）。
+    if closed_screen_windows:
+        active = closed_screen_windows
+        # 只补「落在所有亮屏窗之外」的孤立会话（亮屏事件缺失造成的洞）；
+        # 与窗口相交的会话照旧被窗裁剪 —— 「跨灭屏必须切断」的语义不破。
+        orphans = [(s_['start'], s_['end']) for s_ in raw_sessions
+                   if not _intersect_intervals((s_['start'], s_['end']), active)]
+        if orphans:
+            active = _merge_intervals(list(active) + orphans)
+        if live:
+            active = _merge_intervals(list(active) + [(live['start'], live['end'])])
+    elif raw_sessions or live:
+        base = [(s_['start'], s_['end']) for s_ in raw_sessions]
+        if live:
+            base.append((live['start'], live['end']))
+        active = _merge_intervals(base)
+    else:
+        active = []
+
+    # ── 步骤 4：裁剪 + 去重 + 回收 usage.now 亮屏段 ──
+    claimed = []
+    canonical = []
+    for s_ in sorted(raw_sessions, key=lambda x: (x['ts'], x['end']), reverse=True):
+        for a, b in _intersect_intervals((s_['start'], s_['end']), active):
+            for a2, b2 in _subtract_intervals([(a, b)], claimed):
+                if b2 - a2 >= 1.0:
+                    canonical.append({'app': s_['app'], 'masked': s_['masked'],
+                                      'start': a2, 'end': b2, 'ts': s_['ts'],
+                                      'sec': int(round(b2 - a2))})
+                    claimed.append((a2, b2))
+        claimed = _merge_intervals(claimed)
+
+    runs = {}
+    for ev in now_events:
+        key = (ev['app'], int(round(ev['since'])))
+        cur = runs.get(key)
+        if cur is None:
+            runs[key] = {'app': ev['app'], 'masked': ev['masked'],
+                         'start': ev['since'], 'end': ev['ts'], 'last_ts': ev['ts']}
+        else:
+            cur['end'] = max(cur['end'], ev['ts'])
+            cur['last_ts'] = max(cur['last_ts'], ev['ts'])
+    if live:
+        cur = runs.get((live['app'], int(round(live['start']))))
+        if cur is not None:
+            cur['end'] = max(cur['end'], live['end'])
+
+    other_starts = sorted({s_['start'] for s_ in raw_sessions} |
+                          {ev['since'] for ev in now_events})
+    for run in runs.values():
+        run_end = run['end']
+        later = [x for x in other_starts if x > run['start'] + 1.0]
+        if later:
+            run_end = min(run_end, later[0])
+        for a, b in _intersect_intervals((run['start'], run_end), active):
+            for a2, b2 in _subtract_intervals([(a, b)], claimed):
+                if b2 - a2 >= 1.0:
+                    canonical.append({'app': run['app'], 'masked': run['masked'],
+                                      'start': a2, 'end': b2,
+                                      'ts': run['last_ts'],
+                                      'sec': int(round(b2 - a2))})
+                    claimed.append((a2, b2))
+        claimed = _merge_intervals(claimed)
+
+    # ── 步骤 5：派生 5 个口径 ──
+    fallback = None
+    if active:
+        screen_sec = sum(int(round(e - s_)) for s_, e in active)
+        longest = max((int(round(e - s_)) for s_, e in active), default=0)
+        hourly = _hourly_from_windows(active, start, end)
+        unlocks = 0
+        row = c.execute('SELECT unlocks FROM peer_usage_daily WHERE user=? AND day=?',
+                        (user_id, day)).fetchone()
+        if row:
+            unlocks = int(row['unlocks'] or 0)
+    else:
+        fallback = c.execute(
+            'SELECT screen_sec,unlocks,top_apps FROM peer_usage_daily '
+            'WHERE user=? AND day=?', (user_id, day)).fetchone()
+        screen_sec = int(fallback['screen_sec']) if fallback else 0
+        unlocks = int(fallback['unlocks']) if fallback else 0
+        hourly = [0] * 24
+        longest = 0
+
+    canonical.sort(key=lambda x: (x['end'], x['start']), reverse=True)
+    sessions = [{'app': s_['app'], 'sec': s_['sec'], 'start': s_['start'],
+                 'end': s_['end'], 'ts': s_['ts'], 'masked': s_['masked'],
+                 'folded': False} for s_ in canonical if s_['sec'] > 0]
+    folded = sum(1 for s_ in canonical if 0 < s_['sec'] < 10)
+
+    agg = {}
+    for s_ in canonical:
+        if s_['sec'] > 0:
+            agg[s_['app']] = agg.get(s_['app'], 0) + s_['sec']
+    all_apps_sec = sum(agg.values())
+    top5 = [{'app': a, 'sec': v}
+            for a, v in sorted(agg.items(), key=lambda kv: (-kv[1], kv[0]))[:5]]
+    if not top5 and fallback and fallback['top_apps']:
+        try:
+            parsed = json.loads(fallback['top_apps'])
+            top5 = [{'app': str(it.get('app')), 'sec': int(it.get('sec') or 0)}
+                    for it in parsed if isinstance(it, dict) and it.get('app')][:5]
+        except (ValueError, TypeError):
+            top5 = []
+    # 兜底口径也必须守住 Top5 ≤ 总量
+    if screen_sec > 0:
+        kept, acc = [], 0
+        for it in top5:
+            take = min(it['sec'], max(0, screen_sec - acc))
+            if take > 0:
+                kept.append({'app': it['app'], 'sec': take})
+                acc += take
+        top5 = kept
+        all_apps_sec = max(all_apps_sec, acc) if not agg else all_apps_sec
+
+    return {
+        'screen_sec': screen_sec,
+        'unlocks': unlocks,
+        'longest_session_sec': longest,
+        'hourly': hourly,
+        'canonical_sessions': canonical,
+        'sessions': sessions,
+        'folded_count': folded,
+        'top_apps': top5,
+        'all_apps_sec': all_apps_sec,
+        'current_app': live,
+        'active_windows': active,
+    }
+
+
+def current_network_for(c, user_id, policy, fallback_events=None):
+    """当前网络：与今日状态卡同源（peer_location_latest）；事件流仅兜底。"""
+    level = policy.get('network_level', 'ssid')
+    if level == 'off':
+        return None
+    row = c.execute(
+        'SELECT net, wifi, state_updated, updated FROM peer_location_latest '
+        'WHERE user=?', (user_id,)).fetchone()
+    if row is not None and (row['net'] or ''):
+        ts = row['state_updated'] if row['state_updated'] is not None else row['updated']
+        return {'ts': db.ts_to_sec(ts) if ts is not None else 0,
+                'net': row['net'],
+                'ssid': (row['wifi'] or '') if level == 'ssid' else ''}
+    if fallback_events:
+        return fallback_events[0]
+    return None
+
 # ── 应用使用 ────────────────────────────────────────────────────────
 
 def _screen_events(c, user_id, start, end):
@@ -463,83 +774,65 @@ def folded_count(c, user_id, start, end, policy):
 
 
 def network_events(c, user_id, start, end, policy):
+    """当日网络切换流水（读侧带毫秒防御，ts 归一为秒）。"""
     level = policy.get('network_level', 'ssid')
     if level == 'off':
         return []
-    rows = c.execute(
-        "SELECT ts,payload FROM peer_events WHERE user=? AND type='state.net' "
-        'AND ts>=? AND ts<? ORDER BY ts DESC', (user_id, start, end)).fetchall()
+    rows = _kind_rows(c, user_id, 'state.net', float(start), float(end))
     out = []
-    for r in rows:
-        p = _payload(r)
+    for r in sorted(rows, key=lambda x: x['ts'], reverse=True):
+        p = r['p']
         out.append({'ts': r['ts'], 'net': p.get('net') or '',
                     'ssid': (p.get('ssid') or '') if level == 'ssid' else ''})
     return out
 
 
-def usage_daily_for(c, user_id, day, policy):
-    """某人的当日使用汇总（已按 policy 裁剪）。返回 (body, closed_off)。"""
+def usage_daily_for(c, user_id, day, policy, now=None):
+    """某人的当日使用汇总（已按 policy 裁剪）。返回 (body, closed_off)。
+
+    2.8.7 一套账：总量/最长/24h/会话流/Top5/正在使用全部来自
+    `reconcile_usage_day` 的单一份账，恒等式由构造保证（不再读可能被
+    `[:5]` 截断污染的 `peer_usage_daily.top_apps` 作主口径）。
+    """
     usage_level = policy.get('usage_level', 'full')
     app_level = policy.get('app_level', 'full')
     if usage_level == 'off':
         return {}, True
 
-    start, end = day_bounds(c, day)
-    row = c.execute(
-        'SELECT screen_sec,unlocks,top_apps FROM peer_usage_daily '
-        'WHERE user=? AND day=?', (user_id, day)).fetchone()
-    yrow = c.execute(
-        'SELECT screen_sec FROM peer_usage_daily WHERE user=? AND day=?',
-        (user_id, prev_day(day))).fetchone()
-
-    events = _screen_events(c, user_id, start, end)
-    screen_sec = int(row['screen_sec']) if row else int(sum(e['sec'] for e in events))
-    unlocks = int(row['unlocks']) if row else 0
-    longest = max((e['sec'] for e in events), default=0)
+    led = reconcile_usage_day(c, user_id, day, policy, now=now)
+    y_led = reconcile_usage_day(c, user_id, prev_day(day), policy, now=now)
+    net_ev = network_events(c, user_id, *day_bounds(c, day), policy)
 
     body = {
-        'screen_sec': screen_sec,
-        'unlocks': unlocks,
-        'longest_session_sec': longest,
-        'yesterday_screen_sec': int(yrow['screen_sec']) if yrow else 0,
+        'screen_sec': int(led['screen_sec']),
+        'unlocks': int(led['unlocks']),
+        'longest_session_sec': int(led['longest_session_sec']),
+        'yesterday_screen_sec': int(y_led['screen_sec']),
     }
     # screen_only 档：只留亮屏与解锁两数，分布/应用全裁
     if usage_level == 'full':
-        body['hourly'] = hourly_screen(events, start, end)
+        body['hourly'] = led['hourly']
     if app_level != 'off' and usage_level == 'full':
-        top = []
-        if row and row['top_apps']:
-            try:
-                parsed = json.loads(row['top_apps'])
-                if isinstance(parsed, list):
-                    top = [{'app': str(it.get('app')), 'sec': int(it.get('sec') or 0)}
-                           for it in parsed if isinstance(it, dict) and it.get('app')][:5]
-            except (ValueError, TypeError):
-                top = []
-        body['top_apps'] = top
+        body['top_apps'] = led['top_apps']
     if app_level == 'stream' and usage_level == 'full':
-        body['sessions'] = usage_sessions(c, user_id, start, end, policy)
-        body['folded_count'] = folded_count(c, user_id, start, end, policy)
-    body['network_events'] = network_events(c, user_id, start, end, policy)
+        fold = policy.get('fold_short') is not False
+        body['folded_count'] = int(led['folded_count'])
+        body['sessions'] = [s_ for s_ in led['sessions']
+                            if (s_['sec'] >= 10 if fold else True)]
+    body['network_events'] = net_ev
+    body['current_network'] = current_network_for(
+        c, user_id, policy, fallback_events=net_ev)
     return body, False
 
 
-def current_app(c, user_id, policy):
-    """「正在使用 X」：最新一条 usage.now 事件（stream 档才给）。
+def current_app(c, user_id, policy, now=None):
+    """「正在使用 X」：与 usage-daily 100% 同源（同一份对账账本）。
 
-    用事件日志而不是快照列：一条 usage.now 就是一次可追溯的声明，
-    历史完整、无需迁移新列。
+    关键：熄屏后心跳重发旧 `since` 不再造幽灵会话——由
+    `reconcile_usage_day` 的 live_session 校验统一裁定。
     """
     if policy.get('app_level') != 'stream' or policy.get('usage_level') == 'off':
         return None
-    row = c.execute(
-        "SELECT ts,payload FROM peer_events WHERE user=? AND type='usage.now' "
-        'ORDER BY ts DESC LIMIT 1', (user_id,)).fetchone()
-    if not row:
-        return None
-    p = _payload(row)
-    app = str(p.get('app') or '').strip()
-    if not app:
-        return None
-    return {'app': app, 'masked': p.get('masked') is True,
-            'since': p.get('since') or row['ts'], 'ts': row['ts']}
+    day = dt.datetime.now(space_tz(c)).strftime('%Y-%m-%d')
+    led = reconcile_usage_day(c, user_id, day, policy, now=now)
+    return led['current_app']

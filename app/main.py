@@ -2043,9 +2043,13 @@ def peer_status(user=Depends(current_user)):
         peer_rev = c.execute(
             "SELECT value FROM app_state WHERE key='peer_revision'").fetchone()[0]
         current_app = peer_agg.current_app(c, pid, peer_policy)
+        mine_current_app = peer_agg.current_app(c, user['id'], my_policy)
     mine_row = by_user.get(user['id'])
     peer_row = by_user.get(pid)
     halt = peer.halt_state(peer_policy)
+    mine_halt = peer.halt_state(my_policy)
+    if mine_halt['halted']:
+        mine_current_app = None
     if halt['halted']:
         # 停用期间不返回任何历史敏感字段（只留关闭态所需的元信息）
         peer_row = None
@@ -2056,7 +2060,9 @@ def peer_status(user=Depends(current_user)):
     return {
         'revision': int(peer_rev),
         'mine': {'settings': mine, 'policy': my_policy,
-                 'location': mine_row, 'enabled': mine['location']},
+                 'location': mine_row, 'enabled': mine['location'],
+                 'current_app': mine_current_app,
+                 'halted': mine_halt},
         'peer': {'settings': theirs, 'policy': peer_policy,
                  'location': peer_row,
                  'enabled': theirs['location'],
@@ -2124,28 +2130,23 @@ def peer_state_daily(date: str = '', user=Depends(current_user)):
         theirs_on = peer.load_settings(c, pid)['events']
         peer_policy = peer.load_policy(c, pid)
         halt = peer.halt_state(peer_policy)
-        row = c.execute(
-            'SELECT screen_sec, unlocks FROM peer_usage_daily '
-            'WHERE user=? AND day=?', (user['id'], day)).fetchone()
-        peer_row = c.execute(
-            'SELECT screen_sec, unlocks FROM peer_usage_daily '
-            'WHERE user=? AND day=?', (pid, day)).fetchone()
+        # 一套账：亮屏/解锁与手机页同源（reconcile_usage_day），不读可能漂移的汇总列
+        my_led = peer_agg.reconcile_usage_day(c, user['id'], day, peer.load_policy(c, user['id']))
+        peer_led = peer_agg.reconcile_usage_day(c, pid, day, peer_policy)
     usage_off = peer_policy.get('usage_level') == 'off'
     peer_hidden = (not theirs_on) or usage_off or halt['halted']
     return {
         'date': day,
         'mine': {
             # 自己一侧恒可读（events 关的是「不往外发」，不是「自己都看不到」）
-            'screen_sec': int(row['screen_sec']) if row else 0,
-            'unlocks': int(row['unlocks']) if row else 0,
+            'screen_sec': int(my_led['screen_sec']),
+            'unlocks': int(my_led['unlocks']),
         },
         'peer': {
             'closed_off': peer_hidden,
             'halted': halt,
-            'screen_sec': (int(peer_row['screen_sec'])
-                           if (not peer_hidden and peer_row) else 0),
-            'unlocks': (int(peer_row['unlocks'])
-                        if (not peer_hidden and peer_row) else 0),
+            'screen_sec': (int(peer_led['screen_sec']) if not peer_hidden else 0),
+            'unlocks': (int(peer_led['unlocks']) if not peer_hidden else 0),
         },
     }
 
@@ -2170,6 +2171,7 @@ def peer_usage_daily(date: str = '', user=Depends(current_user)):
         mine_body, mine_off = peer_agg.usage_daily_for(c, user['id'], day, my_policy)
         peer_body, peer_off = peer_agg.usage_daily_for(c, pid, day, peer_policy)
         peer_current = peer_agg.current_app(c, pid, peer_policy)
+        mine_current = peer_agg.current_app(c, user['id'], my_policy)
     mine_halt = peer.halt_state(my_policy)
     peer_halt = peer.halt_state(peer_policy)
     return {
@@ -2177,6 +2179,8 @@ def peer_usage_daily(date: str = '', user=Depends(current_user)):
         'mine': {
             'closed_off': mine_off or mine_halt['halted'],
             'halted': mine_halt,
+            'current_app': (None if (mine_off or mine_halt['halted'])
+                            else mine_current),
             **(mine_body if not (mine_off or mine_halt['halted']) else {}),
         },
         'peer': {

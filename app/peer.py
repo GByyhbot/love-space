@@ -869,7 +869,7 @@ def _apply_state_side_effects(c, user_id, kind, payload, event_ts):
 
 
 def _merge_top_app(c, user_id, day, app, dur):
-    """把一次会话并进当日 Top5 聚合（内存里合、整列覆写，列表恒 ≤5）。"""
+    """把一次会话并进当日 Top5 聚合（内存里合、整列覆写；写侧留 50，读侧取 5）。"""
     if not app or dur <= 0:
         return
     row = c.execute('SELECT top_apps FROM peer_usage_daily WHERE user=? AND day=?',
@@ -887,7 +887,9 @@ def _merge_top_app(c, user_id, day, app, dur):
     for it in items:
         agg[str(it['app'])] = int(it.get('sec') or 0)
     agg[app] = agg.get(app, 0) + int(dur)
-    top = sorted(agg.items(), key=lambda kv: (-kv[1], kv[0]))[:5]
+    # 写侧不截断：保留前 50 个应用（读侧取前 5）。
+    # 原 `[:5]` 导致第 6 名及以后每次写回都被清零重算 → 长尾应用时长永远算不出来。
+    top = sorted(agg.items(), key=lambda kv: (-kv[1], kv[0]))[:50]
     c.execute(
         'INSERT INTO peer_usage_daily(user,day,screen_sec,unlocks,top_apps,updated) '
         'VALUES (?,?,0,0,?,?) '

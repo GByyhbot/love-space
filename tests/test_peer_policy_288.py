@@ -350,7 +350,9 @@ def test_top5_caps_and_merges_masked(client_a, client_b):
     assert apps[0]['app'] == '其他应用' and apps[0]['sec'] == 300
 
 
-def test_top5_keeps_only_five(client_a):
+def test_top5_keeps_only_five(client_a, client_b):
+    """2.8.7 一套账：写侧不再 [:5] 截断（否则第 6 名起时长被反复清零），
+    改为存侧留 50、读侧严格取 5。两边都要断言。"""
     start = _day_start()
     for i in range(7):
         _telemetry(client_a, 'usage.session', {
@@ -359,7 +361,17 @@ def test_top5_keeps_only_five(client_a):
     with db.connect() as c:
         row = c.execute('SELECT top_apps FROM peer_usage_daily WHERE user=? AND day=?',
                         (_uid(client_a), _today())).fetchone()
-    assert len(json.loads(row['top_apps'])) == 5
+    stored = json.loads(row['top_apps'])
+    assert 5 < len(stored) <= 50, '存侧保留长尾（≤50），不得再截成 5'
+    assert [a['app'] for a in stored[:2]] == ['应用6', '应用5'], '存侧仍按秒数倒序'
+    j = client_b.get('/api/peer/usage-daily', headers=HEADERS).json()['peer']
+    top = j['top_apps']
+    assert len(top) == 5, '读侧仍严格只给 5 条'
+    secs = [a['sec'] for a in top]
+    assert secs == sorted(secs, reverse=True), '读侧按秒数倒序'
+    assert all(a['app'].startswith('应用') for a in top), '只含本患者应用'
+    # 一套账口径：Top5 合计不得超过当日亮屏总量
+    assert sum(secs) <= j['screen_sec']
 
 
 def test_yesterday_delta(client_a, client_b):
