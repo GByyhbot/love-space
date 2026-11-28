@@ -81,6 +81,10 @@
         <meta-data
             android:name="com.amap.api.v2.apikey"
             android:value="${AMAP_API_KEY}" />
+        <!-- 高德定位评估链（3dmap 9.8.3 内置定位模块所需的 APSService，仅评估期使用） -->
+        <service
+            android:name="com.amap.api.location.APSService"
+            android:exported="false" />
         <!-- 2.4.5 甲组：flutter_foreground_task 11 的前台服务（service name 是插件
              硬约定不许改）。type=specialUse（依据见上方权限注释）；subtype 用英文
              避免 aapt 对非 ASCII property 的兼容风险。插件 manifest 自带 BOOT

@@ -896,6 +896,19 @@ class _PeerShareSettingsPageState extends ConsumerState<PeerShareSettingsPage>
                     : '尚未加载（进入轨迹页后更新）'),
             warn: _diag.mapErrorCode.isNotEmpty,
           ),
+          _diagRow(
+            theme,
+            cs,
+            '高德影子评估',
+            _diag.shadowEnabled
+                ? '运行中${_diag.shadowSdkVersion.isEmpty ? '' : ' (${_diag.shadowSdkVersion})'} · 采样 ${_diag.shadowSucceeded}/${_diag.shadowAttempts}'
+                    '${_diag.shadowLastLocType.isEmpty ? '' : ' · ${_diag.shadowLastLocType}'}'
+                    '${_diag.shadowLastAcc == null ? '' : ' ±${_diag.shadowLastAcc!.round()}m'}'
+                    ' · 日志 ${(_diag.shadowLogBytes / 1024).toStringAsFixed(1)}KB'
+                : (_diag.shadowAttempts > 0
+                    ? '已停 · 已采 ${_diag.shadowSucceeded}/${_diag.shadowAttempts}'
+                    : '未运行（随定位采集启停）'),
+          ),
           if (_diag.locError != null)
             _diagRow(theme, cs, '最近错误', _diag.locError!, warn: true),
         ]),

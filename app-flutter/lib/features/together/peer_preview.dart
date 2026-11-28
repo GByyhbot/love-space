@@ -56,6 +56,9 @@ PeerTrackSide previewTrack(PeerTrackSide mine, PeerPolicy policy) {
         points: const <PeerTrackPoint>[],
         segments: const <PeerTrackSegment>[],
         distanceM: null,
+        displayPoints: const <PeerTrackPoint>[],
+        displaySegments: const <PeerTrackSegment>[],
+        displayDistanceM: null,
         stays: mine.stays
             .map((s) => PeerTrackStay(
                   lat: _grid(s.lat),

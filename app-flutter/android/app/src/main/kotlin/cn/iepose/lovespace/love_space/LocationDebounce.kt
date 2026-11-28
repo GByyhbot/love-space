@@ -24,9 +24,14 @@ object LocationDebounceConfig {
     // ── Layer 3: Stationary anchor lock ──
     const val LOCK_MIN_POINTS = 3
     const val LOCK_MAX_PAIRWISE_M = 40.0
+    const val LOCK_MAX_RADIUS_M = 150.0
+    const val LOCK_ACC_MULTIPLIER = 1.5
     const val LOCK_MIN_SPAN_MS = 2 * 60_000L
     const val UNLOCK_RADIUS_M = 80.0
+    const val UNLOCK_RADIUS_RATIO = UNLOCK_RADIUS_M / LOCK_MAX_PAIRWISE_M
     const val UNLOCK_CONSECUTIVE_POINTS = 2
+    const val CLUSTER_BUFFER_WINDOW_MS = 10 * 60_000L
+    const val CLUSTER_BUFFER_MAX_POINTS = 20
 
     // ── Layer 4: Moving lightweight smoother ──
     const val SMOOTH_WINDOW_SIZE = 3
@@ -69,6 +74,8 @@ data class DebounceDiagnostics(
     val droppedStationary: Int,
     val backoffStep: Int,
     val backoffDelayMs: Long,
+    val activeLockRadiusM: Double = LocationDebounceConfig.LOCK_MAX_PAIRWISE_M,
+    val activeUnlockRadiusM: Double = LocationDebounceConfig.UNLOCK_RADIUS_M,
 )
 
 sealed class DebounceOutcome {
@@ -117,6 +124,12 @@ class LocationDebouncer {
     var backoffStep: Int = 0
         private set
 
+    var activeLockRadiusM: Double = LocationDebounceConfig.LOCK_MAX_PAIRWISE_M
+        private set
+
+    var activeUnlockRadiusM: Double = LocationDebounceConfig.UNLOCK_RADIUS_M
+        private set
+
     private var lastReliable: RawFix? = null
     private var outsideStreak: Int = 0
     private var pendingAnchor: RawFix? = null
@@ -134,6 +147,8 @@ class LocationDebouncer {
         droppedBounce = 0
         droppedStationary = 0
         backoffStep = 0
+        activeLockRadiusM = LocationDebounceConfig.LOCK_MAX_PAIRWISE_M
+        activeUnlockRadiusM = LocationDebounceConfig.UNLOCK_RADIUS_M
         lastReliable = null
         outsideStreak = 0
         pendingAnchor = null
@@ -152,6 +167,8 @@ class LocationDebouncer {
         droppedStationary = droppedStationary,
         backoffStep = backoffStep,
         backoffDelayMs = currentBackoffMs(),
+        activeLockRadiusM = activeLockRadiusM,
+        activeUnlockRadiusM = activeUnlockRadiusM,
     )
 
     fun recordFailure(): Long {
@@ -203,7 +220,7 @@ class LocationDebouncer {
             }
         }
 
-        // Layer 3 (when locked): immutable anchor until 2 consecutive fixes > 80m.
+        // Layer 3 (when locked): immutable anchor until 2 consecutive fixes > activeUnlockRadiusM.
         if (state == DebounceState.STATIONARY_LOCKED) {
             val lockedAnchor = anchor
             if (lockedAnchor != null) {
@@ -213,7 +230,7 @@ class LocationDebouncer {
                     fix.lat,
                     fix.lng,
                 )
-                if (distFromAnchor <= LocationDebounceConfig.UNLOCK_RADIUS_M) {
+                if (distFromAnchor <= activeUnlockRadiusM) {
                     outsideStreak = 0
                     lastReliable = fix
                     droppedStationary++
@@ -224,9 +241,11 @@ class LocationDebouncer {
                     droppedStationary++
                     return DebounceOutcome.Drop(DropReason.STATIONARY_ABSORBED, state)
                 }
-                // Unlocked by >= 2 consecutive fixes outside 80m.
+                // Unlocked by >= 2 consecutive fixes outside adaptive unlock radius.
                 state = DebounceState.MOVING
                 anchor = null
+                activeLockRadiusM = LocationDebounceConfig.LOCK_MAX_PAIRWISE_M
+                activeUnlockRadiusM = LocationDebounceConfig.UNLOCK_RADIUS_M
                 outsideStreak = 0
                 pendingAnchor = null
                 postTurnBypassRemaining = 0
@@ -275,31 +294,30 @@ class LocationDebouncer {
     }
 
     private fun emitMoving(fix: RawFix): DebounceOutcome {
-        // Layer 3 lock check: prune front if incoming point exceeds pairwise radius.
-        while (clusterWindow.isNotEmpty() &&
-            clusterWindow.any {
-                haversineMeters(it.lat, it.lng, fix.lat, fix.lng) >
-                    LocationDebounceConfig.LOCK_MAX_PAIRWISE_M
-            }
-        ) {
+        // Layer 3 adaptive lock check: maintain a bounded 10-minute sliding buffer
+        // and find a coherent pairwise clique within max(40m, median(acc)*1.5), capped at 150m.
+        clusterWindow.add(fix)
+        val minKeepTs = fix.timeMs - LocationDebounceConfig.CLUSTER_BUFFER_WINDOW_MS
+        while (clusterWindow.isNotEmpty() && clusterWindow.first().timeMs < minKeepTs) {
             clusterWindow.removeAt(0)
         }
-        clusterWindow.add(fix)
+        while (clusterWindow.size > LocationDebounceConfig.CLUSTER_BUFFER_MAX_POINTS) {
+            clusterWindow.removeAt(0)
+        }
 
-        if (clusterWindow.size >= LocationDebounceConfig.LOCK_MIN_POINTS) {
-            val spanMs = clusterWindow.last().timeMs - clusterWindow.first().timeMs
-            if (spanMs >= LocationDebounceConfig.LOCK_MIN_SPAN_MS &&
-                allPairwiseWithin(clusterWindow, LocationDebounceConfig.LOCK_MAX_PAIRWISE_M)
-            ) {
-                val realAnchor = selectRealAnchor(clusterWindow)
-                state = DebounceState.STATIONARY_LOCKED
-                anchor = realAnchor
-                anchorLockCount++
-                outsideStreak = 0
-                lastReliable = realAnchor
-                smoothWindow.clear()
-                return DebounceOutcome.Emit(realAnchor, state, isAnchor = true)
-            }
+        val lockedCluster = findAdaptiveCluster(clusterWindow, fix)
+        if (lockedCluster != null) {
+            val (clique, lockRadius) = lockedCluster
+            val realAnchor = selectRealAnchor(clique)
+            state = DebounceState.STATIONARY_LOCKED
+            anchor = realAnchor
+            activeLockRadiusM = lockRadius
+            activeUnlockRadiusM = adaptiveUnlockRadiusMeters(lockRadius)
+            anchorLockCount++
+            outsideStreak = 0
+            lastReliable = realAnchor
+            smoothWindow.clear()
+            return DebounceOutcome.Emit(realAnchor, state, isAnchor = true)
         }
 
         // Layer 4: 3-point weighted moving smoother (bypassed on sharp turns > 60 deg).
@@ -345,6 +363,34 @@ class LocationDebouncer {
             state,
             isAnchor = false,
         )
+    }
+
+    private fun findAdaptiveCluster(window: List<RawFix>, latest: RawFix): Pair<List<RawFix>, Double>? {
+        if (window.size < LocationDebounceConfig.LOCK_MIN_POINTS) return null
+        val candRadius = adaptiveLockRadiusMeters(window)
+        val near = window.filter {
+            haversineMeters(it.lat, it.lng, latest.lat, latest.lng) <= candRadius
+        }
+        if (near.size < LocationDebounceConfig.LOCK_MIN_POINTS) return null
+
+        val r = adaptiveLockRadiusMeters(near)
+        val clique = ArrayList<RawFix>(near.size)
+        clique.add(latest)
+        val ordered = near
+            .filter { it !== latest }
+            .sortedBy { haversineMeters(it.lat, it.lng, latest.lat, latest.lng) }
+        for (cand in ordered) {
+            if (clique.all { c -> haversineMeters(cand.lat, cand.lng, c.lat, c.lng) <= r }) {
+                clique.add(cand)
+            }
+        }
+        if (clique.size < LocationDebounceConfig.LOCK_MIN_POINTS) return null
+        clique.sortBy { it.timeMs }
+        val rFinal = adaptiveLockRadiusMeters(clique)
+        val spanMs = clique.last().timeMs - clique.first().timeMs
+        if (spanMs < LocationDebounceConfig.LOCK_MIN_SPAN_MS) return null
+        if (!allPairwiseWithin(clique, rFinal)) return null
+        return Pair(clique, rFinal)
     }
 
     private fun allPairwiseWithin(points: List<RawFix>, maxDistM: Double): Boolean {
@@ -396,6 +442,26 @@ class LocationDebouncer {
     }
 
     companion object {
+        fun medianAccuracy(points: List<RawFix>): Double {
+            if (points.isEmpty()) return 0.0
+            val sorted = points.map { it.acc }.sorted()
+            val mid = sorted.size / 2
+            return if (sorted.size % 2 == 1) {
+                sorted[mid]
+            } else {
+                (sorted[mid - 1] + sorted[mid]) / 2.0
+            }
+        }
+
+        fun adaptiveLockRadiusMeters(points: List<RawFix>): Double {
+            val scaled = medianAccuracy(points) * LocationDebounceConfig.LOCK_ACC_MULTIPLIER
+            return maxOf(LocationDebounceConfig.LOCK_MAX_PAIRWISE_M, scaled)
+                .coerceAtMost(LocationDebounceConfig.LOCK_MAX_RADIUS_M)
+        }
+
+        fun adaptiveUnlockRadiusMeters(lockRadiusM: Double): Double =
+            lockRadiusM * LocationDebounceConfig.UNLOCK_RADIUS_RATIO
+
         fun haversineMeters(lat1: Double, lng1: Double, lat2: Double, lng2: Double): Double {
             val r = 6371000.0
             val dLat = (lat2 - lat1) * PI / 180.0

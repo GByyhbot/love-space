@@ -902,7 +902,8 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage>
     final halt = d.status.peerHalt;
     final hidden = track == null || track.hidden;
     final hasTrackData =
-        track != null && (track.points.isNotEmpty || track.stays.isNotEmpty);
+        track != null &&
+        (track.effectivePoints.isNotEmpty || track.stays.isNotEmpty);
     final names = (track?.stays ?? const <PeerTrackStay>[])
         .map((s) => s.displayName)
         .toList(growable: false);
@@ -925,7 +926,7 @@ class _PeerReportPageState extends ConsumerState<PeerReportPage>
           )
         else
           Text(
-            '已移动 ${_distanceText(track.distanceM)} · ${track.stays.length} 个停留点',
+            '已移动 ${_distanceText(track.effectiveDistanceM)} · ${track.stays.length} 个停留点',
             key: const Key('peer-footprint-line'),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
@@ -1713,7 +1714,7 @@ class _MiniTrackThumbnail extends StatelessWidget {
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(kGlassInnerRadius),
-        child: (track.points.isEmpty && track.stays.isEmpty)
+        child: (track.effectivePoints.isEmpty && track.stays.isEmpty)
             ? Center(
                 child: Icon(Icons.route_outlined,
                     size: 24, color: pathColor.withValues(alpha: 0.65)),
@@ -1743,12 +1744,13 @@ class _MiniTrackPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    final pts = track.effectivePoints;
     final lats = <double>[
-      for (final p in track.points) p.lat,
+      for (final p in pts) p.lat,
       for (final s in track.stays) s.lat,
     ];
     final lngs = <double>[
-      for (final p in track.points) p.lng,
+      for (final p in pts) p.lng,
       for (final s in track.stays) s.lng,
     ];
     if (lats.isEmpty) return;
@@ -1779,12 +1781,12 @@ class _MiniTrackPainter extends CustomPainter {
       return Offset(x, y);
     }
 
-    if (!track.isStreet && track.points.length >= 2) {
+    if (!track.isStreet && pts.length >= 2) {
       final path = Path();
-      final p0 = toPx(track.points.first.lat, track.points.first.lng);
+      final p0 = toPx(pts.first.lat, pts.first.lng);
       path.moveTo(p0.dx, p0.dy);
-      for (var i = 1; i < track.points.length; i++) {
-        final p = toPx(track.points[i].lat, track.points[i].lng);
+      for (var i = 1; i < pts.length; i++) {
+        final p = toPx(pts[i].lat, pts[i].lng);
         path.lineTo(p.dx, p.dy);
       }
       canvas.drawPath(

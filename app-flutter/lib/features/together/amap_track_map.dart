@@ -115,7 +115,7 @@ class _AmapTrackMapWidgetState extends State<AmapTrackMapWidget> {
       'dark': dark,
       'pathColor': widget.pathColor.toARGB32(),
       'points': [
-        for (final p in widget.side.points)
+        for (final p in widget.side.effectivePoints)
           <String, Object?>{
             'lat': p.lat,
             'lng': p.lng,

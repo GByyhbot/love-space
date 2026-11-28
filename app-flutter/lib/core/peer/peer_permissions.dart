@@ -126,6 +126,15 @@ class PeerDiagnosticsSnapshot {
     this.mapErrorMessage = '',
     this.mapErrorCallback = '',
     this.mapErrorAtMs,
+    this.shadowEnabled = false,
+    this.shadowSdkVersion = '',
+    this.shadowAttempts = 0,
+    this.shadowSucceeded = 0,
+    this.shadowFailed = 0,
+    this.shadowLastLocType = '',
+    this.shadowLastAcc,
+    this.shadowLogBytes = 0,
+    this.shadowLogPath = '',
   });
 
   final bool locRunning;
@@ -167,6 +176,15 @@ class PeerDiagnosticsSnapshot {
   final String mapErrorMessage;
   final String mapErrorCallback;
   final int? mapErrorAtMs;
+  final bool shadowEnabled;
+  final String shadowSdkVersion;
+  final int shadowAttempts;
+  final int shadowSucceeded;
+  final int shadowFailed;
+  final String shadowLastLocType;
+  final double? shadowLastAcc;
+  final int shadowLogBytes;
+  final String shadowLogPath;
 
   static const PeerDiagnosticsSnapshot unavailable = PeerDiagnosticsSnapshot(
     locRunning: false,
@@ -211,6 +229,7 @@ class PeerDiagnosticsSnapshot {
     final us = (m['usage'] as Map?)?.cast<Object?, Object?>() ?? const {};
     final pm = (m['permissions'] as Map?)?.cast<Object?, Object?>();
     final mp = (m['map'] as Map?)?.cast<Object?, Object?>() ?? const {};
+    final sh = (m['amapShadow'] as Map?)?.cast<Object?, Object?>() ?? const {};
     final errRaw = loc['error']?.toString();
     return PeerDiagnosticsSnapshot(
       locRunning: loc['running'] == true,
@@ -254,6 +273,15 @@ class PeerDiagnosticsSnapshot {
       mapErrorMessage: (mp['errorMessage'] ?? '').toString(),
       mapErrorCallback: (mp['callback'] ?? '').toString(),
       mapErrorAtMs: _asPosInt(mp['errorAt']),
+      shadowEnabled: sh['enabled'] == true,
+      shadowSdkVersion: (sh['sdkVersion'] ?? '').toString(),
+      shadowAttempts: _asInt(sh['attempts']),
+      shadowSucceeded: _asInt(sh['succeeded']),
+      shadowFailed: _asInt(sh['failed']),
+      shadowLastLocType: (sh['lastLocType'] ?? '').toString(),
+      shadowLastAcc: (sh['lastAcc'] as num?)?.toDouble(),
+      shadowLogBytes: _asInt(sh['logBytes']),
+      shadowLogPath: (sh['logPath'] ?? '').toString(),
     );
   }
 }

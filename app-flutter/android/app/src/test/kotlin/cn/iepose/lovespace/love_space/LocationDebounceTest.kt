@@ -175,6 +175,174 @@ class LocationDebounceTest {
         assertEquals(DebounceState.MOVING, debouncer.state)
     }
 
+    // ⑦ 自适应半径公式与等比例解锁边界（min 40m / median*1.5 / max 150m）
+    @Test
+    fun adaptiveRadius_scalesWithMedianAccuracyAndCapsAt150m() {
+        val f10 = RawFix(baseLat, baseLng, 10.0, 0.0, 0L)
+        val f40 = RawFix(baseLat, baseLng, 40.0, 0.0, 0L)
+        val f80 = RawFix(baseLat, baseLng, 80.0, 0.0, 0L)
+        val f120 = RawFix(baseLat, baseLng, 120.0, 0.0, 0L)
+
+        assertEquals(40.0, LocationDebouncer.adaptiveLockRadiusMeters(listOf(f10)), 1e-6)
+        assertEquals(80.0, LocationDebouncer.adaptiveUnlockRadiusMeters(40.0), 1e-6)
+
+        assertEquals(60.0, LocationDebouncer.adaptiveLockRadiusMeters(listOf(f40)), 1e-6)
+        assertEquals(120.0, LocationDebouncer.adaptiveUnlockRadiusMeters(60.0), 1e-6)
+
+        assertEquals(120.0, LocationDebouncer.adaptiveLockRadiusMeters(listOf(f10, f80, f120)), 1e-6)
+        assertEquals(150.0, LocationDebouncer.adaptiveLockRadiusMeters(listOf(f120, f120, f120)), 1e-6)
+        assertEquals(300.0, LocationDebouncer.adaptiveUnlockRadiusMeters(150.0), 1e-6)
+
+        // End-to-end: 3 fixes spaced ~55m apart with acc=45m (radius=67.5m, unlock=135m).
+        val debouncer = LocationDebouncer()
+        val t0 = 1_700_000_000_000L
+        val p1 = offsetMeters(baseLat, baseLng, 0.0, 0.0)
+        val p2 = offsetMeters(baseLat, baseLng, 55.0, 0.0)
+        val p3 = offsetMeters(baseLat, baseLng, 25.0, 25.0)
+        debouncer.process(RawFix(p1.first, p1.second, 45.0, 0.0, t0))
+        debouncer.process(RawFix(p2.first, p2.second, 45.0, 0.0, t0 + 90_000L))
+        val out3 = debouncer.process(RawFix(p3.first, p3.second, 45.0, 0.0, t0 + 180_000L))
+        assertTrue(out3 is DebounceOutcome.Emit && out3.isAnchor)
+        assertEquals(DebounceState.STATIONARY_LOCKED, debouncer.state)
+        assertEquals(67.5, debouncer.activeLockRadiusM, 1e-6)
+        assertEquals(135.0, debouncer.activeUnlockRadiusM, 1e-6)
+
+        // 120m away (>80m baseline, <=135m adaptive unlock) must remain locked.
+        val anchor = debouncer.anchor!!
+        val p120 = offsetMeters(anchor.lat, anchor.lng, 120.0, 0.0)
+        val o120 = debouncer.process(RawFix(p120.first, p120.second, 45.0, 0.0, t0 + 240_000L))
+        assertTrue(o120 is DebounceOutcome.Drop && o120.reason == DropReason.STATIONARY_ABSORBED)
+        assertEquals(DebounceState.STATIONARY_LOCKED, debouncer.state)
+
+        // Two consecutive 140m fixes (>135m) unlock back to MOVING.
+        val p140a = offsetMeters(anchor.lat, anchor.lng, 140.0, 0.0)
+        val p140b = offsetMeters(anchor.lat, anchor.lng, 142.0, 0.0)
+        val o140a = debouncer.process(RawFix(p140a.first, p140a.second, 45.0, 1.0, t0 + 270_000L))
+        assertTrue(o140a is DebounceOutcome.Drop)
+        val o140b = debouncer.process(RawFix(p140b.first, p140b.second, 45.0, 1.0, t0 + 300_000L))
+        assertTrue(o140b is DebounceOutcome.Emit)
+        assertEquals(DebounceState.MOVING, debouncer.state)
+    }
+
+    // ⑧ 必测合成轨迹 ①：静止散布（σ≈80m、30 分钟）须锁定且上报收敛到锚点 + 心跳
+    @Test
+    fun stationaryScatter_sigma80m_30min_locksAndConvergesToAnchorAndHeartbeat() {
+        val debouncer = LocationDebouncer()
+        val rng = Random(20261128)
+        val sigmaXY = 80.0 / kotlin.math.sqrt(2.0) // 2D radial RMS ≈ 80m
+        val inputs = ArrayList<RawFix>(60)
+        val emitted = ArrayList<DebounceOutcome.Emit>()
+        val t0 = 1_700_000_000_000L
+
+        fun nextGaussian(): Double {
+            val u1 = rng.nextDouble().coerceAtLeast(1e-12)
+            val u2 = rng.nextDouble()
+            return kotlin.math.sqrt(-2.0 * kotlin.math.ln(u1)) * cos(2.0 * PI * u2)
+        }
+
+        for (i in 0 until 60) {
+            val northM = nextGaussian() * sigmaXY
+            val eastM = nextGaussian() * sigmaXY
+            val pos = offsetMeters(baseLat, baseLng, northM, eastM)
+            val acc = 45.0 + (i % 6) // 45..50m weak-signal optimistic accuracy
+            val fix = RawFix(pos.first, pos.second, acc, 0.0, t0 + i * 30_000L)
+            inputs.add(fix)
+            val out = debouncer.process(fix)
+            if (out is DebounceOutcome.Emit) {
+                emitted.add(out)
+            }
+        }
+
+        assertEquals(DebounceState.STATIONARY_LOCKED, debouncer.state)
+        assertTrue("Expected at least 1 anchor lock, got ${debouncer.anchorLockCount}", debouncer.anchorLockCount >= 1)
+        assertTrue("Expected sharp emission reduction, got ${emitted.size}/60", emitted.size <= 20)
+
+        val anchor = debouncer.anchor!!
+        assertTrue(
+            "Anchor must come from actual sampled fixes",
+            inputs.any { it.lat == anchor.lat && it.lng == anchor.lng },
+        )
+
+        // Heartbeat fixes after lock stay pinned exactly to the locked anchor with speed=0.0.
+        val hb1 = debouncer.heartbeatFix(t0 + 15 * 60_000L)!!
+        val hb2 = debouncer.heartbeatFix(t0 + 30 * 60_000L)!!
+        assertEquals(anchor.lat, hb1.lat, 0.0)
+        assertEquals(anchor.lng, hb1.lng, 0.0)
+        assertEquals(0.0, hb1.speed!!, 0.0)
+        assertEquals(anchor.lat, hb2.lat, 0.0)
+        assertEquals(anchor.lng, hb2.lng, 0.0)
+    }
+
+    // ⑨ 必测合成轨迹 ②：慢速步行（1 m/s、σ≈30m 噪声）不许被永久锁住，全程位置误差有界、里程误差 ≤5%
+    @Test
+    fun slowWalk_1mps_sigma30m_neverPermanentlyLocked_boundedErrorAndLengthWithin5Pct() {
+        val debouncer = LocationDebouncer()
+        val rng = Random(20261127)
+        val t0 = 1_700_000_000_000L
+        val stepSec = 30
+        val count = 61 // 30 minutes = 1800m true distance
+        val sigmaXY = 30.0 / kotlin.math.sqrt(2.0)
+        val rho = 0.92
+        val innovScale = kotlin.math.sqrt(1.0 - rho * rho)
+
+        fun nextGaussian(): Double {
+            val u1 = rng.nextDouble().coerceAtLeast(1e-12)
+            val u2 = rng.nextDouble()
+            return kotlin.math.sqrt(-2.0 * kotlin.math.ln(u1)) * cos(2.0 * PI * u2)
+        }
+
+        var errN = 0.0
+        var errE = 0.0
+        val emitted = ArrayList<RawFix>()
+        val trueCoords = ArrayList<Pair<Double, Double>>(count)
+
+        for (i in 0 until count) {
+            errN = rho * errN + innovScale * nextGaussian() * sigmaXY
+            errE = rho * errE + innovScale * nextGaussian() * sigmaXY
+            val trueEastM = i * stepSec * 1.0
+            val truePos = offsetMeters(baseLat, baseLng, 0.0, trueEastM)
+            trueCoords.add(truePos)
+            val noisyPos = offsetMeters(baseLat, baseLng, errN, trueEastM + errE)
+            val acc = 28.0 + (i % 5) * 1.5 // 28..34m
+            val fix = RawFix(noisyPos.first, noisyPos.second, acc, 1.0, t0 + i * stepSec * 1000L)
+            val out = debouncer.process(fix)
+            if (out is DebounceOutcome.Emit) {
+                emitted.add(out.fix)
+            }
+        }
+
+        // Must NOT be permanently locked at the end of a 1 m/s walk.
+        assertEquals(DebounceState.MOVING, debouncer.state)
+        assertTrue("Expected majority of walk fixes emitted, got ${emitted.size}/$count", emitted.size >= 50)
+
+        // Position error vs ground truth at every emitted timestamp must stay bounded.
+        var maxPosErrM = 0.0
+        for (p in emitted) {
+            val idx = ((p.timeMs - t0) / (stepSec * 1000L)).toInt().coerceIn(0, count - 1)
+            val truth = trueCoords[idx]
+            val errM = LocationDebouncer.haversineMeters(p.lat, p.lng, truth.first, truth.second)
+            if (errM > maxPosErrM) maxPosErrM = errM
+        }
+        assertTrue("Max position error ${maxPosErrM}m exceeded 120m bound", maxPosErrM <= 120.0)
+
+        // Emitted distance error vs true 1800m walk must be <= 5%.
+        var outDistM = 0.0
+        for (k in 1 until emitted.size) {
+            outDistM += LocationDebouncer.haversineMeters(
+                emitted[k - 1].lat,
+                emitted[k - 1].lng,
+                emitted[k].lat,
+                emitted[k].lng,
+            )
+        }
+        val trueDistM = (count - 1) * stepSec * 1.0
+        val errPct = kotlin.math.abs(outDistM - trueDistM) / trueDistM
+        assertTrue(
+            "Slow-walk mileage error ${(errPct * 1000).roundToInt() / 10.0}% (out=$outDistM vs true=$trueDistM) exceeded 5%",
+            errPct <= 0.05,
+        )
+    }
+
     // ⑤ 上传失败指数退避：1 → 2 → 5 → 10 min 序列与成功清零
     @Test
     fun failureBackoff_follows1_2_5_10MinAndResetsOnSuccess() {

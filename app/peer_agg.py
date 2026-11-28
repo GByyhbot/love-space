@@ -118,13 +118,60 @@ def total_distance_m(points):
     return total
 
 
-def cluster_stays(points, *, radius=STAY_RADIUS_M, min_sec=STAY_MIN_SEC):
+def _safe_acc(pt):
+    acc = pt.get('acc')
+    if acc is None:
+        return 50.0
+    try:
+        v = float(acc)
+        return max(v, 1.0) if v > 0 else 50.0
+    except (TypeError, ValueError):
+        return 50.0
+
+
+def select_real_anchor(members):
+    """在停留簇真实采样点中，选离 1/acc^2 加权中心最近的那一条（与端侧同口径）。
+
+    绝不用算出来的质心冒充采样点。
+    """
+    if not members:
+        raise ValueError('members must not be empty')
+    if len(members) == 1:
+        return members[0]
+    sum_w = 0.0
+    sum_lat = 0.0
+    sum_lng = 0.0
+    for m in members:
+        acc_safe = _safe_acc(m)
+        w = 1.0 / (acc_safe * acc_safe)
+        sum_w += w
+        sum_lat += w * float(m['lat'])
+        sum_lng += w * float(m['lng'])
+    c_lat = sum_lat / sum_w
+    c_lng = sum_lng / sum_w
+
+    best = members[0]
+    best_acc = _safe_acc(best)
+    best_dist = haversine_m(float(best['lat']), float(best['lng']), c_lat, c_lng)
+    for cand in members[1:]:
+        cand_acc = _safe_acc(cand)
+        d = haversine_m(float(cand['lat']), float(cand['lng']), c_lat, c_lng)
+        if d < best_dist - 1e-6 or (abs(d - best_dist) <= 1e-6 and cand_acc < best_acc):
+            best = cand
+            best_acc = cand_acc
+            best_dist = d
+    return best
+
+
+def cluster_stays_with_ranges(points, *, radius=STAY_RADIUS_M, min_sec=STAY_MIN_SEC):
     """停留聚类：连续点在 radius 内累计 ≥min_sec 即一个停留点。
 
-    重心取簇内均值；`left_at` 取簇后第一个点的时刻，**当天最后一簇给 null**
-    （表示「仍在此处」，与令文一致）。
+    锚点取簇内真实采样点中离 1/acc^2 加权中心最近的那个；
+    `left_at` 取簇后第一个点的时刻，**当天最后一簇给 null**。
+    返回 `(stays, ranges)`，其中 `ranges` 为 `[(start_idx, end_idx, anchor_pt), ...]`。
     """
     stays = []
+    ranges = []
     n = len(points)
     i = 0
     while i < n:
@@ -141,16 +188,73 @@ def cluster_stays(points, *, radius=STAY_RADIUS_M, min_sec=STAY_MIN_SEC):
             c_lng = sum(m['lng'] for m in members) / len(members)
         span = points[j]['ts'] - points[i]['ts']
         if span >= min_sec and len(members) >= 2:
+            anchor = select_real_anchor(members)
             left_at = points[j + 1]['ts'] if j + 1 < n else None
             stays.append({
-                'lat': c_lat, 'lng': c_lng,
+                'lat': float(anchor['lat']),
+                'lng': float(anchor['lng']),
                 'arrived_at': points[i]['ts'],
                 'left_at': left_at,
                 'duration_sec': int(span),
                 'points': len(members),
             })
+            ranges.append((i, j, anchor))
         i = j + 1
+    return stays, ranges
+
+
+def cluster_stays(points, *, radius=STAY_RADIUS_M, min_sec=STAY_MIN_SEC):
+    """停留聚类：返回 stays 列表（锚点与展示线共用同一真实采样点）。"""
+    stays, _ = cluster_stays_with_ranges(points, radius=radius, min_sec=min_sec)
     return stays
+
+
+def build_display_points(points, stays, ranges):
+    """生成展示线点列：停留窗内的点整体塌缩为该停留锚点，移动段保留原有点列。
+
+    - 停留起止保留两个锚点端点（`ts = points[i]['ts']` 与 `points[j]['ts']`），
+      使停留段距离 = 0、且时间轴回放在停留窗内停在锚点处不动；
+    - 展示线锚点坐标严格等于 `stays[k]` 的 `(lat, lng)`，绝不两套坐标打架；
+    - 原始 `points` 列表不改不删。
+    """
+    if not points:
+        return []
+    if not ranges:
+        return [dict(p) for p in points]
+
+    display = []
+    cursor = 0
+    for idx, (start_i, end_i, anchor) in enumerate(ranges):
+        while cursor < start_i:
+            display.append(dict(points[cursor]))
+            cursor += 1
+        stay = stays[idx]
+        lat = float(stay['lat'])
+        lng = float(stay['lng'])
+        pn = (stay.get('place_name') or anchor.get('place_name') or '').strip()
+        acc = anchor.get('acc')
+        display.append({
+            'ts': float(points[start_i]['ts']),
+            'lat': lat,
+            'lng': lng,
+            'acc': acc,
+            'speed': 0.0,
+            'place_name': pn,
+        })
+        if end_i > start_i:
+            display.append({
+                'ts': float(points[end_i]['ts']),
+                'lat': lat,
+                'lng': lng,
+                'acc': acc,
+                'speed': 0.0,
+                'place_name': pn,
+            })
+        cursor = end_i + 1
+    while cursor < len(points):
+        display.append(dict(points[cursor]))
+        cursor += 1
+    return display
 
 
 def name_stays(c, stays, points=None):
@@ -219,14 +323,15 @@ def speed_segments(points):
 def empty_track():
     """关闭/停用时的空壳轨迹（**字段齐、值为空**，端上不用判 key 是否存在）。"""
     return {'level': 'off', 'points': [], 'stays': [], 'segments': [],
-            'distance_m': 0.0, 'latest': None}
+            'distance_m': 0.0, 'display_points': [], 'display_segments': [],
+            'display_distance_m': 0.0, 'latest': None}
 
 
 def track_for(c, user_id, day, policy):
     """某人的当日轨迹（已按 policy 裁剪）。返回 dict（供调用方包 closed_off）。
 
-    · exact：点列 + 距离 + 停留点 + 分段；
-    · street：**无点列**，只有网格化停留点与街区级最新位置；
+    · exact：原始点列（兼容旧版）+ 展示线（停留窗塌缩为锚点，移动段保留）+ 距离 + 停留点 + 分段；
+    · street：**无点列**（含展示线空），只有网格化停留点与街区级最新位置；
     · off：由调用方按既有 `closed_off` 明示（这里返回空壳）。
     """
     level = policy.get('location_level', 'exact')
@@ -242,8 +347,7 @@ def track_for(c, user_id, day, policy):
              'acc': r['acc'], 'speed': r['speed'],
              'place_name': (r['place_name'] or '').strip()} for r in raw]
     if level == 'off':
-        return {'level': 'off', 'points': [], 'stays': [], 'segments': [],
-                'distance_m': 0.0, 'latest': None}
+        return empty_track()
 
     if level == 'street':
         pts = filter_points(rows)
@@ -260,6 +364,9 @@ def track_for(c, user_id, day, policy):
             'stays': stays,
             'segments': [],
             'distance_m': None,  # 不足 500m 的精度不提供，端上不显示距离
+            'display_points': [],
+            'display_segments': [],
+            'display_distance_m': None,
             'latest': ({'lat': grid_round(latest['lat']),
                         'lng': grid_round(latest['lng']),
                         'place_name': (latest['place_name'] or '').strip(),
@@ -267,7 +374,9 @@ def track_for(c, user_id, day, policy):
         }
 
     pts = filter_points(rows)
-    stays = name_stays(c, cluster_stays(pts), pts)
+    stays, stay_ranges = cluster_stays_with_ranges(pts)
+    stays = name_stays(c, stays, pts)
+    display_pts = build_display_points(pts, stays, stay_ranges)
     latest = c.execute(
         'SELECT lat,lng,place_name,updated FROM peer_location_latest WHERE user=?',
         (user_id,)).fetchone()
@@ -277,6 +386,9 @@ def track_for(c, user_id, day, policy):
         'stays': stays,
         'segments': speed_segments(pts),
         'distance_m': round(total_distance_m(pts), 1),
+        'display_points': display_pts,
+        'display_segments': speed_segments(display_pts),
+        'display_distance_m': round(total_distance_m(display_pts), 1),
         'latest': ({'lat': latest['lat'], 'lng': latest['lng'],
                     'place_name': (latest['place_name'] or '').strip(),
                     'updated': db.ts_to_sec(latest['updated'])} if latest else None),

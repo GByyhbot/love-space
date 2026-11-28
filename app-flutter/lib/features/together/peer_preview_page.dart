@@ -188,7 +188,7 @@ class _PeerPreviewPageState extends ConsumerState<PeerPreviewPage> {
           )
         else
           Text(
-            '对方看到：已移动 ${p.distanceM == null ? '—' : '${(p.distanceM! / 1000).toStringAsFixed(1)} 公里'}'
+            '对方看到：已移动 ${p.effectiveDistanceM == null ? '—' : '${(p.effectiveDistanceM! / 1000).toStringAsFixed(1)} 公里'}'
             ' · ${p.stays.length} 个停留点',
             key: const Key('preview-track-line'),
             style: theme.textTheme.bodyMedium,

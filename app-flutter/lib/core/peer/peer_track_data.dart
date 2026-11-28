@@ -146,6 +146,9 @@ class PeerTrackSide {
     this.stays = const <PeerTrackStay>[],
     this.segments = const <PeerTrackSegment>[],
     this.distanceM,
+    this.displayPoints,
+    this.displaySegments,
+    this.displayDistanceM,
     this.latestLat,
     this.latestLng,
     this.latestUpdated,
@@ -161,14 +164,30 @@ class PeerTrackSide {
 
   /// street 档为 null（精度不足，不提供数字）。
   final double? distanceM;
+
+  /// 二修甲：展示线（停留窗塌缩为停留锚点，移动段保留原有点列）。
+  /// 兼容老版服务端：若缺省则为 null，自动回退 `points` / `segments` / `distanceM`。
+  final List<PeerTrackPoint>? displayPoints;
+  final List<PeerTrackSegment>? displaySegments;
+  final double? displayDistanceM;
+
   final double? latestLat;
   final double? latestLng;
   final double? latestUpdated;
   final String latestPlaceName;
 
+  List<PeerTrackPoint> get effectivePoints => displayPoints ?? points;
+  List<PeerTrackSegment> get effectiveSegments => displaySegments ?? segments;
+  double? get effectiveDistanceM {
+    if (isStreet) return null;
+    if (displayDistanceM != null) return displayDistanceM;
+    if (displayPoints != null) return trackDistanceMeters(displayPoints!);
+    return distanceM;
+  }
+
   bool get hidden => closedOff || halted.halted;
   bool get isStreet => level == 'street';
-  bool get hasTrack => points.isNotEmpty;
+  bool get hasTrack => effectivePoints.isNotEmpty;
 
   PeerTrackSide withStays(List<PeerTrackStay> resolvedStays) => PeerTrackSide(
         closedOff: closedOff,
@@ -178,6 +197,9 @@ class PeerTrackSide {
         stays: resolvedStays,
         segments: segments,
         distanceM: distanceM,
+        displayPoints: displayPoints,
+        displaySegments: displaySegments,
+        displayDistanceM: displayDistanceM,
         latestLat: latestLat,
         latestLng: latestLng,
         latestUpdated: latestUpdated,
@@ -192,6 +214,9 @@ class PeerTrackSide {
     }
 
     final latest = (j['latest'] as Map?)?.cast<String, dynamic>();
+    final hasDispPts = j.containsKey('display_points') && j['display_points'] is List;
+    final hasDispSegs =
+        j.containsKey('display_segments') && j['display_segments'] is List;
     return PeerTrackSide(
       closedOff: j['closed_off'] == true,
       halted: PeerHalt.fromJson(j['halted']),
@@ -200,12 +225,28 @@ class PeerTrackSide {
       stays: list(j['stays'], PeerTrackStay.fromJson),
       segments: list(j['segments'], PeerTrackSegment.fromJson),
       distanceM: (j['distance_m'] as num?)?.toDouble(),
+      displayPoints:
+          hasDispPts ? list(j['display_points'], PeerTrackPoint.fromJson) : null,
+      displaySegments: hasDispSegs
+          ? list(j['display_segments'], PeerTrackSegment.fromJson)
+          : null,
+      displayDistanceM: (j['display_distance_m'] as num?)?.toDouble(),
       latestLat: (latest?['lat'] as num?)?.toDouble(),
       latestLng: (latest?['lng'] as num?)?.toDouble(),
       latestUpdated: (latest?['updated'] as num?)?.toDouble(),
       latestPlaceName: (latest?['place_name'] ?? '').toString().trim(),
     );
   }
+}
+
+/// 按给定点列计算总折线距离（米）。
+double trackDistanceMeters(List<PeerTrackPoint> pts) {
+  if (pts.length < 2) return 0.0;
+  var total = 0.0;
+  for (var i = 1; i < pts.length; i++) {
+    total += _stayDistMeters(pts[i - 1].lat, pts[i - 1].lng, pts[i].lat, pts[i].lng);
+  }
+  return total;
 }
 
 /// 停留点地名真实来源解析（绝不前端现编）：

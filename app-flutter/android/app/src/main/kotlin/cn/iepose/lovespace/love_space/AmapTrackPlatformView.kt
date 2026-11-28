@@ -158,6 +158,7 @@ object AmapPreload {
             val appCtx = context.applicationContext
             MapsInitializer.updatePrivacyShow(appCtx, true, true)
             MapsInitializer.updatePrivacyAgree(appCtx, true)
+            AmapShadowEvaluator.ensurePrivacy(appCtx)
             AmapDiagnostics.ensureExceptionLogger()
             MapsInitializer.initialize(appCtx)
             System.loadLibrary("AMapSDK_MAP_v9_8_3")
@@ -395,6 +396,20 @@ class AmapTrackPlatformView(
         val boundsBuilder = LatLngBounds.Builder()
         var coordCount = 0
         var firstCoord: LatLng? = null
+        var minLat = Double.POSITIVE_INFINITY
+        var maxLat = Double.NEGATIVE_INFINITY
+        var minLng = Double.POSITIVE_INFINITY
+        var maxLng = Double.NEGATIVE_INFINITY
+
+        fun recordCoord(ll: LatLng) {
+            boundsBuilder.include(ll)
+            if (firstCoord == null) firstCoord = ll
+            if (ll.latitude < minLat) minLat = ll.latitude
+            if (ll.latitude > maxLat) maxLat = ll.latitude
+            if (ll.longitude < minLng) minLng = ll.longitude
+            if (ll.longitude > maxLng) maxLng = ll.longitude
+            coordCount++
+        }
 
         @Suppress("UNCHECKED_CAST")
         val rawPoints = (data["points"] as? List<Map<String, Any?>>) ?: emptyList()
@@ -405,9 +420,7 @@ class AmapTrackPlatformView(
                 val lng = (pt["lng"] as? Number)?.toDouble() ?: continue
                 val ll = LatLng(lat, lng)
                 polyCoords.add(ll)
-                boundsBuilder.include(ll)
-                if (firstCoord == null) firstCoord = ll
-                coordCount++
+                recordCoord(ll)
             }
             if (polyCoords.size >= 2) {
                 map.addPolyline(
@@ -435,12 +448,12 @@ class AmapTrackPlatformView(
                     .snippet(snippet)
                     .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE))
             )
-            boundsBuilder.include(ll)
-            if (firstCoord == null) firstCoord = ll
-            coordCount++
+            recordCoord(ll)
         }
 
-        if (coordCount >= 2) {
+        val hasSpan = coordCount >= 2 &&
+            ((maxLat - minLat) >= 1e-5 || (maxLng - minLng) >= 1e-5)
+        if (hasSpan) {
             lastBounds = try {
                 boundsBuilder.build()
             } catch (_: Throwable) {

@@ -252,6 +252,7 @@ object PeerLocNative {
                 }
                 "status" -> result.success(status())
                 "exportFatal" -> result.success(exportFatalLog())
+                "exportShadowLog" -> result.success(AmapShadowEvaluator.exportLog(context))
                 // ── 2.8.0 fix6 B3：电池优化豁免（设置卡入口）──────────
                 // 状态查询走平台 API（PowerManager），不做任何推断；
                 // 申请走系统对话框（ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS），
@@ -369,6 +370,8 @@ object PeerLocNative {
             "heartbeatTicks" to heartbeatTicks,
             "debounceState" to db.state.name,
             "anchorLockCount" to db.anchorLockCount,
+            "activeLockRadiusM" to db.activeLockRadiusM,
+            "activeUnlockRadiusM" to db.activeUnlockRadiusM,
             "droppedAccuracy" to db.droppedAccuracy,
             "droppedSpike" to db.droppedSpike,
             "droppedBounce" to db.droppedBounce,
@@ -383,7 +386,15 @@ object PeerLocNative {
         val ctx = appContext
         val f = java.io.File(
             (ctx?.getExternalFilesDir(null) ?: ctx?.filesDir), "peer-loc${java.io.File.separator}fatal-native.txt")
-        val content = if (f.exists()) f.readText() else ""
+        val fatalText = if (f.exists()) f.readText() else ""
+        val shadowSummary = AmapShadowEvaluator.summaryLine(ctx)
+        val content = if (shadowSummary.isEmpty()) {
+            fatalText
+        } else if (fatalText.isEmpty()) {
+            "[shadow-eval] $shadowSummary\n"
+        } else {
+            "$fatalText\n[shadow-eval] $shadowSummary\n"
+        }
         return mapOf("path" to (if (f.exists()) f.absolutePath else ""),
                      "content" to content)
     }
@@ -556,6 +567,7 @@ object PeerLocNative {
             "usage" to usageStatus(ctx),
             "permissions" to permissions(ctx),
             "map" to AmapDiagnostics.snapshot(),
+            "amapShadow" to AmapShadowEvaluator.diagnostics(ctx),
             "lastFlushAt" to lastFlushWallMs,
             "lastStateEmitAt" to lastStateEmitMs,
             "lastUsagePullAt" to lastUsagePullMs,
@@ -592,6 +604,7 @@ object PeerLocNative {
         // fix7：心跳广播接收器随采集会话注册/注销（不写清单——本仓库约定
         // 只动这一处原生文件；进程由 FGS 保活，动态接收器足够）
         ensureHeartbeatReceiver(context)
+        AmapShadowEvaluator.start(context)
         try {
             manager.requestLocationUpdates(
                 LocationManager.GPS_PROVIDER,
@@ -664,6 +677,7 @@ object PeerLocNative {
         // fix7：先摘闹钟与接收器（任何一条退出路径都必须取消，防泄漏/空转）
         cancelHeartbeat(appContext)
         unregisterHeartbeatReceiver()
+        AmapShadowEvaluator.stop()
         // 原实现是 `val manager = lm ?: return` 提前返回，导致 lm 为空时
         // 不清理状态；这里改成「有就摘监听、无论如何清状态」
         val manager = lm
@@ -1412,6 +1426,18 @@ object PeerLocNative {
         }
         val lat = hbLat
         val lng = hbLng
+        AmapShadowEvaluator.sampleAligned(
+            context = appContext,
+            trigger = "heartbeat",
+            nativeTsMs = nowMs,
+            nativeLatGcj = lat,
+            nativeLngGcj = lng,
+            nativeAcc = lockedFix?.acc ?: src?.optDouble("acc", 50.0) ?: 50.0,
+            nativeProvider = "heartbeat",
+            nativeSpeed = 0.0,
+            nativeDebounce = if (lockedFix != null) "hb_anchor" else if (src != null) "hb_last" else "hb_latest",
+            nativeState = debouncer.state.name,
+        )
         lastSent = JSONObject().apply {
             put("lat", lat); put("lng", lng)
             put("battery", readBattery()); put("charging", readCharging())
@@ -1497,6 +1523,22 @@ object PeerLocNative {
                 speed = rawSpeed,
                 timeMs = location.time,
             ),
+        )
+        val debounceTag = when (outcome) {
+            is DebounceOutcome.Emit -> if (outcome.isAnchor) "emit_anchor" else "emit_move"
+            is DebounceOutcome.Drop -> "drop_${outcome.reason.name.lowercase(Locale.ROOT)}"
+        }
+        AmapShadowEvaluator.sampleAligned(
+            context = appContext,
+            trigger = "callback",
+            nativeTsMs = location.time,
+            nativeLatGcj = gcj.first,
+            nativeLngGcj = gcj.second,
+            nativeAcc = acc,
+            nativeProvider = location.provider ?: "",
+            nativeSpeed = rawSpeed,
+            nativeDebounce = debounceTag,
+            nativeState = debouncer.state.name,
         )
         updateAdaptiveSampling(debouncer.state)
         when (outcome) {

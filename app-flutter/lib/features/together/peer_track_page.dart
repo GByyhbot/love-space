@@ -309,7 +309,7 @@ class _PeerTrackPageState extends ConsumerState<PeerTrackPage> {
   }
 
   void _togglePlay() {
-    final points = _side.points;
+    final points = _side.effectivePoints;
     if (points.length < 2) return;
     if (_playing) {
       _timer?.cancel();
@@ -348,7 +348,7 @@ class _PeerTrackPageState extends ConsumerState<PeerTrackPage> {
     final cs = theme.colorScheme;
     final side = _side;
     final hasReplay =
-        _data != null && !side.hidden && side.points.length >= 2;
+        _data != null && !side.hidden && side.effectivePoints.length >= 2;
     final topInset = widget.embedded ? ShellChromeScope.topInsetOf(context) : 0.0;
     final body = RefreshIndicator(
       edgeOffset: topInset,
@@ -387,7 +387,7 @@ class _PeerTrackPageState extends ConsumerState<PeerTrackPage> {
                 padding: EdgeInsets.symmetric(vertical: 24),
               ),
             )
-          else if (side.points.isEmpty && side.stays.isEmpty)
+          else if (side.effectivePoints.isEmpty && side.stays.isEmpty)
             _card(
               cs,
               child: const AppEmptyView(
@@ -513,7 +513,7 @@ class _PeerTrackPageState extends ConsumerState<PeerTrackPage> {
                       valueListenable: _tNotifier,
                       builder: (context, t, _) {
                         final reading =
-                            t == null ? null : pointAt(side.points, t);
+                            t == null ? null : pointAt(side.effectivePoints, t);
                         return AmapTrackMapWidget(
                           side: side,
                           replayLat: reading?.lat,
@@ -576,10 +576,10 @@ class _PeerTrackPageState extends ConsumerState<PeerTrackPage> {
                           ),
                         ),
                       ),
-                      if (side.distanceM != null) ...[
+                      if (side.effectiveDistanceM != null) ...[
                         const SizedBox(width: 8),
                         Text(
-                          '已移动 ${_km(side.distanceM!)}',
+                          '已移动 ${_km(side.effectiveDistanceM!)}',
                           style: tabularStyle(
                             theme.textTheme.labelSmall
                                 ?.copyWith(color: cs.outline),
@@ -590,7 +590,7 @@ class _PeerTrackPageState extends ConsumerState<PeerTrackPage> {
                   ),
                 ),
                 // 左下角图例小胶囊
-                if (!side.isStreet && side.points.length >= 2)
+                if (!side.isStreet && side.effectivePoints.length >= 2)
                   Positioned(
                     bottom: 8,
                     left: 8,
@@ -656,7 +656,7 @@ class _PeerTrackPageState extends ConsumerState<PeerTrackPage> {
   }
 
   Widget _replayBar(ThemeData theme, ColorScheme cs, PeerTrackSide side) {
-    final points = side.points;
+    final points = side.effectivePoints;
     final nets = _netRecords();
     final batteries = _batteryReadings();
     return ValueListenableBuilder<double?>(
@@ -946,15 +946,16 @@ class _TrackPainter extends CustomPainter {
       canvas.drawLine(Offset(0, y), Offset(size.width, y), grid);
     }
 
+    final pts = side.effectivePoints;
     final mapper = TrackCanvasMapper(
-      points: side.points,
+      points: pts,
       stays: side.stays,
       size: size,
     );
     if (!mapper.valid) return;
 
     // 折线：步行/静止实线，驾车虚线；数百点按像素步长抽稀，防卡顿
-    if (!side.isStreet && side.points.length >= 2) {
+    if (!side.isStreet && pts.length >= 2) {
       final solidPath = Path();
       final drivePaint = Paint()
         ..color = driveColor
@@ -962,12 +963,12 @@ class _TrackPainter extends CustomPainter {
         ..style = PaintingStyle.stroke
         ..strokeCap = StrokeCap.round;
 
-      var prevPt = side.points.first;
+      var prevPt = pts.first;
       var prevPx = mapper.toOffset(prevPt.lat, prevPt.lng);
-      for (var i = 1; i < side.points.length; i++) {
-        final curPt = side.points[i];
+      for (var i = 1; i < pts.length; i++) {
+        final curPt = pts[i];
         final curPx = mapper.toOffset(curPt.lat, curPt.lng);
-        final isLast = i == side.points.length - 1;
+        final isLast = i == pts.length - 1;
         if (!isLast && (curPx - prevPx).distanceSquared < 1.5) {
           continue;
         }
@@ -990,8 +991,8 @@ class _TrackPainter extends CustomPainter {
           ..strokeJoin = StrokeJoin.round,
       );
 
-      final firstPx = mapper.toOffset(side.points.first.lat, side.points.first.lng);
-      final lastPx = mapper.toOffset(side.points.last.lat, side.points.last.lng);
+      final firstPx = mapper.toOffset(pts.first.lat, pts.first.lng);
+      final lastPx = mapper.toOffset(pts.last.lat, pts.last.lng);
       canvas.drawCircle(firstPx, 6, Paint()..color = bgLabel);
       _dot(canvas, firstPx, pathColor, 4.5);
       canvas.drawCircle(lastPx, 6.5, Paint()..color = bgLabel);
@@ -1049,7 +1050,7 @@ class _TrackPainter extends CustomPainter {
   }
 
   bool _driveBetween(double aTs, double bTs) {
-    for (final s in side.segments) {
+    for (final s in side.effectiveSegments) {
       if (s.type == 'drive' && aTs >= s.startTs && bTs <= s.endTs) return true;
     }
     return false;
